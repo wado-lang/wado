@@ -1,0 +1,29 @@
+// A recursive function that returns a copy of a part of its argument compiles
+// to a fixpoint. A lending clone of it would still call the original, so each
+// round the inliner would splice the clone into its caller, uncovering a call
+// that lending moves to the clone again.
+struct Cast { ty: String }
+struct Paren { inner: Expr }
+variant Expr { P(Paren), C(Cast), N(i32) }
+
+fn cast_class(e: &Expr) -> Option<String> {
+    return match e {
+        P(p) => cast_class(&p.inner),
+        C(c) => Option::Some(c.ty),
+        _ => null,
+    };
+}
+
+#[inline("never")]
+fn class_len(e: &Expr) -> i32 {
+    let class = cast_class(e);
+    return match &class {
+        Some(c) => c.len(),
+        _ => 0,
+    };
+}
+
+test "a recursive callee's part reads as its source" {
+    let e = Expr::P(Paren { inner: Expr::C(Cast { ty: builtin::black_box("Add") }) });
+    assert class_len(&e) == 3;
+}

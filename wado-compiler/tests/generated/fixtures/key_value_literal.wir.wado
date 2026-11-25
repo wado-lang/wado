@@ -1976,18 +1976,18 @@ fn "key_value_literal.wado/key_value_literal.wado/EitherBag<i32>^core:prelude/tr
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<[core:prelude/string.wado/String,i32]>";
     let $match_6: ref null "tuple//[core:prelude/string.wado/String, i32]";
     let end: i32;
-    let v_17: ref "tuple//[core:prelude/string.wado/String, i32]";
-    let v_18: ref "core:prelude/string.wado//String";
-    let used_21: i32;
-    let $licm_repr_35: ref "Array<core:prelude/string.wado/String>";
-    let $licm_repr_36: ref Array<i32>;
+    let used_19: i32;
+    let $licm_repr_33: ref "Array<core:prelude/string.wado/String>";
+    let $licm_repr_34: ref Array<i32>;
+    let v_35: ref "tuple//[core:prelude/string.wado/String, i32]";
+    let v_36: ref "core:prelude/string.wado//String";
     let $hfs_index_37: i32;
     keys = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     values = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     end = builtin::array_len(entries);
     entries = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<[core:prelude/string.wado/String,i32]>" { repr: entries, index: 0, end: end }).repr;
-    $licm_repr_35 = keys.repr;
-    $licm_repr_36 = values.repr;
+    $licm_repr_33 = keys.repr;
+    $licm_repr_34 = values.repr;
     $hfs_index_37 = 0;
     b224: block {
         l225: loop {
@@ -1995,26 +1995,26 @@ fn "key_value_literal.wado/key_value_literal.wado/EitherBag<i32>^core:prelude/tr
                 if $hfs_index_37 >= end {
                     break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_4: ref.null none;
                 }
-                v_17 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_18 = local.tee v_17(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(entries, $hfs_index_37)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_18.repr; $load_5 = v_18.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_17.1 };
+                v_35 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_36 = local.tee v_35(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(entries, $hfs_index_37)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_36.repr; $load_5 = v_36.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_35.1 };
                 $hfs_index_37 = $hfs_index_37 + 1;
-                break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_4: v_17;
+                break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_4: v_35;
             })) == 0 {
-                v_18 = local.tee v_17(ref.as_non_null($match_6)).0;
-                $load_5 = v_17.1;
-                if @unlikely(local.tee used_21(keys.used) >= builtin::array_len($licm_repr_35)) {
+                v_36 = local.tee v_35(ref.as_non_null($match_6)).0;
+                $load_5 = v_35.1;
+                if @unlikely(local.tee used_19(keys.used) >= builtin::array_len($licm_repr_33)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(keys);
-                    $licm_repr_35 = keys.repr;
+                    $licm_repr_33 = keys.repr;
                 }
-                builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_35, used_21, v_18);
-                keys.used = used_21 + 1;
-                if @unlikely(local.tee used_21(values.used) >= builtin::array_len($licm_repr_36)) {
+                builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_33, used_19, v_36);
+                keys.used = used_19 + 1;
+                if @unlikely(local.tee used_19(values.used) >= builtin::array_len($licm_repr_34)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(values);
-                    $licm_repr_36 = values.repr;
+                    $licm_repr_34 = values.repr;
                 }
-                builtin::array_set<i32>($licm_repr_36, used_21, $load_5);
-                values.used = used_21 + 1;
+                builtin::array_set<i32>($licm_repr_34, used_19, $load_5);
+                values.used = used_19 + 1;
             } else {
                 break b224: $iter_0.index = $hfs_index_37;
             }
@@ -2049,18 +2049,18 @@ fn "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>^core:prelude/tr
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<[core:prelude/string.wado/String,i32]>";
     let $match_6: ref null "tuple//[core:prelude/string.wado/String, i32]";
     let end: i32;
-    let v_17: ref "tuple//[core:prelude/string.wado/String, i32]";
-    let v_18: ref "core:prelude/string.wado//String";
-    let used_21: i32;
-    let $licm_repr_35: ref "Array<core:prelude/string.wado/String>";
-    let $licm_repr_36: ref Array<i32>;
+    let used_19: i32;
+    let $licm_repr_33: ref "Array<core:prelude/string.wado/String>";
+    let $licm_repr_34: ref Array<i32>;
+    let v_35: ref "tuple//[core:prelude/string.wado/String, i32]";
+    let v_36: ref "core:prelude/string.wado//String";
     let $hfs_index_37: i32;
     keys = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     values = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     end = builtin::array_len(entries);
     entries = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<[core:prelude/string.wado/String,i32]>" { repr: entries, index: 0, end: end }).repr;
-    $licm_repr_35 = keys.repr;
-    $licm_repr_36 = values.repr;
+    $licm_repr_33 = keys.repr;
+    $licm_repr_34 = values.repr;
     $hfs_index_37 = 0;
     b230: block {
         l231: loop {
@@ -2068,26 +2068,26 @@ fn "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>^core:prelude/tr
                 if $hfs_index_37 >= end {
                     break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_4: ref.null none;
                 }
-                v_17 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_18 = local.tee v_17(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(entries, $hfs_index_37)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_18.repr; $load_5 = v_18.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_17.1 };
+                v_35 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_36 = local.tee v_35(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(entries, $hfs_index_37)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_36.repr; $load_5 = v_36.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_35.1 };
                 $hfs_index_37 = $hfs_index_37 + 1;
-                break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_4: v_17;
+                break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_4: v_35;
             })) == 0 {
-                v_18 = local.tee v_17(ref.as_non_null($match_6)).0;
-                $load_5 = v_17.1;
-                if @unlikely(local.tee used_21(keys.used) >= builtin::array_len($licm_repr_35)) {
+                v_36 = local.tee v_35(ref.as_non_null($match_6)).0;
+                $load_5 = v_35.1;
+                if @unlikely(local.tee used_19(keys.used) >= builtin::array_len($licm_repr_33)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(keys);
-                    $licm_repr_35 = keys.repr;
+                    $licm_repr_33 = keys.repr;
                 }
-                builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_35, used_21, v_18);
-                keys.used = used_21 + 1;
-                if @unlikely(local.tee used_21(values.used) >= builtin::array_len($licm_repr_36)) {
+                builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_33, used_19, v_36);
+                keys.used = used_19 + 1;
+                if @unlikely(local.tee used_19(values.used) >= builtin::array_len($licm_repr_34)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(values);
-                    $licm_repr_36 = values.repr;
+                    $licm_repr_34 = values.repr;
                 }
-                builtin::array_set<i32>($licm_repr_36, used_21, $load_5);
-                values.used = used_21 + 1;
+                builtin::array_set<i32>($licm_repr_34, used_19, $load_5);
+                values.used = used_19 + 1;
             } else {
                 break b230: $iter_0.index = $hfs_index_37;
             }

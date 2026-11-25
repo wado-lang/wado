@@ -65,22 +65,21 @@ fn "serde_ndjson_wrapper.wado/$cm_export__run"() {
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
+    let new_repr: ref Array<u8>;
     body = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"ok\":true}
 "), used: 12 };
-    let $array_clone_src_1: ref Array<u8>;
-    $array_clone_src_1 = body.repr;
-    let $array_clone_dst_2: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(12)), 0, $array_clone_src_1, 0, 12);
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_13 = "serde_ndjson_wrapper.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
-    builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(13)), 0, $array_clone_dst_2, 0, 12);
-    builtin::array_set_u8($array_clone_src_1, 12, 10);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(12 + 1)), 0, body.repr, 0, 12);
+    builtin::array_set_u8(new_repr, 12, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14, $array_clone_src_1, 0, 13);
+        let $mv_field_4: i32;
+        $mv_field_4 = 12 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14, new_repr, 0, $mv_field_4);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

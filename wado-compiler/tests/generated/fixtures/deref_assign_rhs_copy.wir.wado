@@ -420,9 +420,10 @@ global global:core:prelude/primitive.wado::$const_obj_3: ref "core:prelude/strin
 global global:core:prelude/primitive.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "deref_assign_rhs_copy.wado/$test_1_deref_assign_deep_copies_a_reference_element_list"() {
+    let $v_3: ref "core:prelude/string.wado//String";
     let elements_16: ref "Array<core:prelude/string.wado/String>";
-    let v_30: ref "core:prelude/string.wado//String";
     let i: i32;
+    let $licm_repr_49: ref Array<u8>;
     elements_16 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 });
     let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>";
     $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(2);
@@ -443,31 +444,30 @@ fn "deref_assign_rhs_copy.wado/$test_1_deref_assign_deep_copies_a_reference_elem
         };
     };
     builtin::array_set<ref "core:prelude/string.wado//String">(elements_16, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mutated"), used: 7 });
-    $array_clone_i_4 = local.tee v_30(builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, 0)).used;
-    v_30 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = v_30.repr; let $array_clone_dst_7: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>($array_clone_i_4)), 0, $array_clone_src_6, 0, $array_clone_i_4); $array_clone_dst_7, used: $array_clone_i_4 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__10: block -> bool {
-        if $array_clone_i_4 != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+    $v_3 = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, 0);
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
+        if local.tee $array_clone_i_4($v_3.used) != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
         i = 0;
-        $array_clone_src_6 = v_30.repr;
+        $licm_repr_49 = $v_3.repr;
         b4: block {
             l5: loop {
                 break_if b4 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($array_clone_i_4);
-                if builtin::array_get_value<u8>($array_clone_src_6, i) != builtin::array_get_value<u8>(global:deref_assign_rhs_copy.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                if builtin::array_get_value<u8>($licm_repr_49, i) != builtin::array_get_value<u8>(global:deref_assign_rhs_copy.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_6, i) != builtin::array_get_value<u8>(global:deref_assign_rhs_copy.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                if builtin::array_get_value<u8>($licm_repr_49, i) != builtin::array_get_value<u8>(global:deref_assign_rhs_copy.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_6, i) != builtin::array_get_value<u8>(global:deref_assign_rhs_copy.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                if builtin::array_get_value<u8>($licm_repr_49, i) != builtin::array_get_value<u8>(global:deref_assign_rhs_copy.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_6, i) != builtin::array_get_value<u8>(global:deref_assign_rhs_copy.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                if builtin::array_get_value<u8>($licm_repr_49, i) != builtin::array_get_value<u8>(global:deref_assign_rhs_copy.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 i = i + 1;
                 continue l5;
@@ -476,21 +476,21 @@ fn "deref_assign_rhs_copy.wado/$test_1_deref_assign_deep_copies_a_reference_elem
         b10: block {
             l11: loop {
                 break_if b10 i >= $array_clone_i_4;
-                if builtin::array_get_value<u8>($array_clone_src_6, i) != builtin::array_get_value<u8>(global:deref_assign_rhs_copy.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                if builtin::array_get_value<u8>($licm_repr_49, i) != builtin::array_get_value<u8>(global:deref_assign_rhs_copy.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 i = i + 1;
                 continue l11;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__10: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__8: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee v_30("core:prelude/string.wado/core:prelude/string.wado/String::format<deref_assign_rhs_copy.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "deref_assign_rhs_copy.wado//$tmpl$d48748ffcad618c0" { h0: v_30, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_deref_assign_deep_copies_a_reference_element_list at deref_assign_rhs_copy.wado:28
+        "core:rt/panic"(local.tee $v_3("core:prelude/string.wado/core:prelude/string.wado/String::format<deref_assign_rhs_copy.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "deref_assign_rhs_copy.wado//$tmpl$d48748ffcad618c0" { h0: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_deref_assign_deep_copies_a_reference_element_list at deref_assign_rhs_copy.wado:28
 condition: a[0] == \"x\"
 a[0]: "), used: 140 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_deref_assign_deep_copies_a_reference_element_list at deref_assign_rhs_copy.wado:28
 condition: a[0] == \"x\"
-a[0]: "), used: 140 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v_30.used);
+a[0]: "), used: 140 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_3.used);
         unreachable;
     }
 }

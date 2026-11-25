@@ -13,6 +13,7 @@ Run the benchmarks and update `benchmark/README.md` (and `wasm-size/README.md`).
 mise run on-task-started
 ```
 
+- Measure on an idle host: check `ps` first.
 - `vendor/wasmtime` submodule must exist (the SessionStart hook handles it;
   otherwise `git submodule update --init --recommend-shallow vendor/wasmtime`).
 - http-routing needs `oha` (`cargo install oha`); `bun` is mise-managed.

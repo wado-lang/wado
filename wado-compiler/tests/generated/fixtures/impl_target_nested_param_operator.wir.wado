@@ -472,7 +472,7 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<c
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(158)
 
-type "functype//impl_target_nested_param_operator.wado/impl_target_nested_param_operator.wado/Pair<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>^core:prelude/traits.wado/Add::add$spec0$sroa[self.a,rhs.a]$spec0" = fn(ref "Array<core:prelude/string.wado/String>", i32, ref "Array<core:prelude/string.wado/String>", i32) -> [ref "core:prelude/list.wado//List<core:prelude/string.wado/String>", i32];  // TypeId(159)
+type "functype//impl_target_nested_param_operator.wado/impl_target_nested_param_operator.wado/Pair<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>^core:prelude/traits.wado/Add::add$spec0$lend$sroa[self.a,rhs.a]$spec0" = fn(ref "Array<core:prelude/string.wado/String>", i32, ref "Array<core:prelude/string.wado/String>", i32) -> [ref "core:prelude/list.wado//List<core:prelude/string.wado/String>", i32];  // TypeId(159)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(160)
 
@@ -516,11 +516,12 @@ fn "impl_target_nested_param_operator.wado/$test_0_the_operands__element_type"()
     let $v_5_seen: bool;
     let $v_6: bool;
     let $v_6_seen: bool;
+    let $v_2_text: ref "core:prelude/string.wado//String";
     let $v_3_text: ref "core:prelude/string.wado//String";
     let $v_5_text: ref "core:prelude/string.wado//String";
     let $v_6_text: ref "core:prelude/string.wado//String";
-    let v: ref "core:prelude/string.wado//String";
     let i: i32;
+    let $licm_repr_46: ref Array<u8>;
     if ref.is_null(global:impl_target_nested_param_operator.wado::$const_obj_1) {
         global:impl_target_nested_param_operator.wado::$const_obj_1 = block -> ref "impl_target_nested_param_operator.wado//Pair<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>" {
             let $mv_field_1: ref "Array<core:prelude/string.wado/String>";
@@ -529,7 +530,7 @@ fn "impl_target_nested_param_operator.wado/$test_0_the_operands__element_type"()
             $mv_field_3 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 });
             let $mv_a_5: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
             let $mv_b_6: i32;
-            multivalue_bind [$mv_a_5, $mv_b_6] = "impl_target_nested_param_operator.wado/impl_target_nested_param_operator.wado/Pair<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>^core:prelude/traits.wado/Add::add$spec0$sroa[self.a,rhs.a]$spec0"($mv_field_1, 1, $mv_field_3, 1);
+            multivalue_bind [$mv_a_5, $mv_b_6] = "impl_target_nested_param_operator.wado/impl_target_nested_param_operator.wado/Pair<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>^core:prelude/traits.wado/Add::add$spec0$lend$sroa[self.a,rhs.a]$spec0"($mv_field_1, 1, $mv_field_3, 1);
             struct.new "impl_target_nested_param_operator.wado//Pair<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>" { a: $mv_a_5, b: $mv_b_6 };
         };
     }
@@ -543,32 +544,31 @@ fn "impl_target_nested_param_operator.wado/$test_0_the_operands__element_type"()
             "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $v_2_seen, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("impl_target_nested_param_operator.wado:25"), used: 41 });
             unreachable;
         }
-        $v_3_seen = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">(global:impl_target_nested_param_operator.wado::$const_obj_1.a.repr, 1)).used;
-        $v_2 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_7: ref Array<u8>; $array_clone_src_7 = v.repr; let $array_clone_dst_8: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_8(builtin::array_new<u8>($v_3_seen)), 0, $array_clone_src_7, 0, $v_3_seen); $array_clone_dst_8, used: $v_3_seen };
+        $v_2 = builtin::array_get_value<ref "core:prelude/string.wado//String">(global:impl_target_nested_param_operator.wado::$const_obj_1.a.repr, 1);
         $v_2_seen = 1;
-        i = $inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
-            if $v_3_seen != 1 {
-                break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+        i = $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
+            if local.tee $v_3_seen($v_2.used) != 1 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
             }
             i = 0;
-            $array_clone_src_7 = $v_2.repr;
+            $licm_repr_46 = $v_2.repr;
             b5: block {
                 l6: loop {
                     break_if b5 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($v_3_seen);
-                    if builtin::array_get_value<u8>($array_clone_src_7, i) != builtin::array_get_value<u8>(global:impl_target_nested_param_operator.wado::$const_obj_0, i) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                    if builtin::array_get_value<u8>($licm_repr_46, i) != builtin::array_get_value<u8>(global:impl_target_nested_param_operator.wado::$const_obj_0, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($array_clone_src_7, i) != builtin::array_get_value<u8>(global:impl_target_nested_param_operator.wado::$const_obj_0, i) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                    if builtin::array_get_value<u8>($licm_repr_46, i) != builtin::array_get_value<u8>(global:impl_target_nested_param_operator.wado::$const_obj_0, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($array_clone_src_7, i) != builtin::array_get_value<u8>(global:impl_target_nested_param_operator.wado::$const_obj_0, i) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                    if builtin::array_get_value<u8>($licm_repr_46, i) != builtin::array_get_value<u8>(global:impl_target_nested_param_operator.wado::$const_obj_0, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($array_clone_src_7, i) != builtin::array_get_value<u8>(global:impl_target_nested_param_operator.wado::$const_obj_0, i) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                    if builtin::array_get_value<u8>($licm_repr_46, i) != builtin::array_get_value<u8>(global:impl_target_nested_param_operator.wado::$const_obj_0, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                     }
                     i = i + 1;
                     continue l6;
@@ -577,14 +577,14 @@ fn "impl_target_nested_param_operator.wado/$test_0_the_operands__element_type"()
             b11: block {
                 l12: loop {
                     break_if b11 i >= $v_3_seen;
-                    if builtin::array_get_value<u8>($array_clone_src_7, i) != builtin::array_get_value<u8>(global:impl_target_nested_param_operator.wado::$const_obj_0, i) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                    if builtin::array_get_value<u8>($licm_repr_46, i) != builtin::array_get_value<u8>(global:impl_target_nested_param_operator.wado::$const_obj_0, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                     }
                     i = i + 1;
                     continue l12;
                 };
             };
-            break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__6: 1;
         };
         $v_3_seen = 1;
         i;
@@ -601,7 +601,7 @@ fn "impl_target_nested_param_operator.wado/$test_0_the_operands__element_type"()
         0;
     }) == 0) {
         cold_path;
-        v = (if $v_2_seen -> ref "core:prelude/string.wado//String" {
+        $v_2_text = (if $v_2_seen -> ref "core:prelude/string.wado//String" {
             "core:prelude/string.wado/core:prelude/string.wado/String::format<impl_target_nested_param_operator.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "impl_target_nested_param_operator.wado//$tmpl$d48748ffcad618c0" { h0: ref.as_non_null($v_2), s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
@@ -621,7 +621,7 @@ fn "impl_target_nested_param_operator.wado/$test_0_the_operands__element_type"()
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
         });
-        "core:rt/panic"(local.tee v("core:prelude/string.wado/core:prelude/string.wado/String::format<impl_target_nested_param_operator.wado/$tmpl$96e732242e36270f,[i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String,bool,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "impl_target_nested_param_operator.wado//$tmpl$96e732242e36270f" { h0: $mv_b_6, h1: $v_1_4, h2: v, h3: $v_3_text, h4: $v_4, h5: $v_5_text, h6: $v_6_text, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_the_operands__element_type at impl_target_nested_param_operator.wado:25
+        "core:rt/panic"(local.tee $v_2_text("core:prelude/string.wado/core:prelude/string.wado/String::format<impl_target_nested_param_operator.wado/$tmpl$96e732242e36270f,[i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String,bool,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "impl_target_nested_param_operator.wado//$tmpl$96e732242e36270f" { h0: $mv_b_6, h1: $v_1_4, h2: $v_2_text, h3: $v_3_text, h4: $v_4, h5: $v_5_text, h6: $v_6_text, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_the_operands__element_type at impl_target_nested_param_operator.wado:25
 condition: r.a.len() == 2 && r.a[1] == \"y\" && r.b == 3
 r.a.len(): "), used: 166 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_the_operands__element_type at impl_target_nested_param_operator.wado:25
 condition: r.a.len() == 2 && r.a[1] == \"y\" && r.b == 3
@@ -637,7 +637,7 @@ r.a.len() == 2 && r.a[1] == \"y\": "), used: 34 }, s5: struct.new "core:prelude/
 r.b: "), used: 6 }, r5: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 r.b: "), used: 6 }, s6: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 r.b == 3: "), used: 11 }, r6: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-r.b == 3: "), used: 11 }, s7: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r7: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v.used);
+r.b == 3: "), used: 11 }, s7: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r7: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_2_text.used);
         unreachable;
     }
 }
@@ -2684,10 +2684,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, 3);
 }
 
-fn "impl_target_nested_param_operator.wado/impl_target_nested_param_operator.wado/Pair<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>^core:prelude/traits.wado/Add::add$spec0$sroa[self.a,rhs.a]$spec0"($mv$self$repr, $mv$self$used, $mv$rhs$repr, $mv$rhs$used) {
+fn "impl_target_nested_param_operator.wado/impl_target_nested_param_operator.wado/Pair<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>^core:prelude/traits.wado/Add::add$spec0$lend$sroa[self.a,rhs.a]$spec0"($mv$self$repr, $mv$self$used, $mv$rhs$repr, $mv$rhs$used) {
     let a: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
-    let v_13: ref "core:prelude/string.wado//String";
-    let $av_27: i32;
+    let item: ref "core:prelude/string.wado//String";
+    let used: i32;
     a = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>"; $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(1); let $array_clone_i_4: i32; $array_clone_i_4 = 0; let $array_clone_elem_5: ref null "core:prelude/string.wado//String"; $array_clone_deep_prefix: block {
         l335: loop {
             break_if $array_clone_deep_prefix $array_clone_i_4 >= 1;
@@ -2706,16 +2706,15 @@ fn "impl_target_nested_param_operator.wado/impl_target_nested_param_operator.wad
     b337: block {
         l338: loop {
             break_if b337 $array_clone_i_4 >= 1;
-            $av_27 = local.tee v_13(builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$rhs$repr, $array_clone_i_4)).used;
-            v_13 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = v_13.repr; let $array_clone_dst_7: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>($av_27)), 0, $array_clone_src_6, 0, $av_27); $array_clone_dst_7, used: $av_27 };
+            item = builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$rhs$repr, $array_clone_i_4);
             $array_clone_i_4 = $array_clone_i_4 + 1;
-            if @unlikely(local.tee $av_27(a.used) >= builtin::array_len($mv$self$repr)) {
+            if @unlikely(local.tee used(a.used) >= builtin::array_len($mv$self$repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(a);
                 $mv$self$repr = a.repr;
             }
-            builtin::array_set<ref "core:prelude/string.wado//String">($mv$self$repr, $av_27, v_13);
-            a.used = $av_27 + 1;
+            builtin::array_set<ref "core:prelude/string.wado//String">($mv$self$repr, used, item);
+            a.used = used + 1;
             continue l338;
         };
     };

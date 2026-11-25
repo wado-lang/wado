@@ -420,7 +420,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:bug_shared_field_write_reaches_every_name.wado::$const_obj_0: ref "core:prelude/list.wado//List<i32>" = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
+global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "bug_shared_field_write_reaches_every_name.wado/$template_segment$bug_shared_field_write_reaches_every_name.wado/$tmpl$ebaa20f4a908b504"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
     return (if index == 0 -> ref "core:prelude/string.wado//String" {
@@ -1274,19 +1275,14 @@ fn "core:prelude/string.wado/$hole_fmt$core:prelude/string.wado/$tmpl$ce9bda9252
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_pattern"(self) {
-    self.inner.x = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
+    self.inner.x = global:bug_shared_field_write_reaches_every_name.wado::$const_obj_0;
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::pattern_read"(self) {
-    let $load_3: i32;
-    let v: ref "core:prelude/list.wado//List<i32>";
-    v = self.inner.x;
-    let $array_clone_src_1: ref Array<i32>;
-    $array_clone_src_1 = v.repr;
-    $load_3 = v.used;
-    builtin::array_copy<i32>(builtin::array_new<i32>($load_3), 0, $array_clone_src_1, 0, $load_3);
+    let raw: ref "core:prelude/list.wado//List<i32>";
+    raw = self.inner.x;
     "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_pattern"(self);
-    return $load_3;
+    return raw.used;
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -1968,7 +1964,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_ref$sroa[&mut(self.inner)]"(self) {
-    self.x = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
+    self.x = global:bug_shared_field_write_reaches_every_name.wado::$const_obj_0;
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_element$sroa[&mut(self.rows)]"(self) {
@@ -1989,15 +1985,10 @@ fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reache
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::ref_read$sroa[&mut(self.inner)]"(self) {
-    let $load_2: i32;
-    let v: ref "core:prelude/list.wado//List<i32>";
-    v = self.x;
-    let $array_clone_src_1: ref Array<i32>;
-    $array_clone_src_1 = v.repr;
-    $load_2 = v.used;
-    builtin::array_copy<i32>(builtin::array_new<i32>($load_2), 0, $array_clone_src_1, 0, $load_2);
+    let raw: ref "core:prelude/list.wado//List<i32>";
+    raw = self.x;
     "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_ref$sroa[&mut(self.inner)]"(self);
-    return $load_2;
+    return raw.used;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
@@ -2052,7 +2043,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_0, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_2, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
@@ -2066,7 +2057,7 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
     let value: u64;
     let offset: i32;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/primitive.wado::$const_obj_0, self);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/primitive.wado::$const_obj_2, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
 }
 
@@ -2104,21 +2095,21 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::element_read$sroa[&mut(self.rows)]"(self) {
+    let self_13: i32;
     let v: ref "core:prelude/list.wado//List<i32>";
-    let self_14: i32;
-    self_14 = self.used;
-    if @unlikely(0 >= self_14) {
+    self_13 = self.used;
+    if @unlikely(0 >= self_13) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, self_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_shared_field_write_reaches_every_name.wado:52"), used: 49 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, self_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_shared_field_write_reaches_every_name.wado:52"), used: 49 });
         unreachable;
     }
     v = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(self.repr, 0);
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = v.repr;
-    self_14 = v.used;
-    builtin::array_copy<i32>(builtin::array_new<i32>(self_14), 0, $array_clone_src_1, 0, self_14);
+    self_13 = v.used;
+    builtin::array_copy<i32>(builtin::array_new<i32>(self_13), 0, $array_clone_src_1, 0, self_13);
     "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_element$sroa[&mut(self.rows)]"(self);
-    return self_14;
+    return self_13;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {

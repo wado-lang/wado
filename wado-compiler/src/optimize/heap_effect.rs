@@ -26,104 +26,253 @@ use crate::type_table::TypeTable;
 
 use super::arena_query::holds_reference;
 use super::body_memo::BodyMemo;
+use super::inline::recursive_scc_members;
+use crate::lower::plan::value_copy::needs_value_copy;
 use crate::parallel::{Executor, lock};
 
-/// Where a class's objects may come from: a bit per parameter (the last one
-/// standing for every later one) or a global. None means allocated here.
+/// How many depths below a parameter's own objects a [`Prov`] tells apart: a
+/// parameter's objects are at depth 0, and what one load from depth `d`
+/// reaches is at depth `d + 1`. The deepest stands for itself and every depth
+/// past it.
+const DEPTHS: usize = 8;
+const DEEPEST: usize = DEPTHS - 1;
+
+/// How many parameters a [`Prov`] tells apart; the last stands for every later
+/// one.
+const PARAM_SLOTS: usize = 32;
+
+fn param_slot(index: usize) -> usize {
+    index.min(PARAM_SLOTS - 1)
+}
+
+/// The parameters, of `count`, a [`Prov`] parameter bit stands for.
+pub(super) fn params_of_bit(bit: usize, count: usize) -> Range<usize> {
+    let end = if bit == PARAM_SLOTS - 1 {
+        count
+    } else {
+        bit + 1
+    };
+    bit..end.min(count)
+}
+
+/// Where a class's objects may come from: a parameter's objects, or what a
+/// chain of loads from them reaches, a bit per parameter at each depth; or a
+/// global. None means allocated here.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 struct Prov {
     elsewhere: bool,
-    params: u64,
+    params: [u32; DEPTHS],
 }
 
 impl Prov {
     const ELSEWHERE: Self = Self {
         elsewhere: true,
-        params: 0,
+        params: [0; DEPTHS],
     };
 
     fn param(index: usize) -> Self {
-        Self {
-            elsewhere: false,
-            params: 1 << index.min(63),
-        }
-    }
-
-    fn has_param(self, index: usize) -> bool {
-        self.params & (1 << index.min(63)) != 0
+        let mut prov = Self::default();
+        prov.params[0] = 1 << param_slot(index);
+        prov
     }
 
     fn is_fresh(self) -> bool {
-        !self.elsewhere && self.params == 0
+        !self.elsewhere && self.params.iter().all(|&bits| bits == 0)
     }
 
     fn join(&mut self, other: Self) {
         self.elsewhere |= other.elsewhere;
-        self.params |= other.params;
-    }
-}
-
-/// The object types an access reaches through each parameter, and elsewhere.
-/// Kept per parameter so a call charges a callee's write to the argument it
-/// goes through: `format(t)` writing through its own fresh `Formatter` writes
-/// nothing `t` reaches.
-#[derive(Clone, Default, PartialEq, Debug)]
-struct Access {
-    through_params: Vec<ObjectTypes>,
-    elsewhere: ObjectTypes,
-}
-
-impl Access {
-    /// What the access reaches through parameter `index` (the last bit
-    /// [`Prov::param`] keeps stands for every parameter past it).
-    fn through(&self, index: usize) -> &ObjectTypes {
-        static NONE: std::sync::LazyLock<ObjectTypes> =
-            std::sync::LazyLock::new(ObjectTypes::default);
-        self.through_params.get(index.min(63)).unwrap_or(&NONE)
-    }
-
-    fn through_mut(&mut self, index: usize) -> &mut ObjectTypes {
-        if self.through_params.len() <= index {
-            self.through_params
-                .resize(index + 1, ObjectTypes::default());
+        for (mine, theirs) in self.params.iter_mut().zip(other.params) {
+            *mine |= theirs;
         }
-        &mut self.through_params[index]
     }
 
-    fn params_of(prov: Prov) -> impl Iterator<Item = usize> {
-        let mut bits = prov.params;
-        std::iter::from_fn(move || {
-            (bits != 0).then(|| {
-                let index = bits.trailing_zeros() as usize;
-                bits &= bits - 1;
-                index
+    fn contains(self, other: Self) -> bool {
+        let mut joined = self;
+        joined.join(other);
+        joined == self
+    }
+
+    /// What the objects one load from these reaches may come from.
+    fn loaded(self) -> Self {
+        let mut out = Self {
+            elsewhere: self.elsewhere,
+            params: [0; DEPTHS],
+        };
+        out.params[1..].copy_from_slice(&self.params[..DEEPEST]);
+        out.params[DEEPEST] |= self.params[DEEPEST];
+        out
+    }
+
+    /// The origins of `self` that `other` lacks.
+    fn without(self, other: Self) -> Self {
+        let mut out = Self {
+            elsewhere: self.elsewhere && !other.elsewhere,
+            params: self.params,
+        };
+        for (mine, theirs) in out.params.iter_mut().zip(other.params) {
+            *mine &= !theirs;
+        }
+        out
+    }
+
+    /// Each parameter and depth the objects may come from.
+    fn sources(self) -> impl Iterator<Item = (usize, usize)> {
+        (0..DEPTHS).flat_map(move |depth| {
+            let mut bits = self.params[depth];
+            std::iter::from_fn(move || {
+                (bits != 0).then(|| {
+                    let index = bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    (index, depth)
+                })
             })
         })
     }
 
+    /// The parameters the objects may come from, at any depth.
+    fn params_at_any_depth(self) -> u32 {
+        self.params.iter().fold(0, |all, &bits| all | bits)
+    }
+}
+
+/// The object types an access reaches through each parameter at each depth,
+/// and elsewhere. Kept per parameter so a call charges a callee's write to the
+/// argument it goes through: `format(t)` writing through its own fresh
+/// `Formatter` writes nothing `t` reaches. Kept per depth so a write to a
+/// list's spine is told from one inside its elements, whose types a recursive
+/// element type shares.
+#[derive(Clone, Default, PartialEq, Debug)]
+struct Access {
+    through_params: Vec<[ObjectTypes; DEPTHS]>,
+    elsewhere: ObjectTypes,
+}
+
+impl Access {
+    /// Each depth below parameter `index` the access reaches something at.
+    fn depths(&self, index: usize) -> impl Iterator<Item = (usize, &ObjectTypes)> {
+        self.through_params
+            .get(param_slot(index))
+            .into_iter()
+            .flat_map(|depths| depths.iter().enumerate())
+            .filter(|(_, keys)| !keys.is_empty())
+    }
+
+    /// What the access reaches through parameter `index`, at any depth.
+    fn through_any_depth(&self, index: usize) -> ObjectTypes {
+        let mut out = ObjectTypes::default();
+        for (_, keys) in self.depths(index) {
+            out.union(keys);
+        }
+        out
+    }
+
+    fn through_mut(&mut self, index: usize, depth: usize) -> &mut ObjectTypes {
+        if self.through_params.len() <= index {
+            self.through_params.resize(index + 1, Default::default());
+        }
+        &mut self.through_params[index][depth]
+    }
+
     fn record(&mut self, prov: Prov, keys: &ObjectTypes) {
-        for i in Self::params_of(prov) {
-            self.through_mut(i).union(keys);
+        for (i, depth) in prov.sources() {
+            self.through_mut(i, depth).union(keys);
         }
         if prov.elsewhere {
             self.elsewhere.union(keys);
         }
     }
 
-    fn record_meet(&mut self, prov: Prov, a: &ObjectTypes, b: &ObjectTypes) {
-        for i in Self::params_of(prov) {
-            self.through_mut(i).union_meet(a, b);
+    fn union(&mut self, other: &Access) {
+        for (i, depths) in other.through_params.iter().enumerate() {
+            for (depth, keys) in depths.iter().enumerate() {
+                self.through_mut(i, depth).union(keys);
+            }
         }
-        if prov.elsewhere {
-            self.elsewhere.union_meet(a, b);
+        self.elsewhere.union(&other.elsewhere);
+    }
+}
+
+/// An [`Access`] being gathered, its keys held per origin: a summary records
+/// many accesses from one origin, and each reaches every parameter and depth
+/// the origin names, so their keys join once per origin.
+#[derive(Default)]
+struct PendingAccess(Vec<(Prov, ObjectTypes)>);
+
+impl PendingAccess {
+    fn record(&mut self, prov: Prov, keys: &ObjectTypes) {
+        match self.0.iter_mut().find(|(p, _)| *p == prov) {
+            Some((_, held)) => held.union(keys),
+            None => self.0.push((prov, keys.clone())),
         }
     }
 
-    fn union(&mut self, other: &Access) {
-        for (i, keys) in other.through_params.iter().enumerate() {
-            self.through_mut(i).union(keys);
+    fn into_access(self) -> Access {
+        let mut access = Access::default();
+        for (prov, keys) in self.0 {
+            access.record(prov, &keys);
         }
-        self.elsewhere.union(&other.elsewhere);
+        access
+    }
+}
+
+/// What each depth of a chain of objects may come to hold beyond what the depth
+/// above it implies: the objects themselves first, then what one load from
+/// them reaches, and so on.
+#[derive(Clone, Default, PartialEq, Debug)]
+struct Levels {
+    provs: Vec<Prov>,
+    /// The chain runs past [`DEEPEST`] with origins the last depth does not
+    /// imply, so the last one stands for every depth past it.
+    open: bool,
+}
+
+impl Levels {
+    /// The levels of the chain from `start`'s class in `classes`.
+    fn of(classes: &Classes, start: u32) -> Self {
+        let mut raw = Vec::with_capacity(DEPTHS);
+        let mut class = Some(classes.root(start));
+        while raw.len() < DEPTHS
+            && let Some(c) = class
+        {
+            raw.push(classes.prov_of(c));
+            class = classes.loaded_from(c);
+        }
+        let mut open = false;
+        if let Some(deeper) = class {
+            let mut held = Prov::default();
+            for c in classes.chain(deeper) {
+                held.join(classes.prov_of(c));
+            }
+            open = !held.without(deepened(raw[DEEPEST])).is_fresh();
+            if open {
+                raw[DEEPEST].join(held);
+            }
+        }
+        let mut provs: Vec<Prov> = (0..raw.len())
+            .map(|d| {
+                let implied = d
+                    .checked_sub(1)
+                    .map_or(Prov::default(), |up| raw[up].loaded());
+                raw[d].without(implied)
+            })
+            .collect();
+        if !open {
+            while provs.last().is_some_and(|p| p.is_fresh()) {
+                provs.pop();
+            }
+        }
+        Self { provs, open }
+    }
+
+    fn join(&mut self, other: &Levels) {
+        if self.provs.len() < other.provs.len() {
+            self.provs.resize(other.provs.len(), Prov::default());
+        }
+        for (mine, theirs) in self.provs.iter_mut().zip(&other.provs) {
+            mine.join(*theirs);
+        }
+        self.open |= other.open;
     }
 }
 
@@ -198,9 +347,9 @@ struct Summary {
     /// Which fields of those objects `writes` may write.
     field_writes: FieldWrites,
     /// What the result may share.
-    ret: Prov,
+    ret: Levels,
     /// What each parameter's objects may come to hold.
-    into_params: Vec<Prov>,
+    into_params: Vec<Levels>,
     /// What globals may come to hold.
     into_elsewhere: Prov,
 }
@@ -210,13 +359,13 @@ impl Summary {
         self.reads.union(&other.reads);
         self.writes.union(&other.writes);
         self.field_writes.union(&other.field_writes);
-        self.ret.join(other.ret);
+        self.ret.join(&other.ret);
         if self.into_params.len() < other.into_params.len() {
             self.into_params
-                .resize(other.into_params.len(), Prov::default());
+                .resize(other.into_params.len(), Levels::default());
         }
         for (mine, theirs) in self.into_params.iter_mut().zip(&other.into_params) {
-            mine.join(*theirs);
+            mine.join(theirs);
         }
         self.into_elsewhere.join(other.into_elsewhere);
     }
@@ -311,6 +460,8 @@ pub(super) struct HeapEffectsCache {
     /// Filled during a sweep by whichever visit asks first; its values depend
     /// only on the type, so the order changes nothing.
     reach_memo: Mutex<IndexMap<TypeId, Arc<ObjectTypes>>>,
+    /// [`HeapEffects::copy_shares`]'s answers, filled as `reach_memo` is.
+    copy_shares_memo: Mutex<IndexMap<TypeId, bool>>,
     /// Where `assert_one_settled` resumes its rotation.
     #[cfg(debug_assertions)]
     cursor: usize,
@@ -513,7 +664,16 @@ impl HeapEffectsCache {
                     &fresh
                 };
                 let classes = frame.link(frame.classes.clone(), &effects, body);
-                frame.summary(&classes, &effects, body)
+                let mut summary = frame.summary(&classes, &effects, body);
+                // A copy hands its input's unit-case objects on as they are,
+                // which the frame cannot tell from a part: they hold nothing
+                // a write reaches, so the type says what the copy shares.
+                if f.value_copy_type()
+                    .is_some_and(|ty| !effects.copy_shares(ty))
+                {
+                    summary.ret = Levels::default();
+                }
+                summary
             }
             Callee::Builtin(_) | Callee::Opaque { .. } => Summary::default(),
         }
@@ -545,23 +705,74 @@ pub(super) struct HeapEffects<'t> {
 
 impl HeapEffects<'_> {
     /// Whether what `ty` holds may be a reference: an array's elements, or
-    /// anything else's contents.
-    fn elements_hold_reference(&self, ty: TypeId) -> bool {
+    /// anything else's contents. When `copied`, the elements are value-copied,
+    /// which hands on only what such a copy shares.
+    fn elements_hold_reference(&self, ty: TypeId, copied: bool) -> bool {
         let tt = self.type_table;
         let ResolvedType::BuiltinArray(element) = tt.get(tt.strip_handles(ty)) else {
             return true;
         };
-        holds_reference(tt, *element)
+        holds_reference(tt, *element) && (!copied || self.copy_shares(*element))
     }
 
-    /// Whether the retain `r` may carry a reference out of `args`.
+    /// Whether a value copy of `ty` may hold an object its source holds: one
+    /// it hands on as is, such as a reference's referent, a closure's
+    /// environment or an affine value.
+    fn copy_shares(&self, ty: TypeId) -> bool {
+        if let Some(&hit) = lock(&self.cache.copy_shares_memo).get(&ty) {
+            return hit;
+        }
+        let answer = self.copy_shares_walk(ty, &mut IndexSet::default());
+        lock(&self.cache.copy_shares_memo).insert(ty, answer);
+        answer
+    }
+
+    fn copy_shares_walk(&self, ty: TypeId, seen: &mut IndexSet<TypeId>) -> bool {
+        let tt = self.type_table;
+        let ty = tt.representation_head(ty);
+        if !holds_reference(tt, ty) {
+            return false;
+        }
+        if !needs_value_copy(ty, tt) {
+            return true;
+        }
+        if !seen.insert(ty) {
+            return false;
+        }
+        match tt.get(ty) {
+            ResolvedType::Tuple(elems) => elems.iter().any(|&e| self.copy_shares_walk(e, seen)),
+            ResolvedType::Struct { .. } => self
+                .struct_field_types(ty)
+                .is_none_or(|fields| fields.iter().any(|&f| self.copy_shares_walk(f, seen))),
+            ResolvedType::BuiltinArray(element) => self.copy_shares_walk(*element, seen),
+            ResolvedType::Variant { def, type_args } => {
+                tt.variant_template_cases(*def).is_none_or(|cases| {
+                    cases.iter().any(|&(_, _, payload)| {
+                        if !tt.contains_type_param(payload) {
+                            return self.copy_shares_walk(payload, seen);
+                        }
+                        tt.type_param_id(payload)
+                            .and_then(|id| type_args.get(id.index as usize))
+                            .is_none_or(|&arg| self.copy_shares_walk(arg, seen))
+                    })
+                })
+            }
+            _ => true,
+        }
+    }
+
+    /// Whether the retain `r` of `declaration` may carry a reference out of
+    /// `args`.
     fn retains_reference(
         &self,
         body: &Body,
+        declaration: &BuiltinDeclaration,
         r: &RetainSpec<usize>,
         source: Option<Operand>,
     ) -> bool {
-        !r.elements || source.is_none_or(|a| self.elements_hold_reference(body.operand_type(a)))
+        let copied = matches!(declaration.facts.storage, Storage::CopiesArgs);
+        !r.elements
+            || source.is_none_or(|a| self.elements_hold_reference(body.operand_type(a), copied))
     }
 
     /// Every object type `call` may write that its caller can reach: through
@@ -578,9 +789,11 @@ impl HeapEffects<'_> {
         for (j, &a) in args.iter().enumerate() {
             let ty = body.operand_type(a);
             match target {
-                Target::Summary(t) => out.union_meet(t.writes.through(j), &self.reach(ty)),
+                Target::Summary(t) => {
+                    out.union_meet(&t.writes.through_any_depth(j), &self.reach(ty));
+                }
                 Target::Builtin(declaration) if declaration.mut_params.contains(&j) => {
-                    out.union(&builtin_touches(self, declaration, ty));
+                    out.union(&builtin_touches(self, declaration, ty).0);
                 }
                 Target::Builtin(_) => {}
                 Target::Opaque { .. } => out.union(&self.reach(ty)),
@@ -589,12 +802,24 @@ impl HeapEffects<'_> {
         out
     }
 
+    /// Per function, in store order, whether it lies on a call cycle, an
+    /// indirect call reaching every closure.
+    pub(super) fn recursive_functions(&self) -> Vec<bool> {
+        let mut recursive = recursive_scc_members(&self.cache.successors());
+        recursive.truncate(self.cache.functions.facts().len());
+        recursive
+    }
+
     /// Whether the function at `index` may write an object of type `ty` it did
     /// not allocate, where code after the write may read it.
     pub(super) fn function_may_write(&self, index: usize, ty: TypeId) -> bool {
         let writes = &self.cache.summaries[index].writes;
         self.type_table.heap_object_key(ty).is_none_or(|key| {
-            writes.through_params.iter().any(|keys| keys.contains(key))
+            writes
+                .through_params
+                .iter()
+                .flatten()
+                .any(|keys| keys.contains(key))
                 || writes.elsewhere.contains(key)
         })
     }
@@ -788,6 +1013,24 @@ impl HeapEffects<'_> {
         }
     }
 
+    /// Whether a value of type `part` is what one load from an object of type
+    /// `holder` may read: an element of an array or a tuple, or a field of a
+    /// struct.
+    fn loads_as(&self, holder: TypeId, part: TypeId) -> bool {
+        let tt = self.type_table;
+        let part = referent(tt, part);
+        let is_part = |ty: &TypeId| referent(tt, *ty) == part;
+        let holder = referent(tt, holder);
+        match tt.get(holder) {
+            ResolvedType::BuiltinArray(element) => is_part(element),
+            ResolvedType::Tuple(elements) => elements.iter().any(is_part),
+            ResolvedType::Struct { .. } => self
+                .struct_field_types(holder)
+                .is_some_and(|fields| fields.iter().any(is_part)),
+            _ => false,
+        }
+    }
+
     /// A struct's field types, the instance of a generic one included.
     fn struct_field_types(&self, ty: TypeId) -> Option<&[TypeId]> {
         self.cache
@@ -854,6 +1097,15 @@ enum OperandNode {
     Unknown,
 }
 
+impl OperandNode {
+    fn node(self) -> Option<u32> {
+        match self {
+            OperandNode::Node(n) => Some(n),
+            OperandNode::None | OperandNode::Unknown => None,
+        }
+    }
+}
+
 enum Keys {
     One(TypeId),
     Set(Arc<ObjectTypes>),
@@ -904,11 +1156,31 @@ struct AccessSite {
 }
 
 /// A union-find over a frame's nodes, where a class holds what flows together
-/// and its root carries the origins reaching it.
+/// and its root carries the origins reaching it, and the class a load from its
+/// objects reaches: a field, an element or a payload of theirs, or what a cell
+/// holds. A reference that is no cell is its referent's own handle, so it is in
+/// its referent's class.
 #[derive(Clone, Default)]
 struct Classes {
     sets: DisjointSets,
     prov: Vec<Prov>,
+    /// At a root, the node of the class a load reaches, or [`NO_NODE`] where
+    /// nothing was loaded or stored there.
+    loads: Vec<u32>,
+}
+
+/// Some objects a call or a store reaches: a class, or objects `loads` loads
+/// below the deepest class `under` a chain has in the frame, and where `deep`,
+/// every one below them, which come from where `prov` says.
+#[derive(Clone, Copy)]
+enum Level {
+    Class(u32),
+    Beyond {
+        under: u32,
+        loads: usize,
+        deep: bool,
+        prov: Prov,
+    },
 }
 
 impl Classes {
@@ -916,11 +1188,13 @@ impl Classes {
         Self {
             sets: DisjointSets::new(len),
             prov: vec![Prov::default(); len],
+            loads: vec![NO_NODE; len],
         }
     }
 
     fn push(&mut self) -> u32 {
         self.prov.push(Prov::default());
+        self.loads.push(NO_NODE);
         self.sets.push()
     }
 
@@ -933,10 +1207,22 @@ impl Classes {
         self.prov[self.root(n) as usize]
     }
 
+    /// Join `a`'s class and `b`'s, and so what a load reaches from each.
     fn unify(&mut self, a: u32, b: u32) {
-        if let Some((absorbed, kept)) = self.sets.union(b, a) {
+        let mut pending = vec![(a, b)];
+        while let Some((a, b)) = pending.pop() {
+            let Some((absorbed, kept)) = self.sets.union(b, a) else {
+                continue;
+            };
             let absorbed_prov = self.prov[absorbed as usize];
             self.prov[kept as usize].join(absorbed_prov);
+            let moved = self.loads[absorbed as usize];
+            if moved != NO_NODE {
+                match self.loads[kept as usize] {
+                    NO_NODE => self.loads[kept as usize] = moved,
+                    held => pending.push((held, moved)),
+                }
+            }
         }
     }
 
@@ -944,6 +1230,129 @@ impl Classes {
         if let (OperandNode::Node(a), OperandNode::Node(b)) = (a, b) {
             self.unify(a, b);
         }
+    }
+
+    /// The class a load from `n`'s objects reaches, made where there is none.
+    fn load(&mut self, n: u32) -> u32 {
+        let r = self.sets.find(n);
+        match self.loads[r as usize] {
+            NO_NODE => {
+                let loaded = self.push();
+                self.loads[r as usize] = loaded;
+                loaded
+            }
+            loaded => self.sets.find(loaded),
+        }
+    }
+
+    /// [`Self::load`] of an operand's node, where it has one.
+    fn load_operand(&mut self, n: OperandNode) -> OperandNode {
+        match n {
+            OperandNode::Node(n) => OperandNode::Node(self.load(n)),
+            other => other,
+        }
+    }
+
+    /// The class `depth` loads from `n`'s objects reach, made where there is
+    /// none.
+    fn load_n(&mut self, n: u32, depth: usize) -> u32 {
+        (0..depth).fold(n, |n, _| self.load(n))
+    }
+
+    /// Make every load below `n`'s class reach that class: what an access at
+    /// [`DEEPEST`] stands for, or what nothing says the depth of.
+    fn collapse(&mut self, n: u32) {
+        let loaded = self.load(n);
+        self.unify(n, loaded);
+    }
+
+    /// The class a load from `n`'s objects reaches, where the frame has one.
+    fn loaded_from(&self, n: u32) -> Option<u32> {
+        let loaded = self.loads[self.root(n) as usize];
+        (loaded != NO_NODE).then(|| self.root(loaded))
+    }
+
+    /// The classes `n`'s objects are in or reach, `n`'s first.
+    fn chain(&self, n: u32) -> Vec<u32> {
+        let mut chain = Vec::new();
+        let mut class = Some(self.root(n));
+        while let Some(c) = class
+            && !chain.contains(&c)
+        {
+            chain.push(c);
+            class = self.loaded_from(c);
+        }
+        chain
+    }
+
+    /// The objects `depth` loads from `n`'s reach, and where `below`, every
+    /// object a load from them reaches.
+    fn levels(&self, n: u32, depth: usize, below: bool) -> Vec<Level> {
+        let mut class = self.root(n);
+        for reached in 0..depth {
+            let Some(loaded) = self.loaded_from(class) else {
+                let prov = (reached..depth).fold(self.prov_of(class), |p, _| p.loaded());
+                let prov = if below { deepened(prov) } else { prov };
+                return vec![Level::Beyond {
+                    under: class,
+                    loads: depth - reached,
+                    deep: below,
+                    prov,
+                }];
+            };
+            class = loaded;
+        }
+        if !below {
+            return vec![Level::Class(class)];
+        }
+        let chain = self.chain(class);
+        let last = *chain.last().expect("a chain holds its start");
+        let mut levels: Vec<Level> = chain.into_iter().map(Level::Class).collect();
+        if self.loaded_from(last).is_none() {
+            levels.push(Level::Beyond {
+                under: last,
+                loads: 1,
+                deep: true,
+                prov: deepened(self.prov_of(last).loaded()),
+            });
+        }
+        levels
+    }
+
+    fn level_prov(&self, level: Level) -> Prov {
+        match level {
+            Level::Class(c) => self.prov_of(c),
+            Level::Beyond { prov, .. } => prov,
+        }
+    }
+
+    /// Hand each class's origins on to what a load from it reaches.
+    fn settle(&mut self) {
+        let mut pending: Vec<u32> = (0..self.loads.len() as u32)
+            .filter(|&n| self.root(n) == n && !self.prov[n as usize].is_fresh())
+            .collect();
+        while let Some(n) = pending.pop() {
+            let Some(loaded) = self.loaded_from(n) else {
+                continue;
+            };
+            let handed = self.prov[n as usize].loaded();
+            if !self.prov[loaded as usize].contains(handed) {
+                self.prov[loaded as usize].join(handed);
+                pending.push(loaded);
+            }
+        }
+    }
+}
+
+/// `prov` joined with what every chain of loads from objects of its origins
+/// reaches.
+fn deepened(mut prov: Prov) -> Prov {
+    loop {
+        let next = prov.loaded();
+        if prov.contains(next) {
+            return prov;
+        }
+        prov.join(next);
     }
 }
 
@@ -1031,6 +1440,8 @@ impl HeapFrame {
             targets: IndexSet::default(),
         };
         frame.classes.prov[ELSEWHERE as usize] = Prov::ELSEWHERE;
+        // A global reaches only what other globals may.
+        frame.classes.loads[ELSEWHERE as usize] = ELSEWHERE;
         for (k, &local) in params.iter().enumerate() {
             let n = frame.define_local(local);
             frame.classes.prov[n as usize].join(Prov::param(k));
@@ -1100,6 +1511,7 @@ impl HeapFrame {
             );
         }
         classes.sets.flatten();
+        classes.settle();
         classes
     }
 
@@ -1137,36 +1549,80 @@ impl HeapFrame {
         self.classes.unify_nodes(a, b);
     }
 
-    /// The node for an operand while building: a promoted value joins every
-    /// local and expression it reads.
+    /// The node for an operand while building.
     fn operand_node(&mut self, effects: &HeapEffects, body: &Body, op: Operand) -> OperandNode {
-        let tt = effects.type_table;
         match op {
             Operand::Expr(e) => {
-                if !holds_reference(tt, body.exprs[e].type_id) {
+                if !holds_reference(effects.type_table, body.exprs[e].type_id) {
                     return OperandNode::None;
                 }
                 self.expr_node(e)
                     .map_or(OperandNode::Unknown, OperandNode::Node)
             }
-            Operand::Value(v) => {
-                if body
-                    .values
-                    .type_of(v)
-                    .is_some_and(|ty| !holds_reference(tt, ty))
-                {
-                    return OperandNode::None;
+            Operand::Value(v) => self.value_node(effects, body, v),
+        }
+    }
+
+    /// The node for a promoted value while building: a field read is a load
+    /// from its receiver, and a merge joins its inputs.
+    fn value_node(&mut self, effects: &HeapEffects, body: &Body, v: ValueId) -> OperandNode {
+        if !value_holds_reference(effects, body, v) {
+            return OperandNode::None;
+        }
+        let join = |frame: &mut Self, inputs: &[ValueId]| {
+            let mut joined = OperandNode::None;
+            for &input in inputs {
+                let n = frame.value_node(effects, body, input);
+                frame.unify_nodes(joined, n);
+                if joined == OperandNode::None {
+                    joined = n;
                 }
-                let mut leaves = Vec::new();
-                for_each_leaf_local(body, v, &mut |l| leaves.push(self.local_node(l)));
-                let Some((&first, rest)) = leaves.split_first() else {
-                    return OperandNode::None;
-                };
-                for &n in rest {
-                    self.unify(first, n);
-                }
-                OperandNode::Node(first)
             }
+            joined
+        };
+        match *body.values.kind(v) {
+            ValueKind::Opaque(oid) => {
+                OperandNode::Node(self.local_node(body.values.promoted_opaque_local(oid)))
+            }
+            ValueKind::FieldAccess { receiver, .. } => {
+                let receiver = self.value_node(effects, body, receiver);
+                self.classes.load_operand(receiver)
+            }
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                self.value_node(effects, body, operand)
+            }
+            ValueKind::Binary { lhs, rhs, .. } => join(self, &[lhs, rhs]),
+            ValueKind::Select { then, else_, .. } => join(self, &[then, else_]),
+            ValueKind::LoopPhi { entry, body_iter } => join(self, &[entry, body_iter]),
+            ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
+            | ValueKind::Const(..) => OperandNode::None,
+        }
+    }
+
+    /// The class a load from `op`'s objects reaches, where `op` has any.
+    fn operand_load(&mut self, effects: &HeapEffects, body: &Body, op: Operand) -> OperandNode {
+        let n = self.operand_node(effects, body, op);
+        self.classes.load_operand(n)
+    }
+
+    /// Join `n` with what a load from `op` reaches.
+    fn unify_load(&mut self, effects: &HeapEffects, body: &Body, n: u32, op: Operand) {
+        if let OperandNode::Node(m) = self.operand_load(effects, body, op) {
+            self.unify(n, m);
+        }
+    }
+
+    /// Join what a load from `n` reaches with `op`.
+    fn store_into(&mut self, effects: &HeapEffects, body: &Body, n: u32, op: Operand) {
+        if let OperandNode::Node(m) = self.operand_node(effects, body, op) {
+            let slot = self.classes.load(n);
+            self.unify(slot, m);
         }
     }
 
@@ -1306,8 +1762,22 @@ impl HeapFrame {
                     self.unify_op(effects, body, node, *right);
                 }
             }
-            ExprKind::Cast { expr: inner, .. }
-            | ExprKind::ClosureToCanonical { functor: inner, .. } => {
+            ExprKind::Cast {
+                expr: inner,
+                target_type,
+            } => {
+                if yields {
+                    self.unify_op(effects, body, node, *inner);
+                    // A cast that names a different object than its operand,
+                    // as a payload is to its variant, keeps no depth apart.
+                    let tt = effects.type_table;
+                    let object = |ty| tt.heap_object_key(referent(tt, ty));
+                    if object(body.operand_type(*inner)) != object(*target_type) {
+                        self.classes.collapse(node);
+                    }
+                }
+            }
+            ExprKind::ClosureToCanonical { functor: inner, .. } => {
                 if yields {
                     self.unify_op(effects, body, node, *inner);
                 }
@@ -1322,7 +1792,7 @@ impl HeapFrame {
                     self.access(effects, body, Effect::Read, e, *inner, Some(*field_index));
                 }
                 if yields {
-                    self.unify_op(effects, body, node, *inner);
+                    self.unify_load(effects, body, node, *inner);
                 }
             }
             ExprKind::Index { expr: inner, .. } | ExprKind::VariantPayload { expr: inner, .. } => {
@@ -1330,7 +1800,7 @@ impl HeapFrame {
                     self.access(effects, body, Effect::Read, e, *inner, None);
                 }
                 if yields {
-                    self.unify_op(effects, body, node, *inner);
+                    self.unify_load(effects, body, node, *inner);
                 }
             }
             ExprKind::VariantTag { expr: inner } | ExprKind::VariantTest { expr: inner, .. } => {
@@ -1338,16 +1808,16 @@ impl HeapFrame {
             }
             ExprKind::StructLiteral { fields, .. } => {
                 for f in fields {
-                    self.unify_op(effects, body, node, f.value);
+                    self.store_into(effects, body, node, f.value);
                 }
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for &el in elements {
-                    self.unify_op(effects, body, node, el);
+                    self.store_into(effects, body, node, el);
                 }
             }
             ExprKind::VariantConstruct { payload, .. } => {
-                self.unify_op(effects, body, node, *payload);
+                self.store_into(effects, body, node, *payload);
             }
             ExprKind::If {
                 then_branch,
@@ -1422,15 +1892,19 @@ impl HeapFrame {
         };
         if let ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. }
-        | ExprKind::Unary {
+        | ExprKind::VariantPayload { expr: inner, .. } = place
+        {
+            let slot = self.operand_load(effects, body, *inner);
+            self.unify_nodes(slot, value_node);
+            self.access(effects, body, Effect::Write, target, *inner, field);
+        } else if let ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr: inner,
         } = place
         {
             let receiver = self.operand_node(effects, body, *inner);
             self.unify_nodes(receiver, value_node);
-            self.access(effects, body, Effect::Write, target, *inner, field);
+            self.access(effects, body, Effect::Write, target, *inner, None);
         } else if let OperandNode::Node(node) = target_node {
             self.accesses.push(AccessSite {
                 effect: Effect::Write,
@@ -1464,17 +1938,29 @@ impl HeapFrame {
             }
         };
         match &body.pats[pat].kind {
-            PatKind::Binding { local_index, .. } => {
+            PatKind::Binding {
+                local_index,
+                type_id,
+                ..
+            } => {
                 let l = self.define_local(*local_index);
                 if let OperandNode::Node(n) = scrutinee {
+                    // A binding that holds the part in a cell, or reads it out
+                    // of one, is a depth apart from it.
+                    let tt = effects.type_table;
+                    let is_cell = |t| tt.cell_payload(t).is_some();
+                    if ty.is_none_or(|t| is_cell(t) != is_cell(*type_id)) {
+                        self.classes.collapse(n);
+                    }
                     self.unify(l, n);
                 }
             }
             PatKind::Tuple(elements, _) => {
                 read(self, ty);
+                let element = self.classes.load_operand(scrutinee);
                 for (i, &p) in elements.iter().enumerate() {
                     let sub = effects.tuple_element_type(ty, i);
-                    self.pattern(effects, body, p, scrutinee, sub);
+                    self.pattern(effects, body, p, element, sub);
                 }
             }
             PatKind::Struct {
@@ -1483,10 +1969,11 @@ impl HeapFrame {
                 ..
             } => {
                 read(self, Some(*struct_type));
+                let field = self.classes.load_operand(scrutinee);
                 for f in fields {
                     let sub =
                         effects.pattern_field_type(Some(*struct_type), f.field_index as usize);
-                    self.pattern(effects, body, f.pattern, scrutinee, sub);
+                    self.pattern(effects, body, f.pattern, field, sub);
                 }
             }
             PatKind::Variant {
@@ -1495,12 +1982,14 @@ impl HeapFrame {
                 ..
             } => {
                 read(self, ty);
+                let payload = self.classes.load_operand(scrutinee);
                 if let [one] = bindings.as_slice() {
-                    self.pattern(effects, body, *one, scrutinee, Some(*payload_type));
+                    self.pattern(effects, body, *one, payload, Some(*payload_type));
                 } else {
+                    let element = self.classes.load_operand(payload);
                     for (i, &p) in bindings.iter().enumerate() {
                         let sub = effects.tuple_element_type(Some(*payload_type), i);
-                        self.pattern(effects, body, p, scrutinee, sub);
+                        self.pattern(effects, body, p, element, sub);
                     }
                 }
             }
@@ -1527,60 +2016,126 @@ impl HeapFrame {
         result: OperandNode,
         args: &[(Operand, OperandNode)],
     ) {
-        let node = |j: usize| args.get(j).map_or(OperandNode::None, |&(_, n)| n);
+        let node = |j: usize| args.get(j).and_then(|&(_, n)| n.node());
+        let result = result.node();
+        let nodes_of = |bit: usize| params_of_bit(bit, args.len()).filter_map(node);
+        let tt = effects.type_table;
         match call_target(effects, body, e) {
             Target::Summary(s) => {
-                for (j, &(_, n)) in args.iter().enumerate() {
-                    if s.ret.has_param(j) {
-                        classes.unify_nodes(result, n);
-                    }
-                    if s.into_elsewhere.has_param(j) {
-                        classes.unify_nodes(n, OperandNode::Node(ELSEWHERE));
-                    }
-                }
-                if s.ret.elsewhere {
-                    classes.unify_nodes(result, OperandNode::Node(ELSEWHERE));
-                }
-                for (k, into) in s.into_params.iter().enumerate().take(args.len()) {
-                    let nk = node(k);
-                    if into.elsewhere {
-                        classes.unify_nodes(nk, OperandNode::Node(ELSEWHERE));
-                    }
-                    for (j, &(_, nj)) in args.iter().enumerate() {
-                        if j != k && into.has_param(j) {
-                            classes.unify_nodes(nk, nj);
+                let held = |classes: &mut Classes, at: Option<u32>, levels: &Levels| {
+                    let Some(at) = at else { return };
+                    for (depth, prov) in levels.provs.iter().enumerate() {
+                        if prov.is_fresh() {
+                            continue;
                         }
+                        let slot = classes.load_n(at, depth);
+                        for (j, below) in prov.sources() {
+                            for n in nodes_of(j) {
+                                let source = classes.load_n(n, below);
+                                if below == DEEPEST {
+                                    classes.collapse(source);
+                                }
+                                classes.unify(slot, source);
+                            }
+                        }
+                        if prov.elsewhere {
+                            classes.unify(slot, ELSEWHERE);
+                        }
+                    }
+                    if levels.open {
+                        let deepest = classes.load_n(at, DEEPEST);
+                        classes.collapse(deepest);
+                    }
+                };
+                held(classes, result, &s.ret);
+                for (k, levels) in s.into_params.iter().enumerate().take(args.len()) {
+                    held(classes, node(k), levels);
+                }
+                for (j, below) in s.into_elsewhere.sources() {
+                    for n in nodes_of(j) {
+                        let source = classes.load_n(n, below);
+                        classes.unify(source, ELSEWHERE);
                     }
                 }
             }
             Target::Builtin(declaration) => {
                 for r in &declaration.retains {
-                    let source = args.get(r.source).map(|&(a, _)| a);
-                    if !effects.retains_reference(body, r, source) {
+                    let (Some(&(source, _)), Some(n)) = (args.get(r.source), node(r.source)) else {
+                        continue;
+                    };
+                    if !effects.retains_reference(body, declaration, r, Some(source)) {
                         continue;
                     }
+                    let held = if r.elements {
+                        contents(classes, tt, body.operand_type(source), n)
+                    } else {
+                        n
+                    };
                     match r.into {
-                        RetainInto::Param(q) => classes.unify_nodes(node(q), node(r.source)),
-                        RetainInto::Result => classes.unify_nodes(result, node(r.source)),
+                        RetainInto::Param(q) => {
+                            if let Some(d) = node(q) {
+                                let slot = contents(classes, tt, body.operand_type(args[q].0), d);
+                                classes.unify(slot, held);
+                            }
+                        }
+                        RetainInto::Result => {
+                            let Some(result) = result else { continue };
+                            // A copy of the source shares what it shares at
+                            // the depths the source holds it.
+                            if matches!(declaration.facts.storage, Storage::CopiesArgs)
+                                && !r.elements
+                            {
+                                classes.unify(result, held);
+                            } else {
+                                let slot = classes.load(result);
+                                classes.unify(slot, held);
+                            }
+                        }
                         RetainInto::Anywhere => {
-                            classes.unify_nodes(result, node(r.source));
-                            classes.unify_nodes(OperandNode::Node(ELSEWHERE), node(r.source));
+                            if let Some(result) = result {
+                                classes.unify(result, held);
+                            }
+                            classes.unify(held, ELSEWHERE);
                         }
                     }
                 }
-                for (j, &(_, n)) in args.iter().enumerate() {
-                    if returns_part_of(declaration, j) {
-                        classes.unify_nodes(result, n);
+                let Some(result) = result else { return };
+                for j in 0..args.len() {
+                    let Some(n) = node(j) else { continue };
+                    if !returns_part_of(declaration, j) {
+                        continue;
+                    }
+                    let declared = declaration.returns.is_some();
+                    if declared && !declaration.reference_params.contains(&j) {
+                        classes.unify(result, n);
+                        continue;
+                    }
+                    // Through a reference, the result is what one load from
+                    // the argument reads where the types say so: not through a
+                    // cell, which may be the part or a snapshot holding it, and
+                    // not `replace`, which hands back the referent itself.
+                    let (holder, part) = (body.operand_type(args[j].0), body.exprs[e].type_id);
+                    let is_cell = |t| tt.cell_payload(t).is_some();
+                    if declared
+                        && !is_cell(holder)
+                        && !is_cell(part)
+                        && effects.loads_as(holder, part)
+                    {
+                        let loaded = classes.load(n);
+                        classes.unify(result, loaded);
+                    } else {
+                        classes.collapse(n);
+                        classes.unify(result, n);
                     }
                 }
             }
             Target::Opaque { .. } => {
-                for &(_, n) in args {
-                    classes.unify_nodes(result, n);
-                }
-                if let OperandNode::None | OperandNode::Unknown = result {
-                    for pair in args.windows(2) {
-                        classes.unify_nodes(pair[0].1, pair[1].1);
+                let mut joined = result;
+                for n in (0..args.len()).filter_map(node) {
+                    classes.collapse(n);
+                    match joined {
+                        Some(j) => classes.unify(j, n),
+                        None => joined = Some(n),
                     }
                 }
             }
@@ -1591,11 +2146,17 @@ impl HeapFrame {
     /// `classes`.
     fn summary(&self, classes: &Classes, effects: &HeapEffects, body: &Body) -> Summary {
         let mut s = Summary {
-            ret: classes.prov_of(RET),
-            into_params: self.params.iter().map(|&n| classes.prov_of(n)).collect(),
+            ret: Levels::of(classes, RET),
+            into_params: self
+                .params
+                .iter()
+                .map(|&n| Levels::of(classes, n))
+                .collect(),
             into_elsewhere: classes.prov_of(ELSEWHERE),
             ..Summary::default()
         };
+        let mut reads = PendingAccess::default();
+        let mut writes = PendingAccess::default();
         for AccessSite {
             effect,
             node,
@@ -1612,8 +2173,8 @@ impl HeapFrame {
                 }
             }
             let access = match effect {
-                Effect::Read => &mut s.reads,
-                Effect::Write => &mut s.writes,
+                Effect::Read => &mut reads,
+                Effect::Write => &mut writes,
             };
             match keys {
                 Keys::One(k) => access.record(prov, &ObjectTypes::one(*k)),
@@ -1622,8 +2183,17 @@ impl HeapFrame {
         }
         for (&call, (_, span)) in self.calls.iter().zip(&self.call_nodes) {
             let args = &self.call_args[span.clone()];
-            call_summary(classes, effects, body, call, args, &mut s);
+            call_summary(
+                classes,
+                effects,
+                body,
+                call,
+                args,
+                (&mut reads, &mut writes, &mut s.field_writes),
+            );
         }
+        s.reads = reads.into_access();
+        s.writes = writes.into_access();
         s
     }
 
@@ -1639,29 +2209,54 @@ impl HeapFrame {
                     OperandNode::Node(self.classes.root(n))
                 })
             }
-            Operand::Value(v) => {
-                if body
-                    .values
-                    .type_of(v)
-                    .is_some_and(|ty| !holds_reference(tt, ty))
-                {
-                    return OperandNode::None;
+            Operand::Value(v) => self.value_lookup(effects, body, v),
+        }
+    }
+
+    /// [`Self::lookup`] for a promoted value.
+    fn value_lookup(&self, effects: &HeapEffects, body: &Body, v: ValueId) -> OperandNode {
+        if !value_holds_reference(effects, body, v) {
+            return OperandNode::None;
+        }
+        let join = |inputs: &[ValueId]| {
+            let mut joined = OperandNode::None;
+            for &input in inputs {
+                match (joined, self.value_lookup(effects, body, input)) {
+                    (_, OperandNode::None) => {}
+                    (OperandNode::None, n) => joined = n,
+                    (a, b) if a == b => {}
+                    _ => return OperandNode::Unknown,
                 }
-                let mut roots = IndexSet::default();
-                let mut unknown = false;
-                for_each_leaf_local(body, v, &mut |l| match self.local_root(l) {
-                    Some(r) => {
-                        roots.insert(r);
-                    }
-                    None => unknown = true,
-                });
-                if unknown || roots.len() > 1 {
-                    return OperandNode::Unknown;
-                }
-                roots
-                    .first()
-                    .map_or(OperandNode::None, |&r| OperandNode::Node(r))
             }
+            joined
+        };
+        match *body.values.kind(v) {
+            ValueKind::Opaque(oid) => self
+                .local_root(body.values.promoted_opaque_local(oid))
+                .map_or(OperandNode::Unknown, OperandNode::Node),
+            ValueKind::FieldAccess { receiver, .. } => {
+                match self.value_lookup(effects, body, receiver) {
+                    OperandNode::Node(r) => self
+                        .classes
+                        .loaded_from(r)
+                        .map_or(OperandNode::Unknown, OperandNode::Node),
+                    other => other,
+                }
+            }
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                self.value_lookup(effects, body, operand)
+            }
+            ValueKind::Binary { lhs, rhs, .. } => join(&[lhs, rhs]),
+            ValueKind::Select { then, else_, .. } => join(&[then, else_]),
+            ValueKind::LoopPhi { entry, body_iter } => join(&[entry, body_iter]),
+            ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::UnitCase { .. }
+            | ValueKind::Const(..) => OperandNode::None,
         }
     }
 
@@ -1670,29 +2265,51 @@ impl HeapFrame {
         (n != NO_NODE).then(|| self.classes.root(n))
     }
 
-    /// Whether objects in class `n` may be ones the local's class `h` holds:
-    /// the same class, two that both reach outside the body, or either one the
-    /// `ELSEWHERE` class of a [`Self::partial`] frame.
-    fn shares(&self, h: Option<u32>, n: OperandNode) -> bool {
-        match (h, n) {
-            (_, OperandNode::None) => false,
-            (None, _) | (_, OperandNode::Unknown) => true,
-            (Some(h), OperandNode::Node(n)) => {
-                let elsewhere = self.classes.root(ELSEWHERE);
-                n == h
-                    || (!self.classes.prov[h as usize].is_fresh()
-                        && !self.classes.prov[n as usize].is_fresh())
-                    || (self.partial && (h == elsewhere || n == elsewhere))
-            }
+    /// What the objects class `h` holds reach, `None` standing for anything.
+    fn reach_of(&self, h: Option<u32>) -> Option<Reach> {
+        let chain = self.classes.chain(h?);
+        let foreign = chain.iter().any(|&c| !self.classes.prov_of(c).is_fresh());
+        let elsewhere = self.classes.root(ELSEWHERE);
+        Some(Reach {
+            anything: self.partial && chain.contains(&elsewhere),
+            chain,
+            tail: None,
+            foreign,
+            elsewhere: self.partial.then_some(elsewhere),
+        })
+    }
+
+    /// What the objects `depth` loads below class `h`'s reach.
+    fn reach_below(&self, h: u32, depth: usize) -> Reach {
+        let mut class = self.classes.root(h);
+        for reached in 0..depth {
+            let Some(loaded) = self.classes.loaded_from(class) else {
+                let below = depth - reached;
+                let prov = (0..below).fold(self.classes.prov_of(class), |p, _| p.loaded());
+                return Reach {
+                    chain: Vec::new(),
+                    tail: Some((class, below)),
+                    foreign: !deepened(prov).is_fresh(),
+                    anything: false,
+                    elsewhere: self.partial.then(|| self.classes.root(ELSEWHERE)),
+                };
+            };
+            class = loaded;
         }
+        self.reach_of(Some(class))
+            .expect("a class reaches what its chain does")
     }
 
     /// Whether locals `a` and `b` may hold one object.
     pub(super) fn locals_may_share(&self, a: u32, b: u32) -> bool {
-        let Some(b) = self.local_root(b) else {
+        let Some(a) = self.local_root(a) else {
             return true;
         };
-        self.shares(self.local_root(a), OperandNode::Node(b))
+        meets(
+            &self.classes,
+            self.reach_of(self.local_root(b)).as_ref(),
+            Level::Class(a),
+        )
     }
 
     /// Whether `call` may read or write an object of type `key` that the
@@ -1727,7 +2344,7 @@ impl HeapFrame {
             call,
             effect,
             &Keys::One(key),
-            local,
+            self.reach_of(self.local_root(local)).as_ref(),
             &answered,
         )
     }
@@ -1739,32 +2356,49 @@ impl HeapFrame {
         call: ExprId,
         effect: Effect,
         keys: &Keys,
-        local: u32,
+        reach: Option<&Reach>,
         answered: &impl Fn(Operand) -> bool,
     ) -> bool {
         if effect == Effect::Write && !effects.returns(body, call) {
             return false;
         }
-        let h = self.local_root(local);
-        let h_escapes = h.is_none_or(|r| !self.classes.prov[r as usize].is_fresh());
+        let h_escapes = reach.is_none_or(|r| r.foreign || r.anything);
         let (target, args) = call_parts(effects, body, call);
         if h_escapes && keys.meets(&target.elsewhere(effect)) {
             return true;
         }
         args.iter().enumerate().any(|(j, &a)| {
-            if answered(a) || !self.shares(h, self.lookup(effects, body, a)) {
+            if answered(a) {
                 return false;
             }
+            let n = match self.lookup(effects, body, a) {
+                OperandNode::None => return false,
+                OperandNode::Unknown => None,
+                OperandNode::Node(n) => Some(n),
+            };
+            let met = |depth: usize, below: bool| {
+                n.is_none_or(|n| {
+                    self.classes
+                        .levels(n, depth, below)
+                        .into_iter()
+                        .any(|level| meets(&self.classes, reach, level))
+                })
+            };
             let ty = body.operand_type(a);
             match target {
                 Target::Summary(t) => {
-                    keys.meets_both(t.access(effect).through(j), &effects.reach(ty))
+                    let reached = effects.reach(ty);
+                    t.access(effect).depths(j).any(|(depth, types)| {
+                        keys.meets_both(types, &reached) && met(depth, depth == DEEPEST)
+                    })
                 }
                 Target::Builtin(declaration) => {
+                    let (touched, deep) = builtin_touches(effects, declaration, ty);
                     (effect == Effect::Read || declaration.mut_params.contains(&j))
-                        && keys.meets(&builtin_touches(effects, declaration, ty))
+                        && keys.meets(&touched)
+                        && met(0, deep)
                 }
-                Target::Opaque { .. } => keys.meets(&effects.reach(ty)),
+                Target::Opaque { .. } => keys.meets(&effects.reach(ty)) && met(0, true),
             }
         })
     }
@@ -1779,36 +2413,208 @@ impl HeapFrame {
         local: u32,
         answered: impl Fn(Operand) -> bool,
     ) -> bool {
-        let h = self.local_root(local);
+        let reach = self.reach_of(self.local_root(local));
+        self.written_in(effects, body, keys, reach.as_ref(), &answered)
+    }
+
+    /// [`Self::written`] for the objects operand `op` holds or reaches.
+    pub(super) fn operand_written(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        keys: &Arc<ObjectTypes>,
+        op: Operand,
+    ) -> bool {
+        self.operand_written_below(effects, body, keys, op, 0)
+    }
+
+    /// [`Self::operand_written`] for the objects `depth` loads below `op`'s
+    /// and what they reach.
+    pub(super) fn operand_written_below(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        keys: &Arc<ObjectTypes>,
+        op: Operand,
+        depth: usize,
+    ) -> bool {
+        let reach = match self.lookup(effects, body, op) {
+            OperandNode::None => return false,
+            OperandNode::Unknown => None,
+            OperandNode::Node(n) => Some(self.reach_below(n, depth)),
+        };
+        self.written_in(effects, body, keys, reach.as_ref(), &|_| false)
+    }
+
+    /// The depth below the result the objects of the operand `op` sit at,
+    /// where the result reaches them.
+    pub(super) fn returned_at(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        op: Operand,
+    ) -> Option<usize> {
+        let OperandNode::Node(h) = self.lookup(effects, body, op) else {
+            return None;
+        };
+        let h = self.classes.root(h);
+        self.classes.chain(RET).iter().position(|&c| c == h)
+    }
+
+    /// Each parameter and depth below it the objects of the operand `op`, or
+    /// any they reach, may come from.
+    pub(super) fn operand_sources(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        op: Operand,
+    ) -> Vec<(usize, usize)> {
+        match self.lookup(effects, body, op) {
+            OperandNode::Node(h) => self
+                .classes
+                .chain(h)
+                .into_iter()
+                .flat_map(|c| self.classes.prov_of(c).sources())
+                .collect(),
+            OperandNode::None | OperandNode::Unknown => Vec::new(),
+        }
+    }
+
+    /// Whether every object operand `op` holds is allocated in this body and
+    /// stays in it: none comes from a parameter or a global, and none reaches
+    /// anything the body did not allocate, nor the result unless `or_returned`.
+    pub(super) fn operand_confined(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        op: Operand,
+        or_returned: bool,
+    ) -> bool {
+        let OperandNode::Node(h) = self.lookup(effects, body, op) else {
+            return false;
+        };
+        let returned = if or_returned {
+            Vec::new()
+        } else {
+            self.classes.chain(RET)
+        };
+        !self.partial
+            && self
+                .classes
+                .chain(h)
+                .iter()
+                .all(|&c| self.classes.prov_of(c).is_fresh() && !returned.contains(&c))
+    }
+
+    /// Whether an object operand `op` holds or reaches may stay reachable after
+    /// the body returns: returned, a global's, or stored into an object the
+    /// body did not allocate. One that only came from such an object, as
+    /// `extend` copies a parameter's elements in, stays where it was. A store
+    /// joins what a load from its target reaches with what it stores, so the
+    /// target's class reaches `op`'s: no alias of it is asked about.
+    pub(super) fn operand_stored_outside(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        op: Operand,
+        holders: &WrittenHolders,
+    ) -> bool {
+        let h = match self.lookup(effects, body, op) {
+            OperandNode::None => return false,
+            OperandNode::Unknown => return true,
+            OperandNode::Node(h) => h,
+        };
+        if self.partial {
+            return true;
+        }
+        let held = self.classes.chain(h);
+        let mut outside = self.classes.chain(RET);
+        outside.extend(self.classes.chain(ELSEWHERE));
+        held.iter().any(|c| outside.contains(c))
+            || holders
+                .0
+                .iter()
+                .any(|&x| self.classes.chain(x).iter().any(|c| held.contains(c)))
+    }
+
+    /// The classes outside the body that something in it writes, for
+    /// [`Self::operand_stored_outside`]: which they are does not depend on
+    /// what is asked about.
+    pub(super) fn written_holders(&self, effects: &HeapEffects, body: &Body) -> WrittenHolders {
+        let everything = Arc::new(ObjectTypes::everything());
+        WrittenHolders(
+            (0..self.classes.loads.len() as u32)
+                .filter(|&x| self.classes.root(x) == x && !self.classes.prov_of(x).is_fresh())
+                .filter(|&x| {
+                    let holder = Reach {
+                        chain: vec![x],
+                        tail: None,
+                        foreign: false,
+                        anything: false,
+                        elsewhere: None,
+                    };
+                    self.written_in(effects, body, &everything, Some(&holder), &|_| false)
+                })
+                .collect(),
+        )
+    }
+
+    /// Whether no object operand `op` holds or reaches may come from a global.
+    pub(super) fn operand_off_globals(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        op: Operand,
+    ) -> bool {
+        match self.lookup(effects, body, op) {
+            OperandNode::None => true,
+            OperandNode::Unknown => false,
+            OperandNode::Node(h) => {
+                !self.partial
+                    && self
+                        .classes
+                        .chain(h)
+                        .iter()
+                        .all(|&c| !self.classes.prov_of(c).elsewhere)
+            }
+        }
+    }
+
+    fn written_in(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        keys: &Arc<ObjectTypes>,
+        reach: Option<&Reach>,
+        answered: &impl Fn(Operand) -> bool,
+    ) -> bool {
         let wanted = Keys::Set(Arc::clone(keys));
         self.accesses.iter().any(|a| {
             a.effect == Effect::Write
                 && a.keys.meets(keys)
-                && self.shares(h, OperandNode::Node(self.classes.root(a.node)))
+                && meets(&self.classes, reach, Level::Class(a.node))
         }) || self.calls.iter().any(|&call| {
-            self.call_may_keys(
-                effects,
-                body,
-                call,
-                Effect::Write,
-                &wanted,
-                local,
-                &answered,
-            )
+            self.call_may_keys(effects, body, call, Effect::Write, &wanted, reach, answered)
         })
     }
 
-    /// Whether objects `local` holds stay reachable after the body returns:
-    /// through its result, a global, or a parameter they did not come from.
-    pub(super) fn outlives(&self, local: u32) -> bool {
-        let Some(h) = self.local_root(local) else {
+    /// Whether objects `local` holds, once it also holds what `other` holds,
+    /// stay reachable after the body returns: through its result, a global,
+    /// or a parameter they did not come from.
+    pub(super) fn outlives_sharing(&self, local: u32, other: u32) -> bool {
+        let (Some(a), Some(b)) = (self.local_root(local), self.local_root(other)) else {
             return true;
         };
-        let prov = self.classes.prov[h as usize];
+        let (a, b) = (self.classes.chain(a), self.classes.chain(b));
+        let mut prov = Prov::default();
+        for &c in a.iter().chain(&b) {
+            prov.join(self.classes.prov_of(c));
+        }
+        let mut outside = self.classes.chain(RET);
+        outside.push(self.classes.root(ELSEWHERE));
+        let escaped = |chain: &[u32]| chain.iter().any(|c| outside.contains(c));
         !prov.is_fresh()
-            && (h == self.classes.root(RET)
-                || h == self.classes.root(ELSEWHERE)
-                || prov.params.count_ones() > 1)
+            && (escaped(&a) || escaped(&b) || prov.params_at_any_depth().count_ones() > 1)
     }
 
     /// Whether an access at a site `at` accepts, other than one through a
@@ -1821,14 +2627,14 @@ impl HeapFrame {
         local: u32,
         own: impl Fn(Operand) -> bool,
     ) -> bool {
-        let h = self.local_root(local);
+        let reach = self.reach_of(self.local_root(local));
         self.accesses.iter().any(|a| {
             (!writes_only || a.effect == Effect::Write)
                 && at(a.site)
                 && a.keys.contains(key)
                 && a.field.is_none_or(|f| f == field)
                 && !(a.field.is_some() && a.receiver.is_some_and(&own))
-                && self.shares(h, OperandNode::Node(self.classes.root(a.node)))
+                && meets(&self.classes, reach.as_ref(), Level::Class(a.node))
         })
     }
 
@@ -1855,6 +2661,85 @@ impl HeapFrame {
     }
 }
 
+/// See [`HeapFrame::written_holders`].
+pub(super) struct WrittenHolders(Vec<u32>);
+
+/// The classes one class's objects are in or reach.
+struct Reach {
+    chain: Vec<u32>,
+    /// The objects past the frame's classes: those at least so many loads
+    /// below a class with no load of its own.
+    tail: Option<(u32, usize)>,
+    /// Some class on the chain holds objects from outside the body.
+    foreign: bool,
+    /// The chain reaches the `ELSEWHERE` class of a partial frame, which may
+    /// hold objects of any class.
+    anything: bool,
+    /// The `ELSEWHERE` class of a partial frame.
+    elsewhere: Option<u32>,
+}
+
+/// Whether objects at `level` may be ones `reach` (`None`: anything) covers:
+/// on its chain, from outside the body where the chain is too, or in the
+/// `ELSEWHERE` class of a partial frame.
+fn meets(classes: &Classes, reach: Option<&Reach>, level: Level) -> bool {
+    let Some(reach) = reach else {
+        return true;
+    };
+    reach.anything
+        || match level {
+            Level::Class(c) => {
+                let c = classes.root(c);
+                reach.chain.contains(&c)
+                    || (reach.foreign && !classes.prov_of(c).is_fresh())
+                    || reach.elsewhere == Some(c)
+            }
+            // Below a class on the chain is reached through it.
+            Level::Beyond {
+                under,
+                loads,
+                deep,
+                prov,
+            } => {
+                let under = classes.root(under);
+                reach.chain.contains(&under)
+                    || reach.tail.is_some_and(|(tail, from)| {
+                        classes.root(tail) == under && (deep || loads >= from)
+                    })
+                    || (reach.foreign && !prov.is_fresh())
+            }
+        }
+}
+
+/// The class the elements of `n`, an array of type `ty`, are in. What a value
+/// of any other type holds is at no depth a declaration states, so every depth
+/// of it is made one class.
+fn contents(classes: &mut Classes, tt: &TypeTable, ty: TypeId, n: u32) -> u32 {
+    if matches!(tt.get(referent(tt, ty)), ResolvedType::BuiltinArray(_)) {
+        classes.load(n)
+    } else {
+        classes.collapse(n);
+        n
+    }
+}
+
+/// `ty` through its references and newtypes.
+fn referent(tt: &TypeTable, mut ty: TypeId) -> TypeId {
+    loop {
+        match tt.get(ty) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => ty = *inner,
+            ResolvedType::Newtype { .. } => ty = tt.representation_head(ty),
+            _ => return ty,
+        }
+    }
+}
+
+fn value_holds_reference(effects: &HeapEffects, body: &Body, v: ValueId) -> bool {
+    body.values
+        .type_of(v)
+        .is_none_or(|ty| holds_reference(effects.type_table, ty))
+}
+
 /// The expression a field chain starts from, and each object on the chain with
 /// the field taken from it.
 pub(super) fn field_path(body: &Body, mut e: ExprId) -> Option<(ExprId, Vec<(TypeId, u32)>)> {
@@ -1872,15 +2757,15 @@ pub(super) fn field_path(body: &Body, mut e: ExprId) -> Option<(ExprId, Vec<(Typ
     Some((e, path))
 }
 
-/// What a builtin touches through an argument of type `ty`. An `Array<T>` is
-/// reached as the array, its length and element slots, unless the declaration
-/// copies what the elements reach or states nothing of its storage; anything
-/// else is reached whole.
+/// What a builtin touches through an argument of type `ty`, and whether at
+/// every depth below it. An `Array<T>` is reached as the array, its length and
+/// element slots, unless the declaration copies what the elements reach or
+/// states nothing of its storage; anything else is reached whole.
 fn builtin_touches(
     effects: &HeapEffects,
     declaration: &BuiltinDeclaration,
     ty: TypeId,
-) -> Arc<ObjectTypes> {
+) -> (Arc<ObjectTypes>, bool) {
     let reaches_elements = matches!(
         declaration.facts.storage,
         Storage::CopiesArgs | Storage::Opaque
@@ -1888,16 +2773,16 @@ fn builtin_touches(
     let tt = effects.type_table;
     let is_array = matches!(tt.get(tt.strip_handles(ty)), ResolvedType::BuiltinArray(_));
     if reaches_elements || !is_array {
-        return effects.reach(ty);
+        return (effects.reach(ty), true);
     }
-    Arc::new(
-        tt.heap_object_key(ty)
-            .map_or_else(ObjectTypes::everything, ObjectTypes::one),
-    )
+    let array = tt
+        .heap_object_key(ty)
+        .map_or_else(ObjectTypes::everything, ObjectTypes::one);
+    (Arc::new(array), false)
 }
 
 /// Visit the local each opaque leaf of the promoted value `v` reads.
-fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(u32)) {
+pub(super) fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(u32)) {
     let mut stack = vec![v];
     let mut seen = IndexSet::default();
     while let Some(v) = stack.pop() {
@@ -1966,25 +2851,19 @@ fn call_summary(
     body: &Body,
     call: ExprId,
     args: &[(Operand, OperandNode)],
-    s: &mut Summary,
+    (reads, writes, field_writes): (&mut PendingAccess, &mut PendingAccess, &mut FieldWrites),
 ) {
     let target = call_target(effects, body, call);
-    let mut unobserved = Access::default();
+    let mut unobserved = PendingAccess::default();
     let mut unobserved_fields = FieldWrites::default();
-    let Summary {
-        reads,
-        writes,
-        field_writes,
-        ..
-    } = s;
     let (writes, field_writes) = if effects.returns(body, call) {
         (writes, field_writes)
     } else {
         (&mut unobserved, &mut unobserved_fields)
     };
-    reads.elsewhere.union(&target.elsewhere(Effect::Read));
+    reads.record(Prov::ELSEWHERE, &target.elsewhere(Effect::Read));
     let written_elsewhere = target.elsewhere(Effect::Write);
-    writes.elsewhere.union(&written_elsewhere);
+    writes.record(Prov::ELSEWHERE, &written_elsewhere);
     match target {
         Target::Summary(t) => field_writes.union(&t.field_writes),
         Target::Builtin(_) | Target::Opaque { .. } => field_writes.record_types(&written_elsewhere),
@@ -1993,30 +2872,49 @@ fn call_summary(
         let OperandNode::Node(n) = node else {
             continue;
         };
-        let prov = classes.prov_of(n);
-        if prov.is_fresh() {
-            continue;
-        }
+        let foreign = |depth: usize, below: bool| {
+            classes
+                .levels(n, depth, below)
+                .into_iter()
+                .map(|level| classes.level_prov(level))
+                .filter(|prov| !prov.is_fresh())
+        };
         let ty = body.operand_type(a);
         match target {
             Target::Summary(t) => {
                 let reach = effects.reach(ty);
-                reads.record_meet(prov, t.reads.through(j), &reach);
-                writes.record_meet(prov, t.writes.through(j), &reach);
+                for (theirs, mine) in [(&t.reads, &mut *reads), (&t.writes, &mut *writes)] {
+                    for (depth, types) in theirs.depths(j) {
+                        let mut prov = Prov::default();
+                        for p in foreign(depth, depth == DEEPEST) {
+                            prov.join(p);
+                        }
+                        if prov.is_fresh() {
+                            continue;
+                        }
+                        let mut met = ObjectTypes::default();
+                        met.union_meet(types, &reach);
+                        mine.record(prov, &met);
+                    }
+                }
             }
             Target::Builtin(declaration) => {
-                let touched = builtin_touches(effects, declaration, ty);
-                reads.record(prov, &touched);
-                if declaration.mut_params.contains(&j) {
-                    writes.record(prov, &touched);
-                    field_writes.record_types(&touched);
+                let (touched, deep) = builtin_touches(effects, declaration, ty);
+                for prov in foreign(0, deep) {
+                    reads.record(prov, &touched);
+                    if declaration.mut_params.contains(&j) {
+                        writes.record(prov, &touched);
+                        field_writes.record_types(&touched);
+                    }
                 }
             }
             Target::Opaque { .. } => {
                 let reach = effects.reach(ty);
-                reads.record(prov, &reach);
-                writes.record(prov, &reach);
-                field_writes.record_types(&reach);
+                for prov in foreign(0, true) {
+                    reads.record(prov, &reach);
+                    writes.record(prov, &reach);
+                    field_writes.record_types(&reach);
+                }
             }
         }
     }

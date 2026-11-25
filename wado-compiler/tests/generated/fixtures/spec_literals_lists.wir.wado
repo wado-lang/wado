@@ -1239,7 +1239,7 @@ fn "spec_literals_lists.wado/$test_7_implicit_conversion"() {
 }
 
 fn "spec_literals_lists.wado/$test_8_spread"() {
-    let $load_17: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_13: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
     let base_0: ref "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,i32>";
     let $v_1: bool;
     let $v_2: i32;
@@ -1256,11 +1256,11 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
     let $v_8_seen: bool;
     let $v_9: bool;
     let $v_9_seen: bool;
+    let e_32: i32;
     let $iter_0_57: ref "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,i32>";
     let k_58: ref "core:prelude/string.wado//String";
     let v_59: ref "core:prelude//$Cell<i32>";
     let $match_5_60: ref null "tuple//[&core:prelude/string.wado/String, &i32]";
-    let $av_77: i32;
     base_0 = "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V#core:collections/hashmap.wado/1638]>>::from"(array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 1: 1 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, 1: 2 }));
     $iter_0_57 = struct.new "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,i32>" { log: "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V#core:collections/hashmap.wado/1638]>>::from"(array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 1: 9 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100), used: 1 }, 1: 4 })).log, index: 0 };
     b60: block {
@@ -1269,7 +1269,7 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
                 let $variant_payload_1: ref "tuple//[&core:prelude/string.wado/String, &i32]";
                 k_58 = local.tee $variant_payload_1(ref.as_non_null($match_5_60)).0;
                 v_59 = $variant_payload_1.1;
-                "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>::insert"(base_0, $av_77 = k_58.used; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = k_58.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_77)), 0, $array_clone_src_2, 0, $av_77); $array_clone_dst_3, used: $av_77 }, v_59.value);
+                "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>::insert"(base_0, k_58, v_59.value);
             } else {
                 break b60;
             }
@@ -1282,7 +1282,7 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
             if ref.is_null(local.tee $match_5_60("core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIter<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/Iterator::next"($iter_0_57))) == 0 {
                 k_58 = local.tee $variant_payload_1(ref.as_non_null($match_5_60)).0;
                 v_59 = $variant_payload_1.1;
-                "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>::insert"(base_0, $av_77 = k_58.used; struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_2 = k_58.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_77)), 0, $array_clone_src_2, 0, $av_77); $array_clone_dst_3, used: $av_77 }, v_59.value);
+                "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>::insert"(base_0, k_58, v_59.value);
             } else {
                 break b63;
             }
@@ -1290,16 +1290,16 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
         };
     };
     k_58 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-    if @unlikely(local.tee $av_77("core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>::find_index"(base_0.log, base_0.fps, base_0.table, base_0.shift, base_0.seed, k_58)) < 0) {
+    if @unlikely(local.tee e_32("core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>::find_index"(base_0.log, base_0.fps, base_0.table, base_0.shift, base_0.seed, k_58)) < 0) {
         cold_path;
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(k_58);
         unreachable;
     }
-    $v_1 = local.tee $av_77(builtin::array_get_value<i32>(local.tee $load_17(base_0.log).values, $av_77)) == 9;
+    $v_1 = local.tee e_32(builtin::array_get_value<i32>(local.tee $load_13(base_0.log).values, e_32)) == 9;
     $v_2_seen = 0;
     $v_3_seen = 0;
     $v_4 = (if $v_1 -> i32 {
-        $v_3 = k_58 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }; if @unlikely(local.tee $v_2_seen("core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>::find_index"($load_17, base_0.fps, base_0.table, base_0.shift, base_0.seed, k_58)) < 0) {
+        $v_3 = k_58 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }; if @unlikely(local.tee $v_2_seen("core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>::find_index"($load_13, base_0.fps, base_0.table, base_0.shift, base_0.seed, k_58)) < 0) {
             cold_path;
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(k_58);
             unreachable;
@@ -1336,7 +1336,7 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
         0;
     }) == 0) {
         cold_path;
-        "spec_literals_lists.wado/$test_8_spread$cold0"($av_77, $v_1, $v_2, $v_2_seen, $v_3, $v_3_seen, $v_4, $v_5, $v_5_seen, $v_6, $v_6_seen, $v_7, $v_8, $v_8_seen, $v_9, $v_9_seen);
+        "spec_literals_lists.wado/$test_8_spread$cold0"(e_32, $v_1, $v_2, $v_2_seen, $v_3, $v_3_seen, $v_4, $v_5, $v_5_seen, $v_6, $v_6_seen, $v_7, $v_8, $v_8_seen, $v_9, $v_9_seen);
         unreachable;
     }
 }
@@ -3726,30 +3726,30 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
     let map: ref "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,i32>";
     let $iter_0: ref "core:prelude/slice.wado//SliceValueIter<[core:prelude/string.wado/String,i32]>";
     let $match_5: ref null "tuple//[core:prelude/string.wado/String, i32]";
-    let v_7: ref "core:collections/hashmap.wado//HashSeed";
     let end: i32;
-    let v_19: ref "tuple//[core:prelude/string.wado/String, i32]";
-    let v_20: ref "core:prelude/string.wado//String";
+    let v_20: ref "core:collections/hashmap.wado//HashSeed";
+    let v_21: ref "tuple//[core:prelude/string.wado/String, i32]";
+    let v_22: ref "core:prelude/string.wado//String";
     let $hfs_index_23: i32;
-    v_7 = struct.new "core:collections/hashmap.wado//HashSeed" { k0: local.tee v_7(global:core:collections/hashmap.wado::DEFAULT_HASH_SEED).k0, k1: v_7.k1 };
-    map = struct.new "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, deleted_count: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v_7 };
+    v_20 = struct.new "core:collections/hashmap.wado//HashSeed" { k0: local.tee v_20(global:core:collections/hashmap.wado::DEFAULT_HASH_SEED).k0, k1: v_20.k1 };
+    map = struct.new "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, deleted_count: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v_20 };
     end = builtin::array_len(entries);
     entries = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<[core:prelude/string.wado/String,i32]>" { repr: entries, index: 0, end: end }).repr;
     $hfs_index_23 = 0;
     b461: block {
         l462: loop {
-            if ref.is_null(local.tee $match_5($inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_11: block -> ref null "tuple//[core:prelude/string.wado/String, i32]" {
+            if ref.is_null(local.tee $match_5($inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_10: block -> ref null "tuple//[core:prelude/string.wado/String, i32]" {
                 if $hfs_index_23 >= end {
-                    break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_11: ref.null none;
+                    break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_10: ref.null none;
                 }
-                v_19 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_20 = local.tee v_19(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(entries, $hfs_index_23)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_20.repr; $load_5 = v_20.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_19.1 };
+                v_21 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_22 = local.tee v_21(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(entries, $hfs_index_23)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_22.repr; $load_5 = v_22.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_21.1 };
                 $hfs_index_23 = $hfs_index_23 + 1;
-                break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_11: v_19;
+                break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_10: v_21;
             })) == 0 {
-                v_20 = local.tee v_19(ref.as_non_null($match_5)).0;
-                $load_5 = v_19.1;
+                v_22 = local.tee v_21(ref.as_non_null($match_5)).0;
+                $load_5 = v_21.1;
                 $iter_0.index = $hfs_index_23;
-                "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>::insert"(map, v_20, $load_5);
+                "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,i32>::insert"(map, v_22, $load_5);
             } else {
                 break b461: $iter_0.index = $hfs_index_23;
             }
@@ -4272,19 +4272,19 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
-    let $sroa_v_end_37: i32;
-    let $sroa_$iter_5_start_38: i32;
+    let $sroa_v_end_40: i32;
+    let $sroa_$iter_5_start_41: i32;
     self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
     self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
     alive = local.tee $load_2(self.log).alive;
     fps = self.fps;
-    $sroa_v_end_37 = $load_2.count;
-    $sroa_$iter_5_start_38 = 0;
+    $sroa_v_end_40 = $load_2.count;
+    $sroa_$iter_5_start_41 = 0;
     b541: block {
         l542: loop {
-            break_if b541 $sroa_$iter_5_start_38 >= $sroa_v_end_37;
-            $sroa_$iter_5_start_38 = local.tee current($sroa_$iter_5_start_38) + 1;
+            break_if b541 $sroa_$iter_5_start_41 >= $sroa_v_end_40;
+            $sroa_$iter_5_start_41 = local.tee current($sroa_$iter_5_start_41) + 1;
             if builtin::array_get_value<bool>(alive, current) {
                 s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b544: block {

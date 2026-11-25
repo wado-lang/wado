@@ -237,142 +237,141 @@ fn "effect_op_default_cross_module.wado/run"() {
     let h: ref "effect_op_default_cross_module.wado//Mock";
     let $v_3: ref null "core:prelude/string.wado//String";
     let $save_sub/effect_op_default_lib.wado/Greet: ref null "effect_op_default_cross_module.wado//$Dispatch_sub/effect_op_default_lib.wado/Greet";
-    let name_10: ref "core:prelude/string.wado//String";
-    let $local_1_11: ref null "effect_op_default_cross_module.wado//$Dispatch_sub/effect_op_default_lib.wado/Greet";
-    let $local_2_12: ref "effect_op_default_cross_module.wado//$Dispatch_sub/effect_op_default_lib.wado/Greet";
-    let i_23: i32;
-    let $av_42: i32;
+    let name_9: ref "core:prelude/string.wado//String";
+    let $local_1_10: ref null "effect_op_default_cross_module.wado//$Dispatch_sub/effect_op_default_lib.wado/Greet";
+    let $local_2_11: ref "effect_op_default_cross_module.wado//$Dispatch_sub/effect_op_default_lib.wado/Greet";
+    let a_end_17: i32;
+    let i_22: i32;
+    let $licm_repr_37: ref Array<u8>;
     h = struct.new "effect_op_default_cross_module.wado//Mock" {};
     global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet = struct.new "effect_op_default_cross_module.wado//$Dispatch_sub/effect_op_default_lib.wado/Greet" { outer: local.tee $save_sub/effect_op_default_lib.wado/Greet(global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_op_default_cross_module.wado//$Closure_0" { $capture_0: h }, func: ref.func "closure/effect_op_default_cross_module.wado/$closure_wrapper_0" } };
-    $av_42 = local.tee name_10($inline__effect_dispatch__sub_effect_op_default_lib_wado_Greet__hello_2: block -> ref "core:prelude/string.wado//String" {
-        name_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
-        if @likely(ref.is_null(local.tee $local_1_11(global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet)) == 0) {
-            global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet = local.tee $local_2_12(ref.as_non_null($local_1_11)).outer;
-            name_10 = block -> ref "core:prelude/string.wado//String" {
+    name_9 = $inline__effect_dispatch__sub_effect_op_default_lib_wado_Greet__hello_1: block -> ref "core:prelude/string.wado//String" {
+        name_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
+        if @likely(ref.is_null(local.tee $local_1_10(global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet)) == 0) {
+            global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet = local.tee $local_2_11(ref.as_non_null($local_1_10)).outer;
+            name_9 = block -> ref "core:prelude/string.wado//String" {
                 let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_12.op_hello).env, name_10);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_11.op_hello).env, name_9);
             };
-            global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet = $local_1_11;
-            break $inline__effect_dispatch__sub_effect_op_default_lib_wado_Greet__hello_2: name_10;
+            global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet = $local_1_10;
+            break $inline__effect_dispatch__sub_effect_op_default_lib_wado_Greet__hello_1: name_9;
         } else {
-            "core:rt/panic"(local.tee name_10(global:effect_op_default_cross_module.wado::$const_obj_1).repr, name_10.used);
+            "core:rt/panic"(local.tee name_9(global:effect_op_default_cross_module.wado::$const_obj_1).repr, name_9.used);
             unreachable;
         }
         unreachable;
-    }).used;
-    name_10 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = name_10.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_42)), 0, $array_clone_src_3, 0, $av_42); $array_clone_dst_4, used: $av_42 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
-        if $av_42 != 12 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+    };
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
+        if local.tee a_end_17(name_9.used) != 12 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
-        i_23 = 0;
-        $array_clone_src_3 = name_10.repr;
+        i_22 = 0;
+        $licm_repr_37 = name_9.repr;
         b4: block {
             l5: loop {
-                break_if b4 (builtin::i64_extend_i32_s(i_23) + 3_i64) >= builtin::i64_extend_i32_s($av_42);
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_2, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                break_if b4 (builtin::i64_extend_i32_s(i_22) + 3_i64) >= builtin::i64_extend_i32_s(a_end_17);
+                if builtin::array_get_value<u8>($licm_repr_37, i_22) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_2, i_22) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_2, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($licm_repr_37, i_22) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_2, i_22) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_2, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($licm_repr_37, i_22) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_2, i_22) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_2, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($licm_repr_37, i_22) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_2, i_22) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_23 = i_23 + 1;
+                i_22 = i_22 + 1;
                 continue l5;
             };
         };
         b10: block {
             l11: loop {
-                break_if b10 i_23 >= $av_42;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_2, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                break_if b10 i_22 >= a_end_17;
+                if builtin::array_get_value<u8>($licm_repr_37, i_22) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_2, i_22) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_23 = i_23 + 1;
+                i_22 = i_22 + 1;
                 continue l11;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__5: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee name_10("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_op_default_cross_module.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "effect_op_default_cross_module.wado//$tmpl$d48748ffcad618c0" { h0: name_10, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_op_default_cross_module.wado:18
+        "core:rt/panic"(local.tee name_9("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_op_default_cross_module.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "effect_op_default_cross_module.wado//$tmpl$d48748ffcad618c0" { h0: name_9, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_op_default_cross_module.wado:18
 condition: Greet::hello() == \"hello, world\"
 Greet::hello(): "), used: 126 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_op_default_cross_module.wado:18
 condition: Greet::hello() == \"hello, world\"
-Greet::hello(): "), used: 126 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, name_10.used);
+Greet::hello(): "), used: 126 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, name_9.used);
         unreachable;
     }
-    $av_42 = local.tee name_10($inline__effect_dispatch__sub_effect_op_default_lib_wado_Greet__hello_7: block -> ref "core:prelude/string.wado//String" {
-        name_10 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = local.tee $v_3(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 97, 100, 111), used: 4 }).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(4)), 0, $array_clone_src_3, 0, 4); $array_clone_dst_4, used: 4 };
-        if @likely(ref.is_null(local.tee $local_1_11(global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet)) == 0) {
-            global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet = local.tee $local_2_12(ref.as_non_null($local_1_11)).outer;
-            name_10 = block -> ref "core:prelude/string.wado//String" {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_12.op_hello).env, name_10);
+    name_9 = $inline__effect_dispatch__sub_effect_op_default_lib_wado_Greet__hello_5: block -> ref "core:prelude/string.wado//String" {
+        $v_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 97, 100, 111), used: 4 };
+        if @likely(ref.is_null(local.tee $local_1_10(global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet)) == 0) {
+            global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet = local.tee $local_2_11(ref.as_non_null($local_1_10)).outer;
+            name_9 = block -> ref "core:prelude/string.wado//String" {
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_11.op_hello).env, ref.as_non_null($v_3));
             };
-            global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet = $local_1_11;
-            break $inline__effect_dispatch__sub_effect_op_default_lib_wado_Greet__hello_7: name_10;
+            global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet = $local_1_10;
+            break $inline__effect_dispatch__sub_effect_op_default_lib_wado_Greet__hello_5: name_9;
         } else {
-            "core:rt/panic"(local.tee name_10(global:effect_op_default_cross_module.wado::$const_obj_1).repr, name_10.used);
+            "core:rt/panic"(local.tee name_9(global:effect_op_default_cross_module.wado::$const_obj_1).repr, name_9.used);
             unreachable;
         }
         unreachable;
-    }).used;
-    name_10 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = name_10.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_42)), 0, $array_clone_src_3, 0, $av_42); $array_clone_dst_4, used: $av_42 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__10: block -> bool {
-        if $av_42 != 11 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+    };
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
+        if local.tee a_end_17(name_9.used) != 11 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
         }
-        i_23 = 0;
-        $array_clone_src_3 = name_10.repr;
+        i_22 = 0;
+        $licm_repr_37 = name_9.repr;
         b17: block {
             l18: loop {
-                break_if b17 (builtin::i64_extend_i32_s(i_23) + 3_i64) >= builtin::i64_extend_i32_s($av_42);
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                break_if b17 (builtin::i64_extend_i32_s(i_22) + 3_i64) >= builtin::i64_extend_i32_s(a_end_17);
+                if builtin::array_get_value<u8>($licm_repr_37, i_22) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_0, i_22) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($licm_repr_37, i_22) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_0, i_22) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($licm_repr_37, i_22) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_0, i_22) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($licm_repr_37, i_22) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_0, i_22) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_23 = i_23 + 1;
+                i_22 = i_22 + 1;
                 continue l18;
             };
         };
         b23: block {
             l24: loop {
-                break_if b23 i_23 >= $av_42;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                break_if b23 i_22 >= a_end_17;
+                if builtin::array_get_value<u8>($licm_repr_37, i_22) != builtin::array_get_value<u8>(global:effect_op_default_cross_module.wado::$const_obj_0, i_22) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_23 = i_23 + 1;
+                i_22 = i_22 + 1;
                 continue l24;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__10: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee name_10("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_op_default_cross_module.wado/$tmpl$fb61c547e0e5f8a4,[core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "effect_op_default_cross_module.wado//$tmpl$fb61c547e0e5f8a4" { h0: ref.as_non_null($v_3), h1: name_10, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_op_default_cross_module.wado:19
+        "core:rt/panic"(local.tee name_9("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_op_default_cross_module.wado/$tmpl$fb61c547e0e5f8a4,[core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "effect_op_default_cross_module.wado//$tmpl$fb61c547e0e5f8a4" { h0: ref.as_non_null($v_3), h1: name_9, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_op_default_cross_module.wado:19
 condition: Greet::hello(`wado`) == \"hello, wado\"
 `wado`: "), used: 123 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_op_default_cross_module.wado:19
 condition: Greet::hello(`wado`) == \"hello, wado\"
 `wado`: "), used: 123 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 Greet::hello(`wado`): "), used: 23 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-Greet::hello(`wado`): "), used: 23 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, name_10.used);
+Greet::hello(`wado`): "), used: 23 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, name_9.used);
         unreachable;
     }
     global:effect_op_default_cross_module.wado::$effect_sub/effect_op_default_lib.wado/Greet = $save_sub/effect_op_default_lib.wado/Greet;

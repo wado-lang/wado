@@ -293,6 +293,13 @@ pub fn plan(
             &return_paths,
             &flat.type_table.borrow(),
             &builtins,
+            &ownership::OwnedCalls::new(
+                &conventions.returns_owned,
+                &conventions.returns_projection,
+                &builtins,
+                &retained.calls,
+            ),
+            &confined_params,
         )
     });
     let indirect_owned_returns =

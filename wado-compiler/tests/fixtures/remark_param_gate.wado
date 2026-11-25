@@ -1,5 +1,6 @@
-// A constant does not reach a `String` parameter compared with `==`, so the
-// gate survives to run time even though `-D log.level=info` settles it.
+// A gate the constant does not reach survives to run time even though
+// `-D log.level=info` settles it. `black_box` stands for whatever keeps the
+// constant from reaching it.
 
 use { println, Stdout } from "core:cli";
 
@@ -14,7 +15,7 @@ fn is_trace(s: String) -> bool {
 }
 
 export fn run() with Stdout {
-    if is_trace(LOG_LEVEL) {
+    if is_trace(builtin::black_box(LOG_LEVEL)) {
         println(`tracing`);
     }
 }

@@ -1,0 +1,84 @@
+// A part stored into an aggregate keeps its copy wherever sharing would show:
+// a write to the source or to the part while the aggregate is live, and an
+// aggregate that leaves the body.
+struct Range { lo: i32, hi: i32 }
+struct Elem { name: String, ranges: List<Range> }
+struct Wrap { inner: Elem, n: i32 }
+struct Tree { label: i32, kids: List<Tree> }
+
+fn width(e: &Elem) -> i32 {
+    let mut w = 0;
+    for let r of &e.ranges { w += r.hi - r.lo; }
+    return w;
+}
+
+#[inline("never")]
+fn source_written(src: &mut List<Elem>) -> i32 {
+    let mut rest: List<Elem> = [];
+    rest.push(src[0]);
+    src[0].ranges[0].hi = 100;
+    return width(&rest[0]);
+}
+
+#[inline("never")]
+fn part_written(e: &Elem) -> i32 {
+    let mut w = Wrap { inner: *e, n: 1 };
+    w.inner.ranges.push(Range { lo: 0, hi: 10 });
+    return width(&w.inner);
+}
+
+#[inline("never")]
+fn returned(e: &Elem) -> Wrap {
+    return Wrap { inner: *e, n: 1 };
+}
+
+#[inline("never")]
+fn stored_into_param(e: &Elem, out: &mut List<Elem>) {
+    out.push(*e);
+}
+
+#[inline("never")]
+fn kid_written(t: &Tree) -> i32 {
+    let mut kids: List<Tree> = [];
+    kids.push(t.kids[0]);
+    for let k of &mut kids {
+        k.kids.push(Tree { label: 7, kids: [] });
+    }
+    return kids[0].kids.len();
+}
+
+fn elem() -> Elem {
+    return Elem { name: "a", ranges: [Range { lo: 1, hi: builtin::black_box(3) }] };
+}
+
+test "a write to the source keeps the copy" {
+    let mut src: List<Elem> = [elem()];
+    assert source_written(&mut src) == 2;
+}
+
+test "a write to the part keeps the source" {
+    let e = elem();
+    assert part_written(&e) == 12;
+    assert width(&e) == 2;
+}
+
+test "a returned aggregate keeps the copy" {
+    let mut e = elem();
+    let w = returned(&e);
+    e.ranges[0].hi = 100;
+    assert width(&w.inner) == 2;
+}
+
+test "an aggregate a parameter holds keeps the copy" {
+    let mut e = elem();
+    let mut out: List<Elem> = [];
+    stored_into_param(&e, &mut out);
+    e.ranges[0].hi = 100;
+    assert width(&out[0]) == 2;
+}
+
+test "a write into a recursive part keeps the source" {
+    let t = builtin::black_box(Tree { label: 0, kids: [Tree { label: 1, kids: [] }] });
+    assert kid_written(&t) == 1;
+    assert t.kids[0].kids.len() == 0;
+}

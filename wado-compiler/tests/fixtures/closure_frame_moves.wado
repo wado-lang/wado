@@ -2,8 +2,8 @@
 //
 // The move analysis used to abandon any function that built one, so a single
 // `map(|x| …)` left every other local in that body copying. The element the
-// iterator already copied moves into `next`; the one copy left is the
-// iterator's own, which value semantics requires.
+// iterator yields moves into `next`, and the iterator copies none: nothing
+// else holds the list `advance` returns.
 struct Cfg { alt: i32, elems: List<i32>, pos: i32 }
 
 #[inline(never)]
@@ -40,12 +40,12 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_pass": {"O2": ["nir/inline"]},
+    "wir_pass": {"O2": ["nir/inline", "nir/copy_elision"]},
     "wir_scope": "build",
     "wir_lines": {
         "O2": [
             {"contains": ["array_set<ref"], "not_contains": ["struct.new", "array_copy"], "count": 1},
-            {"contains": ["array_copy"], "count": 1}
+            {"contains": ["array_copy"], "count": 0}
         ]
     }
 }

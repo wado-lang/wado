@@ -380,23 +380,23 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_binding_read_a
     let $load_1: i32;
     let held: ref null "core:prelude/list.wado//List<i32>";
     let v_1: ref "core:prelude/list.wado//List<i32>";
-    let used_13: i32;
+    let used_12: i32;
     v_1 = ref.as_non_null(local.tee held(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }));
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = v_1.repr;
     $load_1 = v_1.used;
     let $array_clone_dst_2: ref Array<i32>;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
-    if @unlikely(local.tee used_13($load_1) >= builtin::array_len($array_clone_dst_2)) {
+    if @unlikely(local.tee used_12($load_1) >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee v_1(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: $load_1 }));
         $array_clone_dst_2 = v_1.repr;
     }
-    builtin::array_set<i32>($array_clone_dst_2, used_13, 3);
-    $load_1 = used_13 + 1;
-    if @unlikely(local.tee used_13(held.used) != 2) {
+    builtin::array_set<i32>($array_clone_dst_2, used_12, 3);
+    $load_1 = used_12 + 1;
+    if @unlikely(local.tee used_12(held.used) != 2) {
         cold_path;
-        "value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_binding_read_again_inside_the_arm_is_not_moved_out_from_under_it$cold1"(used_13);
+        "value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_binding_read_again_inside_the_arm_is_not_moved_out_from_under_it$cold1"(used_12);
         unreachable;
     }
     if @unlikely($load_1 != 3) {
@@ -440,34 +440,32 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$template_segment$value_copy_
 }
 
 fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_0_a_let_out_of_a_place_copies"() {
-    let $sroa_$sroa_h_xs_23_repr_26: ref Array<i32>;
-    let $sroa_write_back_30: ref "core:prelude/list.wado//List<i32>";
-    $sroa_$sroa_h_xs_23_repr_26 = array.new_fixed<i32>(1, 2);
+    let $sroa_$sroa_h_xs_21_repr_22: ref Array<i32>;
+    let $sroa_write_back_29: ref "core:prelude/list.wado//List<i32>";
+    $sroa_$sroa_h_xs_21_repr_22 = array.new_fixed<i32>(1, 2);
     let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_$sroa_h_xs_23_repr_26, 0, 2);
-    builtin::array_copy<i32>(local.tee $sroa_$sroa_h_xs_23_repr_26(builtin::array_new<i32>(2)), 0, $array_clone_dst_2, 0, 2);
-    if @unlikely(2 >= builtin::array_len($sroa_$sroa_h_xs_23_repr_26)) {
+    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_$sroa_h_xs_21_repr_22, 0, 2);
+    if @unlikely(2 >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_30(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_h_xs_23_repr_26, used: 2 }));
-        $sroa_$sroa_h_xs_23_repr_26 = $sroa_write_back_30.repr;
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_29(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: 2 }));
+        $array_clone_dst_2 = $sroa_write_back_29.repr;
     }
-    builtin::array_set<i32>($sroa_$sroa_h_xs_23_repr_26, 2, 3);
+    builtin::array_set<i32>($array_clone_dst_2, 2, 3);
     "wasi/task-return"(0);
 }
 
 fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_1_a_struct_literal_out_of_a_place_copies"() {
-    let $sroa_$sroa_h_xs_23_repr_27: ref Array<i32>;
-    let $sroa_write_back_31: ref "core:prelude/list.wado//List<i32>";
-    $sroa_$sroa_h_xs_23_repr_27 = array.new_fixed<i32>(1, 2);
+    let $sroa_$sroa_h_xs_21_repr_23: ref Array<i32>;
+    let $sroa_write_back_30: ref "core:prelude/list.wado//List<i32>";
+    $sroa_$sroa_h_xs_21_repr_23 = array.new_fixed<i32>(1, 2);
     let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_$sroa_h_xs_23_repr_27, 0, 2);
-    builtin::array_copy<i32>(local.tee $sroa_$sroa_h_xs_23_repr_27(builtin::array_new<i32>(2)), 0, $array_clone_dst_2, 0, 2);
-    if @unlikely(2 >= builtin::array_len($sroa_$sroa_h_xs_23_repr_27)) {
+    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_$sroa_h_xs_21_repr_23, 0, 2);
+    if @unlikely(2 >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_31(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_h_xs_23_repr_27, used: 2 }));
-        $sroa_$sroa_h_xs_23_repr_27 = $sroa_write_back_31.repr;
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_30(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: 2 }));
+        $array_clone_dst_2 = $sroa_write_back_30.repr;
     }
-    builtin::array_set<i32>($sroa_$sroa_h_xs_23_repr_27, 2, 3);
+    builtin::array_set<i32>($array_clone_dst_2, 2, 3);
     "wasi/task-return"(0);
 }
 
@@ -477,15 +475,15 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_2_an_arm_bi
 }
 
 fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_3_a_share_plus_a_repoint_still_copies_where_the_binding_is_read_again"() {
-    let $sroa_b_repr_24: ref Array<i32>;
-    let $sroa_write_back_26: ref "core:prelude/list.wado//List<i32>";
-    $sroa_b_repr_24 = array.new_fixed<i32>(1, 2);
-    if @unlikely(2 >= builtin::array_len($sroa_b_repr_24)) {
+    let $sroa_b_repr_23: ref Array<i32>;
+    let $sroa_write_back_25: ref "core:prelude/list.wado//List<i32>";
+    $sroa_b_repr_23 = array.new_fixed<i32>(1, 2);
+    if @unlikely(2 >= builtin::array_len($sroa_b_repr_23)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_26(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_b_repr_24, used: 2 }));
-        $sroa_b_repr_24 = $sroa_write_back_26.repr;
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_25(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_b_repr_23, used: 2 }));
+        $sroa_b_repr_23 = $sroa_write_back_25.repr;
     }
-    builtin::array_set<i32>($sroa_b_repr_24, 2, 3);
+    builtin::array_set<i32>($sroa_b_repr_23, 2, 3);
     "wasi/task-return"(0);
 }
 
@@ -495,30 +493,30 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_4_a_release
 }
 
 fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference"() {
-    let $sroa_write_back_33: ref "core:prelude/list.wado//List<i32>";
-    let $sroa_b_repr_34: ref Array<i32>;
-    $sroa_b_repr_34 = array.new_fixed<i32>(1, 2);
+    let $sroa_b_repr_30: ref Array<i32>;
+    let $sroa_write_back_38: ref "core:prelude/list.wado//List<i32>";
+    $sroa_b_repr_30 = array.new_fixed<i32>(1, 2);
     let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_b_repr_34, 0, 2);
+    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_b_repr_30, 0, 2);
     if @unlikely(2 >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_33(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: 2 }));
-        $array_clone_dst_2 = $sroa_write_back_33.repr;
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_38(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: 2 }));
+        $array_clone_dst_2 = $sroa_write_back_38.repr;
     }
     builtin::array_set<i32>($array_clone_dst_2, 2, 3);
     "wasi/task-return"(0);
 }
 
 fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_6_a_share_does_not_outlive_an_in_place_assignment_under_a_reference_local"() {
-    let $sroa_b_repr_29: ref Array<i32>;
-    let $sroa_write_back_33: ref "core:prelude/list.wado//List<i32>";
-    $sroa_b_repr_29 = array.new_fixed<i32>(1, 2);
+    let $sroa_b_repr_28: ref Array<i32>;
+    let $sroa_write_back_36: ref "core:prelude/list.wado//List<i32>";
+    $sroa_b_repr_28 = array.new_fixed<i32>(1, 2);
     let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_b_repr_29, 0, 2);
+    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_b_repr_28, 0, 2);
     if @unlikely(2 >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_33(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: 2 }));
-        $array_clone_dst_2 = $sroa_write_back_33.repr;
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_36(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: 2 }));
+        $array_clone_dst_2 = $sroa_write_back_36.repr;
     }
     builtin::array_set<i32>($array_clone_dst_2, 2, 3);
     "wasi/task-return"(0);

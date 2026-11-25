@@ -12,9 +12,10 @@ fn sink(name: &String, v: i32) -> i32 {
 }
 
 // The branch keeps the result out of syntactic-constant reach: only the
-// interpreter knows `pick` yields `f.field_name`.
-fn pick(f: &Field) -> String {
-    if f.field_name.len() > 100 {
+// interpreter knows `pick` yields `f.field_name`. `f` comes second, so lowering
+// cannot share the result with the receiver and the copy reaches the optimizer.
+fn pick(limit: i32, f: &Field) -> String {
+    if f.field_name.len() > limit {
         return "too long";
     }
     return f.field_name;
@@ -22,14 +23,14 @@ fn pick(f: &Field) -> String {
 
 export fn run() {
     let f = Field { field_name: "id_str" };
-    let name = pick(&f);
+    let name = pick(100, &f);
     assert sink(&name, builtin::black_box(1)) == 7;
 }
 
 __DATA__
 {
     "stdout": "",
-    "wir_pass": {"O2": ["nir/inline", "nir/const_fold", "nir/store_load_forward_post_scalarize", "nir/const_fold_post_global"]},
+    "wir_pass": {"O2": ["nir/inline", "nir/const_fold", "nir/store_load_forward_post_scalarize", "nir/const_fold_post_global", "nir/copy_elision"]},
     "wir_expect:O2": ["array.new_data<u8>(\"id_str\")"],
     "wir_not_expect:O2": ["$array_clone_dst"]
 }

@@ -386,7 +386,7 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 fn "value_copy_array_xmod.wado/$test_0_bare_array_of_same_named_cross_module_structs_keeps_distinct_copy_helpers"() {
     let arr_a: ref "Array<sub/value_copy_array_xmod_a.wado/Foo>";
     let arr_b: ref "Array<sub/value_copy_array_xmod_b.wado/Foo>";
-    let self_26: ref "core:prelude/list.wado//List<i32>";
+    let self_24: ref "core:prelude/list.wado//List<i32>";
     builtin::array_set<ref "sub/value_copy_array_xmod_a.wado//Foo">(local.tee arr_a(builtin::array_new<ref "sub/value_copy_array_xmod_a.wado//Foo">(1)), 0, struct.new "sub/value_copy_array_xmod_a.wado//Foo" { a: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } });
     builtin::array_set<ref "sub/value_copy_array_xmod_b.wado//Foo">(local.tee arr_b(builtin::array_new<ref "sub/value_copy_array_xmod_b.wado//Foo">(1)), 0, struct.new "sub/value_copy_array_xmod_b.wado//Foo" { b: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(2), used: 1 }, c: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(3), used: 1 } });
     let $array_clone_len_3: i32;
@@ -429,18 +429,18 @@ fn "value_copy_array_xmod.wado/$test_0_bare_array_of_same_named_cross_module_str
         };
     };
     $array_clone_dst_7 = $array_clone_dst_7;
-    if @unlikely(local.tee $array_clone_len_3(local.tee self_26(builtin::array_get_value<ref "sub/value_copy_array_xmod_a.wado//Foo">($array_clone_dst_2, 0).a).used) >= builtin::array_len(self_26.repr)) {
+    if @unlikely(local.tee $array_clone_len_3(local.tee self_24(builtin::array_get_value<ref "sub/value_copy_array_xmod_a.wado//Foo">($array_clone_dst_2, 0).a).used) >= builtin::array_len(self_24.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_26);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_24);
     }
-    builtin::array_set<i32>(self_26.repr, $array_clone_len_3, 9);
-    self_26.used = $array_clone_len_3 + 1;
-    if @unlikely(local.tee $array_clone_len_3(local.tee self_26(builtin::array_get_value<ref "sub/value_copy_array_xmod_b.wado//Foo">($array_clone_dst_7, 0).b).used) >= builtin::array_len(self_26.repr)) {
+    builtin::array_set<i32>(self_24.repr, $array_clone_len_3, 9);
+    self_24.used = $array_clone_len_3 + 1;
+    if @unlikely(local.tee $array_clone_len_3(local.tee self_24(builtin::array_get_value<ref "sub/value_copy_array_xmod_b.wado//Foo">($array_clone_dst_7, 0).b).used) >= builtin::array_len(self_24.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_26);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_24);
     }
-    builtin::array_set<i32>(self_26.repr, $array_clone_len_3, 9);
-    self_26.used = $array_clone_len_3 + 1;
+    builtin::array_set<i32>(self_24.repr, $array_clone_len_3, 9);
+    self_24.used = $array_clone_len_3 + 1;
     if @unlikely(local.tee $array_clone_len_3(builtin::array_get_value<ref "sub/value_copy_array_xmod_a.wado//Foo">(arr_a, 0).a.used) != 1) {
         cold_path;
         "value_copy_array_xmod.wado/$test_0_bare_array_of_same_named_cross_module_structs_keeps_distinct_copy_helpers$cold3"($array_clone_len_3);

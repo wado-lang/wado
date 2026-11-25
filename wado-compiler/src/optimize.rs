@@ -19,6 +19,7 @@ mod const_branch_prune;
 mod const_folding;
 mod const_object_globalization;
 mod container_sroa;
+mod copy_elision;
 mod copy_prop;
 mod dae;
 pub mod dce;
@@ -81,6 +82,7 @@ use const_branch_prune::prune_constant_branches;
 use const_folding::{fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
+use copy_elision::elide_value_copies;
 use copy_prop::propagate_copies;
 use dae::eliminate_dead_arguments;
 use dce::{
@@ -952,11 +954,17 @@ fn run_optimization_passes(
             gated!("nir/peephole", GatedPass::PeepholePre, |p, g| {
                 peephole::run_peephole(p, g, true, &mut heap_effects, &mut mod_ref_summaries)
             });
+            // `nir/inline` keeps every value copy a call until the loop first
+            // converges, so each round judges a copy in the body the last round's
+            // splices landed it in. Before `nir/value_copy_demote`, which would
+            // turn a copy this drops whole into a spine copy.
+            gated!("nir/copy_elision", GatedPass::CopyElision, |p, g| {
+                elide_value_copies(p, g, &mut heap_effects)
+            });
             // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
             // copies when the binding's elements are provably never mutated through
             // it. Runs before `nir/inline`, where the `$value_copy$T(arg)` shape it
-            // matches disappears. (Copies are inserted precisely at the lower phase,
-            // so there is no elision pass to sequence against.)
+            // matches disappears.
             gate_only!(
                 "nir/value_copy_demote",
                 GatedPass::ValueCopyDemote,

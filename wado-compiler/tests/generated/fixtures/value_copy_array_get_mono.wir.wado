@@ -390,23 +390,23 @@ global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/strin
 fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_independent"() {
     let $v_0: i32;
     let arr: ref "Array<value_copy_array_get_mono.wado/Cell>";
-    let $sroa_dst_repr_72: ref "Array<value_copy_array_get_mono.wado/Cell>";
-    let $sroa_write_back_74: ref "core:prelude/list.wado//List<value_copy_array_get_mono.wado/Cell>";
-    $sroa_dst_repr_72 = array.new_fixed<ref "value_copy_array_get_mono.wado//Cell">();
-    if @unlikely(0 >= builtin::array_len($sroa_dst_repr_72)) {
+    let $sroa_dst_repr_71: ref "Array<value_copy_array_get_mono.wado/Cell>";
+    let $sroa_write_back_73: ref "core:prelude/list.wado//List<value_copy_array_get_mono.wado/Cell>";
+    $sroa_dst_repr_71 = array.new_fixed<ref "value_copy_array_get_mono.wado//Cell">();
+    if @unlikely(0 >= builtin::array_len($sroa_dst_repr_71)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono.wado/Cell>::grow"(local.tee $sroa_write_back_74(struct.new "core:prelude/list.wado//List<value_copy_array_get_mono.wado/Cell>" { repr: $sroa_dst_repr_72, used: 0 }));
-        $sroa_dst_repr_72 = $sroa_write_back_74.repr;
+        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono.wado/Cell>::grow"(local.tee $sroa_write_back_73(struct.new "core:prelude/list.wado//List<value_copy_array_get_mono.wado/Cell>" { repr: $sroa_dst_repr_71, used: 0 }));
+        $sroa_dst_repr_71 = $sroa_write_back_73.repr;
     }
-    builtin::array_set<ref "value_copy_array_get_mono.wado//Cell">($sroa_dst_repr_72, 0, struct.new "value_copy_array_get_mono.wado//Cell" { v: 7 });
-    builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">($sroa_dst_repr_72, 0).v = 88;
+    builtin::array_set<ref "value_copy_array_get_mono.wado//Cell">($sroa_dst_repr_71, 0, struct.new "value_copy_array_get_mono.wado//Cell" { v: 7 });
+    builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">($sroa_dst_repr_71, 0).v = 88;
     builtin::array_set<ref "value_copy_array_get_mono.wado//Cell">(local.tee arr(builtin::array_new<ref "value_copy_array_get_mono.wado//Cell">(1)), 0, struct.new "value_copy_array_get_mono.wado//Cell" { v: 9 });
     if @unlikely(local.tee $v_0(builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">(arr, 0).v) != 9) {
         cold_path;
         "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_independent$cold2"($v_0);
         unreachable;
     }
-    if @unlikely(local.tee $v_0(builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">($sroa_dst_repr_72, 0).v) != 88) {
+    if @unlikely(local.tee $v_0(builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">($sroa_dst_repr_71, 0).v) != 88) {
         cold_path;
         "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_independent$cold0"($v_0);
         unreachable;

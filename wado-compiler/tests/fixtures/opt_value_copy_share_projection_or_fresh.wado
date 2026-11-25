@@ -1,0 +1,44 @@
+// A callee returning either its first argument's storage or a fresh value
+// hands back nothing a later write could reach but that argument, so a
+// read-only binding of its result shares the storage as it would `*c`.
+struct Range { lo: i32, hi: i32 }
+struct Class { ranges: List<Range>, neg: bool }
+
+fn holds(c: &Class, x: i32) -> bool {
+    for let r of &c.ranges {
+        if r.lo <= x && x <= r.hi { return !c.neg; }
+    }
+    return c.neg;
+}
+
+#[inline("never")]
+fn folded(c: &Class, fold: bool) -> Class {
+    if !fold {
+        return *c;
+    }
+    let mut out: List<Range> = [];
+    for let r of &c.ranges { out.push(Range { lo: r.lo - 1, hi: r.hi + 1 }); }
+    return Class { ranges: out, neg: c.neg };
+}
+
+#[inline("never")]
+fn count(c: &Class, xs: &List<i32>, fold: bool) -> i32 {
+    let f = folded(c, fold);
+    let mut n = 0;
+    for let x of xs { if holds(&f, *x) { n += 1; } }
+    return n;
+}
+
+test "shares the projected argument" {
+    let c = Class { ranges: [Range { lo: 1, hi: 3 }, Range { lo: 7, hi: 9 }], neg: false };
+    let xs: List<i32> = [0, 2, 5, 8, 10];
+    assert count(&c, &xs, builtin::black_box(false)) == 2;
+    assert count(&c, &xs, builtin::black_box(true)) == 4;
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["lower/value_copy/share"]},
+    "test": {},
+    "wir_not_expect:O2": ["$array_clone_src"]
+}

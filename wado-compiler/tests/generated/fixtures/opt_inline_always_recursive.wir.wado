@@ -133,28 +133,28 @@ fn "opt_inline_always_recursive.wado/fact"(n) {
 fn "opt_inline_always_recursive.wado/run"() with Stdout {
     let acc: i32;
     let current: i32;
-    let out_24: ref "core:prelude/string.wado//String";
+    let out_23: ref "core:prelude/string.wado//String";
     let x: i64;
-    let $sroa_$iter_0_start_124: i32;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_194: i32;
+    let $sroa_$iter_0_start_151: i32;
+    let start_192: i32;
     acc = 0;
-    $sroa_$iter_0_start_124 = 1;
+    $sroa_$iter_0_start_151 = 1;
     b1: block {
         l2: loop {
-            break_if b1 $sroa_$iter_0_start_124 >= 6;
-            $sroa_$iter_0_start_124 = local.tee current($sroa_$iter_0_start_124) + 1;
+            break_if b1 $sroa_$iter_0_start_151 >= 6;
+            $sroa_$iter_0_start_151 = local.tee current($sroa_$iter_0_start_151) + 1;
             acc = acc + "opt_inline_always_recursive.wado/fact"(current);
             continue l2;
         };
     };
-    out_24 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $inline_core_prelude_string_wado_String__internal_push_view_27: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_27;
+    out_23 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $inline_core_prelude_string_wado_String__internal_push_view_26: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_26;
     };
-    $sroa_$iter_0_start_124 = acc < 0;
+    $sroa_$iter_0_start_151 = acc < 0;
     x = builtin::i64_extend_i32_s(acc);
     x = select i64(x < 0_i64, 0_i64 - x, x);
     current = $inline_count_digits_u64_1: block -> i32 {
@@ -217,53 +217,53 @@ fn "opt_inline_always_recursive.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if $sroa_$iter_0_start_124 {
-        if @unlikely(local.tee $sroa_$iter_0_start_124(0 + 1) > builtin::array_len(out_24.repr)) {
+    if $sroa_$iter_0_start_151 {
+        if @unlikely(local.tee $sroa_$iter_0_start_151(0 + 1) > builtin::array_len(out_23.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_24, $sroa_$iter_0_start_124);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_23, $sroa_$iter_0_start_151);
         }
-        start_194 = out_24.used;
-        out_24.used = $sroa_$iter_0_start_124;
-        builtin::array_set_u8(out_24.repr, start_194, 45);
+        start_192 = out_23.used;
+        out_23.used = $sroa_$iter_0_start_151;
+        builtin::array_set_u8(out_23.repr, start_192, 45);
     } else {
     }
-    if @unlikely(local.tee $sroa_$iter_0_start_124(out_24.used + current) > builtin::array_len(out_24.repr)) {
+    if @unlikely(local.tee $sroa_$iter_0_start_151(out_23.used + current) > builtin::array_len(out_23.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_24, $sroa_$iter_0_start_124);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_23, $sroa_$iter_0_start_151);
     }
-    start_194 = out_24.used;
-    out_24.used = $sroa_$iter_0_start_124;
-    arr = out_24.repr;
-    $sroa_$iter_0_start_124 = start_194 + current;
+    start_192 = out_23.used;
+    out_23.used = $sroa_$iter_0_start_151;
+    arr = out_23.repr;
+    $sroa_$iter_0_start_151 = start_192 + current;
     b25: block {
         l26: loop {
-            break_if b25 ($sroa_$iter_0_start_124 - start_194) < 2;
+            break_if b25 ($sroa_$iter_0_start_151 - start_192) < 2;
             q = x /u 100_i64;
             tens = local.tee current(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, $sroa_$iter_0_start_124 - 1, (48 + current) - (tens * 10));
-            builtin::array_set_u8(arr, $sroa_$iter_0_start_124 - 2, 48 + tens);
-            $sroa_$iter_0_start_124 = $sroa_$iter_0_start_124 - 2;
+            builtin::array_set_u8(arr, $sroa_$iter_0_start_151 - 1, (48 + current) - (tens * 10));
+            builtin::array_set_u8(arr, $sroa_$iter_0_start_151 - 2, 48 + tens);
+            $sroa_$iter_0_start_151 = $sroa_$iter_0_start_151 - 2;
             x = q;
             continue l26;
         };
     };
-    if $sroa_$iter_0_start_124 > start_194 {
-        builtin::array_set_u8(arr, start_194, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_$iter_0_start_151 > start_192 {
+        builtin::array_set_u8(arr, start_192, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
-    $inline_core_prelude_string_wado_String__internal_push_view_46: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_46;
+    $inline_core_prelude_string_wado_String__internal_push_view_45: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_45;
     };
-    $sroa_$iter_0_start_124 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    $sroa_$iter_0_start_151 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     current = builtin::i32_wrap_i64(x >> 32_i64);
-    $sroa_$iter_0_start_124 = "opt_inline_always_recursive.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_124);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_194(out_24.used) + 1)), 0, out_24.repr, 0, start_194);
-    builtin::array_set_u8(arr, start_194, 10);
+    $sroa_$iter_0_start_151 = "opt_inline_always_recursive.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_151);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_192(out_23.used) + 1)), 0, out_23.repr, 0, start_192);
+    builtin::array_set_u8(arr, start_192, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_194 = start_194 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(current, arr, 0, start_194);
+        start_192 = start_192 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(current, arr, 0, start_192);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -271,7 +271,7 @@ fn "opt_inline_always_recursive.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_124);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_151);
     }
     if @unlikely(acc != 153) {
         cold_path;

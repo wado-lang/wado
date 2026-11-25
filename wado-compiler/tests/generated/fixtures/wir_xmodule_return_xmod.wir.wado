@@ -688,7 +688,6 @@ mini::RK_PROG: "), used: 16 }, s2: struct.new "core:prelude/string.wado//String"
 
 fn "wir_xmodule_return_xmod.wado/_run_parse_entry$$Closure_0$dae[max_errors,entry]$spec0"(input) {
     let $load_0: ref "core:prelude/list.wado//List<i32>";
-    let $load_16: i32;
     let tokens_1: ref "sub/wir_xmodule_return_parser.wado//TokenStream";
     let p_2: ref "sub/wir_xmodule_return_parser.wado//Parser";
     let _r: ref null "sub/wir_xmodule_return_parser.wado//ParseError";
@@ -696,13 +695,10 @@ fn "wir_xmodule_return_xmod.wado/_run_parse_entry$$Closure_0$dae[max_errors,entr
     let _d: ref "sub/wir_xmodule_return_parser.wado//ParseError";
     let d: ref "sub/wir_xmodule_return_parser.wado//Diagnostic";
     let $dead_field_slot_11: ref "sub/wir_xmodule_return_parser.wado//CstNode";
-    let v_21: ref "sub/wir_xmodule_return_parser.wado//Span";
-    let v_22: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
-    let self_38: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/Diagnostic>";
-    let self_45: ref "sub/wir_xmodule_return_parser.wado//TreeBuilder";
+    let span: ref "sub/wir_xmodule_return_parser.wado//Span";
+    let self_30: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/Diagnostic>";
+    let self_37: ref "sub/wir_xmodule_return_parser.wado//TreeBuilder";
     let pos: ref "core:prelude//$Cell<i32>";
-    let $sroa_$sroa_e_span_62_start_65: i32;
-    let $sroa_$sroa_e_span_62_end_66: i32;
     tokens_1 = "sub/wir_xmodule_return_parser.wado/tokenize$spec0"(input);
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = local.tee $load_0(tokens_1.kinds).repr;
@@ -712,7 +708,7 @@ fn "wir_xmodule_return_xmod.wado/_run_parse_entry$$Closure_0$dae[max_errors,entr
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($array_clone_len_3)), 0, $array_clone_src_1, 0, $array_clone_len_3);
     if ref.is_null(local.tee _r("sub/wir_xmodule_return_parser.wado/_parse_prog"(local.tee p_2(struct.new "sub/wir_xmodule_return_parser.wado//Parser" { tokens: tokens_1, kinds: $array_clone_dst_2, pos: 0, pending: ref.null none, b: struct.new "sub/wir_xmodule_return_parser.wado//TreeBuilder" { events: struct.new "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>" { repr: array.new_fixed<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(), used: 0 } }, diagnostics: struct.new "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/Diagnostic>" { repr: array.new_fixed<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">(), used: 0 } })))) == 0 {
         e_4 = ref.as_non_null(_r);
-        input = local.tee e_4((if ref.is_null(local.tee _r(p_2.pending)) == 0 -> ref "sub/wir_xmodule_return_parser.wado//ParseError" {
+        e_4 = (if ref.is_null(local.tee _r(p_2.pending)) == 0 -> ref "sub/wir_xmodule_return_parser.wado//ParseError" {
             if local.tee _d(ref.as_non_null(_r)).span.start >= e_4.span.start -> ref "sub/wir_xmodule_return_parser.wado//ParseError" {
                 _d;
             } else {
@@ -720,122 +716,45 @@ fn "wir_xmodule_return_xmod.wado/_run_parse_entry$$Closure_0$dae[max_errors,entr
             }
         } else {
             e_4;
-        })).message;
-        let $array_clone_src_4: ref Array<u8>;
-        $array_clone_src_4 = input.repr;
-        $array_clone_len_3 = input.used;
-        let $array_clone_dst_5: ref Array<u8>;
-        builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($array_clone_len_3)), 0, $array_clone_src_4, 0, $array_clone_len_3);
-        $sroa_$sroa_e_span_62_start_65 = local.tee v_21(e_4.span).start;
-        $sroa_$sroa_e_span_62_end_66 = v_21.end;
-        v_22 = e_4.expected;
-        let $array_clone_src_7: ref "Array<core:prelude/string.wado/String>";
-        $array_clone_src_7 = v_22.repr;
-        $load_16 = v_22.used;
-        let $array_clone_dst_8: ref "Array<core:prelude/string.wado/String>";
-        $array_clone_dst_8 = builtin::array_new<ref "core:prelude/string.wado//String">($load_16);
-        let $array_clone_i_10: i32;
-        $array_clone_i_10 = 0;
-        let $array_clone_elem_11: ref null "core:prelude/string.wado//String";
-        $array_clone_deep_prefix: block {
-            l10: loop {
-                break_if $array_clone_deep_prefix $array_clone_i_10 >= $load_16;
-                $array_clone_elem_11 = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_src_7, $array_clone_i_10);
-                builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_8, $array_clone_i_10, (if ref.is_null($array_clone_elem_11) -> ref null "core:prelude/string.wado//String" {
-                    $array_clone_elem_11;
-                } else {
-                    "wir_xmodule_return_xmod.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_11));
-                }));
-                $array_clone_i_10 = $array_clone_i_10 + 1;
-                continue l10;
-            };
-        };
-        $array_clone_src_7 = local.tee v_22(e_4.rule_stack).repr;
-        $array_clone_dst_8 = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $load_16(v_22.used));
-        $array_clone_i_10 = 0;
-        $array_clone_deep_prefix: block {
-            l12: loop {
-                break_if $array_clone_deep_prefix $array_clone_i_10 >= $load_16;
-                $array_clone_elem_11 = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_src_7, $array_clone_i_10);
-                builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_8, $array_clone_i_10, (if ref.is_null($array_clone_elem_11) -> ref null "core:prelude/string.wado//String" {
-                    $array_clone_elem_11;
-                } else {
-                    "wir_xmodule_return_xmod.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_11));
-                }));
-                $array_clone_i_10 = $array_clone_i_10 + 1;
-                continue l12;
-            };
-        };
+        });
         let $mv$lc$1: i32;
-        multivalue_bind [$array_clone_i_10, $mv$lc$1] = (let $mv_arg_17: ref "core:prelude/list.wado//List<char>"; "sub/wir_xmodule_return_parser.wado/line_col"(local.tee $mv_arg_17(p_2.tokens.chars).repr, $mv_arg_17.used, $sroa_$sroa_e_span_62_start_65));
-        input = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_src_4(builtin::array_new<u8>($array_clone_len_3)), 0, $array_clone_dst_5, 0, $array_clone_len_3); $array_clone_src_4, used: $array_clone_len_3 };
-        v_21 = struct.new "sub/wir_xmodule_return_parser.wado//Span" { start: $sroa_$sroa_e_span_62_start_65, end: $sroa_$sroa_e_span_62_end_66 };
-        local.tee d(struct.new "sub/wir_xmodule_return_parser.wado//Diagnostic" { severity: 0, code: 0, message: input, span: v_21, line: $array_clone_i_10, col: $mv$lc$1, expected: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }, found: -1, rule_stack: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }, recovery: 4, related: struct.new "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/RelatedInfo>" { repr: array.new_fixed<ref "sub/wir_xmodule_return_parser.wado//RelatedInfo">(), used: 0 } }).rule_stack = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: $array_clone_src_7 = builtin::array_new<ref "core:prelude/string.wado//String">($load_16); $array_clone_len_3 = 0; $array_clone_deep_prefix: block {
-            l14: loop {
-                break_if $array_clone_deep_prefix $array_clone_len_3 >= $load_16;
-                $array_clone_elem_11 = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_8, $array_clone_len_3);
-                builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_src_7, $array_clone_len_3, (if ref.is_null($array_clone_elem_11) -> ref null "core:prelude/string.wado//String" {
-                    $array_clone_elem_11;
-                } else {
-                    "wir_xmodule_return_xmod.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_11));
-                }));
-                $array_clone_len_3 = $array_clone_len_3 + 1;
-                continue l14;
-            };
-        }; $array_clone_src_7, used: $load_16 };
-        if @unlikely(local.tee $array_clone_len_3(local.tee self_38(p_2.diagnostics).used) >= builtin::array_len(self_38.repr)) {
+        multivalue_bind [$array_clone_len_3, $mv$lc$1] = (let $mv_arg_4: ref "core:prelude/list.wado//List<char>"; "sub/wir_xmodule_return_parser.wado/line_col"(local.tee $mv_arg_4(p_2.tokens.chars).repr, $mv_arg_4.used, e_4.span.start));
+        input = e_4.message;
+        span = e_4.span;
+        local.tee d(struct.new "sub/wir_xmodule_return_parser.wado//Diagnostic" { severity: 0, code: 0, message: input, span: span, line: $array_clone_len_3, col: $mv$lc$1, expected: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }, found: -1, rule_stack: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }, recovery: 4, related: struct.new "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/RelatedInfo>" { repr: array.new_fixed<ref "sub/wir_xmodule_return_parser.wado//RelatedInfo">(), used: 0 } }).rule_stack = e_4.rule_stack;
+        if @unlikely(local.tee $array_clone_len_3(local.tee self_30(p_2.diagnostics).used) >= builtin::array_len(self_30.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/Diagnostic>::grow"(self_38);
+            "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/Diagnostic>::grow"(self_30);
         }
-        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">(self_38.repr, $array_clone_len_3, d);
-        self_38.used = $array_clone_len_3 + 1;
+        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">(self_30.repr, $array_clone_len_3, d);
+        self_30.used = $array_clone_len_3 + 1;
     } else {
     }
-    self_45 = p_2.b;
+    self_37 = p_2.b;
     pos = struct.new "core:prelude//$Cell<i32>" { value: 0 };
     $dead_field_slot_11 = block -> ref "sub/wir_xmodule_return_parser.wado//CstNode" {
-        let $mv_arg_26: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>";
-        "sub/wir_xmodule_return_parser.wado/tree_build_node"(local.tee $mv_arg_26(self_45.events).repr, $mv_arg_26.used, pos);
+        let $mv_arg_5: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>";
+        "sub/wir_xmodule_return_parser.wado/tree_build_node"(local.tee $mv_arg_5(self_37.events).repr, $mv_arg_5.used, pos);
     };
-    $array_clone_src_1 = local.tee $load_0(local.tee tokens_1(p_2.tokens).kinds).repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $array_clone_src_1 = local.tee $load_0(tokens_1.starts).repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $array_clone_src_1 = local.tee $load_0(tokens_1.ends).repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $array_clone_src_1 = local.tee $load_0(tokens_1.triv_lo).repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $array_clone_src_1 = local.tee $load_0(tokens_1.triv_hi).repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $array_clone_src_1 = local.tee $load_0(tokens_1.triv_kinds).repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $array_clone_src_1 = local.tee $load_0(tokens_1.triv_starts).repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $array_clone_src_1 = local.tee $load_0(tokens_1.triv_ends).repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $array_clone_src_1 = local.tee $load_0(tokens_1.triv_chans).repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $array_clone_src_1 = local.tee $load_0(tokens_1.flags).repr;
-    builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    self_38 = p_2.diagnostics;
-    let $array_clone_src_57: ref "Array<sub/wir_xmodule_return_parser.wado/Diagnostic>";
-    $array_clone_src_57 = self_38.repr;
-    $array_clone_len_3 = self_38.used;
-    let $array_clone_dst_58: ref "Array<sub/wir_xmodule_return_parser.wado/Diagnostic>";
-    $array_clone_dst_58 = builtin::array_new<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">($array_clone_len_3);
-    $sroa_$sroa_e_span_62_start_65 = 0;
-    let $array_clone_elem_61: ref null "sub/wir_xmodule_return_parser.wado//Diagnostic";
+    self_30 = p_2.diagnostics;
+    let $array_clone_src_6: ref "Array<sub/wir_xmodule_return_parser.wado/Diagnostic>";
+    $array_clone_src_6 = self_30.repr;
+    $array_clone_len_3 = self_30.used;
+    let $array_clone_dst_7: ref "Array<sub/wir_xmodule_return_parser.wado/Diagnostic>";
+    $array_clone_dst_7 = builtin::array_new<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">($array_clone_len_3);
+    $mv$lc$1 = 0;
+    let $array_clone_elem_10: ref null "sub/wir_xmodule_return_parser.wado//Diagnostic";
     $array_clone_deep_prefix: block {
-        l18: loop {
-            break_if $array_clone_deep_prefix $sroa_$sroa_e_span_62_start_65 >= $array_clone_len_3;
-            $array_clone_elem_61 = builtin::array_get_value<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">($array_clone_src_57, $sroa_$sroa_e_span_62_start_65);
-            builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">($array_clone_dst_58, $sroa_$sroa_e_span_62_start_65, (if ref.is_null($array_clone_elem_61) -> ref null "sub/wir_xmodule_return_parser.wado//Diagnostic" {
-                $array_clone_elem_61;
+        l12: loop {
+            break_if $array_clone_deep_prefix $mv$lc$1 >= $array_clone_len_3;
+            $array_clone_elem_10 = builtin::array_get_value<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">($array_clone_src_6, $mv$lc$1);
+            builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">($array_clone_dst_7, $mv$lc$1, (if ref.is_null($array_clone_elem_10) -> ref null "sub/wir_xmodule_return_parser.wado//Diagnostic" {
+                $array_clone_elem_10;
             } else {
-                "wir_xmodule_return_xmod.wado/$value_copy$sub/wir_xmodule_return_parser.wado/Diagnostic"(ref.as_non_null($array_clone_elem_61));
+                "wir_xmodule_return_xmod.wado/$value_copy$sub/wir_xmodule_return_parser.wado/Diagnostic"(ref.as_non_null($array_clone_elem_10));
             }));
-            $sroa_$sroa_e_span_62_start_65 = $sroa_$sroa_e_span_62_start_65 + 1;
-            continue l18;
+            $mv$lc$1 = $mv$lc$1 + 1;
+            continue l12;
         };
     };
     return $dead_field_slot_11;
@@ -880,16 +799,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b31: block {
-        l32: loop {
-            break_if b31 (digit_count - offset) < 2;
+    b25: block {
+        l26: loop {
+            break_if b25 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-            continue l32;
+            continue l26;
         };
     };
     if digit_count > offset {
@@ -1096,56 +1015,56 @@ fn "core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$af
 }
 
 fn "core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b145b32c9a586330"(v, index) {
-    return b92: block -> ref "core:prelude/string.wado//String" {
-        b93: block {
-            b94: block {
-                b95: block {
-                    b96: block {
-                        b97: block {
-                            b98: block {
-                                b99: block {
-                                    b100: block {
-                                        b101: block {
-                                            b102: block {
-                                                b103: block {
-                                                    b104: block {
-                                                        b105: block {
+    return b86: block -> ref "core:prelude/string.wado//String" {
+        b87: block {
+            b88: block {
+                b89: block {
+                    b90: block {
+                        b91: block {
+                            b92: block {
+                                b93: block {
+                                    b94: block {
+                                        b95: block {
+                                            b96: block {
+                                                b97: block {
+                                                    b98: block {
+                                                        b99: block {
                                                             br_table index [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
                                                         };
                                                         unreachable;
                                                     };
                                                     v.s0;
-                                                    break b92;
+                                                    break b86;
                                                 };
                                                 v.r0;
-                                                break b92;
+                                                break b86;
                                             };
                                             v.s1;
-                                            break b92;
+                                            break b86;
                                         };
                                         v.r1;
-                                        break b92;
+                                        break b86;
                                     };
                                     v.s2;
-                                    break b92;
+                                    break b86;
                                 };
                                 v.r2;
-                                break b92;
+                                break b86;
                             };
                             v.s3;
-                            break b92;
+                            break b86;
                         };
                         v.r3;
-                        break b92;
+                        break b86;
                     };
                     v.s4;
-                    break b92;
+                    break b86;
                 };
                 v.r4;
-                break b92;
+                break b86;
             };
             v.s5;
-            break b92;
+            break b86;
         };
         v.r5;
     };
@@ -1228,50 +1147,50 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
+    b115: block {
+        l116: loop {
+            break_if b115 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            continue l116;
+        };
+    };
+    b117: block {
+        l118: loop {
+            break_if b117 i > $licm_arith_7;
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            continue l118;
+        };
+    };
+    b119: block {
+        l120: loop {
+            break_if b119 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            continue l120;
+        };
+    };
     b121: block {
         l122: loop {
-            break_if b121 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
-            at = src_start + i;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
-            builtin::store_i64(ptr + i, w);
-            i = i + 8;
-            at = src_start + i;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
-            builtin::store_i64(ptr + i, w);
-            i = i + 8;
+            break_if b121 i >= len;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
             continue l122;
-        };
-    };
-    b123: block {
-        l124: loop {
-            break_if b123 i > $licm_arith_7;
-            at = src_start + i;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
-            builtin::store_i64(ptr + i, w);
-            i = i + 8;
-            continue l124;
-        };
-    };
-    b125: block {
-        l126: loop {
-            break_if b125 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
-            i = i + 1;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
-            i = i + 1;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
-            i = i + 1;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
-            i = i + 1;
-            continue l126;
-        };
-    };
-    b127: block {
-        l128: loop {
-            break_if b127 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
-            i = i + 1;
-            continue l128;
         };
     };
 }
@@ -1348,7 +1267,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-        l137: loop {
+        l131: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
             written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
@@ -1356,7 +1275,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return written;
             }
-            continue l137;
+            continue l131;
         };
     };
 }
@@ -1370,30 +1289,43 @@ fn "sub/wir_xmodule_return_parser.wado/line_col"($mv$chars$repr, $mv$chars$used,
     pos = select i32(pos < $mv$chars$used, pos, $mv$chars$used);
     i = 0;
     if pos <= $mv$chars$used {
+        b134: block {
+            l135: loop {
+                break_if b134 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(pos);
+                if builtin::array_get_value<char>($mv$chars$repr, i) == 10 {
+                    line = line + 1;
+                    col = 0;
+                } else {
+                    col = col + 1;
+                }
+                i = i + 1;
+                if builtin::array_get_value<char>($mv$chars$repr, i) == 10 {
+                    line = line + 1;
+                    col = 0;
+                } else {
+                    col = col + 1;
+                }
+                i = i + 1;
+                if builtin::array_get_value<char>($mv$chars$repr, i) == 10 {
+                    line = line + 1;
+                    col = 0;
+                } else {
+                    col = col + 1;
+                }
+                i = i + 1;
+                if builtin::array_get_value<char>($mv$chars$repr, i) == 10 {
+                    line = line + 1;
+                    col = 0;
+                } else {
+                    col = col + 1;
+                }
+                i = i + 1;
+                continue l135;
+            };
+        };
         b140: block {
             l141: loop {
-                break_if b140 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(pos);
-                if builtin::array_get_value<char>($mv$chars$repr, i) == 10 {
-                    line = line + 1;
-                    col = 0;
-                } else {
-                    col = col + 1;
-                }
-                i = i + 1;
-                if builtin::array_get_value<char>($mv$chars$repr, i) == 10 {
-                    line = line + 1;
-                    col = 0;
-                } else {
-                    col = col + 1;
-                }
-                i = i + 1;
-                if builtin::array_get_value<char>($mv$chars$repr, i) == 10 {
-                    line = line + 1;
-                    col = 0;
-                } else {
-                    col = col + 1;
-                }
-                i = i + 1;
+                break_if b140 i >= pos;
                 if builtin::array_get_value<char>($mv$chars$repr, i) == 10 {
                     line = line + 1;
                     col = 0;
@@ -1404,23 +1336,10 @@ fn "sub/wir_xmodule_return_parser.wado/line_col"($mv$chars$repr, $mv$chars$used,
                 continue l141;
             };
         };
-        b146: block {
-            l147: loop {
-                break_if b146 i >= pos;
-                if builtin::array_get_value<char>($mv$chars$repr, i) == 10 {
-                    line = line + 1;
-                    col = 0;
-                } else {
-                    col = col + 1;
-                }
-                i = i + 1;
-                continue l147;
-            };
-        };
     } else {
-        b149: block {
-            l150: loop {
-                break_if b149 i >= pos;
+        b143: block {
+            l144: loop {
+                break_if b143 i >= pos;
                 if if @unlikely(i >= $mv$chars$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $mv$chars$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:539"), used: 38 });
@@ -1432,7 +1351,7 @@ fn "sub/wir_xmodule_return_parser.wado/line_col"($mv$chars$repr, $mv$chars$used,
                     col = col + 1;
                 }
                 i = i + 1;
-                continue l150;
+                continue l144;
             };
         };
     }
@@ -1465,9 +1384,9 @@ fn "sub/wir_xmodule_return_parser.wado/tree_build_node"($mv$events$repr, $mv$eve
         $load_0 = 0;
         flags = kind == -1;
         end_8 = start_4;
-        b155: block {
-            l156: loop {
-                break_if b155 local.tee $load_4(pos.value) >= $mv$events$used;
+        b149: block {
+            l150: loop {
+                break_if b149 local.tee $load_4(pos.value) >= $mv$events$used;
                 if @unlikely($load_4 >=u $mv$events$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($load_4, $mv$events$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:831"), used: 38 });
@@ -1475,7 +1394,7 @@ fn "sub/wir_xmodule_return_parser.wado/tree_build_node"($mv$events$repr, $mv$eve
                 }
                 if ref.test "sub/wir_xmodule_return_parser.wado//BuildEvent::Close"(local.tee $match_24(builtin::array_get_value<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">($mv$events$repr, $load_4))) {
                     end_8 = ref.cast "sub/wir_xmodule_return_parser.wado//BuildEvent::Close"($match_24).payload_0;
-                    break b155: pos.value = $load_4 + 1;
+                    break b149: pos.value = $load_4 + 1;
                 } else {
                 }
                 if ref.test "sub/wir_xmodule_return_parser.wado//BuildEvent::Open"($match_24) {
@@ -1541,7 +1460,7 @@ fn "sub/wir_xmodule_return_parser.wado/tree_build_node"($mv$events$repr, $mv$eve
                         }
                     }
                 }
-                continue l156;
+                continue l150;
             };
         };
         return struct.new "sub/wir_xmodule_return_parser.wado//CstNode" { kind: kind, span: struct.new "sub/wir_xmodule_return_parser.wado//Span" { start: start_4, end: end_8 }, flags: flags };
@@ -1565,8 +1484,8 @@ fn "sub/wir_xmodule_return_parser.wado/try_INT"($mv$chars$repr, $mv$chars$used, 
         return -1;
     }
     start = start + 1;
-    b173: block {
-        l174: loop {
+    b167: block {
+        l168: loop {
             rep_0: block {
                 break_if rep_0 start >= $mv$chars$used;
                 break_if rep_0 if @unlikely(0 > start) {
@@ -1575,9 +1494,9 @@ fn "sub/wir_xmodule_return_parser.wado/try_INT"($mv$chars$repr, $mv$chars$used, 
                     unreachable;
                 }; $m_1 = builtin::array_get_value<char>($mv$chars$repr, start); (48 <=u $m_1) & ($m_1 <=u 57) == 0;
                 start = start + 1;
-                continue l174;
+                continue l168;
             };
-            break b173;
+            break b167;
         };
     };
     return start;
@@ -1824,9 +1743,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/stri
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f, if @unlikely(local.tee $load_0($inline_utf8_prefix_end_5: block -> i32 {
         end_45 = 0;
         seen = 0;
-        b210: block {
-            l211: loop {
-                break_if b210 ((end_45 < $mv$text$used) & (seen < $load_0)) == 0;
+        b204: block {
+            l205: loop {
+                break_if b204 ((end_45 < $mv$text$used) & (seen < $load_0)) == 0;
                 end_45 = end_45 + $inline_utf8_seq_len_7: block -> i32 {
                     if local.tee end_45(builtin::array_get_value<u8>($mv$text$repr, end_45)) <u 128 {
                         break $inline_utf8_seq_len_7: 1;
@@ -1840,7 +1759,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/stri
                     break $inline_utf8_seq_len_7: 4;
                 };
                 seen = seen + 1;
-                continue l211;
+                continue l205;
             };
         };
         if end_45 > $mv$text$used {
@@ -2068,9 +1987,9 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize$spec0"(input) {
     $licm_triv_starts_240 = ts.triv_starts;
     $licm_triv_ends_241 = ts.triv_ends;
     $licm_triv_chans_242 = ts.triv_chans;
-    b229: block {
-        l230: loop {
-            break_if b229 $sroa_lexer_pos_239 >= $load_1;
+    b223: block {
+        l224: loop {
+            break_if b223 $sroa_lexer_pos_239 >= $load_1;
             best_end = -1;
             best_kind = 3;
             $cse_243 = $sroa_lexer_pos_239 < $load_1;
@@ -2106,8 +2025,8 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize$spec0"(input) {
                         break $inline_try_WS_0: -1;
                     }
                     $cse_243 = $cse_243 + 1;
-                    b240: block {
-                        l241: loop {
+                    b234: block {
+                        l235: loop {
                             $inline_try_WS_0__rep_1: block {
                                 break_if $inline_try_WS_0__rep_1 $cse_243 >= $load_1;
                                 break_if $inline_try_WS_0__rep_1 (if (if (if if @unlikely(0 > $cse_243) {
@@ -2128,9 +2047,9 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize$spec0"(input) {
                                     builtin::array_get_value<char>($licm_repr_108, $cse_243) == 10;
                                 }) == 0;
                                 $cse_243 = $cse_243 + 1;
-                                continue l241;
+                                continue l235;
                             };
-                            break b240;
+                            break b234;
                         };
                     };
                     break $inline_try_WS_0: $cse_243;
@@ -2219,7 +2138,7 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize$spec0"(input) {
                 }
                 $sroa_lexer_pos_239 = best_end;
             }
-            continue l230;
+            continue l224;
         };
     };
     "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenStream::push_token_flagged$dae[flags,return]"(ts, 2, $sroa_lexer_pos_239, $sroa_lexer_pos_239, cap, ts.triv_kinds.used);
@@ -2287,8 +2206,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
     $licm_used_14 = self.used;
     $licm_repr_15 = self.repr;
     $hfs_byte_index_41 = self.byte_index;
-    b272: block {
-        l273: loop {
+    b266: block {
+        l267: loop {
             $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__0: block {
                 if $hfs_byte_index_41 >= $licm_used_14 {
                     $sroa_slot_13 = 0;
@@ -2337,9 +2256,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
             if $sroa_slot_13 == 1 {
                 n = n + 1;
             } else {
-                break b272: self.byte_index = $hfs_byte_index_41;
+                break b266: self.byte_index = $hfs_byte_index_41;
             }
-            continue l273;
+            continue l267;
         };
     };
     return n;
@@ -3280,9 +3199,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     $licm_arith_37 = c <u 128;
     $licm_arith_38 = c & 255;
     $hfs_used_39 = self.used;
-    b394: block {
-        l395: loop {
-            break_if b394 i >= n;
+    b388: block {
+        l389: loop {
+            break_if b388 i >= n;
             $inline_core_prelude_string_wado_String__push_0: block {
                 if $licm_arith_37 {
                     if @unlikely(local.tee $hfs_used_39($hfs_used_39 + 1) > builtin::array_len($licm_repr_36)) {
@@ -3314,7 +3233,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
             };
             i = i + 1;
             self.used = $hfs_used_39;
-            continue l395;
+            continue l389;
         };
     };
 }
@@ -3435,9 +3354,9 @@ fn "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenS
     $licm_repr_49 = out.repr;
     $hfs_used_83 = out.used;
     if (end <= $mv$self$used) & (start >= 0) {
-        b412: block {
-            l413: loop {
-                break_if b412 start >= end;
+        b406: block {
+            l407: loop {
+                break_if b406 start >= end;
                 $inline_core_prelude_string_wado_String__push_0: block {
                     if local.tee code_11(builtin::array_get_value<char>($mv$self$repr, start)) <u 128 {
                         code_11 = code_11 & 255;
@@ -3491,13 +3410,13 @@ fn "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenS
                 };
                 start = start + 1;
                 out.used = $hfs_used_83;
-                continue l413;
+                continue l407;
             };
         };
     } else {
-        b421: block {
-            l422: loop {
-                break_if b421 start >= end;
+        b415: block {
+            l416: loop {
+                break_if b415 start >= end;
                 $inline_core_prelude_string_wado_String__push_0: block {
                     if @unlikely(start >=u $mv$self$used) {
                         cold_path;
@@ -3556,7 +3475,7 @@ fn "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenS
                 };
                 start = start + 1;
                 out.used = $hfs_used_83;
-                continue l422;
+                continue l416;
             };
         };
     }
@@ -3600,11 +3519,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits
     $sroa_result_used_25 = 0;
     $licm_repr_27 = iter.repr;
     $hfs_byte_index_53 = iter.byte_index;
-    b433: block {
-        l434: loop {
+    b427: block {
+        l428: loop {
             if $hfs_byte_index_53 >= 3 {
                 iter.byte_index = $hfs_byte_index_53;
-                break b433;
+                break b427;
             }
             $inline_decode_char_at_0: block {
                 if local.tee b0(builtin::array_get_value<u8>($licm_repr_27, $hfs_byte_index_53)) <u 128 {
@@ -3649,7 +3568,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits
             }
             builtin::array_set<char>($sroa_result_repr_24, $sroa_result_used_25, b0);
             $sroa_result_used_25 = $sroa_result_used_25 + 1;
-            continue l434;
+            continue l428;
         };
     };
     return struct.new "core:prelude/list.wado//List<char>" { repr: $sroa_result_repr_24, used: $sroa_result_used_25 };

@@ -45,6 +45,7 @@ pub enum GatedPass {
     SroaParam,
     SroaVariantReturn,
     ValueCopyDemote,
+    CopyElision,
     ScalarForward,
     LetBlockFlatten,
     /// Whole-program only: the column says whether any function changed since
@@ -58,7 +59,7 @@ pub enum GatedPass {
 }
 
 impl GatedPass {
-    const COUNT: usize = 19;
+    const COUNT: usize = 20;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call
@@ -322,6 +323,7 @@ mod tests {
             GatedPass::SroaParam,
             GatedPass::SroaVariantReturn,
             GatedPass::ValueCopyDemote,
+            GatedPass::CopyElision,
             GatedPass::ScalarForward,
             GatedPass::LetBlockFlatten,
             GatedPass::ParamSpec,
@@ -344,6 +346,7 @@ mod tests {
                 | GatedPass::SroaParam
                 | GatedPass::SroaVariantReturn
                 | GatedPass::ValueCopyDemote
+                | GatedPass::CopyElision
                 | GatedPass::ScalarForward
                 | GatedPass::LetBlockFlatten
                 | GatedPass::ParamSpec

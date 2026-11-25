@@ -115,6 +115,13 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
     format!("{deep_name}$shallow")
 }
 
+/// The name of the clone `copy_elision` mints of a function that returns
+/// copies of its arguments' parts, lending the parts instead: the function's
+/// name with a `$lend` suffix.
+pub fn lending_clone_name(name: &str) -> String {
+    format!("{name}$lend")
+}
+
 /// The name of the function `cold_outline` moves a `cold_path()` region into:
 /// the enclosing function's name with a `$cold` suffix, numbered when it opens
 /// more than one region.

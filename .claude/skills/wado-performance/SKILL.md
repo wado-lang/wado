@@ -28,11 +28,12 @@ exception. §2 and §4 say where the fix goes instead.
 wado run --profile guest,profile.json,1 prog.wado   # interval 1 short runs, 0 exhaustive
 wado test --profile guest,profile.json,1 file.wado  # same, over one file's test blocks
 wado run-webgpu --profile guest,profile.json,1 prog.wado  # same, on a wasi:webgpu host
-node .claude/skills/wado-performance/scripts/analyze_guest_profile.ts profile.json [--top N] [--under NAME]
+node .claude/skills/wado-performance/scripts/analyze_guest_profile.ts profile.json [--top N] [--under NAME] [--callers NAME]
 ```
 
 `--under NAME` keeps the samples whose stack passes through a function whose
-name contains NAME, so a timed phase reads apart from its setup.
+name contains NAME, so a timed phase reads apart from its setup. `--callers '$value_copy$'` names the call sites that pay for a hot helper, which reads as
+one leaf.
 
 The sampler only sees guest code. It samples at an epoch check, which only
 guest code reaches, so a host call (a GPU wait, a copy across the boundary)

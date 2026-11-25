@@ -105,6 +105,14 @@ pub struct SpecializationCapHit {
     pub turned_down: usize,
 }
 
+/// Where a lending clone's result shares objects with its arguments: the
+/// depth below the result, and each parameter with the depth below it.
+#[derive(Debug, Clone, Default)]
+pub struct LentParts {
+    pub result_depth: usize,
+    pub param_depths: Vec<(usize, usize)>,
+}
+
 /// A linked Wado package ready for WIR building and code generation.
 ///
 /// Produced by [`crate::link::link`] from a [`crate::package::Package`].
@@ -134,6 +142,10 @@ pub struct NirPackage {
     /// later round, so its current call sites are not its whole contract.
     /// Identity, not a name test — see the declaration-identity WEP.
     pub sroa_param_clones: IndexSet<FuncId>,
+    /// Functions `optimize/copy_elision` minted to lend the parts they return
+    /// rather than copy them, with what each lends. A clone lends nothing
+    /// further.
+    pub lending_clones: IndexMap<FuncId, LentParts>,
     /// How each function `sroa_param` minted, `dae` or `drve` reshaped, or
     /// `param_spec` cloned from one of those stands against the root it
     /// derives from. Its name is rendered from this alone, so two routes to one
@@ -608,6 +620,28 @@ impl NirPackage {
             let func = func_rc.borrow();
             FunctionRef::from_resolved(&func, func.module_source.clone())
         })
+    }
+
+    /// Give a clone of the function `origin` names its own entry in
+    /// `function_strings`, which is name-keyed: DCE reads it to decide which
+    /// string literals survive, so without one the clone's literals are pruned
+    /// out from under it.
+    pub fn copy_function_strings(
+        &mut self,
+        origin: &(ModuleSource, String),
+        clone: (ModuleSource, String),
+    ) {
+        if let Some(strings) = self.function_strings.get(origin).cloned() {
+            self.function_strings.insert(clone, strings);
+        }
+    }
+
+    /// Per function, in store order, whether it is a `$value_copy$T` helper.
+    pub fn value_copy_functions(&self) -> Vec<bool> {
+        self.functions
+            .iter()
+            .map(|f| f.borrow().is_value_copy())
+            .collect()
     }
 
     /// The [`FuncId`]s of the calls that write no struct field: a builtin whose
