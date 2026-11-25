@@ -6,7 +6,7 @@
 use crate::graph::DisjointSets;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::parallel::Executor;
-use crate::wir::{WirInstr, WirPackage, WirTypeDef, WirTypeId};
+use crate::wir::{PerDefinedFunc, WirInstr, WirPackage, WirTypeDef, WirTypeId};
 
 use super::util::may_exit_enclosing_block;
 
@@ -42,34 +42,28 @@ pub(super) fn forward_struct_field_constants(module: &mut WirPackage, exec: &Exe
 
 /// Which parameters each defined function retains, read before the bodies are
 /// visited, since no body edit moves them.
-struct RetainedParams {
-    by_index: IndexMap<u32, Vec<bool>>,
-}
+struct RetainedParams(PerDefinedFunc<Vec<bool>>);
 
 impl RetainedParams {
     fn of(module: &WirPackage) -> Self {
-        Self {
-            by_index: module
-                .functions
-                .iter()
-                .enumerate()
-                .map(|(position, f)| {
-                    let retained = f
-                        .param_names
-                        .iter()
-                        .map(|param| f.retains.iter().any(|s| s == param))
-                        .collect();
-                    (module.defined_func_index(position), retained)
-                })
-                .collect(),
-        }
+        let retained = module
+            .functions
+            .iter()
+            .map(|f| {
+                f.param_names
+                    .iter()
+                    .map(|param| f.retains.iter().any(|s| s == param))
+                    .collect()
+            })
+            .collect();
+        Self(PerDefinedFunc::new(module, retained))
     }
 
     /// Whether a call of `func_index` may retain its argument `arg`. An import
     /// carries no retention: unknown, so conservative.
     fn stores(&self, func_index: u32, arg: usize) -> bool {
-        self.by_index
-            .get(&func_index)
+        self.0
+            .get(func_index)
             .is_none_or(|params| params.get(arg).is_none_or(|&retained| retained))
     }
 }

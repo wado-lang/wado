@@ -387,8 +387,37 @@ impl WirPackage {
     /// The position in [`functions`](Self::functions) of the function a
     /// `WirFuncId` index names, or `None` for an import.
     pub fn defined_func_position(&self, index: u32) -> Option<usize> {
-        let position = index.checked_sub(self.defined_func_base)? as usize;
-        (position < self.functions.len()).then_some(position)
+        defined_position(self.defined_func_base, self.functions.len(), index)
+    }
+}
+
+fn defined_position(base: u32, len: usize, index: u32) -> Option<usize> {
+    let position = index.checked_sub(base)? as usize;
+    (position < len).then_some(position)
+}
+
+/// A value per defined function of a [`WirPackage`], looked up by `WirFuncId`
+/// index while the package itself is borrowed mutably.
+pub struct PerDefinedFunc<T> {
+    base: u32,
+    values: Vec<T>,
+}
+
+impl<T> PerDefinedFunc<T> {
+    /// `values` holds one entry per function of `module`, in its order.
+    #[must_use]
+    pub fn new(module: &WirPackage, values: Vec<T>) -> Self {
+        assert_eq!(values.len(), module.functions.len());
+        Self {
+            base: module.defined_func_base,
+            values,
+        }
+    }
+
+    /// The value of the function `index` names, or `None` for an import.
+    #[must_use]
+    pub fn get(&self, index: u32) -> Option<&T> {
+        defined_position(self.base, self.values.len(), index).map(|p| &self.values[p])
     }
 }
 
