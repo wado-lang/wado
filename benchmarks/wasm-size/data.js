@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795579125597,
+  "lastUpdate": 1795583427426,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82161,6 +82161,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ecff8f0d11c9601602e03e42ca0cae71477b969a"
         },
         "date": 1795579125160,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dd1f42f69e3a4eca5bf6b7f0d5d1dcb73d71ffb5",
+          "message": "Merge pull request #2753 from wado-lang/ccr-ee967306-pz0wlo\n\nfeat(eddy): review a pull request by itself when CodeRabbit is rate limited",
+          "timestamp": "2026-11-25T13:52:50+09:00",
+          "tree_id": "710ffa41892a48bd308281fcd7ee5d2413610947",
+          "url": "https://github.com/wado-lang/wado/commit/dd1f42f69e3a4eca5bf6b7f0d5d1dcb73d71ffb5"
+        },
+        "date": 1795583426086,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
