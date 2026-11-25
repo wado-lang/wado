@@ -18,7 +18,7 @@ struct affine_closure_with_locals.wado//$Closure_1 {  // TypeId(3)
     mut $capture_0: ref "affine_closure_with_locals.wado//One",
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(4)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(4)
 
 array Array<u8> (mut u8);  // TypeId(5)
 
@@ -49,9 +49,9 @@ type "functype//affine_closure_with_locals.wado/run" = fn();  // TypeId(16)
 
 type "functype//affine_closure_with_locals.wado/$cm_export__run" = fn();  // TypeId(17)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(18)
+type "functype//core:prelude/numeric.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(18)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(19)
+type "functype//core:prelude/numeric.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(19)
 
 type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(20)
 
@@ -59,7 +59,7 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(21)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(22)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(23)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
@@ -143,7 +143,7 @@ fn "affine_closure_with_locals.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__format_affine_closure_with_locals_wado__tmpl_b31438d91a1e3c14__i32_i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_26;
     };
     is_negative_127 = $local_2_940 < 0;
-    $local_2_940 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_131(x_131 = builtin::i64_extend_i32_s($local_2_940); select i64(x_131 < 0_i64, 0_i64 - x_131, x_131)));
+    $local_2_940 = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_131(x_131 = builtin::i64_extend_i32_s($local_2_940); select i64(x_131 < 0_i64, 0_i64 - x_131, x_131)));
     if is_negative_127 {
         if @unlikely(1 > builtin::array_len($sroa_out_repr_919)) {
             cold_path;
@@ -161,7 +161,7 @@ fn "affine_closure_with_locals.wado/run"() with Stdout {
     }
     start_433 = $sroa_out_used_920;
     $sroa_out_used_920 = is_negative_127;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_out_repr_919, start_433, x_131, $local_2_940);
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_919, start_433, x_131, $local_2_940);
     if @unlikely(local.tee $local_2_940($sroa_out_used_920 + 1) > builtin::array_len($sroa_out_repr_919)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $mv_arg_1(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_919, used: $sroa_out_used_920 }), $local_2_940);
@@ -171,7 +171,7 @@ fn "affine_closure_with_locals.wado/run"() with Stdout {
     $sroa_out_used_920 = $local_2_940;
     builtin::array_copy<u8>($sroa_out_repr_919, is_negative_127, global:affine_closure_with_locals.wado::$const_obj_1, 0, 1);
     $local_2_940 = -1 < 0;
-    is_negative_127 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_131(x_131 = builtin::i64_extend_i32_s(-1); select i64(x_131 < 0_i64, 0_i64 - x_131, x_131)));
+    is_negative_127 = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_131(x_131 = builtin::i64_extend_i32_s(-1); select i64(x_131 < 0_i64, 0_i64 - x_131, x_131)));
     if $local_2_940 {
         if @unlikely(local.tee $local_2_940($sroa_out_used_920 + 1) > builtin::array_len($sroa_out_repr_919)) {
             cold_path;
@@ -190,7 +190,7 @@ fn "affine_closure_with_locals.wado/run"() with Stdout {
     }
     start_433 = $sroa_out_used_920;
     $sroa_out_used_920 = $local_2_940;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_out_repr_919, start_433, x_131, is_negative_127);
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_919, start_433, x_131, is_negative_127);
     if @unlikely(local.tee $local_2_940($sroa_out_used_920 + 7) > builtin::array_len($sroa_out_repr_919)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $mv_arg_1(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_919, used: $sroa_out_used_920 }), $local_2_940);
@@ -200,7 +200,7 @@ fn "affine_closure_with_locals.wado/run"() with Stdout {
     $sroa_out_used_920 = $local_2_940;
     builtin::array_copy<u8>($sroa_out_repr_919, is_negative_127, global:affine_closure_with_locals.wado::$const_obj_0, 0, 7);
     $local_2_940 = $sroa_t_h2_910 < 0;
-    $sroa_t_h2_910 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_131(x_131 = builtin::i64_extend_i32_s($sroa_t_h2_910); select i64(x_131 < 0_i64, 0_i64 - x_131, x_131)));
+    $sroa_t_h2_910 = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_131(x_131 = builtin::i64_extend_i32_s($sroa_t_h2_910); select i64(x_131 < 0_i64, 0_i64 - x_131, x_131)));
     if $local_2_940 {
         if @unlikely(local.tee $local_2_940($sroa_out_used_920 + 1) > builtin::array_len($sroa_out_repr_919)) {
             cold_path;
@@ -219,7 +219,7 @@ fn "affine_closure_with_locals.wado/run"() with Stdout {
     }
     is_negative_127 = $sroa_out_used_920;
     $sroa_out_used_920 = $local_2_940;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_out_repr_919, is_negative_127, x_131, $sroa_t_h2_910);
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_919, is_negative_127, x_131, $sroa_t_h2_910);
     $inline_core_prelude_string_wado_String__format_affine_closure_with_locals_wado__tmpl_b31438d91a1e3c14__i32_i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_113: block {
         break $inline_core_prelude_string_wado_String__format_affine_closure_with_locals_wado__tmpl_b31438d91a1e3c14__i32_i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_113;
     };
@@ -228,7 +228,7 @@ fn "affine_closure_with_locals.wado/run"() with Stdout {
     $local_2_940 = "affine_closure_with_locals.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_2_940);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($sroa_out_used_920 + 1)), 0, $sroa_out_repr_919, 0, $sroa_out_used_920);
     builtin::array_set_u8(new_repr, $sroa_out_used_920, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -256,7 +256,7 @@ fn "affine_closure_with_locals.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+fn "core:prelude/numeric.wado/write_decimal_digits"(arr, offset, val, digit_count) {
     let q: u64;
     let pair: i32;
     let tens: i32;
@@ -278,7 +278,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
 }
 
-fn "core:prelude/primitive.wado/count_digits_u64"(val) {
+fn "core:prelude/numeric.wado/count_digits_u64"(val) {
     if val <u 100000_i64 {
         if val <u 100_i64 {
             if val <u 10_i64 {
@@ -343,7 +343,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -455,11 +455,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_5: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();

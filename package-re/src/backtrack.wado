@@ -14,7 +14,7 @@ global MAX_VISITED_BITS: i32 = 1 << 18;
 
 /// Whether `backtrack` reads the span `[start, end)`.
 internal fn fits(program: &Program, start: i32, end: i32) -> bool {
-    return program.state_base[program.insts.len()] <= MAX_VISITED_BITS / (end - start + 1);
+    return program.states() <= MAX_VISITED_BITS / (end - start + 1);
 }
 
 /// The capture slots of the leftmost-first match starting at `start`, which
@@ -23,7 +23,7 @@ internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, star
     contract fits(program, start, end)
 {
     let positions = end - start + 1;
-    let words = (program.state_base[program.insts.len()] * positions + 31) / 32;
+    let words = (program.states() * positions + 31) / 32;
     cache.visited.truncate(0);
     for let _w of 0..<words {
         cache.visited.push(0);
@@ -118,6 +118,9 @@ internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, star
                 _::Fail => {
                     break;
                 },
+                // The DFAs run no program that holds one, so none found
+                // this span.
+                Lookaround(_) => unreachable(),
             }
         }
     }

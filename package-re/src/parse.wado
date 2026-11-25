@@ -3,12 +3,29 @@
 
 use { HashSet } from "core:collections";
 use { BinaryProperty, GeneralCategoryGroup, Property, contains, ranges } from "core:icu";
-use { CharSet, ClassItem, Flag, Group, Modified, NamedProperty, NamedSet, Node, Repeat, SetKind } from "./ast.wado";
+use {
+    CharSet,
+    ClassItem,
+    Flag,
+    Group,
+    Lookaround,
+    Modified,
+    NamedProperty,
+    NamedSet,
+    Node,
+    Repeat,
+    SetKind,
+} from "./ast.wado";
 use { MAX_CODE_POINT, complement, normalize } from "./charset.wado";
 
 /// How deep groups may nest, so that a pattern read at run time cannot
 /// exhaust the stack.
 internal global MAX_NESTING: i32 = 256;
+
+/// How many lookarounds a pattern may hold, so that one read at run time
+/// cannot spend unbounded memory on a search: it keeps a bit for each
+/// lookaround at each position of the text.
+global MAX_LOOKAROUNDS: i32 = 256;
 
 /// Why a pattern was refused, and the byte of the pattern where it went wrong:
 /// 0 for one too large to compile, which no one byte makes so.
@@ -52,7 +69,7 @@ internal fn parse(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> 
 }
 
 /// Whether `pattern` is an ECMA-262 `Pattern`, read as the `u` flag reads it.
-/// What Re cannot match, such as a lookahead or a backreference, is Ok here.
+/// What Re cannot match, such as a backreference, is Ok here.
 /// Two of Re's own rules still apply: groups nest at most `MAX_NESTING` deep,
 /// and `\p{…}` names what `core:icu` knows.
 pub fn validate_ecma262_syntax<S: AsStrSlice>(pattern: S) -> Result<(), PatternError> {
@@ -69,6 +86,7 @@ fn read_pattern(pattern: StrSlice, syntax: Syntax, holes: List<Hole>) -> Result<
         syntax,
         depth: 0,
         groups: 0,
+        lookarounds: 0,
         names: HashSet::new(),
         all_names: HashSet::new(),
         declared: [],
@@ -110,6 +128,7 @@ struct Parser {
     syntax: Syntax,
     depth: i32,
     groups: i32,
+    lookarounds: i32,
     /// The names of the groups that may take part in a match beside one read
     /// here (MightBothParticipate).
     names: HashSet<String>,
@@ -206,12 +225,25 @@ impl Parser {
                 }
                 Node::Group(Group { index, name: g.name, body: self.splice_inside(&g.body, at)? });
             },
+            Lookaround(l) => {
+                let index = self.next_lookaround(at);
+                Node::Lookaround(Lookaround { ..l, index, body: self.splice_inside(&l.body, at)? });
+            },
             Modified(m) => Node::Modified(Modified { ..m, body: self.splice_inside(&m.body, at)? }),
             Repeat(r) => Node::Repeat(Repeat { ..r, body: self.splice(&r.body, at)? }),
             Concat(nodes) => Node::Concat(self.splice_all(&nodes, at)?),
             Alternation(nodes) => Node::Alternation(self.splice_all(&nodes, at)?),
-            _ => *node,
+            Char(_) | _::Any | _::Start | _::End | _::WordBoundary | _::NotWordBoundary | Set(_) => *node,
         });
+    }
+
+    /// The index of the lookaround that opens at `at`.
+    fn next_lookaround(&mut self, at: i32) -> i32 {
+        if self.lookarounds == MAX_LOOKAROUNDS {
+            self.refuse(at, `a pattern may hold at most ${MAX_LOOKAROUNDS} lookarounds`);
+        }
+        self.lookarounds += 1;
+        return self.lookarounds - 1;
     }
 
     fn splice_inside(&mut self, body: &Node, at: i32) -> Result<Node, PatternError> {
@@ -471,17 +503,15 @@ impl Parser {
             '.' => Ok([Node::Any, true]),
             '(' => {
                 // In Unicode mode, Term admits no quantified Assertion.
-                if self.looking_at("?=") || self.looking_at("?!") {
-                    return Ok([
-                        self.lookaround(start, 2, "lookahead `(?=` `(?!` cannot be matched in linear time")?,
-                        false,
-                    ]);
-                }
-                if self.looking_at("?<=") || self.looking_at("?<!") {
-                    return Ok([
-                        self.lookaround(start, 3, "lookbehind `(?<=` `(?<!` cannot be matched in linear time")?,
-                        false,
-                    ]);
+                for let [opener, ahead, negated] of [
+                    ["?=", true, false],
+                    ["?!", true, true],
+                    ["?<=", false, false],
+                    ["?<!", false, true],
+                ] as List<[String, bool, bool]> {
+                    if self.looking_at(opener) {
+                        return Ok([self.lookaround(start, opener.len(), ahead, negated)?, false]);
+                    }
                 }
                 Ok([self.group(start)?, true]);
             },
@@ -541,17 +571,15 @@ impl Parser {
         return Ok(Node::Modified(Modified { add, remove, body }));
     }
 
-    /// A lookaround after its `(`, whose opener runs `len` bytes on. Its groups
-    /// count and its names are claimed, though Re cannot match it, so no tree
-    /// is built.
-    fn lookaround(&mut self, start: i32, len: i32, why: String) -> Result<Node, PatternError> {
-        self.refuse(start, why);
+    /// A lookaround after its `(`, whose opener runs `len` bytes on.
+    fn lookaround(&mut self, start: i32, len: i32, ahead: bool, negated: bool) -> Result<Node, PatternError> {
         let at = self.pos;
         self.pos += len;
+        let index = self.next_lookaround(start);
         return self.inside(at, |p| {
-            p.disjunction()?;
+            let body = p.disjunction()?;
             p.close_group(start)?;
-            return Ok(Node::Concat([]));
+            return Ok(Node::Lookaround(Lookaround { index, ahead, negated, body }));
         });
     }
 

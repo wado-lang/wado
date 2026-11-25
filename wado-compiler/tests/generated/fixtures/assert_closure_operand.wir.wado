@@ -21,9 +21,9 @@ struct core:prelude/string.wado//String {  // TypeId(1)
 
 struct assert_closure_operand.wado//$Closure_0 {}  // TypeId(2)
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(3)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(3)
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(4)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(4)
 
 array Array<u8> (mut u8);  // TypeId(5)
 
@@ -62,11 +62,11 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//assert_closure_operand.wado/$cm_export__run" = fn();  // TypeId(18)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
+type "functype//core:prelude/async.wado/copy_result" = fn(i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(19)
 
-type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
+type "functype//core:prelude/async.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(21)
+type "functype//core:prelude/numeric.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(21)
 
 type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(22)
 
@@ -82,7 +82,7 @@ type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(27)
 
 type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(28)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(29)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(29)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(30)
 
@@ -134,34 +134,12 @@ fn "assert_closure_operand.wado/$cm_export__run"() {
     unreachable;
 }
 
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-    let q: u64;
-    let pair: i32;
-    let tens: i32;
-    digit_count = offset + digit_count;
-    b0: block {
-        l1: loop {
-            break_if b0 (digit_count - offset) < 2;
-            q = val /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
-            digit_count = digit_count - 2;
-            val = q;
-            continue l1;
-        };
-    };
-    if digit_count > offset {
-        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
-    }
-}
-
-fn "core:prelude/types.wado/copy_result"(packed) {
-    return (if local.tee packed(packed & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+fn "core:prelude/async.wado/copy_result"(packed) {
+    return (if local.tee packed(packed & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
         0;
-    } else if packed == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+    } else if packed == 1 -> "core:prelude/async.wado//enum:CopyResult" {
         1;
-    } else if @likely(packed == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+    } else if @likely(packed == 2) -> "core:prelude/async.wado//enum:CopyResult" {
         2;
     } else {
         "core:rt/unreachable"();
@@ -169,7 +147,7 @@ fn "core:prelude/types.wado/copy_result"(packed) {
     });
 }
 
-fn "core:prelude/types.wado/cm_await_copy"(handle) {
+fn "core:prelude/async.wado/cm_await_copy"(handle) {
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
@@ -182,6 +160,28 @@ fn "core:prelude/types.wado/cm_await_copy"(handle) {
     "wasi/waitable-join"(handle, 0);
     "wasi/waitable-set-drop"(ws);
     return status;
+}
+
+fn "core:prelude/numeric.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+    let q: u64;
+    let pair: i32;
+    let tens: i32;
+    digit_count = offset + digit_count;
+    b3: block {
+        l4: loop {
+            break_if b3 (digit_count - offset) < 2;
+            q = val /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
+            digit_count = digit_count - 2;
+            val = q;
+            continue l4;
+        };
+    };
+    if digit_count > offset {
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
+    }
 }
 
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
@@ -243,7 +243,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -295,7 +295,7 @@ fn "core:rt/cm_await_blocked"(handle, packed) {
     if packed != -1 {
         return packed;
     }
-    return "core:prelude/types.wado/cm_await_copy"(handle);
+    return "core:prelude/async.wado/cm_await_copy"(handle);
 }
 
 fn "core:rt/cm_stream_write_once"(handle, ptr, count) {
@@ -314,7 +314,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     block {
         l22: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
-            written = "core:prelude/types.wado/copy_result"(written);
+            written = "core:prelude/async.wado/copy_result"(written);
             taken = taken + delivered_6;
             if ((written != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
@@ -375,7 +375,7 @@ fn "assert_closure_operand.wado/assert_closure_operand.wado/$Closure_0^core:prel
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assert_closure_operand.wado/$tmpl$053cee3811ed67a3,[fn(i32)->i32,i32,i32]>$spec0$spec0$sroa[t.h0]"(t) {
     let $load_6: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0: ref "core:prelude/format.wado//Formatter";
+    let $temp_inline_core_prelude_reflect_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0: ref "core:prelude/format.wado//Formatter";
     let new_used_150: i32;
     let start_151: i32;
     if ref.is_null(global:core:prelude/string.wado::$const_obj_12) {
@@ -385,8 +385,8 @@ condition: apply(|x: i32| -> i32 { return x * 2; }, n) == 99
     }
     local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(253), used: 0 }).used = 154;
     builtin::array_copy<u8>(out_3.repr, 0, global:core:prelude/string.wado::$const_obj_12, 0, 154);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
-    "assert_closure_operand.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: t }, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0);
+    $temp_inline_core_prelude_reflect_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
+    "assert_closure_operand.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: t }, $temp_inline_core_prelude_reflect_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0);
     if @unlikely(local.tee new_used_150(out_3.used + 4) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_150);
@@ -400,7 +400,7 @@ condition: apply(|x: i32| -> i32 { return x * 2; }, n) == 99
     }
     start_151 = out_3.used;
     out_3.used = new_used_150;
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6(out_3.repr), start_151, 3_i64, 1);
+    "core:prelude/numeric.wado/write_decimal_digits"(local.tee $load_6(out_3.repr), start_151, 3_i64, 1);
     if @unlikely(local.tee new_used_150(new_used_150 + 46) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_150);
@@ -414,7 +414,7 @@ condition: apply(|x: i32| -> i32 { return x * 2; }, n) == 99
     }
     start_151 = out_3.used;
     out_3.used = new_used_150;
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6(out_3.repr), start_151, 6_i64, 1);
+    "core:prelude/numeric.wado/write_decimal_digits"(local.tee $load_6(out_3.repr), start_151, 6_i64, 1);
     if @unlikely(local.tee new_used_150(new_used_150 + 1) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_150);

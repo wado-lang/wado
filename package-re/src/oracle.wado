@@ -1,0 +1,134 @@
+//! Where each lookaround of a pattern passes in a text: one bit for each
+//! position. A lookahead holds where a match of its body starts, which a pass
+//! back from the text's end tells for every position at once, and a
+//! lookbehind where one ends, which a pass from the start tells. So a search
+//! reads a lookaround as it reads `\b`, and stays linear in the text.
+
+use { holds } from "./pike.wado";
+use { Direction, LookaroundPrograms, Program } from "./program.wado";
+
+internal struct Oracle {
+    /// `stride` words for each lookaround, a bit for each position.
+    bits: List<i32>,
+    stride: i32,
+}
+
+impl Oracle {
+    /// The oracle of a pattern with no lookaround, or of no text yet.
+    internal fn new() -> Oracle {
+        return Oracle { bits: [], stride: 0 };
+    }
+
+    /// Where each of `lookarounds` passes in `text`.
+    internal fn of(lookarounds: &List<LookaroundPrograms>, text: StrSlice) -> Oracle {
+        let stride = (text.len() + 32) / 32;
+        let mut oracle = Oracle { bits: List::filled(lookarounds.len() * stride, 0), stride };
+        // One inside another has the higher index, and is asked while the
+        // outer one's body is read.
+        for let back of 0..<lookarounds.len() {
+            let index = lookarounds.len() - 1 - back;
+            oracle.scan(index, &lookarounds[index], text);
+        }
+        return oracle;
+    }
+
+    internal fn is_empty(&self) -> bool {
+        return self.stride == 0;
+    }
+
+    /// Whether lookaround `index` passes at `pos`.
+    internal fn passes(&self, index: i32, pos: i32) -> bool {
+        return self.bits[index * self.stride + (pos >> 5)] >> (pos & 31) & 1 != 0;
+    }
+
+    /// Fills the bits of lookaround `index`. Its body is read from every
+    /// position at once, and only for whether it matches: no thread holds a
+    /// slot, and one is dropped wherever another reached its instruction.
+    fn scan(&mut self, index: i32, lookaround: &LookaroundPrograms, text: StrSlice) {
+        let program = &lookaround.holds;
+        let forward = program.direction == Direction::Forward;
+        let [mut pos, limit, step] = if forward { [0, text.len(), 1] } else { [text.len(), 0, -1] };
+        let mut threads = Threads {
+            current: [],
+            next: [],
+            seen: List::filled(program.insts.len(), -1),
+            stamp: 0,
+            matched: false,
+        };
+        loop {
+            if text.is_char_boundary(pos) {
+                threads.add(program, self, text, 0, pos);
+            }
+            if threads.matched != lookaround.negated {
+                self.bits[index * self.stride + (pos >> 5)] |= 1 << (pos & 31);
+            }
+            if pos == limit {
+                return;
+            }
+            let byte = program.direction.byte_at(text, pos);
+            pos += step;
+            threads.advance();
+            for let pc of &threads.current {
+                if let Byte([lo, hi]) = program.insts[*pc] && byte >= lo && byte <= hi {
+                    threads.add(program, self, text, *pc + 1, pos);
+                }
+            }
+        }
+    }
+}
+
+/// The threads of one scan: the `Byte`s reached at the position before, and
+/// those being reached at this one.
+struct Threads {
+    current: List<i32>,
+    next: List<i32>,
+    /// `seen[pc] == stamp` marks `pc` reached at this position.
+    seen: List<i32>,
+    stamp: i32,
+    /// Whether a thread reached `Match` at this position.
+    matched: bool,
+}
+
+impl Threads {
+    /// Moves on a position: the threads reached become those to step.
+    fn advance(&mut self) {
+        [self.current, self.next] = [self.next, self.current];
+        self.next.truncate(0);
+        self.stamp += 1;
+        self.matched = false;
+    }
+
+    /// Follows every instruction that consumes nothing from `pc`. Every
+    /// `Progress` passes: an empty iteration adds nothing to what matches.
+    fn add(&mut self, program: &Program, oracle: &Oracle, text: StrSlice, from: i32, pos: i32) {
+        let mut stack: List<i32> = [from];
+        while let Some(pc) = stack.pop() {
+            if self.seen[pc] == self.stamp {
+                continue;
+            }
+            self.seen[pc] = self.stamp;
+            match program.insts[pc] {
+                Jump(target) => stack.push(target),
+                Split([first, second]) => {
+                    stack.push(second);
+                    stack.push(first);
+                },
+                Save(_) | Clear(_) | Progress(_) => stack.push(pc + 1),
+                Assert(look) => {
+                    if holds(look, text, pos) {
+                        stack.push(pc + 1);
+                    }
+                },
+                Lookaround([inner, _]) => {
+                    if oracle.passes(inner, pos) {
+                        stack.push(pc + 1);
+                    }
+                },
+                _::Fail => {
+                },
+                Byte(_) => self.next.push(pc),
+                _::Match => self.matched = true,
+            }
+        }
+    }
+}
