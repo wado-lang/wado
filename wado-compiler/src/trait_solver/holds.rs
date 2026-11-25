@@ -906,7 +906,10 @@ impl Query<'_> {
     /// `ty` with each projection an impl answers replaced by what that impl
     /// binds: `<Ints as Src>::Item` is `i32` under `impl Src for Ints`, and a
     /// family's member is its binding at the projection's arguments. A
-    /// projection off a parameter binds nothing here and stays as written.
+    /// projection off a parameter is what the parameter's bounds state for
+    /// it, and stays as written where they state nothing, or disagree: a
+    /// projection names no trait arguments, so it cannot pick between
+    /// `C: Conv<i32, Out = A> + Conv<String, Out = B>`.
     fn normalized(&mut self, ty: &SolverType) -> SolverType {
         match ty {
             SolverType::Projection {
@@ -916,20 +919,24 @@ impl Query<'_> {
                 args,
             } => {
                 let base = self.normalized(base);
-                if let SolverType::Param(index) = base
-                    && let Some(stated) = self
+                if let SolverType::Param(index) = base {
+                    let mut stated = self
                         .env
                         .param_assoc
                         .get(index as usize)
                         .into_iter()
                         .flatten()
-                        .find(|eq| eq.trait_ == *trait_ && eq.assoc == *assoc)
-                    // One written as itself (`Item = I::Item`) states nothing,
-                    // and reading it would not end.
-                    && stated.ty != *ty
-                {
-                    let stated = stated.ty.clone();
-                    return self.normalized(&stated);
+                        .filter(|eq| eq.trait_ == *trait_ && eq.assoc == *assoc)
+                        .map(|eq| &eq.ty);
+                    if let Some(first) = stated.next()
+                        && stated.all(|other| other == first)
+                        // One written as itself (`Item = I::Item`) states
+                        // nothing, and reading it would not end.
+                        && first != ty
+                    {
+                        let first = first.clone();
+                        return self.normalized(&first);
+                    }
                 }
                 let args: Vec<SolverType> = args.iter().map(|a| self.normalized(a)).collect();
                 let member = match self.holds(&base, *trait_, &[]) {

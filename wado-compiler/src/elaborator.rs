@@ -2052,7 +2052,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .type_table
                         .borrow_mut()
                         .register_ref_blanket_assoc_type_def(
-                            trait_ref.decl,
+                            trait_ref,
                             kind,
                             name,
                             param,

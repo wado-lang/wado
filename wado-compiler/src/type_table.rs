@@ -127,7 +127,7 @@ pub struct TypeTable {
     /// What a blanket over a reference (`impl<T: Bound> Tr for &mut T`) binds
     /// each associated type to, written over its parameter. No declaration
     /// keys it: the referent is whatever the reference points to.
-    ref_blanket_assoc_type_defs: IndexMap<RefBlanketAssocTypeKey, RefBlanketAssocType>,
+    ref_blanket_assoc_type_defs: IndexMap<RefBlanketAssocTypeKey, Vec<RefBlanketAssocType>>,
     /// What each trait declares of its associated types, by declaring trait and
     /// name. See [`AssocTypeSig`].
     assoc_type_sigs: IndexMap<DefId, IndexMap<String, Arc<AssocTypeSig>>>,
@@ -3964,14 +3964,23 @@ impl TypeTable {
         args: &[TypeId],
     ) -> Option<TypeId> {
         // A blanket over a reference answers whatever the reference points
-        // to, so it does not wait for the referent to settle.
-        if let Some(family) = self.ref_blanket_projection(base, owning_trait, assoc_name) {
-            return Some(self.instantiate_family(*owning_trait, assoc_name, family, args));
-        }
-        if !self.projection_base_is_rigid(base) {
-            return None;
-        }
-        let family = self.projection_family(base, owning_trait, trait_args, assoc_name)?;
+        // to, so it does not wait for the referent to settle. An impl written
+        // for the reference itself outranks it, as it does in dispatch.
+        let on_reference = if self.ref_kind(base).is_some() {
+            self.resolve_assoc_type_of_trait_at(base, owning_trait, trait_args, assoc_name)
+                .or_else(|| {
+                    self.ref_blanket_projection(base, owning_trait, trait_args, assoc_name)
+                })
+        } else {
+            None
+        };
+        let family = match on_reference {
+            Some(family) => family,
+            None if self.projection_base_is_rigid(base) => {
+                self.projection_family(base, owning_trait, trait_args, assoc_name)?
+            }
+            None => return None,
+        };
         Some(self.instantiate_family(*owning_trait, assoc_name, family, args))
     }
 
@@ -4312,28 +4321,43 @@ impl TypeTable {
     /// to: for `impl<I: Iterator> Iterator for &mut I`, `"Item"` → `I::Item`.
     pub fn register_ref_blanket_assoc_type_def(
         &mut self,
-        trait_decl: DefId,
+        trait_ref: TraitRef,
         target_ref: RefKind,
         assoc_name: String,
         param: TypeId,
         binding: TypeId,
     ) {
-        self.ref_blanket_assoc_type_defs.insert(
-            RefBlanketAssocTypeKey {
-                trait_decl,
+        let blankets = self
+            .ref_blanket_assoc_type_defs
+            .entry(RefBlanketAssocTypeKey {
+                trait_decl: trait_ref.decl,
                 target_ref,
                 assoc_name,
-            },
-            RefBlanketAssocType { param, binding },
-        );
+            })
+            .or_default();
+        let def = RefBlanketAssocType {
+            trait_args: trait_ref.args,
+            param,
+            binding,
+        };
+        match blankets
+            .iter_mut()
+            .find(|known| known.trait_args == def.trait_args)
+        {
+            Some(known) => *known = def,
+            None => blankets.push(def),
+        }
     }
 
     /// What a blanket over a reference binds `assoc_name` to for `base`, its
-    /// parameter standing for what `base` points to.
+    /// parameter standing for what `base` points to: the blanket whose trait
+    /// arguments are `trait_args`, or the one every blanket agrees on where a
+    /// bound names none.
     fn ref_blanket_projection(
         &mut self,
         base: TypeId,
         owning_trait: &DefId,
+        trait_args: Option<&[TypeId]>,
         assoc_name: &str,
     ) -> Option<TypeId> {
         let key = RefBlanketAssocTypeKey {
@@ -4341,10 +4365,28 @@ impl TypeTable {
             target_ref: self.ref_kind(base)?,
             assoc_name: assoc_name.to_string(),
         };
-        let def = *self.ref_blanket_assoc_type_defs.get(&key)?;
+        let blankets = self.ref_blanket_assoc_type_defs.get(&key)?.clone();
         let referent = self.ref_pointee(base)?;
-        let substitution = self.bind_params(&[def.param], &[referent]);
-        Some(self.substitute_type_params(def.binding, &substitution))
+        let mut answers = Vec::new();
+        for def in blankets {
+            let substitution = self.bind_params(&[def.param], &[referent]);
+            let written: Vec<TypeId> = def
+                .trait_args
+                .iter()
+                .map(|&arg| self.substitute_type_params(arg, &substitution))
+                .collect();
+            if trait_args.is_some_and(|wanted| !written.is_empty() && written != wanted) {
+                continue;
+            }
+            let answer = self.substitute_type_params(def.binding, &substitution);
+            if !answers.contains(&answer) {
+                answers.push(answer);
+            }
+        }
+        match answers[..] {
+            [answer] => Some(answer),
+            _ => None,
+        }
     }
 
     /// The generic definition of `assoc_name` on `base_decl`, together with
@@ -7991,9 +8033,7 @@ impl TypeSet {
     }
 }
 
-/// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather
-/// than an instantiated type. `List<T>`, `&List<T>` and `&mut List<T>` each
-/// bind `IntoIter` their own way, so the target's reference kind is part of it.
+/// [`AssocTypeKey`] for a blanket impl over a reference to its parameter.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct RefBlanketAssocTypeKey {
     trait_decl: DefId,
@@ -8001,13 +8041,18 @@ struct RefBlanketAssocTypeKey {
     assoc_name: String,
 }
 
-/// A blanket's binding, and the parameter its target refers to.
-#[derive(Debug, Clone, Copy)]
+/// A blanket's binding, the trait arguments its impl wrote, and the parameter
+/// its target refers to.
+#[derive(Debug, Clone)]
 struct RefBlanketAssocType {
+    trait_args: Vec<TypeId>,
     param: TypeId,
     binding: TypeId,
 }
 
+/// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather
+/// than an instantiated type. `List<T>`, `&List<T>` and `&mut List<T>` each
+/// bind `IntoIter` their own way, so the target's reference kind is part of it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct GenericAssocTypeKey {
     target_decl: AstId,

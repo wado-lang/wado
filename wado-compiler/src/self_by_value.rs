@@ -25,7 +25,8 @@ pub fn self_by_value_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnosti
                 continue;
             }
             for method in &block.methods {
-                if attrs_allow(&method.attrs, lint::SELF_BY_VALUE) {
+                // A declaration without a body reserves a name: nothing calls it.
+                if method.body.is_none() || attrs_allow(&method.attrs, lint::SELF_BY_VALUE) {
                     continue;
                 }
                 for param in &method.params {

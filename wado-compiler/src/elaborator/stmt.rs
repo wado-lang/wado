@@ -2923,11 +2923,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let iter_var = minted_name("iter", unique_id);
         let label = minted_name("for_of", unique_id);
 
-        // An affine value moves into the loop through `ForOf::start`, so the
-        // loop owns what it walks. A copyable one walks its `IntoIterator`,
-        // whose iterator shares the operand's storage where a moved one would
-        // cost a copy of a list read after the loop (WEP: Affine Types).
-        let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
+        let iterator =self.tysys.compiler_trait(CompilerItem::Iterator);
         // An iterator that is a reference advances what it points to, so the
         // loop walks it as it stands: `into_iter` and `start` reach the
         // referent, and would walk a copy of it or move it out. An iterator
@@ -2936,23 +2932,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and `start` would.
         // An `IntoIterator` written for the reference itself says what a walk
         // of it is, and answers first as a reference's own impl always does.
-        let reference_states_its_walk = Receiver::ref_to(
-            &self
+        // A newtype inherits its base's, a link at a time.
+        let reference_states_its_walk = {
+            let tt = self.tysys.type_table.borrow();
+            let into_iterator = self
                 .tysys
-                .type_table
-                .borrow()
-                .fq_type_name(into_iter_receiver_type),
-        )
-        .zip(
-            self.tysys
                 .compiler_trait(CompilerItem::IntoIterator)
-                .and_then(|fq| fq.canonical()),
-        )
-        .is_some_and(|(receiver, trait_)| {
-            self.tysys
-                .trait_env
-                .has_any_methodful_impl_by_receiver(&receiver, trait_)
-        });
+                .and_then(|fq| fq.canonical());
+            tt.ref_kind(into_iter_receiver_type)
+                .zip(tt.ref_pointee(into_iter_receiver_type))
+                .zip(into_iterator)
+                .is_some_and(|((kind, referent), trait_)| {
+                    std::iter::successors(Some(referent), |&link| match tt.get(link) {
+                        ResolvedType::Newtype { base_type, .. } => Some(*base_type),
+                        _ => None,
+                    })
+                    .map(|link| tt.fq_type_name(link))
+                    .filter(|name| name.binder_name().is_none())
+                    .any(|name| {
+                        self.tysys.trait_env.has_any_methodful_impl_by_receiver(
+                            &Receiver::RefTo(kind, name.head_only()),
+                            trait_,
+                        )
+                    })
+                })
+        };
         let walks_operand = !reference_states_its_walk
             && {
                 let tt = self.tysys.type_table.borrow();
@@ -2966,6 +2970,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_,
                 )
             });
+        // An affine value moves into the loop through `ForOf::start`, so the
+        // loop owns what it walks. A copyable one walks its `IntoIterator`,
+        // whose iterator shares the operand's storage where a moved one would
+        // cost a copy of a list read after the loop (WEP: Affine Types).
         let walks_value = !walks_operand
             && self.tysys.is_affine(
                 into_iter_receiver_type,

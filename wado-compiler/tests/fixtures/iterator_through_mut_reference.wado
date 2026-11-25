@@ -179,3 +179,15 @@ test "an IntoIterator written for the reference says what the loop walks" {
     }
     assert seen == [2, 4];
 }
+
+type Tally = Counter;
+
+test "and a newtype inherits it from its base" {
+    let mut t = Counter { n: 0 } as Tally;
+    let mut seen: List<i32> = [];
+    for let x of &mut t {
+        seen.push(x);
+        if seen.len() == 2 { break; }
+    }
+    assert seen == [2, 4];
+}

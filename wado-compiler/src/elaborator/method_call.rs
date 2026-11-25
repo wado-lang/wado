@@ -576,7 +576,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
-        // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
+        // A blanket over references (`impl Inspect for &T`) is preferred only
+        // where `answers_reference_receiver` says it answers this receiver.
         // A default body's call whose author reached the bound's subject
         // through a reference reads the subject, so the reference the author
         // wrote selects no `&T` impl. The subject may be a reference itself,

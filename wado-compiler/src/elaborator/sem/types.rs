@@ -1225,7 +1225,7 @@ pub(crate) fn impl_self_layers(
 /// Recorded only on the iterator path (`DesugarKind::ForOfIterator`);
 /// tuple and variadic paths don't dispatch, so they don't record here.
 ///
-/// The two `FunctionRef`s are the same dispatch targets the elaborator
+/// Its `FunctionRef`s are the same dispatch targets the elaborator
 /// resolved through `resolve_method_call_with(method_id: None,
 /// call_id: None)`, captured here so reify emits the synthetic calls
 /// without re-dispatching.

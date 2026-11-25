@@ -1744,8 +1744,9 @@ impl<I: Iterator> IntoIterator for I {
 }
 
 /// A `&mut` to an iterator is an iterator that advances the one it points to,
-/// so a loop, an adapter or a generic consumer handed `&mut iter` leaves
-/// `iter` where it stopped.
+/// so a loop, an adapter or a consumer bounded by `Iterator`, handed
+/// `&mut iter`, leaves `iter` where it stopped. One bounded by `IntoIterator`
+/// walks a copy.
 impl<affine I: Iterator> Iterator for &mut I {
     type Item = I::Item;
 
