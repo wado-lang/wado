@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795583427426,
+  "lastUpdate": 1795587427878,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82225,6 +82225,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "57d09ebc57019b8401bebe343ae2172b1efb3e92",
+          "message": "Merge pull request #2752 from wado-lang/perf/gale-gen\n\nperf(optimize): elide value copies an aggregate holds or a call returns",
+          "timestamp": "2026-11-25T14:57:46+09:00",
+          "tree_id": "38b93e79b91edaebae4acc674c9a11ae0e608164",
+          "url": "https://github.com/wado-lang/wado/commit/57d09ebc57019b8401bebe343ae2172b1efb3e92"
+        },
+        "date": 1795587426722,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24986,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353988,
             "unit": "bytes"
           }
         ]
