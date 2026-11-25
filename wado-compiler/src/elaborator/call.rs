@@ -218,14 +218,20 @@ pub(super) enum ArgSite {
         settles: Settles,
     },
     Template(Span),
+    /// A trailing argument the callee's default filled.
+    Defaulted(Span),
 }
 
 impl ArgSite {
-    /// Argument `i` of a call over `raw_args`, at `call_span` if unwritten.
-    pub(super) fn of(raw_args: &[Expr], i: usize, call_span: Span) -> Self {
-        raw_args
-            .get(i)
-            .map_or(Self::Template(call_span), Self::written)
+    /// Argument `i` of a call over `raw_args`, at `call_span` if unwritten:
+    /// one of the `typed` arguments a tagged template handed in, or a default
+    /// past them.
+    pub(super) fn of(raw_args: &[Expr], typed: usize, i: usize, call_span: Span) -> Self {
+        match raw_args.get(i) {
+            Some(value) => Self::written(value),
+            None if i < typed => Self::Template(call_span),
+            None => Self::Defaulted(call_span),
+        }
     }
 
     pub(super) fn written(value: &Expr) -> Self {
@@ -240,7 +246,7 @@ impl ArgSite {
     pub(super) fn settles(self) -> Settles {
         match self {
             Self::Written { settles, .. } => settles,
-            Self::Template(_) => Settles::Variables,
+            Self::Template(_) | Self::Defaulted(_) => Settles::Variables,
         }
     }
 
@@ -248,7 +254,7 @@ impl ArgSite {
     /// fault, since no source spells the template's type.
     pub(super) fn mismatch(self, expected: String, found: String) -> TypeError {
         match self {
-            Self::Written { span, .. } => TypeError::TypeMismatch {
+            Self::Written { span, .. } | Self::Defaulted(span) => TypeError::TypeMismatch {
                 expected,
                 found,
                 span,
@@ -262,7 +268,7 @@ impl ArgSite {
 
     pub(super) fn span(self) -> Span {
         match self {
-            Self::Written { span, .. } | Self::Template(span) => span,
+            Self::Written { span, .. } | Self::Template(span) | Self::Defaulted(span) => span,
         }
     }
 }
@@ -288,13 +294,30 @@ fn static_call_on_head(
     }
 }
 
-pub(super) fn arg_sites_of(raw_args: &[Expr], resolved: usize, call_span: Span) -> Vec<ArgSite> {
-    (0..resolved)
-        .map(|i| ArgSite::of(raw_args, i, call_span))
-        .collect()
-}
-
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// How many arguments the call at `call_id` was handed already typed: a
+    /// tagged template's one, the template.
+    fn typed_arg_count(&self, call_id: AstId) -> usize {
+        usize::from(self.sem.types.tagged_templates.contains_key(&call_id))
+    }
+
+    fn arg_site(&self, call: &ast::CallExpr, i: usize) -> ArgSite {
+        ArgSite::of(&call.args, self.typed_arg_count(call.id), i, call.span)
+    }
+
+    pub(super) fn arg_sites_of(
+        &self,
+        call_id: AstId,
+        raw_args: &[Expr],
+        resolved: usize,
+        call_span: Span,
+    ) -> Vec<ArgSite> {
+        let typed = self.typed_arg_count(call_id);
+        (0..resolved)
+            .map(|i| ArgSite::of(raw_args, typed, i, call_span))
+            .collect()
+    }
+
     /// Whether `slot_count` slots leave anything for inference: a `_` among
     /// the written args, at any depth, or fewer written than there are slots.
     pub(super) fn turbofish_leaves_slot(&self, type_args: &[TypeId], slot_count: usize) -> bool {
@@ -2059,7 +2082,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && let Some(info) = self.static_waits(instance, suffix, args.len())
                 {
                     for (i, (&arg, &param)) in args.iter().zip(&info.param_types).enumerate() {
-                        self.typecheck_arg(arg, param, ArgSite::of(&call.args, i, call.span));
+                        self.typecheck_arg(arg, param, self.arg_site(call, i));
                     }
                     self.wait_for_static(PendingStatic {
                         receiver: receiver.clone(),
@@ -2132,12 +2155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 let generic = !impl_type_args_inferred.is_empty() || !method_type_args.is_empty();
                 if generic
-                    && self.report_value_for_reference(
-                        &raw_param_types,
-                        &call.args,
-                        &args,
-                        call.span,
-                    )
+                    && self.report_value_for_reference(&raw_param_types, call, &args)
                 {
                     return TypeTable::ERROR;
                 }
@@ -2190,7 +2208,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(&expected) = substituted.get(i)
                         && !self.is_open_slot(expected, &scope)
                     {
-                        self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
+                        self.typecheck_arg(*arg, expected, self.arg_site(call, i));
                     }
                 }
 
@@ -2494,18 +2512,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     self.recoerce_literal_args(&call.args, &mut args, &param_types);
                     if func_ref.monomorph_info.is_some()
-                        && self.report_value_for_reference(
-                            &param_types,
-                            &call.args,
-                            &args,
-                            call.span,
-                        )
+                        && self.report_value_for_reference(&param_types, call, &args)
                     {
                         return TypeTable::ERROR;
                     }
                     // The same check the bare `Type::method` spelling gets: a
                     // count is only skipped where no signature answered.
-                    let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
+                    let arg_sites =
+                        self.arg_sites_of(call.id, &call.args, args.len(), call.span);
                     if declares_params
                         && !self.check_static_call_args(
                             &param_types,
@@ -2744,7 +2758,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if !self.lookup_function_type_params(&callee).is_empty() {
-            self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span);
+            self.report_value_for_reference(&declared_param_types, call, &args);
         }
         self.defer_or_report_uninferred_fn_type_args(
             &callee,
@@ -2840,7 +2854,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, arg) in args.iter_mut().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
                 self.pin_arg_hole_against(arg, expected);
-                self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
+                self.typecheck_arg(*arg, expected, self.arg_site(call, i));
             }
         }
         if !check_param_types.is_empty() {
@@ -2935,7 +2949,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = fn_params.get(i) {
-                self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
+                self.typecheck_arg(*arg, expected, self.arg_site(call, i));
             }
         }
 
@@ -4146,9 +4160,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn report_value_for_reference(
         &mut self,
         param_types: &[TypeId],
-        arg_exprs: &[ast::Expr],
+        call: &ast::CallExpr,
         args: &[TypeId],
-        call_span: Span,
     ) -> bool {
         let is_ref = |this: &Self, t| {
             RefKind::from_resolved(this.tysys.type_table.borrow().get(t)).is_some()
@@ -4162,7 +4175,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         for &i in &mismatched {
-            let _ = self.emit(ArgSite::of(arg_exprs, i, call_span).mismatch(
+            let _ = self.emit(self.arg_site(call, i).mismatch(
                 self.tysys.type_id_to_string(param_types[i]),
                 self.tysys.type_id_to_string(args[i]),
             ));
@@ -5862,7 +5875,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // Built here rather than on the caller's hot path: only a call that
         // actually reaches a blanket static needs the per-argument sites.
-        let arg_sites = arg_sites_of(raw_args, args.len(), span);
+        let arg_sites = self.arg_sites_of(call_id, raw_args, args.len(), span);
         self.resolve_blanket_static_method(
             receiver_ty,
             method,
@@ -6168,7 +6181,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
             self.recoerce_literal_args(&call.args, &mut args, &param_types);
             for (i, (&arg, &param)) in args.iter().zip(&param_types).enumerate() {
-                self.typecheck_arg(arg, param, ArgSite::of(&call.args, i, call.span));
+                self.typecheck_arg(arg, param, self.arg_site(call, i));
             }
             let final_return_type = self.substitute_map_in_frame(&subst, declared_return);
 
