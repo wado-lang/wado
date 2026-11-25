@@ -1153,7 +1153,7 @@ fn mint_scalarized_clones(
                 .iter()
                 .map(|s| (s.local, s.scalar_type_id))
                 .collect();
-            body.values.retype_locals(&retyped);
+            body.retype_locals(&retyped);
             let root = body.root();
             rewrite_param_reads(body, NodeRef::Block(root), &affected);
         }

@@ -1178,18 +1178,27 @@ impl<'a> Engine<'a> {
     /// no parent edge to move and nothing to enqueue — which is also why `f` may
     /// only rewrite one promoted value to another.
     pub fn map_operands(&mut self, node: NodeRef, f: &mut impl FnMut(Operand) -> Operand) {
-        let mut spliced = false;
-        self.body.for_each_operand_mut(node, |slot| {
-            let new = f(*slot);
-            spliced |= new != *slot && (new.as_expr().is_some() || slot.as_expr().is_some());
-            *slot = new;
+        // Mapped on a read walk first: a mutable borrow counts as an edit, and
+        // a caller may map a slot to itself, as a snapshot does.
+        let mut mapped: Vec<Operand> = Vec::new();
+        let mut moved = false;
+        self.body.for_each_operand(node, |old| {
+            let new = f(old);
+            assert!(
+                new == old || (new.as_expr().is_none() && old.as_expr().is_none()),
+                "[NIR engine] map_operands({node:?}) moved a skeleton operand: installing \
+                 one is a splice and replacing one orphans its subtree, and either way \
+                 the parent map goes stale. Use `redirect_expr` / `replace_expr_kind`."
+            );
+            moved |= new != old;
+            mapped.push(new);
         });
-        assert!(
-            !spliced,
-            "[NIR engine] map_operands({node:?}) moved a skeleton operand: installing \
-             one is a splice and replacing one orphans its subtree, and either way \
-             the parent map goes stale. Use `redirect_expr` / `replace_expr_kind`."
-        );
+        if moved {
+            let mut mapped = mapped.into_iter();
+            self.body.for_each_operand_mut(node, |slot| {
+                *slot = mapped.next().expect("both walks visit the same slots");
+            });
+        }
         self.census_add_subtree(node);
     }
 

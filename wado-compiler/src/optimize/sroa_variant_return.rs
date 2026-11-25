@@ -2032,9 +2032,10 @@ fn rewrite_call_sites(
                 .map(|(&local, f)| (local, candidates[f].layout.tuple_type))
                 .collect();
             for (&local, &tuple_type) in &tuple_types {
-                let slot = &mut func.locals[local as usize].type_id;
-                changed |= *slot != tuple_type;
-                *slot = tuple_type;
+                if func.locals[local as usize].type_id != tuple_type {
+                    func.locals[local as usize].type_id = tuple_type;
+                    changed = true;
+                }
             }
             changed |= retype_lets(&mut body, &tuple_types);
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
@@ -2322,18 +2323,23 @@ fn case_tuple(body: &mut Body, value: Operand, cand: &Candidate, span: Span) -> 
 /// tuple-returning call claim to produce a boxed one. Reports `changed` only when
 /// a type moved on a node that runs.
 fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candidate>) -> bool {
-    let mut changed = false;
-    for e in reachable_exprs(body) {
-        let node = &mut body.exprs[e];
-        if let ExprKind::Call { func_id, .. } = &node.kind
-            && let Some(cand) = candidates.get(func_id)
-            && node.type_id != cand.layout.tuple_type
-        {
-            node.type_id = cand.layout.tuple_type;
-            changed = true;
-        }
+    // Read before writing: a mutable borrow counts as an edit, and this runs
+    // over every caller of a scalarized callee each round.
+    let retypes: Vec<(ExprId, TypeId)> = reachable_exprs(body)
+        .into_iter()
+        .filter_map(|e| {
+            let node = &body.exprs[e];
+            let ExprKind::Call { func_id, .. } = &node.kind else {
+                return None;
+            };
+            let tuple_type = candidates.get(func_id)?.layout.tuple_type;
+            (node.type_id != tuple_type).then_some((e, tuple_type))
+        })
+        .collect();
+    for &(e, tuple_type) in &retypes {
+        body.exprs[e].type_id = tuple_type;
     }
-    changed
+    !retypes.is_empty()
 }
 
 /// Retype the binding statement and every read of the bound temp. The local's
@@ -2345,32 +2351,46 @@ fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) -> bool {
 
 /// [`retype_let`] for several locals in one sweep.
 fn retype_lets(body: &mut Body, tuple_types: &IndexMap<u32, TypeId>) -> bool {
-    let mut changed = false;
-    for stmt in body.stmts.values_mut() {
-        if let StmtKind::Let {
-            local_index,
-            type_id,
-            ..
-        } = &mut stmt.kind
-            && let Some(&tuple_type) = tuple_types.get(local_index)
-            && *type_id != tuple_type
-        {
-            *type_id = tuple_type;
-            changed = true;
-        }
+    // Read before writing, as `retype_candidate_calls` does.
+    let lets: Vec<(StmtId, TypeId)> = body
+        .stmts
+        .iter()
+        .filter_map(|(s, stmt)| {
+            let StmtKind::Let {
+                local_index,
+                type_id,
+                ..
+            } = &stmt.kind
+            else {
+                return None;
+            };
+            let tuple_type = *tuple_types.get(local_index)?;
+            (*type_id != tuple_type).then_some((s, tuple_type))
+        })
+        .collect();
+    let reads: Vec<(ExprId, TypeId)> = body
+        .exprs
+        .iter()
+        .filter_map(|(e, node)| {
+            let ExprKind::Local { index, .. } = &node.kind else {
+                return None;
+            };
+            let tuple_type = *tuple_types.get(index)?;
+            (node.type_id != tuple_type).then_some((e, tuple_type))
+        })
+        .collect();
+    for &(s, tuple_type) in &lets {
+        let StmtKind::Let { type_id, .. } = &mut body.stmts[s].kind else {
+            unreachable!("collected as a `Let`");
+        };
+        *type_id = tuple_type;
     }
-    for node in body.exprs.values_mut() {
-        if let ExprKind::Local { index, .. } = &node.kind
-            && let Some(&tuple_type) = tuple_types.get(index)
-            && node.type_id != tuple_type
-        {
-            node.type_id = tuple_type;
-            changed = true;
-        }
+    for &(e, tuple_type) in &reads {
+        body.exprs[e].type_id = tuple_type;
     }
     let retyped: Vec<(u32, TypeId)> = tuple_types.iter().map(|(&l, &t)| (l, t)).collect();
-    body.values.retype_locals(&retyped);
-    changed
+    body.retype_locals(&retyped);
+    !lets.is_empty() || !reads.is_empty()
 }
 
 /// Read-only context for the call-site rewrite over one body.
