@@ -6,17 +6,17 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::tir::{ResolvedType, SubstitutionContext, TypeArgMap, TypeId, TypeParamId};
+use crate::tir::{ResolvedType, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::call::{bound_targets, slot_names};
+use super::call::slot_names;
 use super::coercion::ExpectedReturn;
 use super::infer_hole::BoundRows;
 use super::scope::ParamRef;
 use super::trait_query::SelfBinding;
-use super::types::FunctionContext;
+use super::types::{FunctionContext, TypeError};
 use crate::ast::{self, GenericParam};
 
 /// The kind of declaration an [`Instantiation`] instantiates.
@@ -25,6 +25,11 @@ pub(super) enum InstanceKind {
     Builtin,
     Function,
     Method,
+    /// A static called through its type, whose first `declaring` slots the
+    /// declaring block's, which the type's own turbofish writes.
+    Static {
+        declaring: usize,
+    },
     Struct,
     Variant,
 }
@@ -35,6 +40,7 @@ impl InstanceKind {
             Self::Builtin => "builtin",
             Self::Function => "function",
             Self::Method => "method",
+            Self::Static { .. } => unreachable!("a static's slots are worded by its path"),
             Self::Struct => "struct",
             Self::Variant => "variant",
         }
@@ -46,6 +52,7 @@ impl InstanceKind {
             Self::Struct => " { … }",
             Self::Variant => "::…",
             Self::Builtin | Self::Function | Self::Method => "()",
+            Self::Static { .. } => unreachable!("a static's slots are worded by its path"),
         }
     }
 
@@ -57,6 +64,30 @@ impl InstanceKind {
             self.turbofish_tail(),
         )
     }
+
+    /// [`Self::slot_owner`] for the slot at `index`.
+    fn owner_of_slot(self, name: &str, index: usize) -> String {
+        match self {
+            Self::Static { declaring } => {
+                let (prefix, suffix) = name.rsplit_once("::").expect("a static is a path");
+                static_slot_owner(prefix, suffix, index < declaring)
+            }
+            Self::Builtin | Self::Function | Self::Method | Self::Struct | Self::Variant => {
+                self.slot_owner(name)
+            }
+        }
+    }
+}
+
+/// Whose slot a static call `prefix::suffix` left open, and the turbofish
+/// that writes it: the receiver's where `receiver_open`, else the method's.
+pub(super) fn static_slot_owner(prefix: &str, suffix: &str, receiver_open: bool) -> String {
+    let turbofish = if receiver_open {
+        format!("`{prefix}::<...>::{suffix}()`")
+    } else {
+        format!("`{prefix}::{suffix}::<...>()`")
+    };
+    TypeError::cannot_infer_owner(&format!("`{prefix}::{suffix}`"), &turbofish)
 }
 
 /// What is being instantiated, for the "cannot infer" diagnostic raised if a
@@ -81,17 +112,26 @@ pub(super) struct Instantiation<'a> {
 /// A declaration's slots rewritten into one use site's variables.
 pub(super) struct Instantiated {
     /// What each slot became, in declaration order: a fresh variable, or the
-    /// slot itself where instantiation was declined. Feed this to
-    /// `InferCtx::new` so `solve` answers positionally.
+    /// slot itself where instantiation was declined.
     pub(super) vars: Vec<TypeId>,
     /// Rewrites a type written in the declaration's frame into this use site's
     /// variables. Apply with `TypeTable::substitute_type_params`.
     subst: TypeArgMap,
-    /// Per-slot "cannot infer" diagnostic, attached by
-    /// [`Elaborator::record_instantiation`] to the slots still unsolved when the
-    /// use site commits. `None` marks a slot that cannot go unanswered: one left
-    /// rigid, or one the turbofish named.
-    diags: Vec<Option<(Span, String, String)>>,
+    /// Per slot, whether the use site leaves it to inference: not one left
+    /// rigid, nor one the turbofish named.
+    inferred: Vec<bool>,
+    /// The associated-type equalities the slots' bounds state, linked once the
+    /// arguments other than literals have met their slots.
+    pub(super) links: Option<SlotLinks>,
+}
+
+/// What [`Elaborator::link_deferred_assoc_equalities`] reads of a call's slots.
+#[derive(Clone)]
+pub(super) struct SlotLinks {
+    pub(super) owners: Vec<GenericParam>,
+    pub(super) names: Vec<ParamRef>,
+    pub(super) self_binding: Option<SelfBinding>,
+    pub(super) span: Span,
 }
 
 impl Instantiated {
@@ -99,33 +139,25 @@ impl Instantiated {
     /// such as the `_`s a receiver's turbofish writes. Nothing substitutes
     /// into them, and an unsolved one reports nothing here: the site does.
     pub(super) fn of_vars(vars: Vec<TypeId>) -> Instantiated {
-        let diags = vec![None; vars.len()];
         Instantiated {
+            inferred: vec![false; vars.len()],
             vars,
             subst: TypeArgMap::default(),
-            diags,
+            links: None,
         }
     }
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Instantiate `slots` — a declaration's type parameters, in order — with
-    /// one fresh inference variable each.
+    /// one fresh inference variable each. A type *pack* (`..T`) becomes one
+    /// too, answered by a tuple: inside a tuple it is written as a
+    /// [`ResolvedType::PackVar`], which the answer splices into.
     ///
-    /// A type *pack* (`..T`) is left rigid. A variable stands for one type; a
-    /// pack stands for a list of them, and the unifier splices it by
-    /// recognising `TypePack` inside the expected tuple. Rewriting `[..T]` to
-    /// `[?0]` would hide the shape that arm matches on and the pack would
-    /// never bind. Instantiating a pack needs a pack-shaped variable, which
-    /// does not exist yet.
-    ///
-    /// A slot [`Instantiation::type_args`] names is solved as it is minted. A
-    /// pack the turbofish names is substituted outright: what it stands for is
-    /// written, so a parameter type mentioning it is concrete before any
-    /// argument meets it, and nothing is left for the unifier to splice.
+    /// A slot [`Instantiation::type_args`] names is solved as it is minted.
     pub(super) fn instantiate(&mut self, slots: &[TypeId], of: &Instantiation<'_>) -> Instantiated {
         let mut vars = Vec::with_capacity(slots.len());
-        let mut diags = Vec::with_capacity(slots.len());
+        let mut inferred = Vec::with_capacity(slots.len());
         let mut subst = TypeArgMap::default();
         let named_args = self.turbofish_per_slot(slots, of.type_args);
         for (i, &slot) in slots.iter().enumerate() {
@@ -146,15 +178,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter(|&t| t != TypeTable::UNKNOWN);
             let Some((param, name, is_pack)) = named_slot else {
                 vars.push(slot);
-                diags.push(None);
+                inferred.push(false);
                 continue;
             };
-            if is_pack {
-                if let Some(pack) = named {
-                    subst.insert(param, pack);
-                }
-                vars.push(slot);
-                diags.push(None);
+            // A pack the turbofish names is substituted outright: what it
+            // stands for is written, so nothing is left to splice.
+            if is_pack && let Some(pack) = named {
+                subst.insert(param, pack);
+                vars.push(pack);
+                inferred.push(false);
                 continue;
             }
             let var = self.mint_infer_var_named(&name);
@@ -163,7 +195,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The parameter and the rest of the sentence stay apart so
             // `finalize_infer_holes` can name every unsolved slot of this use
             // site in one message.
-            let owner = of.kind.slot_owner(of.name);
+            let owner = of.kind.owner_of_slot(of.name, i);
             // Answered here, so an argument meets what the source wrote. A `_`
             // in it reports as this slot would.
             if let Some(named) = named {
@@ -171,13 +203,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.settle_as_written(var, named);
                 // A `_` standing for the whole slot leaves it to inference, as
                 // an omitted argument does.
-                let leaves_slot = self.tysys.type_table.borrow().is_infer_var(named);
-                diags.push(leaves_slot.then_some((of.span, name, owner)));
+                inferred.push(self.tysys.type_table.borrow().is_infer_var(named));
                 continue;
             }
-            diags.push(Some((of.span, name, owner)));
+            self.attach_infer_var_blame(var, of.span, name, owner);
+            inferred.push(true);
         }
-        Instantiated { vars, subst, diags }
+        Instantiated {
+            vars,
+            subst,
+            inferred,
+            links: None,
+        }
     }
 
     /// Rewrite a type written in a declaration's frame into `inst`'s variables.
@@ -236,25 +273,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         param_types
             .iter()
-            .map(|&t| {
-                let substituted = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .substitute_type_params(t, &subst);
-                self.answer_frame_projections(substituted)
-            })
+            .map(|&t| self.substitute_map_in_frame(&subst, t))
             .collect()
     }
 
-    /// [`Self::substitute_in_frame`] for a substitution bound by name.
-    pub(super) fn substitute_ctx_in_frame(
+    /// `subst` over `type_id`, then the projections that answers.
+    pub(super) fn substitute_map_in_frame(
         &mut self,
-        subst: &SubstitutionContext,
+        subst: &TypeArgMap,
         type_id: TypeId,
     ) -> TypeId {
-        let substituted = subst.substitute(type_id, &mut self.tysys.type_table.borrow_mut());
+        let substituted = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(type_id, subst);
         self.answer_frame_projections(substituted)
+    }
+
+    /// `inst`'s variables as the context answers them, or `None` while any is
+    /// still open.
+    pub(super) fn answered_slots(&self, inst: &Instantiated) -> Option<Vec<TypeId>> {
+        let answers = self.apply_infer_holes_each(&inst.vars);
+        let all = answers
+            .iter()
+            .zip(&inst.vars)
+            .all(|(answer, var)| answer != var);
+        all.then_some(answers)
     }
 
     /// [`Self::instantiate_type`] over a signature's parameter list.
@@ -268,16 +313,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Record what the use site's solver determined for each slot, so the
-    /// module-end sweep substitutes the variables out of every recorded fact.
-    ///
-    /// A slot the solver left as its own variable stays unsolved. Reporting it
-    /// is [`Self::blame_unsolved`]'s job, kept separate because a site may
-    /// still resolve the slot after solving — the free-function path defers to
-    /// `defer_or_report_uninferred_fn_type_args` — and only the site that
-    /// gives up should raise the diagnostic.
+    /// body's sweep substitutes the variables out of every recorded fact.
+    /// A slot still open is reported by the blame it was minted with.
     pub(super) fn record_instantiation(&mut self, inst: &Instantiated, solved: &[TypeId]) {
         for (&var, &answer) in inst.vars.iter().zip(solved.iter()) {
+            // A slot instantiation declined stays rigid.
+            if !self.tysys.type_table.borrow().is_infer_var(var) {
+                continue;
+            }
             self.equate(var, answer);
+            // An inferred `!` binds nothing, yet stands for the slot: the
+            // site settled it.
+            if self.apply_infer_holes(answer) == TypeTable::NEVER {
+                self.waive_open(var);
+            }
+        }
+    }
+
+    /// Leave unreported each of `inst`'s variables nothing answered: the site
+    /// gave the instance up, and reports what it could not settle itself.
+    pub(super) fn abandon(&mut self, inst: &Instantiated) {
+        for &var in &inst.vars {
+            self.waive_open(var);
         }
     }
 
@@ -301,16 +358,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let args = self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
             return (args, None);
         }
-        let inst = self.instantiate(slots, of);
+        let mut inst = self.instantiate(slots, of);
         self.record_slot_bounds(&inst, own_params, of.self_binding, of.impl_args, of.span);
-        let names = slot_names(own_params, &self.tysys.resolutions);
-        self.link_deferred_assoc_equalities(
-            own_params,
-            &names,
-            &inst.vars,
-            of.self_binding,
-            of.span,
-        );
+        inst.links = Some(SlotLinks {
+            owners: own_params.to_vec(),
+            names: slot_names(own_params, &self.tysys.resolutions),
+            self_binding: of.self_binding,
+            span: of.span,
+        });
         let param_types = self.instantiate_types(param_types, &inst);
         let ret = ret.map(|ret| ExpectedReturn {
             declared: self.instantiate_type(ret.declared, &inst),
@@ -350,68 +405,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_args: &[(ParamRef, TypeId)],
         span: Span,
     ) {
-        for ((&var, param), diag) in inst.vars.iter().zip(params.iter()).zip(inst.diags.iter()) {
-            // `diags` is `None` exactly where instantiation was declined, and
-            // that slot is rigid: it is never solved, so a bound recorded
-            // against it could never be re-checked.
-            if diag.is_none() {
+        for ((&var, param), &inferred) in inst.vars.iter().zip(params).zip(&inst.inferred) {
+            if !inferred {
                 continue;
             }
             let bounds = self.declared_bounds(param, self_binding, impl_args, BoundRows::Unbound);
             self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
-        }
-    }
-
-    /// Stand a variable in for each pack slot that a slot `solved` left open
-    /// pins through an associated-type equality
-    /// (`S: ReflectStruct<FieldTypes = [..F]>`). [`Self::instantiate`] leaves a
-    /// pack rigid, and only the owner's projection answers this one; it is
-    /// blamed with its owner.
-    pub(super) fn defer_pinned_packs(
-        &mut self,
-        inst: &Instantiated,
-        params: &[GenericParam],
-        names: &[ParamRef],
-        solved: &mut [TypeId],
-        self_binding: Option<SelfBinding>,
-        impl_args: &[(ParamRef, TypeId)],
-    ) {
-        for (i, param) in params.iter().enumerate() {
-            let Some((span, _, owner)) =
-                inst.diags[i].clone().filter(|_| solved[i] == inst.vars[i])
-            else {
-                continue;
-            };
-            let targets = param
-                .bounds
-                .iter()
-                .flat_map(|b| bound_targets(b, names, &self.tysys.resolutions));
-            for (_, j) in targets.collect::<Vec<_>>() {
-                let pack = &params[j];
-                if !pack.is_pack || solved[j] != inst.vars[j] {
-                    continue;
-                }
-                let var = self.mint_infer_var_named(&pack.name);
-                self.mark_pack_var(var);
-                self.attach_infer_var_blame(var, span, pack.name.clone(), owner.clone());
-                let bounds =
-                    self.declared_bounds(pack, self_binding, impl_args, BoundRows::Unbound);
-                self.attach_infer_var_bounds(var, pack.name.clone(), bounds, span);
-                solved[j] = var;
-            }
-        }
-    }
-
-    /// Attach each slot's "cannot infer" diagnostic to the variable still
-    /// standing in for it, so an unsolved one is reported at finalize.
-    pub(super) fn blame_unsolved(&mut self, inst: &Instantiated, solved: &[TypeId]) {
-        for (i, &var) in inst.vars.iter().enumerate() {
-            if solved.get(i) != Some(&var) {
-                continue;
-            }
-            if let Some((span, param, owner)) = inst.diags[i].clone() {
-                self.attach_infer_var_blame(var, span, param, owner);
-            }
         }
     }
 }

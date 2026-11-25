@@ -69,11 +69,17 @@ pub(crate) struct MethodDispatch {
     /// transfers ownership of the receiver. The resource move check reads this
     /// to flag a use of the receiver binding after a consuming call.
     pub(crate) consumes_self: bool,
+<<<<<<< HEAD
     /// The receiver, a reference, where that `self` is read out of what it
     /// points to: the method is the referent's, not one of an impl written
     /// for the reference.
     pub(crate) self_out_of_reference: Option<TypeId>,
     /// The pending selection this call waits on, whose dispatch the module-end
+||||||| cb4f66e2c
+    /// The pending selection this call waits on, whose dispatch the module-end
+=======
+    /// The pending selection this call waits on, whose dispatch the body's
+>>>>>>> origin/main
     /// sweep writes over `method_def` and `function_ref`.
     pub(crate) selection: Option<usize>,
 }
@@ -345,6 +351,12 @@ macro_rules! define_body_facts {
                     $($name: self.$name.split_off(base.$name),)+
                     default_overlays: self.default_overlays.split_off(base.default_overlays),
                 }
+            }
+
+            /// Put back what [`Self::split_off`] peeled off.
+            pub(crate) fn append(&mut self, tail: BodyFacts) {
+                $(self.$name.extend(tail.$name);)+
+                self.default_overlays.extend(tail.default_overlays);
             }
 
             #[cfg(debug_assertions)]
@@ -771,7 +783,7 @@ pub(crate) struct LiteralCallee {
 
 impl LiteralCallee {
     /// Recompute the names from the recorded `TypeId`s. They are a function of
-    /// the types alone, so the module-end sweep calls this once a solved
+    /// the types alone, so the body's sweep calls this once a solved
     /// inference variable changes one.
     pub(crate) fn remangle(&mut self, tt: &TypeTable) {
         self.type_arg_names = self

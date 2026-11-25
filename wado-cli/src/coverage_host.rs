@@ -12,7 +12,7 @@ use wado_compiler::coverage::{
     self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Registered, TestReport,
 };
 use wado_compiler::pgo;
-#[cfg(debug_assertions)]
+#[cfg(not(feature = "dist"))]
 use wado_compiler::stdlib::DEV_STDLIB_ROOT;
 use wado_compiler::stdlib::core_module_file;
 use wado_lsp::host::discovery::Disk;
@@ -408,14 +408,14 @@ fn write_coverage(
 }
 
 /// Where a dev build reads the stdlib `file` from.
-#[cfg(debug_assertions)]
+#[cfg(not(feature = "dist"))]
 fn dev_stdlib_file(file: &str) -> Option<PathBuf> {
     Some(Path::new(DEV_STDLIB_ROOT).join(file))
 }
 
-/// A release build embeds the stdlib, so its modules are reported by import
+/// A `dist` build embeds the stdlib, so its modules are reported by import
 /// path.
-#[cfg(not(debug_assertions))]
+#[cfg(feature = "dist")]
 fn dev_stdlib_file(_file: &str) -> Option<PathBuf> {
     None
 }

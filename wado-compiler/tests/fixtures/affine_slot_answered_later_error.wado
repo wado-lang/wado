@@ -1,0 +1,18 @@
+// An affine parameter of the enclosing scope that reaches a slot not declared
+// `affine` through a variable settled later is reported as one given directly.
+fn keep<T>(o: Option<T>) -> Option<T> {
+    return o;
+}
+
+fn later<affine U>(u: U) {
+    let mut o = keep(null);
+    o = Option::Some(u);
+}
+
+export fn run() {
+}
+
+__DATA__
+{
+  "compile_error": ":8:17: analysis error: affine type 'U' given for 'T', which may be copied"
+}

@@ -293,7 +293,7 @@ test "a schema built breaking a keyword's rule is an error at compile" {
 }
 
 test "a pattern outside the supported syntax is an error at compile" {
-    let e = invalid(Validator::compile(&Schema::parse(#"{"pattern": "(?<=a)b"}"#).unwrap()));
+    let e = invalid(Validator::compile(&Schema::parse(#"{"pattern": "(a)\\1"}"#).unwrap()));
     assert e.uri matches { null };
     assert e.pointer == "/pattern";
 }

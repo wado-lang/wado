@@ -16,7 +16,7 @@ struct core:prelude/list.wado//List<contract_clause_reads_while_let_binding.wado
     mut used: i32,
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(3)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(3)
 
 array Array<u8> (mut u8);  // TypeId(4)
 
@@ -42,7 +42,7 @@ type "functype//contract_clause_reads_while_let_binding.wado/$cm_export__run" = 
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(15)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(16)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
@@ -74,29 +74,29 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 fn "contract_clause_reads_while_let_binding.wado/run"() with Stdout {
-    let out_44: ref "core:prelude/string.wado//String";
-    let is_negative_107: bool;
+    let out_40: ref "core:prelude/string.wado//String";
+    let is_negative_103: bool;
     let x: i64;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let $sroa_keys_repr_169: ref "Array<contract_clause_reads_while_let_binding.wado/Key>";
-    let $sroa_keys_used_170: i32;
-    let $sroa_write_back_183: ref "core:prelude/list.wado//List<contract_clause_reads_while_let_binding.wado/Key>";
-    let start_212: i32;
-    $sroa_keys_repr_169 = array.new_fixed<ref "contract_clause_reads_while_let_binding.wado//Key">(struct.new "contract_clause_reads_while_let_binding.wado//Key" { frag: ref.null none });
-    $sroa_keys_used_170 = 1;
+    let $sroa_keys_repr_165: ref "Array<contract_clause_reads_while_let_binding.wado/Key>";
+    let $sroa_keys_used_166: i32;
+    let $sroa_write_back_178: ref "core:prelude/list.wado//List<contract_clause_reads_while_let_binding.wado/Key>";
+    let start_207: i32;
+    $sroa_keys_repr_165 = array.new_fixed<ref "contract_clause_reads_while_let_binding.wado//Key">(struct.new "contract_clause_reads_while_let_binding.wado//Key" { frag: ref.null none });
+    $sroa_keys_used_166 = 1;
     b0: block {
         l1: loop {
             $fused_$inline_next_sroa_keys_used__2: block {
-                if $sroa_keys_used_170 < 3 {
-                    if @unlikely($sroa_keys_used_170 >= builtin::array_len($sroa_keys_repr_169)) {
+                if $sroa_keys_used_166 < 3 {
+                    if @unlikely($sroa_keys_used_166 >= builtin::array_len($sroa_keys_repr_165)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<contract_clause_reads_while_let_binding.wado/Key>::grow"(local.tee $sroa_write_back_183(struct.new "core:prelude/list.wado//List<contract_clause_reads_while_let_binding.wado/Key>" { repr: $sroa_keys_repr_169, used: $sroa_keys_used_170 }));
-                        $sroa_keys_repr_169 = $sroa_write_back_183.repr;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<contract_clause_reads_while_let_binding.wado/Key>::grow"(local.tee $sroa_write_back_178(struct.new "core:prelude/list.wado//List<contract_clause_reads_while_let_binding.wado/Key>" { repr: $sroa_keys_repr_165, used: $sroa_keys_used_166 }));
+                        $sroa_keys_repr_165 = $sroa_write_back_178.repr;
                     }
-                    builtin::array_set<ref "contract_clause_reads_while_let_binding.wado//Key">($sroa_keys_repr_169, $sroa_keys_used_170, struct.new "contract_clause_reads_while_let_binding.wado//Key" { frag: ref.null none });
-                    $sroa_keys_used_170 = $sroa_keys_used_170 + 1;
+                    builtin::array_set<ref "contract_clause_reads_while_let_binding.wado//Key">($sroa_keys_repr_165, $sroa_keys_used_166, struct.new "contract_clause_reads_while_let_binding.wado//Key" { frag: ref.null none });
+                    $sroa_keys_used_166 = $sroa_keys_used_166 + 1;
                     break $fused_$inline_next_sroa_keys_used__2;
                 }
                 break b0;
@@ -104,14 +104,14 @@ fn "contract_clause_reads_while_let_binding.wado/run"() with Stdout {
             continue l1;
         };
     };
-    out_44 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $inline_core_prelude_string_wado_String__internal_push_view_38: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_38;
+    out_40 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $inline_core_prelude_string_wado_String__internal_push_view_35: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_35;
     };
-    is_negative_107 = $sroa_keys_used_170 < 0;
-    x = builtin::i64_extend_i32_s($sroa_keys_used_170);
+    is_negative_103 = $sroa_keys_used_166 < 0;
+    x = builtin::i64_extend_i32_s($sroa_keys_used_166);
     x = select i64(x < 0_i64, 0_i64 - x, x);
-    $sroa_keys_used_170 = $inline_count_digits_u64_1: block -> i32 {
+    $sroa_keys_used_166 = $inline_count_digits_u64_1: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
                 if x <u 10_i64 {
@@ -171,61 +171,61 @@ fn "contract_clause_reads_while_let_binding.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if is_negative_107 {
-        if @unlikely(local.tee is_negative_107(0 + 1) > builtin::array_len(out_44.repr)) {
+    if is_negative_103 {
+        if @unlikely(local.tee is_negative_103(0 + 1) > builtin::array_len(out_40.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_44, is_negative_107);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_40, is_negative_103);
         }
-        start_212 = out_44.used;
-        out_44.used = is_negative_107;
-        builtin::array_set_u8(out_44.repr, start_212, 45);
+        start_207 = out_40.used;
+        out_40.used = is_negative_103;
+        builtin::array_set_u8(out_40.repr, start_207, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_107(out_44.used + $sroa_keys_used_170) > builtin::array_len(out_44.repr)) {
+    if @unlikely(local.tee is_negative_103(out_40.used + $sroa_keys_used_166) > builtin::array_len(out_40.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_44, is_negative_107);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_40, is_negative_103);
     }
-    start_212 = out_44.used;
-    out_44.used = is_negative_107;
-    arr = out_44.repr;
-    $sroa_keys_used_170 = start_212 + $sroa_keys_used_170;
+    start_207 = out_40.used;
+    out_40.used = is_negative_103;
+    arr = out_40.repr;
+    $sroa_keys_used_166 = start_207 + $sroa_keys_used_166;
     b26: block {
         l27: loop {
-            break_if b26 ($sroa_keys_used_170 - start_212) < 2;
+            break_if b26 ($sroa_keys_used_166 - start_207) < 2;
             q = x /u 100_i64;
-            tens = local.tee is_negative_107(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, $sroa_keys_used_170 - 1, (48 + is_negative_107) - (tens * 10));
-            builtin::array_set_u8(arr, $sroa_keys_used_170 - 2, 48 + tens);
-            $sroa_keys_used_170 = $sroa_keys_used_170 - 2;
+            tens = local.tee is_negative_103(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, $sroa_keys_used_166 - 1, (48 + is_negative_103) - (tens * 10));
+            builtin::array_set_u8(arr, $sroa_keys_used_166 - 2, 48 + tens);
+            $sroa_keys_used_166 = $sroa_keys_used_166 - 2;
             x = q;
             continue l27;
         };
     };
-    if $sroa_keys_used_170 > start_212 {
-        builtin::array_set_u8(arr, start_212, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_keys_used_166 > start_207 {
+        builtin::array_set_u8(arr, start_207, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
-    $inline_core_prelude_string_wado_String__internal_push_view_57: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_57;
+    $inline_core_prelude_string_wado_String__internal_push_view_54: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_54;
     };
-    $sroa_keys_used_170 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_107 = builtin::i32_wrap_i64(x >> 32_i64);
-    $sroa_keys_used_170 = "contract_clause_reads_while_let_binding.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_keys_used_170);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_212(out_44.used) + 1)), 0, out_44.repr, 0, start_212);
-    builtin::array_set_u8(arr, start_212, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    $sroa_keys_used_166 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    is_negative_103 = builtin::i32_wrap_i64(x >> 32_i64);
+    $sroa_keys_used_166 = "contract_clause_reads_while_let_binding.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_keys_used_166);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_207(out_40.used) + 1)), 0, out_40.repr, 0, start_207);
+    builtin::array_set_u8(arr, start_207, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_212 = start_212 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_107, arr, 0, start_212);
+        start_207 = start_207 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_103, arr, 0, start_207);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"(is_negative_107);
+        "wasi/stream-drop-writable"(is_negative_103);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_keys_used_170);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_keys_used_166);
     }
 }
 
@@ -316,11 +316,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_5: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();

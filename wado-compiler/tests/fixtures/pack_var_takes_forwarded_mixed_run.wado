@@ -1,0 +1,20 @@
+// A pack variable alone in its tuple takes the whole of a forwarded tuple that
+// holds the caller's own pack beside fixed elements.
+fn keep<..T>(x: [..T]) -> [..T] {
+    return x;
+}
+
+fn head_fixed<..U>(x: [i32, ..U]) -> [i32, ..U] {
+    return keep(x);
+}
+
+fn tail_fixed<..U>(x: [..U, bool]) -> [..U, bool] {
+    return keep(x);
+}
+
+test "a pack variable takes a run holding the caller's pack" {
+    let head = head_fixed([1, "a", true]);
+    assert head.0 == 1;
+    let tail = tail_fixed([1, true]);
+    assert tail.1;
+}

@@ -349,7 +349,7 @@ impl SourceWatch {
     /// from disk once and pins it, so an edit afterwards leaves the run
     /// describing a tree that is no longer there — the same report every other
     /// source gets.
-    #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+    #[cfg(not(feature = "dist"))]
     fn observe_dev_stdlib(&self) {
         use wado_compiler::stdlib::{DEV_STDLIB_ROOT, installed_dev_stdlib};
 
@@ -362,8 +362,8 @@ impl SourceWatch {
         }
     }
 
-    /// A release or `wasm32` build embeds the stdlib, so no file backs it.
-    #[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
+    /// A `dist` build embeds the stdlib, so no file backs it.
+    #[cfg(feature = "dist")]
     fn observe_dev_stdlib(&self) {}
 
     /// The hash of what `path` held when the run first read it whole; `None`
@@ -447,7 +447,7 @@ mod tests {
 
     /// The stdlib is an input like any other: a run that compiled against one
     /// version and finished after another landed describes neither tree.
-    #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+    #[cfg(not(feature = "dist"))]
     #[test]
     fn a_run_watches_the_stdlib_it_compiles_against() {
         use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files};

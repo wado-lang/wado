@@ -15,17 +15,16 @@ use crate::name::{
 };
 use crate::primitive::PrimitiveType;
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, StructDef, SubstitutionContext, TemplateId,
-    TupleSlot, TypeArgMap, TypeId, slots_from_impl_args,
+    FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateId, TupleSlot, TypeArgMap, TypeId,
+    slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::call::{ArgSite, CaseSite, InheritedStatic, SigChoice, bind_nearer};
+use super::call::{ArgSite, CallSolve, CaseSite, InheritedStatic, SigChoice, bind_nearer};
 use super::callee::StaticMethodRef;
-use super::coercion::{ExpectedReturn, answers_last};
+use super::coercion::ExpectedReturn;
 use super::expr::IndexAccess;
-use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::pending_selection::{DispatchSite, PendingCall};
@@ -976,34 +975,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inst = inst
                 .as_ref()
                 .expect("a method with slots instantiates them");
-            // The call's own variables, which the turbofish and the expected
-            // type have met. One still open takes what the arguments solve it
-            // to at the base, which a newtype receiver's arguments meet.
-            let mut infer = InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
+            // The arguments meet the parameters at the base, which a newtype
+            // receiver's arguments meet.
+            let param_types = self.instantiate_types(&solve_params, inst);
             let solve_args = InheritedFrame::solved_at(inherited, &self.tysys, &args);
-            for (i, (&param_type, &arg)) in solve_params.iter().zip(solve_args.iter()).enumerate() {
-                if answers_last(args_ast.get(i)) {
-                    infer.add_deferred(param_type, arg);
-                } else {
-                    infer.add(param_type, arg);
-                }
-            }
-            let solved = infer.solve();
-            let mut known: Vec<TypeId> = inst
-                .vars
-                .iter()
-                .zip(solved)
-                .map(|(&var, solved)| {
-                    let answer = self.apply_infer_holes(var);
-                    if self.tysys.type_table.borrow().is_infer_var(answer) {
-                        solved
-                    } else {
-                        answer
-                    }
-                })
-                .collect();
-            // Instantiation leaves a pack rigid, so one the arguments did not
-            // reach is one the call left nothing over for.
+            let mut known = self.solve_call_in_context(CallSolve {
+                slots: &inst.vars,
+                param_types: &param_types,
+                args: &solve_args,
+                raw_args: args_ast,
+                ret: None,
+            });
+            // A pack the arguments did not reach is one the call left nothing
+            // over for.
             let reached = self
                 .tysys
                 .packs_args_reach(&expected_param_types, args.len());
@@ -1098,8 +1082,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (method_type_args, subst_ctx) = self.bind_method_type_args(
             type_args,
             MethodInferenceInput {
-                receiver_type: receiver,
-                method_name,
                 slots: &method_type_param_ids,
                 own_params: &method_own_params,
                 param_types: &solve_params,
@@ -1116,7 +1098,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         if !subst_ctx.is_empty() {
-            return_type = self.substitute_ctx_in_frame(&subst_ctx, return_type);
+            return_type = self.substitute_map_in_frame(&subst_ctx, return_type);
         }
         if let Some(frame) = inherited {
             return_type = frame.to_newtype(&self.tysys, return_type);
@@ -1138,7 +1120,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A hole may still ride the receiver (a deep chain's intermediate call,
         // `gen().keep().unwrap()`): the recorded name embeds `Type<?hole>`, but
         // the monomorphizer rebuilds names from the receiver type, which the
-        // module-end sweep concretises once the hole is solved further out.
+        // body's sweep concretises once the hole is solved further out.
 
         // The one place arguments are checked: against the parameter types with
         // this call's type arguments substituted in. Doing it here rather than
@@ -1150,7 +1132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             let mut solved: Vec<TypeId> = expected_param_types
                 .iter()
-                .map(|&t| self.substitute_ctx_in_frame(&subst_ctx, t))
+                .map(|&t| self.substitute_map_in_frame(&subst_ctx, t))
                 .collect();
             if let Some(frame) = inherited {
                 frame.to_newtype_in(&self.tysys, &mut solved);
@@ -3001,6 +2983,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &at_base,
                     expected_at_base,
                     static_call.span,
+                    None,
                 )
                 .0
             });
@@ -3023,24 +3006,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect();
             let solved = self.answer_receiver_vars(vars, &callee_args, &answers);
-            let mut unanswered = Vec::new();
             for (&var, answer) in vars.iter().zip(solved) {
-                if answer == var {
-                    let now = self.apply_infer_holes(var);
-                    if self.tysys.type_table.borrow().is_infer_var(now) {
-                        unanswered.push(var);
-                    }
-                } else {
+                if answer != var {
                     self.equate(var, answer);
                 }
             }
             declaring_args = self.apply_infer_holes_each(&declaring_args);
-            // A `_` nothing answered waits for a later use where the bare
-            // spelling's slot would, and is reported now where none can come.
-            if !unanswered.is_empty() && !self.defers_uninferred(&args, vars, expected_type) {
-                self.close_uninferred(&unanswered);
-                return TypeTable::ERROR;
-            }
             target_type_id = self.with_written_args(target_type_id, &declaring_args);
             let callee_args =
                 self.args_at_callee(target_type_id, &declaring_args, callee_sig.as_ref());
@@ -3118,8 +3089,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_type_args,
                 &qualified,
                 MethodInferenceInput {
-                    receiver_type: target_type_id,
-                    method_name: &static_call.method,
                     slots: &own_ids,
                     own_params: &sig.own_params,
                     param_types: &param_types,
@@ -3448,6 +3417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             static_method_module.unwrap_or_else(|| func_ref.module_source.clone());
         self.record_default_walk(
             static_call.id,
+            static_call.span,
             &args,
             &param_types,
             &static_method_defaults,
@@ -3539,10 +3509,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The template is written against the blanket param, so `-> Self` /
         // `-> T` lands on the receiver at the call site.
         let blanket_slot = self.tysys.blanket_param_slot(blanket_def, &blanket_param);
-        let return_type = SubstitutionContext::new()
-            .bind(&[blanket_slot], &[receiver_type_id])
-            .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
-        let return_type = self.answer_frame_projections(return_type);
+        let receiver_slot = self
+            .tysys
+            .type_table
+            .borrow()
+            .bind_params(&[blanket_slot], &[receiver_type_id]);
+        let return_type = self.substitute_map_in_frame(&receiver_slot, template_return);
         let param_types = self.blanket_static_param_types(
             blanket_def,
             &template_params,
@@ -3570,8 +3542,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             written,
             &qualified,
             MethodInferenceInput {
-                receiver_type: receiver_type_id,
-                method_name: method,
                 slots: &slots,
                 own_params: &own_params,
                 param_types: &param_types,
@@ -3588,9 +3558,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let param_types: Vec<TypeId> = param_types
             .iter()
-            .map(|&t| self.substitute_ctx_in_frame(&subst, t))
+            .map(|&t| self.substitute_map_in_frame(&subst, t))
             .collect();
-        let return_type = self.substitute_ctx_in_frame(&subst, return_type);
+        let return_type = self.substitute_map_in_frame(&subst, return_type);
 
         // The arguments were resolved before the blanket was found, so a
         // literal among them takes its parameter's type only now.
@@ -3651,6 +3621,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         self.record_default_walk(
             call_id,
+            span,
             args,
             &param_types,
             &static_method_defaults,
@@ -3687,19 +3658,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_id: TypeId,
     ) -> Vec<TypeId> {
         let blanket_slot = self.tysys.blanket_param_slot(blanket, blanket_param);
-        let mut param_types: Vec<TypeId> = {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            template
-                .iter()
-                .map(|&pt| {
-                    SubstitutionContext::new()
-                        .bind(&[blanket_slot], &[receiver_type_id])
-                        .substitute(pt, &mut tt)
-                })
-                .collect()
-        };
-        self.answer_frame_projections_in(&mut param_types);
-        param_types
+        let receiver_slot = self
+            .tysys
+            .type_table
+            .borrow()
+            .bind_params(&[blanket_slot], &[receiver_type_id]);
+        template
+            .iter()
+            .map(|&pt| self.substitute_map_in_frame(&receiver_slot, pt))
+            .collect()
     }
 
     /// Whether `args` arguments fill a callee declaring `params` parameters,
@@ -4691,6 +4658,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match ctx {
             Some(ctx) => self.record_default_walk(
                 call_id,
+                span,
                 args,
                 &callee_params.param_types,
                 &callee_params.param_defaults,

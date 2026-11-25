@@ -1,8 +1,8 @@
 // A constraint whose type mentions a pack is left unchecked at the bound: a
-// pack has no arity until it expands. The call is what rejects it, and nothing
-// there settles `P`, so the call names the parameter it could not infer rather
-// than closing the pack to `[]` and reporting the shape that leaves
-// (docs/wep-2026-03-14-variadic-type-parameters.md §6).
+// pack has no arity until it expands. The call is what rejects it, at the
+// argument the constraint does not fit, with the pack still open rather than
+// closed to `[]` (docs/wep-2026-03-14-variadic-type-parameters.md §6). That
+// mismatch is the whole fault, so `P` is not reported again as uninferred.
 
 trait Sink with () {
     type Cb;
@@ -33,5 +33,6 @@ test "a pack in a constraint is rejected at the call, not at the bound" {
 __DATA__
 {
   "test": {},
-  "compile_error": "cannot infer type parameter `P` of function `drive`"
+  "compile_error": ":30:36: analysis error: type mismatch: expected 'fn([..P]) -> i32', found 'String'",
+  "compile_errors_not_contains": ["cannot infer"]
 }

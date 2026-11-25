@@ -1,0 +1,3070 @@
+#![no_prelude]
+#![stdlib("core:prelude/numeric.wado")]
+//! The methods and trait impls of the integer and float primitives.
+//
+// This module intentionally does NOT depend on core:rt to keep the
+// dependency structure simple.
+
+use { String, AsStrSlice } from "core:prelude/string.wado";
+use { Array } from "core:prelude/array.wado";
+use { Formatter } from "core:prelude/format.wado";
+use {
+    Ordering,
+    Eq,
+    Ord,
+    Hash,
+    Hasher,
+    Default,
+    Display,
+    Inspect,
+    Binary,
+    Octal,
+    LowerHex,
+    UpperHex,
+    LowerExp,
+    UpperExp,
+    FromStr,
+    LenientFromStr,
+    LenientParseError,
+    ConvertError,
+} from "core:prelude/traits.wado";
+use { Result } from "core:prelude/option.wado";
+
+use {
+    check_special,
+    SpecialKind,
+    short,
+    short32,
+    fixed_width,
+    fixed_width_for_prec,
+    format_decimal,
+    format_exp,
+    format_decimal_prec,
+    format_exp_prec,
+    write_decimal,
+    write_exp,
+    write_decimal_prec,
+    write_exp_prec,
+    u64_bit_len,
+    BINARY32,
+    BINARY64,
+} from "core:prelude/fpfmt.wado";
+
+// Deterministic math functions imported directly from the bundled
+// `core:libm.wat` asset (compiled from the Rust `libm` crate). The
+// loader synthesises Wado bindings from the wat module's exports — see
+// `docs/wep-2026-01-10-wasm-import.md`. Names are remapped onto the
+// Wado-side identifiers used by the impl blocks below
+// (`libm_log` → `f64_ln`, etc.).
+use {
+    libm_sin as f64_sin,
+    libm_cos as f64_cos,
+    libm_tan as f64_tan,
+    libm_asin as f64_asin,
+    libm_acos as f64_acos,
+    libm_atan as f64_atan,
+    libm_atan2 as f64_atan2,
+    libm_sinh as f64_sinh,
+    libm_cosh as f64_cosh,
+    libm_tanh as f64_tanh,
+    libm_asinh as f64_asinh,
+    libm_acosh as f64_acosh,
+    libm_atanh as f64_atanh,
+    libm_exp as f64_exp,
+    libm_exp2 as f64_exp2,
+    libm_exp10 as f64_exp10,
+    libm_expm1 as f64_expm1,
+    libm_log as f64_ln,
+    libm_log2 as f64_log2,
+    libm_log10 as f64_log10,
+    libm_log1p as f64_ln1p,
+    libm_pow as f64_pow,
+    libm_cbrt as f64_cbrt,
+    libm_hypot as f64_hypot,
+    libm_fmod as f64_fmod,
+    libm_fma as f64_mul_add,
+    libm_round as f64_round,
+    libm_erf as f64_erf,
+    libm_erfc as f64_erfc,
+    libm_tgamma as f64_gamma,
+    libm_lgamma as f64_ln_gamma,
+    libm_sinf as f32_sin,
+    libm_cosf as f32_cos,
+    libm_tanf as f32_tan,
+    libm_asinf as f32_asin,
+    libm_acosf as f32_acos,
+    libm_atanf as f32_atan,
+    libm_atan2f as f32_atan2,
+    libm_sinhf as f32_sinh,
+    libm_coshf as f32_cosh,
+    libm_tanhf as f32_tanh,
+    libm_asinhf as f32_asinh,
+    libm_acoshf as f32_acosh,
+    libm_atanhf as f32_atanh,
+    libm_expf as f32_exp,
+    libm_exp2f as f32_exp2,
+    libm_exp10f as f32_exp10,
+    libm_expm1f as f32_expm1,
+    libm_logf as f32_ln,
+    libm_log2f as f32_log2,
+    libm_log10f as f32_log10,
+    libm_log1pf as f32_ln1p,
+    libm_powf as f32_pow,
+    libm_cbrtf as f32_cbrt,
+    libm_hypotf as f32_hypot,
+    libm_fmodf as f32_fmod,
+    libm_fmaf as f32_mul_add,
+    libm_roundf as f32_round,
+    libm_erff as f32_erf,
+    libm_erfcf as f32_erfc,
+    libm_tgammaf as f32_gamma,
+    libm_lgammaf as f32_ln_gamma,
+} from "../libm.wat" with { type: "wat" };
+
+use {
+    IntErrorKind,
+    ParseIntError,
+    ParseFloatError,
+    parse_i64_radix,
+    parse_u64_radix,
+    parse_float_bits,
+    lenient_int_preprocess,
+    lenient_float_preprocess,
+} from "core:prelude/numparse.wado";
+
+// These write formatted values directly to a Formatter's buffer,
+// avoiding intermediate GC String allocations in the common case.
+
+/// Write `digit_count` decimal digits of `val` into `arr` at `offset`, padded
+/// with leading zeros — a decimal chunk below the leading one carries them.
+/// Two digits per divide: each divide waits on the one before, so the chain
+/// is the cost, and dividing by 100 halves it.
+internal fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, digit_count: i32) {
+    let mut pos = offset + digit_count;
+    let mut t = val;
+    while pos - offset >= 2 {
+        let q = t / 100;
+        let pair = (t - q * 100) as i32;
+        let tens = pair / 10;
+        builtin::array_set_u8(arr, pos - 1, ('0' as i32 + pair - tens * 10) as u8);
+        builtin::array_set_u8(arr, pos - 2, ('0' as i32 + tens) as u8);
+        pos -= 2;
+        t = q;
+    }
+    if pos > offset {
+        builtin::array_set_u8(arr, offset, ('0' as i32 + (t % 10) as i32) as u8);
+    }
+}
+
+/// Count decimal digits of a u64 value, by a binary search over the powers of
+/// ten. Dividing by ten per digit would be a serial chain; no compare here waits.
+internal fn count_digits_u64(val: u64) -> i32 {
+    if val < 100000 {
+        if val < 100 {
+            if val < 10 {
+                return 1;
+            }
+            return 2;
+        }
+        if val < 1000 {
+            return 3;
+        }
+        if val < 10000 {
+            return 4;
+        }
+        return 5;
+    }
+    if val < 10000000000 {
+        if val < 10000000 {
+            if val < 1000000 {
+                return 6;
+            }
+            return 7;
+        }
+        if val < 100000000 {
+            return 8;
+        }
+        if val < 1000000000 {
+            return 9;
+        }
+        return 10;
+    }
+    if val < 1000000000000000 {
+        if val < 1000000000000 {
+            if val < 100000000000 {
+                return 11;
+            }
+            return 12;
+        }
+        if val < 10000000000000 {
+            return 13;
+        }
+        if val < 100000000000000 {
+            return 14;
+        }
+        return 15;
+    }
+    if val < 100000000000000000 {
+        if val < 10000000000000000 {
+            return 16;
+        }
+        return 17;
+    }
+    if val < 1000000000000000000 {
+        return 18;
+    }
+    if val < 10000000000000000000 {
+        return 19;
+    }
+    return 20;
+}
+
+/// Drop the last `drop` decimal digits of `val`, rounding half to even — the
+/// rounding `{:.Ne}` applies to an integer mantissa.
+fn round_off_digits_u64(val: u64, drop: i32) -> u64 {
+    let mut divisor: u64 = 1;
+    for let mut i = 0; i < drop; i += 1 {
+        divisor *= 10;
+    }
+    let quotient = val / divisor;
+    let remainder = val - quotient * divisor;
+    let half = divisor / 2;
+    if remainder > half || remainder == half && quotient % 2 == 1 {
+        return quotient + 1;
+    }
+    return quotient;
+}
+
+/// Write `abs_value` in exponential notation: a mantissa of `precision + 1`
+/// digits, or — with no precision — its digits with trailing zeros stripped,
+/// then `e`/`E` and the decimal exponent. Matches Rust's integer `{:e}`.
+fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bool) {
+    let precision = f.precision;
+    let mut value = abs_value;
+    let mut exponent = count_digits_u64(value) - 1;
+    if precision >= 0 {
+        let total = precision + 1;
+        let drop = exponent + 1 - total;
+        if drop > 0 {
+            value = round_off_digits_u64(value, drop);
+            if count_digits_u64(value) > total {
+                // The rounding carried: 999 became 1000, one decade up.
+                value /= 10;
+                exponent += 1;
+            }
+        }
+    } else {
+        while value >= 10 && value % 10 == 0 {
+            value /= 10;
+        }
+    }
+
+    let digits = value.to_string();
+    let fraction_len = digits.len() - 1;
+    let mark = f.mark();
+    if is_negative {
+        f.write_char('-');
+    } else if f.sign_plus {
+        f.write_char('+');
+    }
+    f.write_char(unchecked digits.char_at_byte(0));
+    if precision > 0 || precision < 0 && fraction_len > 0 {
+        f.write_char('.');
+        f.buf.push_str(unchecked digits.slice(1, digits.len()));
+        for let mut i = fraction_len; i < precision; i += 1 {
+            f.write_char('0');
+        }
+    }
+    f.write_char(if upper { 'E' } else { 'e' });
+    f.write_display(&exponent);
+    f.apply_padding(mark);
+}
+
+/// Count digits of a u64 value (as raw i64 bits) in the given power-of-2 base.
+/// `bits_per_digit` is log2(base): 1 for binary, 3 for octal, 4 for hex.
+fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
+    if val_i64 == 0 {
+        return 1;
+    }
+    return u64_bit_len(val_i64 as u64).div_ceil(bits_per_digit);
+}
+
+/// Write digits of a u64 value (as raw i64 bits) in a power-of-2 base.
+fn write_u64_base_digits(
+    arr: &mut Array<u8>,
+    offset: i32,
+    val_i64: i64,
+    digit_count: i32,
+    bits_per_digit: i32,
+    mask: i32,
+    upper: bool,
+) {
+    let mask64 = mask as i64;
+    let mut pos = offset + digit_count;
+    if val_i64 == 0 {
+        builtin::array_set_u8(arr, offset, b'0');
+    } else {
+        let mut temp: i64 = val_i64;
+        while temp != 0 {
+            pos -= 1;
+            let digit: i32 = (temp & mask64) as i32;
+            let ch = if digit < 10 {
+                '0' as i32 + digit;
+            } else if upper {
+                'A' as i32 + digit - 10;
+            } else {
+                'a' as i32 + digit - 10;
+            };
+            builtin::array_set_u8(arr, pos, ch as u8);
+            // Unsigned right shift: use Wasm's i64.shr_u semantics
+            // In Wado, >> on i64 is arithmetic shift. For unsigned shift we need:
+            // (val as u64 >> bits) as i64
+            let shift_u64: u64 = bits_per_digit as u64;
+            temp = (temp as u64 >> shift_u64) as i64;
+        }
+    }
+}
+
+impl i8 {
+    pub const BITS: i32 = 8;
+    pub const MAX: i8 = 127;
+    pub const MIN: i8 = -128;
+
+    pub fn max(a: i8, b: i8) -> i8 {
+        return builtin::select(a > b, a, b);
+    }
+
+    pub fn min(a: i8, b: i8) -> i8 {
+        return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: i8, low: i8, high: i8) -> i8
+        contract low <= high
+    {
+        return i8::min(i8::max(value, low), high);
+    }
+
+    /// The magnitude of `x`. `MIN` has none in `i8` and wraps to itself,
+    /// as negating it does.
+    pub fn abs(x: i8) -> i8 {
+        return if x < 0 { -x } else { x };
+    }
+
+    /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
+    pub fn div_floor(&self, rhs: i8) -> i8 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two
+        // divisions. The shift is -1 where the signs differ, where `/` rounded
+        // up, and a select of it costs no branch.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 7) } else { q };
+    }
+
+    /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: i8) -> i8 {
+        let q = *self / rhs;
+        // As `div_floor`: `/` rounded down where the signs are the same.
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 7) } else { q };
+    }
+
+    fn fmt_into(&self, f: &mut Formatter) {
+        (*self as i32).fmt_decimal(f);
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut buf = String::with_capacity(5);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError> {
+        return i8::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError>
+        contract 2 <= radix <= 36
+    {
+        return Result::Ok(
+            (unchecked parse_i64_radix(&s.as_str_slice(), radix, i8::MAX as i64, i8::MAX as u64 + 1))? as i8,
+        );
+    }
+}
+
+impl FromStr for i8 {
+    type Err = ParseIntError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError> {
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), 10, i8::MAX as i64, i8::MAX as u64 + 1)? as i8);
+    }
+}
+
+impl LenientFromStr for i8 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i8, LenientParseError> {
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i8::from_str_radix(cleaned, radix)?);
+    }
+}
+
+impl u8 {
+    pub const BITS: i32 = 8;
+    pub const MAX: u8 = 255;
+    pub const MIN: u8 = 0;
+
+    pub fn max(a: u8, b: u8) -> u8 {
+        return builtin::select(a > b, a, b);
+    }
+
+    pub fn min(a: u8, b: u8) -> u8 {
+        return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: u8, low: u8, high: u8) -> u8
+        contract low <= high
+    {
+        return u8::min(u8::max(value, low), high);
+    }
+
+    /// The negation modulo 2^8: `0` for `0`, `MAX - self + 1` otherwise.
+    pub fn wrapping_neg(&self) -> u8 {
+        return 0 - *self;
+    }
+
+    /// `self / rhs` rounded up. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: u8) -> u8 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
+    }
+
+    /// Returns true if the byte is an ASCII digit: 0-9.
+    pub fn is_ascii_digit(&self) -> bool {
+        return (*self as char).is_ascii_digit();
+    }
+
+    /// Returns true if the byte is an ASCII letter: a-z or A-Z.
+    pub fn is_ascii_alphabetic(&self) -> bool {
+        return (*self as char).is_ascii_alphabetic();
+    }
+
+    /// Returns true if the byte is an ASCII letter or digit: a-z, A-Z, 0-9.
+    pub fn is_ascii_alphanumeric(&self) -> bool {
+        return (*self as char).is_ascii_alphanumeric();
+    }
+
+    /// Returns true if the byte is an ASCII lowercase letter: a-z.
+    pub fn is_ascii_lowercase(&self) -> bool {
+        return (*self as char).is_ascii_lowercase();
+    }
+
+    /// Returns true if the byte is an ASCII uppercase letter: A-Z.
+    pub fn is_ascii_uppercase(&self) -> bool {
+        return (*self as char).is_ascii_uppercase();
+    }
+
+    /// Returns true if the byte is ASCII whitespace: SP, HT, LF, VT, FF, CR.
+    pub fn is_ascii_whitespace(&self) -> bool {
+        return (*self as char).is_ascii_whitespace();
+    }
+
+    /// Returns true if the byte is a hexadecimal digit: 0-9, a-f, A-F.
+    pub fn is_hexdigit(&self) -> bool {
+        return (*self as char).is_hexdigit();
+    }
+
+    /// Converts an ASCII uppercase letter to lowercase, leaving every other
+    /// byte unchanged.
+    pub fn to_ascii_lowercase(&self) -> u8 {
+        return (*self as char).to_ascii_lowercase() as u8;
+    }
+
+    /// Converts an ASCII lowercase letter to uppercase, leaving every other
+    /// byte unchanged.
+    pub fn to_ascii_uppercase(&self) -> u8 {
+        return (*self as char).to_ascii_uppercase() as u8;
+    }
+
+    /// Checks that two bytes are an ASCII case-insensitive match.
+    pub fn eq_ignore_ascii_case(&self, other: &u8) -> bool {
+        return (*self as char).eq_ignore_ascii_case(&(*other as char));
+    }
+
+    fn fmt_into(&self, f: &mut Formatter) {
+        (*self as i32).fmt_decimal(f);
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut buf = String::with_capacity(4);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError> {
+        return u8::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError>
+        contract 2 <= radix <= 36
+    {
+        return Result::Ok((unchecked parse_u64_radix(&s.as_str_slice(), radix, u8::MAX as u64))? as u8);
+    }
+}
+
+impl FromStr for u8 {
+    type Err = ParseIntError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError> {
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), 10, u8::MAX as u64)? as u8);
+    }
+}
+
+impl LenientFromStr for u8 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u8, LenientParseError> {
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u8::from_str_radix(cleaned, radix)?);
+    }
+}
+
+impl i16 {
+    pub const BITS: i32 = 16;
+    pub const MAX: i16 = 32767;
+    pub const MIN: i16 = -32768;
+
+    pub fn max(a: i16, b: i16) -> i16 {
+        return builtin::select(a > b, a, b);
+    }
+
+    pub fn min(a: i16, b: i16) -> i16 {
+        return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: i16, low: i16, high: i16) -> i16
+        contract low <= high
+    {
+        return i16::min(i16::max(value, low), high);
+    }
+
+    /// The magnitude of `x`. `MIN` has none in `i16` and wraps to itself,
+    /// as negating it does.
+    pub fn abs(x: i16) -> i16 {
+        return if x < 0 { -x } else { x };
+    }
+
+    /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
+    pub fn div_floor(&self, rhs: i16) -> i16 {
+        let q = *self / rhs;
+        // As `i8::div_floor`.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 15) } else { q };
+    }
+
+    /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: i16) -> i16 {
+        let q = *self / rhs;
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 15) } else { q };
+    }
+
+    fn fmt_into(&self, f: &mut Formatter) {
+        (*self as i32).fmt_decimal(f);
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut buf = String::with_capacity(7);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError> {
+        return i16::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError>
+        contract 2 <= radix <= 36
+    {
+        return Result::Ok(
+            (unchecked parse_i64_radix(&s.as_str_slice(), radix, i16::MAX as i64, i16::MAX as u64 + 1))? as i16,
+        );
+    }
+}
+
+impl FromStr for i16 {
+    type Err = ParseIntError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError> {
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), 10, i16::MAX as i64, i16::MAX as u64 + 1)? as i16);
+    }
+}
+
+impl LenientFromStr for i16 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i16, LenientParseError> {
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i16::from_str_radix(cleaned, radix)?);
+    }
+}
+
+impl u16 {
+    pub const BITS: i32 = 16;
+    pub const MAX: u16 = 65535;
+    pub const MIN: u16 = 0;
+
+    pub fn max(a: u16, b: u16) -> u16 {
+        return builtin::select(a > b, a, b);
+    }
+
+    pub fn min(a: u16, b: u16) -> u16 {
+        return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: u16, low: u16, high: u16) -> u16
+        contract low <= high
+    {
+        return u16::min(u16::max(value, low), high);
+    }
+
+    /// The negation modulo 2^16: `0` for `0`, `MAX - self + 1` otherwise.
+    pub fn wrapping_neg(&self) -> u16 {
+        return 0 - *self;
+    }
+
+    /// `self / rhs` rounded up. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: u16) -> u16 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
+    }
+
+    fn fmt_into(&self, f: &mut Formatter) {
+        (*self as i32).fmt_decimal(f);
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut buf = String::with_capacity(6);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError> {
+        return u16::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError>
+        contract 2 <= radix <= 36
+    {
+        return Result::Ok((unchecked parse_u64_radix(&s.as_str_slice(), radix, u16::MAX as u64))? as u16);
+    }
+}
+
+impl FromStr for u16 {
+    type Err = ParseIntError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError> {
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), 10, u16::MAX as u64)? as u16);
+    }
+}
+
+impl LenientFromStr for u16 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u16, LenientParseError> {
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u16::from_str_radix(cleaned, radix)?);
+    }
+}
+
+impl i32 {
+    pub const BITS: i32 = 32;
+    pub const MAX: i32 = 2147483647;
+    pub const MIN: i32 = -2147483648;
+
+    pub fn max(a: i32, b: i32) -> i32 {
+        return builtin::select(a > b, a, b);
+    }
+
+    pub fn min(a: i32, b: i32) -> i32 {
+        return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: i32, low: i32, high: i32) -> i32
+        contract low <= high
+    {
+        return i32::min(i32::max(value, low), high);
+    }
+
+    /// The magnitude of `x`. `MIN` has none in `i32` and wraps to itself,
+    /// as negating it does.
+    pub fn abs(x: i32) -> i32 {
+        return if x < 0 { -x } else { x };
+    }
+
+    /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
+    pub fn div_floor(&self, rhs: i32) -> i32 {
+        let q = *self / rhs;
+        // As `i8::div_floor`.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 31) } else { q };
+    }
+
+    /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: i32) -> i32 {
+        let q = *self / rhs;
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 31) } else { q };
+    }
+
+    /// Counts the leading zeros in this integer.
+    pub fn clz(x: i32) -> i32 {
+        return builtin::i32_clz(x);
+    }
+
+    /// Counts the trailing zeros in this integer.
+    pub fn ctz(x: i32) -> i32 {
+        return builtin::i32_ctz(x);
+    }
+
+    /// Counts the number of set bits (population count).
+    pub fn popcnt(x: i32) -> i32 {
+        return builtin::i32_popcnt(x);
+    }
+
+    fn fmt_decimal(&self, f: &mut Formatter) {
+        let is_negative = *self < 0;
+        let abs_val = i64::abs(*self as i64) as u64;
+        let digit_count = count_digits_u64(abs_val);
+        let offset = f.prepare_int_write(is_negative, "", digit_count);
+        write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, abs_val, digit_count);
+    }
+
+    fn fmt_into(&self, f: &mut Formatter) {
+        self.fmt_decimal(f);
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut buf = String::with_capacity(12);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError> {
+        return i32::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError>
+        contract 2 <= radix <= 36
+    {
+        return Result::Ok(
+            (unchecked parse_i64_radix(&s.as_str_slice(), radix, i32::MAX as i64, i32::MAX as u64 + 1))? as i32,
+        );
+    }
+}
+
+impl FromStr for i32 {
+    type Err = ParseIntError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError> {
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), 10, i32::MAX as i64, i32::MAX as u64 + 1)? as i32);
+    }
+}
+
+impl LenientFromStr for i32 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i32, LenientParseError> {
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i32::from_str_radix(cleaned, radix)?);
+    }
+}
+
+impl u32 {
+    pub const BITS: i32 = 32;
+    pub const MAX: u32 = 4294967295;
+    pub const MIN: u32 = 0;
+
+    pub fn max(a: u32, b: u32) -> u32 {
+        return builtin::select(a > b, a, b);
+    }
+
+    pub fn min(a: u32, b: u32) -> u32 {
+        return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: u32, low: u32, high: u32) -> u32
+        contract low <= high
+    {
+        return u32::min(u32::max(value, low), high);
+    }
+
+    /// The negation modulo 2^32: `0` for `0`, `MAX - self + 1` otherwise.
+    pub fn wrapping_neg(&self) -> u32 {
+        return 0 - *self;
+    }
+
+    /// `self / rhs` rounded up. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: u32) -> u32 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
+    }
+
+    fn fmt_decimal(&self, f: &mut Formatter) {
+        let value = *self as u64;
+        let digit_count = count_digits_u64(value);
+        let offset = f.prepare_int_write(false, "", digit_count);
+        write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, value, digit_count);
+    }
+
+    fn fmt_into(&self, f: &mut Formatter) {
+        self.fmt_decimal(f);
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut buf = String::with_capacity(11);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError> {
+        return u32::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError>
+        contract 2 <= radix <= 36
+    {
+        return Result::Ok((unchecked parse_u64_radix(&s.as_str_slice(), radix, u32::MAX as u64))? as u32);
+    }
+}
+
+impl FromStr for u32 {
+    type Err = ParseIntError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError> {
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), 10, u32::MAX as u64)? as u32);
+    }
+}
+
+impl LenientFromStr for u32 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u32, LenientParseError> {
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u32::from_str_radix(cleaned, radix)?);
+    }
+}
+
+impl i64 {
+    pub const BITS: i32 = 64;
+    pub const MAX: i64 = 9223372036854775807;
+    pub const MIN: i64 = -9223372036854775808;
+
+    pub fn max(a: i64, b: i64) -> i64 {
+        return builtin::select(a > b, a, b);
+    }
+
+    pub fn min(a: i64, b: i64) -> i64 {
+        return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: i64, low: i64, high: i64) -> i64
+        contract low <= high
+    {
+        return i64::min(i64::max(value, low), high);
+    }
+
+    /// The magnitude of `x`. `MIN` has none in `i64` and wraps to itself,
+    /// as negating it does.
+    pub fn abs(x: i64) -> i64 {
+        return if x < 0 { -x } else { x };
+    }
+
+    /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
+    pub fn div_floor(&self, rhs: i64) -> i64 {
+        let q = *self / rhs;
+        // As `i8::div_floor`.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 63) } else { q };
+    }
+
+    /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: i64) -> i64 {
+        let q = *self / rhs;
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 63) } else { q };
+    }
+
+    /// Counts the leading zeros in this integer.
+    pub fn clz(x: i64) -> i64 {
+        return builtin::i64_clz(x);
+    }
+
+    /// Counts the trailing zeros in this integer.
+    pub fn ctz(x: i64) -> i64 {
+        return builtin::i64_ctz(x);
+    }
+
+    /// Counts the number of set bits (population count).
+    pub fn popcnt(x: i64) -> i64 {
+        return builtin::i64_popcnt(x);
+    }
+
+    fn fmt_decimal(&self, f: &mut Formatter) {
+        let value = *self;
+        let is_negative = value < 0;
+        let abs_val = i64::abs(value) as u64;
+        let digit_count = count_digits_u64(abs_val);
+        let offset = f.prepare_int_write(is_negative, "", digit_count);
+        write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, abs_val, digit_count);
+    }
+
+    fn fmt_into(&self, f: &mut Formatter) {
+        self.fmt_decimal(f);
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut buf = String::with_capacity(21);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError> {
+        return i64::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>
+        contract 2 <= radix <= 36
+    {
+        return unchecked parse_i64_radix(&s.as_str_slice(), radix, i64::MAX, i64::MAX as u64 + 1);
+    }
+}
+
+impl FromStr for i64 {
+    type Err = ParseIntError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError> {
+        return parse_i64_radix(&s.as_str_slice(), 10, i64::MAX, i64::MAX as u64 + 1);
+    }
+}
+
+impl LenientFromStr for i64 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError> {
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i64::from_str_radix(cleaned, radix)?);
+    }
+}
+
+impl u64 {
+    pub const BITS: i32 = 64;
+    pub const MAX: u64 = 18446744073709551615;
+    pub const MIN: u64 = 0;
+
+    pub fn max(a: u64, b: u64) -> u64 {
+        return builtin::select(a > b, a, b);
+    }
+
+    pub fn min(a: u64, b: u64) -> u64 {
+        return builtin::select(a < b, a, b);
+    }
+
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: u64, low: u64, high: u64) -> u64
+        contract low <= high
+    {
+        return u64::min(u64::max(value, low), high);
+    }
+
+    /// The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
+    pub fn wrapping_neg(&self) -> u64 {
+        return 0 - *self;
+    }
+
+    /// `self / rhs` rounded up. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: u64) -> u64 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
+    }
+
+    fn fmt_decimal(&self, f: &mut Formatter) {
+        let digit_count = count_digits_u64(*self);
+        let offset = f.prepare_int_write(false, "", digit_count);
+        write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, *self, digit_count);
+    }
+
+    /// `alt_prefix` is written only when the spec asked for the alternate form
+    /// (`${x:#x}`); `prepare_int_write` drops it for a plain `${x:x}`.
+    fn fmt_base(&self, f: &mut Formatter, base: i32, upper: bool, alt_prefix: String) {
+        let val_i64 = *self as i64;
+        let bits_per_digit = if base == 2 {
+            1;
+        } else if base == 8 {
+            3;
+        } else {
+            4;
+        };
+        let mask = base - 1;
+        let digit_count = count_digits_u64_base(val_i64, bits_per_digit);
+        let offset = f.prepare_int_write(false, alt_prefix, digit_count);
+        write_u64_base_digits(
+            f.buf.internal_raw_bytes_mut(),
+            offset,
+            val_i64,
+            digit_count,
+            bits_per_digit,
+            mask,
+            upper,
+        );
+    }
+
+    fn fmt_into(&self, f: &mut Formatter) {
+        self.fmt_decimal(f);
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut buf = String::with_capacity(21);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError> {
+        return u64::from_str_radix(s, 16);
+    }
+
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>
+        contract 2 <= radix <= 36
+    {
+        return unchecked parse_u64_radix(&s.as_str_slice(), radix, u64::MAX);
+    }
+}
+
+impl FromStr for u64 {
+    type Err = ParseIntError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError> {
+        return parse_u64_radix(&s.as_str_slice(), 10, u64::MAX);
+    }
+}
+
+impl LenientFromStr for u64 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError> {
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u64::from_str_radix(cleaned, radix)?);
+    }
+}
+
+/// Format a special float (NaN, Inf, or zero) with padding.
+fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_repr: String) {
+    let mark = f.mark();
+    if kind matches { _::NaN } {
+        f.buf.push_str("NaN");
+    } else if kind matches { _::Inf } {
+        f.buf.push_str(&if is_neg { "-inf" } else { "inf" });
+    } else {
+        f.buf.push_str(&if is_neg { "-" } else { "" });
+        f.buf.push_str(&zero_repr);
+    }
+    f.apply_padding(mark);
+}
+
+/// Write sign prefix ("-" or "+").
+fn fmt_float_sign(f: &mut Formatter, is_neg: bool) {
+    if is_neg {
+        f.buf.push_str("-");
+    } else if f.sign_plus {
+        f.buf.push_str("+");
+    }
+}
+
+impl f32 {
+    pub const BITS: i32 = 32;
+    pub const PI: f32 = 3.14159265358979323846;
+    pub const TAU: f32 = 6.28318530717958647692;
+    pub const E: f32 = 2.71828182845904523536;
+    pub const LN2: f32 = 0.69314718055994530942;
+    pub const LN10: f32 = 2.30258509299404568402;
+    pub const LOG2_E: f32 = 1.44269504088896340736;
+    pub const LOG10_E: f32 = 0.43429448190325182765;
+    pub const SQRT2: f32 = 1.41421356237309504880;
+    pub const FRAC_1_SQRT2: f32 = 0.70710678118654752440;
+    pub const FRAC_PI_2: f32 = 1.57079632679489661923;
+    pub const FRAC_PI_4: f32 = 0.78539816339744830962;
+    pub const INFINITY: f32 = 1.0 / 0.0;
+    pub const NEG_INFINITY: f32 = -1.0 / 0.0;
+    pub const NAN: f32 = builtin::f32_reinterpret_i32(0x7fc00000);
+    pub const MAX: f32 = 3.40282347e38;
+    pub const MIN: f32 = -3.40282347e38;
+    /// The smallest positive normal value.
+    pub const MIN_POSITIVE: f32 = 1.17549435e-38;
+    /// The gap between 1.0 and the next larger value.
+    pub const EPSILON: f32 = 1.1920929e-7;
+    pub const RADIX: i32 = 2;
+    /// Significand bits, the implicit leading one included.
+    pub const MANTISSA_DIGITS: i32 = 24;
+    /// Decimal digits that survive a round trip through the type.
+    pub const DIGITS: i32 = 6;
+    pub const MIN_EXP: i32 = -125;
+    pub const MAX_EXP: i32 = 128;
+    pub const MIN_10_EXP: i32 = -37;
+    pub const MAX_10_EXP: i32 = 38;
+
+    fn fmt_into(&self, f: &mut Formatter) {
+        if f.precision >= 0 {
+            self.fmt_fixed(f.precision, f);
+            return;
+        }
+        let [is_special, is_neg, kind] = check_special(*self as f64);
+        if is_special {
+            fmt_float_special(f, is_neg, kind, "0");
+            return;
+        }
+        let abs_f = f32::abs(*self);
+        let result = short32(abs_f);
+        let d = result.digits;
+        let p = result.exponent;
+        let n_digits = result.n_digits;
+        let mark = f.mark();
+        fmt_float_sign(f, is_neg);
+        write_decimal(f.buf, d, p, n_digits);
+        f.apply_padding(mark);
+    }
+
+    fn inspect_into(&self, f: &mut Formatter) {
+        if f.precision >= 0 {
+            self.fmt_fixed(f.precision, f);
+            return;
+        }
+        let [is_special, is_neg, kind] = check_special(*self as f64);
+        if is_special {
+            fmt_float_special(f, is_neg, kind, "0.0");
+            return;
+        }
+        let abs_f = f32::abs(*self);
+        let result = short32(abs_f);
+        let d = result.digits;
+        let p = result.exponent;
+        let n_digits = result.n_digits;
+        let exp = p + n_digits - 1;
+        let mark = f.mark();
+        fmt_float_sign(f, is_neg);
+        if exp < -4 || exp >= 16 {
+            write_exp(f.buf, d, p, n_digits, false);
+        } else if p >= 0 {
+            write_decimal(f.buf, d, p, n_digits);
+            f.buf.push_str(".0");
+        } else {
+            write_decimal(f.buf, d, p, n_digits);
+        }
+        f.apply_padding(mark);
+    }
+
+    fn fmt_fixed(&self, precision: i32, f: &mut Formatter) {
+        let v64 = *self as f64;
+        v64.fmt_fixed(precision, f);
+    }
+
+    fn fmt_exp(&self, precision: i32, upper: i32, f: &mut Formatter) {
+        let v64 = *self as f64;
+        v64.fmt_exp(precision, upper, f);
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut buf = String::with_capacity(16);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    /// Absolute value
+    pub fn abs(x: f32) -> f32 {
+        return builtin::f32_abs(x);
+    }
+
+    /// Ceiling (round toward +infinity)
+    pub fn ceil(x: f32) -> f32 {
+        return builtin::f32_ceil(x);
+    }
+
+    /// Floor (round toward -infinity)
+    pub fn floor(x: f32) -> f32 {
+        return builtin::f32_floor(x);
+    }
+
+    /// Truncate toward zero
+    pub fn trunc(x: f32) -> f32 {
+        return builtin::f32_trunc(x);
+    }
+
+    /// Round to nearest, breaking ties away from zero
+    ///
+    /// Wasm rounds the other way, so this is a software implementation —
+    /// slower than `round_ties_even`.
+    pub fn round(x: f32) -> f32 {
+        return f32_round(x);
+    }
+
+    /// Round to nearest, breaking ties toward the even neighbour
+    pub fn round_ties_even(x: f32) -> f32 {
+        return builtin::f32_nearest(x);
+    }
+
+    /// Square root
+    pub fn sqrt(x: f32) -> f32 {
+        return builtin::f32_sqrt(x);
+    }
+
+    /// The lesser of two values by the order, where NaN is greatest; `x` when
+    /// they are equal.
+    pub fn min(x: f32, y: f32) -> f32 {
+        return builtin::select(y < x, y, x);
+    }
+
+    /// The greater of two values by the order, where NaN is greatest; `y` when
+    /// they are equal.
+    pub fn max(x: f32, y: f32) -> f32 {
+        return builtin::select(y < x, x, y);
+    }
+
+    /// IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
+    /// `0.0`.
+    pub fn ieee754_min(x: f32, y: f32) -> f32 {
+        return builtin::f32_min(x, y);
+    }
+
+    /// IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
+    /// `0.0`.
+    pub fn ieee754_max(x: f32, y: f32) -> f32 {
+        return builtin::f32_max(x, y);
+    }
+
+    /// `x` confined to `low..=high` by the order, except that a NaN `x` stays
+    /// NaN.
+    pub fn clamp(x: f32, low: f32, high: f32) -> f32
+        contract !high.is_nan() && low <= high
+    {
+        if x.is_nan() {
+            return x;
+        }
+        return builtin::select(x < low, low, builtin::select(high < x, high, x));
+    }
+
+    /// Copy sign from y to x
+    pub fn copysign(x: f32, y: f32) -> f32 {
+        return builtin::f32_copysign(x, y);
+    }
+
+    /// Sine (in radians)
+    pub fn sin(x: f32) -> f32 {
+        return f32_sin(x);
+    }
+
+    /// Cosine (in radians)
+    pub fn cos(x: f32) -> f32 {
+        return f32_cos(x);
+    }
+
+    /// Tangent (in radians)
+    pub fn tan(x: f32) -> f32 {
+        return f32_tan(x);
+    }
+
+    /// Arc sine (returns radians)
+    pub fn asin(x: f32) -> f32 {
+        return f32_asin(x);
+    }
+
+    /// Arc cosine (returns radians)
+    pub fn acos(x: f32) -> f32 {
+        return f32_acos(x);
+    }
+
+    /// Arc tangent (returns radians)
+    pub fn atan(x: f32) -> f32 {
+        return f32_atan(x);
+    }
+
+    /// Arc tangent of y/x (returns radians)
+    pub fn atan2(y: f32, x: f32) -> f32 {
+        return f32_atan2(y, x);
+    }
+
+    /// Hyperbolic sine
+    pub fn sinh(x: f32) -> f32 {
+        return f32_sinh(x);
+    }
+
+    /// Hyperbolic cosine
+    pub fn cosh(x: f32) -> f32 {
+        return f32_cosh(x);
+    }
+
+    /// Hyperbolic tangent
+    pub fn tanh(x: f32) -> f32 {
+        return f32_tanh(x);
+    }
+
+    /// Inverse hyperbolic sine
+    pub fn asinh(x: f32) -> f32 {
+        return f32_asinh(x);
+    }
+
+    /// Inverse hyperbolic cosine
+    pub fn acosh(x: f32) -> f32 {
+        return f32_acosh(x);
+    }
+
+    /// Inverse hyperbolic tangent
+    pub fn atanh(x: f32) -> f32 {
+        return f32_atanh(x);
+    }
+
+    /// e raised to the power x
+    pub fn exp(x: f32) -> f32 {
+        return f32_exp(x);
+    }
+
+    /// 2 raised to the power x
+    pub fn exp2(x: f32) -> f32 {
+        return f32_exp2(x);
+    }
+
+    /// 10 raised to the power x
+    pub fn exp10(x: f32) -> f32 {
+        return f32_exp10(x);
+    }
+
+    /// e^x - 1 (more accurate for small x)
+    pub fn expm1(x: f32) -> f32 {
+        return f32_expm1(x);
+    }
+
+    /// Natural logarithm (base e)
+    pub fn ln(x: f32) -> f32 {
+        return f32_ln(x);
+    }
+
+    /// Logarithm base 2
+    pub fn log2(x: f32) -> f32 {
+        return f32_log2(x);
+    }
+
+    /// Logarithm base 10
+    pub fn log10(x: f32) -> f32 {
+        return f32_log10(x);
+    }
+
+    /// ln(1 + x) (more accurate for small x)
+    pub fn ln1p(x: f32) -> f32 {
+        return f32_ln1p(x);
+    }
+
+    /// x raised to the power y
+    pub fn pow(x: f32, y: f32) -> f32 {
+        return f32_pow(x, y);
+    }
+
+    /// Cube root
+    pub fn cbrt(x: f32) -> f32 {
+        return f32_cbrt(x);
+    }
+
+    /// Euclidean distance: sqrt(x^2 + y^2)
+    pub fn hypot(x: f32, y: f32) -> f32 {
+        return f32_hypot(x, y);
+    }
+
+    /// Floating-point remainder of x/y
+    pub fn fmod(x: f32, y: f32) -> f32 {
+        return f32_fmod(x, y);
+    }
+
+    /// Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
+    pub fn erf(x: f32) -> f32 {
+        return f32_erf(x);
+    }
+
+    /// Complementary error function: `1 - erf(x)`, accurate where erf is near 1
+    pub fn erfc(x: f32) -> f32 {
+        return f32_erfc(x);
+    }
+
+    /// Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
+    pub fn gamma(x: f32) -> f32 {
+        return f32_gamma(x);
+    }
+
+    /// Natural logarithm of `|Γ(x)|`
+    pub fn ln_gamma(x: f32) -> f32 {
+        return f32_ln_gamma(x);
+    }
+
+    /// `x * y + z`, rounded once instead of twice.
+    ///
+    /// Wasm has no scalar FMA instruction, so this is a software
+    /// implementation — slower than `x * y + z`.
+    pub fn mul_add(x: f32, y: f32, z: f32) -> f32 {
+        return f32_mul_add(x, y, z);
+    }
+
+    pub fn is_nan(&self) -> bool {
+        return builtin::f32_is_nan(*self);
+    }
+
+    /// IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
+    pub fn ieee754_eq(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_eq(*self, other);
+    }
+
+    /// IEEE 754's `!=`: true when either is a NaN.
+    pub fn ieee754_ne(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_ne(*self, other);
+    }
+
+    /// IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
+    pub fn ieee754_lt(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_lt(*self, other);
+    }
+
+    /// IEEE 754's `<=`: false when either is a NaN.
+    pub fn ieee754_le(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_le(*self, other);
+    }
+
+    /// IEEE 754's `>`: false when either is a NaN.
+    pub fn ieee754_gt(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_gt(*self, other);
+    }
+
+    /// IEEE 754's `>=`: false when either is a NaN.
+    pub fn ieee754_ge(&self, other: f32) -> bool {
+        return builtin::f32_ieee754_ge(*self, other);
+    }
+
+    pub fn is_finite(&self) -> bool {
+        return *self - *self == 0.0;
+    }
+
+    /// Reinterprets the bits of this f32 as a u32.
+    pub fn to_bits(&self) -> u32 {
+        return builtin::i32_reinterpret_f32(*self) as u32;
+    }
+
+    /// Creates an f32 from its bit representation.
+    pub fn from_bits(bits: u32) -> f32 {
+        return builtin::f32_reinterpret_i32(bits as i32);
+    }
+}
+
+impl FromStr for f32 {
+    type Err = ParseFloatError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<f32, ParseFloatError> {
+        return Result::Ok(f32::from_bits(parse_float_bits(&s.as_str_slice(), &BINARY32)? as u32));
+    }
+}
+
+impl LenientFromStr for f32 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f32, LenientParseError> {
+        let cleaned = lenient_float_preprocess(s);
+        return Result::Ok(f32::from_str(cleaned)?);
+    }
+}
+
+impl f64 {
+    pub const BITS: i32 = 64;
+    pub const PI: f64 = 3.14159265358979323846;
+    pub const TAU: f64 = 6.28318530717958647692;
+    pub const E: f64 = 2.71828182845904523536;
+    pub const LN2: f64 = 0.69314718055994530942;
+    pub const LN10: f64 = 2.30258509299404568402;
+    pub const LOG2_E: f64 = 1.44269504088896340736;
+    pub const LOG10_E: f64 = 0.43429448190325182765;
+    pub const SQRT2: f64 = 1.41421356237309504880;
+    pub const FRAC_1_SQRT2: f64 = 0.70710678118654752440;
+    pub const FRAC_PI_2: f64 = 1.57079632679489661923;
+    pub const FRAC_PI_4: f64 = 0.78539816339744830962;
+    pub const INFINITY: f64 = 1.0 / 0.0;
+    pub const NEG_INFINITY: f64 = -1.0 / 0.0;
+    pub const NAN: f64 = builtin::f64_reinterpret_i64(0x7ff8000000000000);
+    pub const MAX: f64 = 1.7976931348623157e308;
+    pub const MIN: f64 = -1.7976931348623157e308;
+    /// The smallest positive normal value.
+    pub const MIN_POSITIVE: f64 = 2.2250738585072014e-308;
+    /// The gap between 1.0 and the next larger value.
+    pub const EPSILON: f64 = 2.220446049250313e-16;
+    pub const RADIX: i32 = 2;
+    /// Significand bits, the implicit leading one included.
+    pub const MANTISSA_DIGITS: i32 = 53;
+    /// Decimal digits that survive a round trip through the type.
+    pub const DIGITS: i32 = 15;
+    pub const MIN_EXP: i32 = -1021;
+    pub const MAX_EXP: i32 = 1024;
+    pub const MIN_10_EXP: i32 = -307;
+    pub const MAX_10_EXP: i32 = 308;
+    /// The largest integer exactly representable in f64: 2^53 - 1.
+    /// Mirrors JS `Number.MAX_SAFE_INTEGER`.
+    pub const MAX_SAFE_INTEGER: f64 = 9007199254740991.0;
+    /// The smallest integer exactly representable in f64: -(2^53 - 1).
+    /// Mirrors JS `Number.MIN_SAFE_INTEGER`.
+    pub const MIN_SAFE_INTEGER: f64 = -9007199254740991.0;
+
+    fn fmt_into(&self, f: &mut Formatter) {
+        if f.precision >= 0 {
+            self.fmt_fixed(f.precision, f);
+            return;
+        }
+        let value = *self;
+        let [is_special, is_neg, kind] = check_special(value);
+        if is_special {
+            fmt_float_special(f, is_neg, kind, "0");
+            return;
+        }
+        let abs_f = f64::abs(value);
+        let result = short(abs_f);
+        let d = result.digits;
+        let p = result.exponent;
+        let n_digits = result.n_digits;
+        let mark = f.mark();
+        fmt_float_sign(f, is_neg);
+        write_decimal(f.buf, d, p, n_digits);
+        f.apply_padding(mark);
+    }
+
+    fn inspect_into(&self, f: &mut Formatter) {
+        if f.precision >= 0 {
+            self.fmt_fixed(f.precision, f);
+            return;
+        }
+        let value = *self;
+        let [is_special, is_neg, kind] = check_special(value);
+        if is_special {
+            fmt_float_special(f, is_neg, kind, "0.0");
+            return;
+        }
+        let abs_f = f64::abs(value);
+        let result = short(abs_f);
+        let d = result.digits;
+        let p = result.exponent;
+        let n_digits = result.n_digits;
+        let exp = p + n_digits - 1;
+        let mark = f.mark();
+        fmt_float_sign(f, is_neg);
+        if exp < -4 || exp >= 16 {
+            write_exp(f.buf, d, p, n_digits, false);
+        } else if p >= 0 {
+            write_decimal(f.buf, d, p, n_digits);
+            f.buf.push_str(".0");
+        } else {
+            write_decimal(f.buf, d, p, n_digits);
+        }
+        f.apply_padding(mark);
+    }
+
+    fn fmt_fixed(&self, precision: i32, f: &mut Formatter) {
+        let value = *self;
+        let [is_special, is_neg, kind] = check_special(value);
+        if is_special {
+            if kind matches { _::NaN } || kind matches { _::Inf } {
+                fmt_float_special(f, is_neg, kind, "0");
+                return;
+            }
+            let mark = f.mark();
+            fmt_float_sign(f, is_neg);
+            f.buf.push_str("0");
+            if precision > 0 {
+                f.buf.push_str(".");
+                f.buf.append_byte_filled(b'0', precision);
+            }
+            f.apply_padding(mark);
+            return;
+        }
+        let abs_f = f64::abs(value);
+        let result = fixed_width_for_prec(abs_f, precision);
+        let d = result.digits;
+        let p = result.exponent;
+        let n_digits = result.n_digits;
+        let mark = f.mark();
+        fmt_float_sign(f, is_neg);
+        write_decimal_prec(f.buf, d, p, n_digits, precision);
+        f.apply_padding(mark);
+    }
+
+    fn fmt_exp(&self, precision: i32, upper: i32, f: &mut Formatter) {
+        let value = *self;
+        let upper_bool = upper != 0;
+        let [is_special, is_neg, kind] = check_special(value);
+        if is_special {
+            if kind matches { _::NaN } || kind matches { _::Inf } {
+                fmt_float_special(f, is_neg, kind, "0");
+                return;
+            }
+            let mark = f.mark();
+            fmt_float_sign(f, is_neg);
+            f.buf.push_str("0");
+            if precision > 0 {
+                f.buf.push_str(".");
+                f.buf.append_byte_filled(b'0', precision);
+            }
+            f.buf.push_str(&if upper_bool { "E" } else { "e" });
+            f.buf.push_str("0");
+            f.apply_padding(mark);
+            return;
+        }
+        let abs_f = f64::abs(value);
+        let mark = f.mark();
+        fmt_float_sign(f, is_neg);
+        if precision >= 0 {
+            let total_digits = precision + 1;
+            let clamped = if total_digits > 18 {
+                18;
+            } else if total_digits < 1 {
+                1;
+            } else {
+                total_digits;
+            };
+            let result = fixed_width(abs_f, clamped);
+            let d = result.digits;
+            let p = result.exponent;
+            let n_digits = result.n_digits;
+            write_exp_prec(f.buf, d, p, n_digits, precision, upper_bool);
+        } else {
+            let result = short(abs_f);
+            let d = result.digits;
+            let p = result.exponent;
+            let n_digits = result.n_digits;
+            write_exp(f.buf, d, p, n_digits, upper_bool);
+        }
+        f.apply_padding(mark);
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut buf = String::with_capacity(24);
+        let mut f = Formatter::new(&mut buf);
+        self.fmt_into(&mut f);
+        return buf;
+    }
+
+    /// Absolute value
+    pub fn abs(x: f64) -> f64 {
+        return builtin::f64_abs(x);
+    }
+
+    /// Ceiling (round toward +infinity)
+    pub fn ceil(x: f64) -> f64 {
+        return builtin::f64_ceil(x);
+    }
+
+    /// Floor (round toward -infinity)
+    pub fn floor(x: f64) -> f64 {
+        return builtin::f64_floor(x);
+    }
+
+    /// Truncate toward zero
+    pub fn trunc(x: f64) -> f64 {
+        return builtin::f64_trunc(x);
+    }
+
+    /// Round to nearest, breaking ties away from zero
+    ///
+    /// Wasm rounds the other way, so this is a software implementation —
+    /// slower than `round_ties_even`.
+    pub fn round(x: f64) -> f64 {
+        return f64_round(x);
+    }
+
+    /// Round to nearest, breaking ties toward the even neighbour
+    pub fn round_ties_even(x: f64) -> f64 {
+        return builtin::f64_nearest(x);
+    }
+
+    /// Square root
+    pub fn sqrt(x: f64) -> f64 {
+        return builtin::f64_sqrt(x);
+    }
+
+    /// The lesser of two values by the order, where NaN is greatest; `x` when
+    /// they are equal.
+    pub fn min(x: f64, y: f64) -> f64 {
+        return builtin::select(y < x, y, x);
+    }
+
+    /// The greater of two values by the order, where NaN is greatest; `y` when
+    /// they are equal.
+    pub fn max(x: f64, y: f64) -> f64 {
+        return builtin::select(y < x, x, y);
+    }
+
+    /// IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
+    /// `0.0`.
+    pub fn ieee754_min(x: f64, y: f64) -> f64 {
+        return builtin::f64_min(x, y);
+    }
+
+    /// IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
+    /// `0.0`.
+    pub fn ieee754_max(x: f64, y: f64) -> f64 {
+        return builtin::f64_max(x, y);
+    }
+
+    /// `x` confined to `low..=high` by the order, except that a NaN `x` stays
+    /// NaN.
+    pub fn clamp(x: f64, low: f64, high: f64) -> f64
+        contract !high.is_nan() && low <= high
+    {
+        if x.is_nan() {
+            return x;
+        }
+        return builtin::select(x < low, low, builtin::select(high < x, high, x));
+    }
+
+    /// Copy sign from y to x
+    pub fn copysign(x: f64, y: f64) -> f64 {
+        return builtin::f64_copysign(x, y);
+    }
+
+    /// Sine (in radians)
+    pub fn sin(x: f64) -> f64 {
+        return f64_sin(x);
+    }
+
+    /// Cosine (in radians)
+    pub fn cos(x: f64) -> f64 {
+        return f64_cos(x);
+    }
+
+    /// Tangent (in radians)
+    pub fn tan(x: f64) -> f64 {
+        return f64_tan(x);
+    }
+
+    /// Arc sine (returns radians)
+    pub fn asin(x: f64) -> f64 {
+        return f64_asin(x);
+    }
+
+    /// Arc cosine (returns radians)
+    pub fn acos(x: f64) -> f64 {
+        return f64_acos(x);
+    }
+
+    /// Arc tangent (returns radians)
+    pub fn atan(x: f64) -> f64 {
+        return f64_atan(x);
+    }
+
+    /// Arc tangent of y/x (returns radians)
+    pub fn atan2(y: f64, x: f64) -> f64 {
+        return f64_atan2(y, x);
+    }
+
+    /// Hyperbolic sine
+    pub fn sinh(x: f64) -> f64 {
+        return f64_sinh(x);
+    }
+
+    /// Hyperbolic cosine
+    pub fn cosh(x: f64) -> f64 {
+        return f64_cosh(x);
+    }
+
+    /// Hyperbolic tangent
+    pub fn tanh(x: f64) -> f64 {
+        return f64_tanh(x);
+    }
+
+    /// Inverse hyperbolic sine
+    pub fn asinh(x: f64) -> f64 {
+        return f64_asinh(x);
+    }
+
+    /// Inverse hyperbolic cosine
+    pub fn acosh(x: f64) -> f64 {
+        return f64_acosh(x);
+    }
+
+    /// Inverse hyperbolic tangent
+    pub fn atanh(x: f64) -> f64 {
+        return f64_atanh(x);
+    }
+
+    /// e raised to the power x
+    pub fn exp(x: f64) -> f64 {
+        return f64_exp(x);
+    }
+
+    /// 2 raised to the power x
+    pub fn exp2(x: f64) -> f64 {
+        return f64_exp2(x);
+    }
+
+    /// 10 raised to the power x
+    pub fn exp10(x: f64) -> f64 {
+        return f64_exp10(x);
+    }
+
+    /// e^x - 1 (more accurate for small x)
+    pub fn expm1(x: f64) -> f64 {
+        return f64_expm1(x);
+    }
+
+    /// Natural logarithm (base e)
+    pub fn ln(x: f64) -> f64 {
+        return f64_ln(x);
+    }
+
+    /// Logarithm base 2
+    pub fn log2(x: f64) -> f64 {
+        return f64_log2(x);
+    }
+
+    /// Logarithm base 10
+    pub fn log10(x: f64) -> f64 {
+        return f64_log10(x);
+    }
+
+    /// ln(1 + x) (more accurate for small x)
+    pub fn ln1p(x: f64) -> f64 {
+        return f64_ln1p(x);
+    }
+
+    /// x raised to the power y
+    pub fn pow(x: f64, y: f64) -> f64 {
+        return f64_pow(x, y);
+    }
+
+    /// Cube root
+    pub fn cbrt(x: f64) -> f64 {
+        return f64_cbrt(x);
+    }
+
+    /// Euclidean distance: sqrt(x^2 + y^2)
+    pub fn hypot(x: f64, y: f64) -> f64 {
+        return f64_hypot(x, y);
+    }
+
+    /// Floating-point remainder of x/y
+    pub fn fmod(x: f64, y: f64) -> f64 {
+        return f64_fmod(x, y);
+    }
+
+    /// Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
+    pub fn erf(x: f64) -> f64 {
+        return f64_erf(x);
+    }
+
+    /// Complementary error function: `1 - erf(x)`, accurate where erf is near 1
+    pub fn erfc(x: f64) -> f64 {
+        return f64_erfc(x);
+    }
+
+    /// Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
+    pub fn gamma(x: f64) -> f64 {
+        return f64_gamma(x);
+    }
+
+    /// Natural logarithm of `|Γ(x)|`
+    pub fn ln_gamma(x: f64) -> f64 {
+        return f64_ln_gamma(x);
+    }
+
+    /// `x * y + z`, rounded once instead of twice.
+    ///
+    /// Wasm has no scalar FMA instruction, so this is a software
+    /// implementation — slower than `x * y + z`.
+    pub fn mul_add(x: f64, y: f64, z: f64) -> f64 {
+        return f64_mul_add(x, y, z);
+    }
+
+    pub fn is_nan(&self) -> bool {
+        return builtin::f64_is_nan(*self);
+    }
+
+    /// IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
+    pub fn ieee754_eq(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_eq(*self, other);
+    }
+
+    /// IEEE 754's `!=`: true when either is a NaN.
+    pub fn ieee754_ne(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_ne(*self, other);
+    }
+
+    /// IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
+    pub fn ieee754_lt(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_lt(*self, other);
+    }
+
+    /// IEEE 754's `<=`: false when either is a NaN.
+    pub fn ieee754_le(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_le(*self, other);
+    }
+
+    /// IEEE 754's `>`: false when either is a NaN.
+    pub fn ieee754_gt(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_gt(*self, other);
+    }
+
+    /// IEEE 754's `>=`: false when either is a NaN.
+    pub fn ieee754_ge(&self, other: f64) -> bool {
+        return builtin::f64_ieee754_ge(*self, other);
+    }
+
+    pub fn is_finite(&self) -> bool {
+        return *self - *self == 0.0;
+    }
+
+    /// Reinterprets the bits of this f64 as a u64.
+    pub fn to_bits(&self) -> u64 {
+        return builtin::i64_reinterpret_f64(*self) as u64;
+    }
+
+    /// Creates an f64 from its bit representation.
+    pub fn from_bits(bits: u64) -> f64 {
+        return builtin::f64_reinterpret_i64(bits as i64);
+    }
+}
+
+impl FromStr for f64 {
+    type Err = ParseFloatError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<f64, ParseFloatError> {
+        return Result::Ok(f64::from_bits(parse_float_bits(&s.as_str_slice(), &BINARY64)?));
+    }
+}
+
+impl LenientFromStr for f64 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f64, LenientParseError> {
+        let cleaned = lenient_float_preprocess(s);
+        return Result::Ok(f64::from_str(cleaned)?);
+    }
+}
+
+impl Display for i8 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Display for u8 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Display for i16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Display for u16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Display for i32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Display for u32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Display for i64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Display for u64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Display for f32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Display for f64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+/// All 128 bits equal. The lane-typed aliases are all the same `v128`, so
+/// there is no lane type whose own equality this could defer to, and a float
+/// lane's NaN is a bit pattern here rather than a value. Compare as `f32x4`
+/// where the IEEE reading is the one wanted.
+impl Eq for v128 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return builtin::i8x16_all_true(builtin::i8x16_eq(*self, *other));
+    }
+}
+
+/// Debug representation for the raw 128-bit SIMD register: 32 hex digits,
+/// most-significant lane first. The lane-typed aliases are all the same `v128`,
+/// so no canonical lane interpretation exists to print.
+impl Inspect for v128 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_str("v128(0x");
+        for let mut i = 0; i < 16; i += 1 {
+            // A lane index is an immediate operand, so the sixteen are spelled
+            // out rather than computed.
+            let byte = (match i {
+                0 => builtin::i8x16_extract_lane_u(0, *self),
+                1 => builtin::i8x16_extract_lane_u(1, *self),
+                2 => builtin::i8x16_extract_lane_u(2, *self),
+                3 => builtin::i8x16_extract_lane_u(3, *self),
+                4 => builtin::i8x16_extract_lane_u(4, *self),
+                5 => builtin::i8x16_extract_lane_u(5, *self),
+                6 => builtin::i8x16_extract_lane_u(6, *self),
+                7 => builtin::i8x16_extract_lane_u(7, *self),
+                8 => builtin::i8x16_extract_lane_u(8, *self),
+                9 => builtin::i8x16_extract_lane_u(9, *self),
+                10 => builtin::i8x16_extract_lane_u(10, *self),
+                11 => builtin::i8x16_extract_lane_u(11, *self),
+                12 => builtin::i8x16_extract_lane_u(12, *self),
+                13 => builtin::i8x16_extract_lane_u(13, *self),
+                14 => builtin::i8x16_extract_lane_u(14, *self),
+                _ => builtin::i8x16_extract_lane_u(15, *self),
+            }) as u8;
+            f.write_str(`${byte:02x}`);
+        }
+        f.write_char(')');
+    }
+}
+
+impl Inspect for i8 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Inspect for u8 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Inspect for i16 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Inspect for u16 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Inspect for i32 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Inspect for u32 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Inspect for i64 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Inspect for u64 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.fmt_into(f);
+    }
+}
+
+impl Inspect for f32 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.inspect_into(f);
+    }
+}
+
+impl Inspect for f64 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.inspect_into(f);
+    }
+}
+
+impl LowerExp for f32 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        self.fmt_exp(f.precision, 0, f);
+    }
+}
+
+impl UpperExp for f32 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        self.fmt_exp(f.precision, 1, f);
+    }
+}
+
+impl LowerExp for f64 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        self.fmt_exp(f.precision, 0, f);
+    }
+}
+
+impl UpperExp for f64 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        self.fmt_exp(f.precision, 1, f);
+    }
+}
+
+impl LowerExp for i8 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, false);
+    }
+}
+
+impl UpperExp for i8 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, true);
+    }
+}
+
+impl LowerExp for u8 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, false);
+    }
+}
+
+impl UpperExp for u8 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, true);
+    }
+}
+
+impl LowerExp for i16 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, false);
+    }
+}
+
+impl UpperExp for i16 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, true);
+    }
+}
+
+impl LowerExp for u16 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, false);
+    }
+}
+
+impl UpperExp for u16 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, true);
+    }
+}
+
+impl LowerExp for i32 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, false);
+    }
+}
+
+impl UpperExp for i32 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, true);
+    }
+}
+
+impl LowerExp for u32 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, false);
+    }
+}
+
+impl UpperExp for u32 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self as u64, true);
+    }
+}
+
+impl LowerExp for i64 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, i64::abs(*self) as u64, false);
+    }
+}
+
+impl UpperExp for i64 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, *self < 0, i64::abs(*self) as u64, true);
+    }
+}
+
+impl LowerExp for u64 {
+    pub fn fmt_lower_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self, false);
+    }
+}
+
+impl UpperExp for u64 {
+    pub fn fmt_upper_exp(&self, f: &mut Formatter) {
+        write_int_exp(f, false, *self, true);
+    }
+}
+
+impl Binary for i8 {
+    pub fn fmt_binary(&self, f: &mut Formatter) {
+        (*self as u8 as u64).fmt_base(f, 2, false, "0b");
+    }
+}
+
+impl Binary for u8 {
+    pub fn fmt_binary(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 2, false, "0b");
+    }
+}
+
+impl Binary for i16 {
+    pub fn fmt_binary(&self, f: &mut Formatter) {
+        (*self as u16 as u64).fmt_base(f, 2, false, "0b");
+    }
+}
+
+impl Binary for u16 {
+    pub fn fmt_binary(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 2, false, "0b");
+    }
+}
+
+impl Binary for i32 {
+    pub fn fmt_binary(&self, f: &mut Formatter) {
+        (*self as u32 as u64).fmt_base(f, 2, false, "0b");
+    }
+}
+
+impl Binary for u32 {
+    pub fn fmt_binary(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 2, false, "0b");
+    }
+}
+
+impl Binary for i64 {
+    pub fn fmt_binary(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 2, false, "0b");
+    }
+}
+
+impl Octal for i8 {
+    pub fn fmt_octal(&self, f: &mut Formatter) {
+        (*self as u8 as u64).fmt_base(f, 8, false, "0o");
+    }
+}
+
+impl Octal for u8 {
+    pub fn fmt_octal(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 8, false, "0o");
+    }
+}
+
+impl Octal for i16 {
+    pub fn fmt_octal(&self, f: &mut Formatter) {
+        (*self as u16 as u64).fmt_base(f, 8, false, "0o");
+    }
+}
+
+impl Octal for u16 {
+    pub fn fmt_octal(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 8, false, "0o");
+    }
+}
+
+impl Octal for i32 {
+    pub fn fmt_octal(&self, f: &mut Formatter) {
+        (*self as u32 as u64).fmt_base(f, 8, false, "0o");
+    }
+}
+
+impl Octal for u32 {
+    pub fn fmt_octal(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 8, false, "0o");
+    }
+}
+
+impl Octal for i64 {
+    pub fn fmt_octal(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 8, false, "0o");
+    }
+}
+
+impl LowerHex for i8 {
+    pub fn fmt_lower_hex(&self, f: &mut Formatter) {
+        (*self as u8 as u64).fmt_base(f, 16, false, "0x");
+    }
+}
+
+impl LowerHex for u8 {
+    pub fn fmt_lower_hex(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 16, false, "0x");
+    }
+}
+
+impl LowerHex for i16 {
+    pub fn fmt_lower_hex(&self, f: &mut Formatter) {
+        (*self as u16 as u64).fmt_base(f, 16, false, "0x");
+    }
+}
+
+impl LowerHex for u16 {
+    pub fn fmt_lower_hex(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 16, false, "0x");
+    }
+}
+
+impl LowerHex for i32 {
+    pub fn fmt_lower_hex(&self, f: &mut Formatter) {
+        (*self as u32 as u64).fmt_base(f, 16, false, "0x");
+    }
+}
+
+impl LowerHex for u32 {
+    pub fn fmt_lower_hex(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 16, false, "0x");
+    }
+}
+
+impl LowerHex for i64 {
+    pub fn fmt_lower_hex(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 16, false, "0x");
+    }
+}
+
+impl UpperHex for i8 {
+    pub fn fmt_upper_hex(&self, f: &mut Formatter) {
+        (*self as u8 as u64).fmt_base(f, 16, true, "0x");
+    }
+}
+
+impl UpperHex for u8 {
+    pub fn fmt_upper_hex(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 16, true, "0x");
+    }
+}
+
+impl UpperHex for i16 {
+    pub fn fmt_upper_hex(&self, f: &mut Formatter) {
+        (*self as u16 as u64).fmt_base(f, 16, true, "0x");
+    }
+}
+
+impl UpperHex for u16 {
+    pub fn fmt_upper_hex(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 16, true, "0x");
+    }
+}
+
+impl UpperHex for i32 {
+    pub fn fmt_upper_hex(&self, f: &mut Formatter) {
+        (*self as u32 as u64).fmt_base(f, 16, true, "0x");
+    }
+}
+
+impl UpperHex for u32 {
+    pub fn fmt_upper_hex(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 16, true, "0x");
+    }
+}
+
+impl UpperHex for i64 {
+    pub fn fmt_upper_hex(&self, f: &mut Formatter) {
+        (*self as u64).fmt_base(f, 16, true, "0x");
+    }
+}
+
+impl Binary for u64 {
+    pub fn fmt_binary(&self, f: &mut Formatter) {
+        self.fmt_base(f, 2, false, "0b");
+    }
+}
+
+impl Octal for u64 {
+    pub fn fmt_octal(&self, f: &mut Formatter) {
+        self.fmt_base(f, 8, false, "0o");
+    }
+}
+
+impl LowerHex for u64 {
+    pub fn fmt_lower_hex(&self, f: &mut Formatter) {
+        self.fmt_base(f, 16, false, "0x");
+    }
+}
+
+impl UpperHex for u64 {
+    pub fn fmt_upper_hex(&self, f: &mut Formatter) {
+        self.fmt_base(f, 16, true, "0x");
+    }
+}
+
+// These enable calling Eq::eq on primitives when T: Eq bounds are used.
+
+impl Eq for i8 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+impl Eq for u8 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+impl Eq for i16 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+impl Eq for u16 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+impl Eq for i32 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+impl Eq for u32 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+impl Eq for i64 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+impl Eq for u64 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+impl Eq for f32 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+impl Eq for f64 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return *self == *other;
+    }
+}
+
+// These enable calling Ord::cmp on primitives when T: Ord bounds are used.
+
+impl Ord for i8 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for u8 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for i16 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for u16 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for i32 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for u32 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for i64 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for u64 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+// The operators carry the float order themselves, as they do an integer's.
+impl Ord for f32 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for f64 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl Hash for i8 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for u8 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for i16 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for u16 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for i32 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for u32 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for i64 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for u64 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self);
+    }
+}
+
+// Widening is exact, so `f32` hashes as the `f64` it widens to.
+impl Hash for f32 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        (*self as f64).hash(h);
+    }
+}
+
+// A float feeds its bits with every NaN made one and the two zeroes made one,
+// the values its `==` cannot tell apart.
+impl Hash for f64 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        let bits = if self.is_nan() {
+            f64::NAN.to_bits();
+        } else if *self == 0.0 {
+            0;
+        } else {
+            self.to_bits();
+        };
+        h.write_u64(bits);
+    }
+}
+
+impl Default for i8 {
+    pub fn default() -> i8 {
+        return 0;
+    }
+}
+
+impl Default for i16 {
+    pub fn default() -> i16 {
+        return 0;
+    }
+}
+
+impl Default for i32 {
+    pub fn default() -> i32 {
+        return 0;
+    }
+}
+
+impl Default for i64 {
+    pub fn default() -> i64 {
+        return 0;
+    }
+}
+
+impl Default for u8 {
+    pub fn default() -> u8 {
+        return 0;
+    }
+}
+
+impl Default for u16 {
+    pub fn default() -> u16 {
+        return 0;
+    }
+}
+
+impl Default for u32 {
+    pub fn default() -> u32 {
+        return 0;
+    }
+}
+
+impl Default for u64 {
+    pub fn default() -> u64 {
+        return 0;
+    }
+}
+
+impl Default for f32 {
+    pub fn default() -> f32 {
+        return 0.0;
+    }
+}
+
+impl Default for f64 {
+    pub fn default() -> f64 {
+        return 0.0;
+    }
+}
+
+impl From<i8> for i16 {
+    pub fn from(value: i8) -> i16 {
+        return value as i16;
+    }
+}
+impl From<i8> for i32 {
+    pub fn from(value: i8) -> i32 {
+        return value as i32;
+    }
+}
+impl From<i8> for i64 {
+    pub fn from(value: i8) -> i64 {
+        return value as i64;
+    }
+}
+impl From<i16> for i32 {
+    pub fn from(value: i16) -> i32 {
+        return value as i32;
+    }
+}
+impl From<i16> for i64 {
+    pub fn from(value: i16) -> i64 {
+        return value as i64;
+    }
+}
+impl From<i32> for i64 {
+    pub fn from(value: i32) -> i64 {
+        return value as i64;
+    }
+}
+impl From<u8> for u16 {
+    pub fn from(value: u8) -> u16 {
+        return value as u16;
+    }
+}
+impl From<u8> for u32 {
+    pub fn from(value: u8) -> u32 {
+        return value as u32;
+    }
+}
+impl From<u8> for u64 {
+    pub fn from(value: u8) -> u64 {
+        return value as u64;
+    }
+}
+impl From<u8> for i16 {
+    pub fn from(value: u8) -> i16 {
+        return value as i16;
+    }
+}
+impl From<u8> for i32 {
+    pub fn from(value: u8) -> i32 {
+        return value as i32;
+    }
+}
+impl From<u8> for i64 {
+    pub fn from(value: u8) -> i64 {
+        return value as i64;
+    }
+}
+impl From<u16> for u32 {
+    pub fn from(value: u16) -> u32 {
+        return value as u32;
+    }
+}
+impl From<u16> for u64 {
+    pub fn from(value: u16) -> u64 {
+        return value as u64;
+    }
+}
+impl From<u16> for i32 {
+    pub fn from(value: u16) -> i32 {
+        return value as i32;
+    }
+}
+impl From<u16> for i64 {
+    pub fn from(value: u16) -> i64 {
+        return value as i64;
+    }
+}
+impl From<u32> for u64 {
+    pub fn from(value: u32) -> u64 {
+        return value as u64;
+    }
+}
+impl From<u32> for i64 {
+    pub fn from(value: u32) -> i64 {
+        return value as i64;
+    }
+}
+impl From<f32> for f64 {
+    pub fn from(value: f32) -> f64 {
+        return value as f64;
+    }
+}
+impl From<bool> for i32 {
+    pub fn from(value: bool) -> i32 {
+        if value {
+            return 1;
+        }
+        return 0;
+    }
+}
+
+impl TryFrom<i64> for i32 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i64) -> Result<i32, ConvertError> {
+        if value < i32::MIN as i64 || value > i32::MAX as i64 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for i32`));
+        }
+        return Result::Ok(value as i32);
+    }
+}
+
+impl TryFrom<i64> for i16 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i64) -> Result<i16, ConvertError> {
+        if value < i16::MIN as i64 || value > i16::MAX as i64 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for i16`));
+        }
+        return Result::Ok(value as i16);
+    }
+}
+
+impl TryFrom<i64> for i8 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i64) -> Result<i8, ConvertError> {
+        if value < i8::MIN as i64 || value > i8::MAX as i64 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for i8`));
+        }
+        return Result::Ok(value as i8);
+    }
+}
+
+impl TryFrom<i32> for i16 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i32) -> Result<i16, ConvertError> {
+        if value < i16::MIN as i32 || value > i16::MAX as i32 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for i16`));
+        }
+        return Result::Ok(value as i16);
+    }
+}
+
+impl TryFrom<i32> for i8 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i32) -> Result<i8, ConvertError> {
+        if value < i8::MIN as i32 || value > i8::MAX as i32 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for i8`));
+        }
+        return Result::Ok(value as i8);
+    }
+}
+
+impl TryFrom<i16> for i8 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i16) -> Result<i8, ConvertError> {
+        if value < i8::MIN as i16 || value > i8::MAX as i16 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for i8`));
+        }
+        return Result::Ok(value as i8);
+    }
+}
+
+impl TryFrom<i32> for u32 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i32) -> Result<u32, ConvertError> {
+        if value < 0 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for u32`));
+        }
+        return Result::Ok(value as u32);
+    }
+}
+
+impl TryFrom<i64> for u64 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i64) -> Result<u64, ConvertError> {
+        if value < 0 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for u64`));
+        }
+        return Result::Ok(value as u64);
+    }
+}
+
+impl TryFrom<i64> for u32 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i64) -> Result<u32, ConvertError> {
+        if value < 0 || value > u32::MAX as i64 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for u32`));
+        }
+        return Result::Ok(value as u32);
+    }
+}
+
+impl TryFrom<u64> for i64 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: u64) -> Result<i64, ConvertError> {
+        if value > i64::MAX as u64 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for i64`));
+        }
+        return Result::Ok(value as i64);
+    }
+}
+
+impl TryFrom<u64> for u32 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: u64) -> Result<u32, ConvertError> {
+        if value > u32::MAX as u64 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for u32`));
+        }
+        return Result::Ok(value as u32);
+    }
+}
+
+impl TryFrom<u32> for u16 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: u32) -> Result<u16, ConvertError> {
+        if value > u16::MAX as u32 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for u16`));
+        }
+        return Result::Ok(value as u16);
+    }
+}
+
+impl TryFrom<u32> for u8 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: u32) -> Result<u8, ConvertError> {
+        if value > u8::MAX as u32 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for u8`));
+        }
+        return Result::Ok(value as u8);
+    }
+}
+
+impl TryFrom<u16> for u8 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: u16) -> Result<u8, ConvertError> {
+        if value > u8::MAX as u16 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} out of range for u8`));
+        }
+        return Result::Ok(value as u8);
+    }
+}
+
+impl TryFrom<i64> for f32 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i64) -> Result<f32, ConvertError> {
+        let f = value as f32;
+        if f as i64 != value {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f32`));
+        }
+        return Result::Ok(f);
+    }
+}
+
+impl TryFrom<i64> for f64 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: i64) -> Result<f64, ConvertError> {
+        let f = value as f64;
+        if f as i64 != value {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f64`));
+        }
+        return Result::Ok(f);
+    }
+}
+
+impl TryFrom<u64> for f64 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: u64) -> Result<f64, ConvertError> {
+        if value > 9007199254740992 as u64 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f64`));
+        }
+        return Result::Ok(value as f64);
+    }
+}
+
+impl TryFrom<u64> for f32 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: u64) -> Result<f32, ConvertError> {
+        if value > 16777216 as u64 {
+            builtin::cold_path();
+            return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f32`));
+        }
+        return Result::Ok(value as f32);
+    }
+}

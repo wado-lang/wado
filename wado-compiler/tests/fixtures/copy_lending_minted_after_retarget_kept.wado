@@ -1,0 +1,30 @@
+// A function whose copies read a call's result lends what that call lends, once
+// the call moves to its own clone. Both happen in one round here: `outer` is a
+// caller of `inner`'s clone and a lender to `read_after_write`, which writes
+// the argument and so keeps the copies.
+#[inline("never")]
+fn inner(p: &List<List<i32>>) -> List<List<i32>> {
+    let mut out: List<List<i32>> = [];
+    for let mut i = 0; i < p.len(); i += 1 { out.push(p[i]); }
+    return out;
+}
+
+#[inline("never")]
+fn outer(p: &List<List<i32>>) -> List<List<i32>> {
+    let a = inner(p);
+    let mut out: List<List<i32>> = [];
+    for let mut i = 0; i < a.len(); i += 1 { out.push(a[i]); }
+    return out;
+}
+
+#[inline("never")]
+fn read_after_write(q: &mut List<List<i32>>) -> i32 {
+    let r = outer(q);
+    q[0][0] = 9;
+    return r[0][0];
+}
+
+test "the result keeps the argument's parts as they were" {
+    let mut q: List<List<i32>> = [[builtin::black_box(1)]];
+    assert read_after_write(&mut q) == 1;
+}

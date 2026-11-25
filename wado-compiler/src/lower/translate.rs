@@ -238,6 +238,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
             })
         }),
         sroa_param_clones: IndexSet::default(),
+        lending_clones: IndexMap::default(),
         reshapes: IndexMap::default(),
         renamed: Vec::new(),
     };

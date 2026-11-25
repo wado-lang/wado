@@ -59,22 +59,18 @@ test "parse_inline resolves underscore emphasis" {
     }
 }
 
-test "parse_inline sets keep_asterisk when a * emphasis abuts an alphanumeric" {
-    let nodes = parse_inline("*word*s", &no_refs());
-    if let Some(Node::Emphasis(em)) = nodes.get(0) {
-        assert em.keep_asterisk == true;
-    } else {
-        panic("expected an Emphasis node");
+test "parse_inline reads a single * between word characters as text" {
+    for let source of ["a*b+c*d", "*word*s", "(24*60*60*1e9)."] as List<String> {
+        let nodes = parse_inline(&source, &no_refs());
+        for let node of nodes {
+            assert node matches { Node::Text(_) };
+        }
     }
 }
 
-test "parse_inline does not set keep_asterisk for an ordinary * emphasis" {
-    let nodes = parse_inline("*word* s", &no_refs());
-    if let Some(Node::Emphasis(em)) = nodes.get(0) {
-        assert em.keep_asterisk == false;
-    } else {
-        panic("expected an Emphasis node");
-    }
+test "parse_inline still reads ** between word characters as strong" {
+    let nodes = parse_inline("**K**eyed", &no_refs());
+    assert nodes.get(0) matches { Some(Node::Strong(_)) };
 }
 
 test "parse_inline resolves strong emphasis" {

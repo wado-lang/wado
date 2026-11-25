@@ -20,8 +20,8 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
-    StructDef, SubstitutionContext, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId,
-    impl_args_in_slot_order, positional_substitution, slots_from_impl_args,
+    StructDef, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId, impl_args_in_slot_order,
+    positional_substitution, slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -37,7 +37,7 @@ use super::infer_hole::{BoundRows, DeclaredBound, Obligation};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
-use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess};
+use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess, OpaqueReason};
 use super::trait_env::{ImplHeader, ImplMethodHeader, TraitEnv, header_as_written};
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
@@ -67,6 +67,22 @@ pub(super) fn narrow_to_reaching<T>(candidates: &mut Vec<T>, reaches: impl Fn(&T
     } else {
         candidates.truncate(1);
     }
+}
+
+/// A function type with its row left out.
+#[derive(PartialEq)]
+struct FunctionShape {
+    is_mut: bool,
+    params: Vec<TypeId>,
+    return_type: TypeId,
+}
+
+/// What the candidates of one selection agree on at one position.
+enum Agreement {
+    Same(TypeId),
+    /// Function types differing only in their rows.
+    RowOnly(FunctionShape),
+    Differ,
 }
 
 /// The block a match leaving a slot to the call was read off.
@@ -191,10 +207,6 @@ impl MethodInfo {
 /// both their signature and declaration forms, and its parameter and return
 /// types — with the call-site context the solver needs.
 pub(super) struct MethodInferenceInput<'a> {
-    /// Receiver's `TypeId` at the call site, which a diagnostic names.
-    pub receiver_type: TypeId,
-    /// Method name, for the "cannot infer" diagnostic.
-    pub method_name: &'a str,
     /// The method's own slots, as the lookup that produced `param_types`
     /// reported them ([`MethodInfo::method_type_param_ids`]). The answers
     /// come back in this order, which is the order the caller binds them in.
@@ -1952,62 +1964,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         merged
     }
 
-    /// Report a pack an argument reached that the solve still left open, which
-    /// is what the free-function and static paths report for themselves.
-    fn report_unsettled_reached_packs(
-        &mut self,
-        method_name: &str,
-        receiver_type: TypeId,
-        own_params: &[ast::GenericParam],
-        slots: &[TypeId],
-        type_args: &[TypeId],
-        reached: &[TypeParamId],
-        span: Span,
-    ) {
-        let table = self.tysys.type_table.borrow();
-        let reached_packs: Vec<(&ast::GenericParam, TypeId, TypeId)> = own_params
-            .iter()
-            .zip(slots)
-            .zip(type_args)
-            .filter(|((p, slot), _)| p.is_pack && reached.contains(&table.declared_param(**slot)))
-            .map(|((p, &slot), &arg)| (p, slot, arg))
-            .collect();
-        if reached_packs.is_empty() {
-            return;
-        }
-        // A pack left answering for itself is unanswered. One spread over the
-        // caller's own (`[..Bs]`) is the caller forwarding it, settled as the
-        // caller's. One deferred to a variable reports itself if nothing
-        // answers it.
-        let scope = self.scope_type_param_ids();
-        let open: Vec<String> = reached_packs
-            .into_iter()
-            .filter(|&(_, slot, arg)| {
-                arg == slot
-                    || (self.tysys.is_unbound_type_param(arg)
-                        && !scope.owns(&table, arg)
-                        && !self.awaits_report(&table, arg))
-                    || scope.spreads_foreign_pack(&table, arg)
-            })
-            .map(|(p, _, _)| p.name.clone())
-            .collect();
-        drop(table);
-        if open.is_empty() {
-            return;
-        }
-        let receiver = self
-            .tysys
-            .type_table
-            .borrow()
-            .name(self.tysys.get_base_type(receiver_type));
-        let _ = self.emit(TypeError::UninferredMethodTypeArgs {
-            receiver,
-            method: method_name.to_string(),
-            params: open,
-            span,
-        });
-    }
-
     /// [`Self::resolve_method_type_args`], then what every caller does with the
     /// answer: check the declared bounds, and bind the slots for substitution.
     /// Both read the method's bounds, so both see the impl's parameters at the
@@ -2016,7 +1972,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
-    ) -> (Vec<TypeId>, SubstitutionContext) {
+    ) -> (Vec<TypeId>, TypeArgMap) {
         assert!(
             explicit.len() <= input.own_params.len(),
             "a turbofish must be grouped into the method's packs before it is bound"
@@ -2035,7 +1991,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         explicit: Vec<TypeId>,
         name: &str,
         input: MethodInferenceInput<'_>,
-    ) -> (Vec<TypeId>, SubstitutionContext) {
+    ) -> (Vec<TypeId>, TypeArgMap) {
         assert!(
             input.inst.is_none(),
             "the static's own slots are instantiated here"
@@ -2066,33 +2022,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
-    ) -> (Vec<TypeId>, SubstitutionContext) {
+    ) -> (Vec<TypeId>, TypeArgMap) {
         let (slots, own_params, impl_args, span) =
             (input.slots, input.own_params, input.impl_args, input.span);
         let self_binding = input.self_binding;
         let reached = self
             .tysys
             .packs_args_reach(input.param_types, input.args.len());
-        let (method_name, receiver_type) = (input.method_name.to_string(), input.receiver_type);
         let effect_rows = self
             .tysys
             .type_table
             .borrow()
             .call_effect_binding(input.param_types, input.args);
         let mut type_args = self.resolve_method_type_args(explicit, input);
-        let reached = self.settle_unreached_packs(own_params, slots, &mut type_args, &reached);
-        self.report_unsettled_reached_packs(
-            &method_name,
-            receiver_type,
-            own_params,
-            slots,
-            &type_args,
-            &reached,
-            span,
-        );
-        let mut subst = SubstitutionContext::new();
+        self.settle_unreached_packs(own_params, slots, &mut type_args, &reached);
+        let subst = self
+            .tysys
+            .type_table
+            .borrow()
+            .bind_params(slots, &type_args);
         if !type_args.is_empty() {
-            subst = subst.bind(slots, &type_args);
             self.enforce_type_arg_bounds(
                 own_params,
                 &type_args,
@@ -2123,7 +2072,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_binding,
             declaring_module,
             inst,
-            impl_args,
             span,
             ..
         } = input;
@@ -2142,7 +2090,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let param_types = self.instantiate_types(param_types, inst);
         let decl_return_type = self.instantiate_type(decl_return_type, inst);
 
-        let (mut inferred, _) = self.solve_call_type_args(CallSolve {
+        let mut inferred = self.solve_call_in_context(CallSolve {
             slots: &inst.vars,
             param_types: &param_types,
             args,
@@ -2180,20 +2128,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         let names = slot_names(&method_type_params, &self.tysys.resolutions);
-        self.defer_pinned_packs(
-            inst,
-            &method_type_params,
-            &names,
-            &mut inferred,
-            Some(self_binding),
-            impl_args,
-        );
         // A slot the solver left as its own variable is unconstrained. The
         // variable already carries the "cannot infer" diagnostic and the
-        // module-end sweep, so nothing needs classifying here: what an
+        // body's sweep, so nothing needs classifying here: what an
         // enclosing generic happens to be named cannot be confused with it.
         self.record_instantiation(inst, &inferred);
-        self.blame_unsolved(inst, &inferred);
         self.link_deferred_assoc_equalities(
             &method_type_params,
             &names,
@@ -2545,14 +2484,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | None => {}
             Some(Ordered::Undecided(_)) => unreachable!("returned above"),
         }
-        match self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe) {
-            Some(found) => TraitLookup::Found(Box::new(found)),
-            None => TraitLookup::Missing,
-        }
+        self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe)
     }
 
-    /// `lookup`, with an undecided selection reported at `span` as needing an
-    /// annotation, for a site that cannot wait for the receiver to settle.
+    /// `lookup`, with an undecided selection reported at `span`, for a site
+    /// that cannot wait for the receiver or a closure argument to settle it.
     pub(super) fn decide_now(
         &mut self,
         lookup: TraitLookup,
@@ -2560,10 +2496,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) -> TraitLookup {
-        if !matches!(lookup, TraitLookup::Undecided(_)) {
-            return lookup;
+        match lookup {
+            TraitLookup::Undecided(_) => {
+                self.report_undecided_selection(receiver, method_name, span);
+            }
+            TraitLookup::AwaitsClosureRow { .. } => {
+                let _ = self.emit(TypeError::CannotInferType {
+                    message: format!(
+                        "which `{method_name}` this calls depends on what its closure argument performs, which this call cannot wait for; pin the trait's arguments"
+                    ),
+                    span,
+                });
+            }
+            TraitLookup::Found(_) | TraitLookup::Missing | TraitLookup::Reported => {
+                return lookup;
+            }
         }
-        self.report_undecided_selection(receiver, method_name, span);
         TraitLookup::Reported
     }
 
@@ -2579,9 +2527,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) -> Result<(FqTraitName, MethodInfo), TraitLookup> {
-        if let TraitLookup::Undecided(live) = &lookup
-            && can_wait
-            && let Some(declared) = self.trait_declared_info(live, declared_self, method_name)
+        let (live, agreed): (&[Option<DefId>], &[Option<TypeId>]) = match &lookup {
+            TraitLookup::Undecided(live) => (live, &[]),
+            TraitLookup::AwaitsClosureRow { live, trait_args } => (live, trait_args),
+            TraitLookup::Found(_) | TraitLookup::Missing | TraitLookup::Reported => {
+                return Err(lookup);
+            }
+        };
+        if can_wait
+            && let Some(declared) =
+                self.trait_declared_info(live, agreed, declared_self, method_name)
         {
             return Ok(declared);
         }
@@ -3311,7 +3266,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         span: Span,
         probe: Option<ArgSource<'_, '_>>,
-    ) -> Option<TraitMethodMatch> {
+    ) -> TraitLookup {
         // The overload set is the concrete candidates of one declaration.
         // Distinct traits never form one, and a blanket neither forms nor
         // defeats one, having lost to every concrete impl already.
@@ -3356,6 +3311,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     found_traits[i].method_info.return_type
                 });
             }
+            self.narrow_by_function_rows(&mut admitted, &classes, |&i, position| {
+                found_traits[i]
+                    .method_info
+                    .param_types
+                    .get(position)
+                    .copied()
+            });
             // An impl writing the trait's arguments defines the function the
             // call names; one leaving a slot to the call only covers it.
             let writes_trait_args =
@@ -3378,7 +3340,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // them apart.
                 if let [first, _, ..] = admitted.as_slice() {
                     self.report_impls_tied_at_call(&found_traits, &admitted, receiver, span);
-                    return Some(found_traits.swap_remove(*first));
+                    return TraitLookup::Found(Box::new(found_traits.swap_remove(*first)));
                 }
             }
             // Unique-or-error: exactly one admitted candidate wins. No ranking
@@ -3392,16 +3354,134 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 [] if !applicable.is_empty() => {
                     self.report_no_admitted_overload(&found_traits, method_name, &classes, span);
-                    return found_traits.into_iter().next();
+                    return TraitLookup::first_of(found_traits);
                 }
-                [] | [_, _, ..] => {}
+                [_, _, ..] if self.ties_on_closure_rows(&found_traits, &admitted, &classes) => {
+                    return self.await_closure_row(&found_traits, &admitted);
+                }
+                [_, _, ..] => {
+                    // What the report names, and what stands in for the
+                    // call, are the candidates the arguments admit.
+                    found_traits = found_traits
+                        .into_iter()
+                        .enumerate()
+                        .filter_map(|(i, found)| admitted.contains(&i).then_some(found))
+                        .collect();
+                }
+                [] => {}
             }
         }
 
         self.report_trait_argument_ambiguity(&found_traits, method_name, &classes, span);
         // Still return a winner: reporting and then claiming the method is
         // missing would stack a second, wrong diagnostic on the same call.
-        found_traits.into_iter().next()
+        TraitLookup::first_of(found_traits)
+    }
+
+    /// Whether the `admitted` candidates differ only in the rows of the
+    /// function types they take where the argument is a closure: its body's
+    /// row selects among them once it is walked, so the call waits for it.
+    fn ties_on_closure_rows(
+        &self,
+        found_traits: &[TraitMethodMatch],
+        admitted: &[usize],
+        classes: &[ArgClass],
+    ) -> bool {
+        let mut closure_decides = false;
+        for (position, class) in classes.iter().enumerate() {
+            let params: Vec<Option<TypeId>> = admitted
+                .iter()
+                .map(|&i| {
+                    found_traits[i]
+                        .method_info
+                        .param_types
+                        .get(position)
+                        .copied()
+                })
+                .collect();
+            match self.agreement(&params) {
+                Agreement::Same(_) => {}
+                Agreement::RowOnly(_) if *class == ArgClass::Opaque(OpaqueReason::Closure) => {
+                    closure_decides = true;
+                }
+                Agreement::RowOnly(_) | Agreement::Differ => return false,
+            }
+        }
+        closure_decides
+    }
+
+    /// The selection a call tied on a closure's row waits for: the `admitted`
+    /// blocks, and what their trait arguments agree on, so the closure is
+    /// typed by the shape every candidate gives it.
+    fn await_closure_row(
+        &self,
+        found_traits: &[TraitMethodMatch],
+        admitted: &[usize],
+    ) -> TraitLookup {
+        let arity = found_traits[admitted[0]].trait_args.len();
+        let trait_args = (0..arity)
+            .map(|position| {
+                let args: Vec<Option<TypeId>> = admitted
+                    .iter()
+                    .map(|&i| found_traits[i].trait_args.get(position).copied())
+                    .collect();
+                match self.agreement(&args) {
+                    Agreement::Same(arg) => Some(arg),
+                    Agreement::RowOnly(shape) => {
+                        let mut tt = self.tysys.type_table.borrow_mut();
+                        let row = vec![tt.mint_effect_var()];
+                        Some(tt.make_function_with_mut(
+                            shape.is_mut,
+                            shape.params,
+                            shape.return_type,
+                            row,
+                        ))
+                    }
+                    Agreement::Differ => None,
+                }
+            })
+            .collect();
+        TraitLookup::AwaitsClosureRow {
+            live: admitted
+                .iter()
+                .map(|&i| found_traits[i].method_info.impl_block)
+                .collect(),
+            trait_args,
+        }
+    }
+
+    /// What `types` agree on: all one type, function types differing only in
+    /// their rows, or nothing.
+    fn agreement(&self, types: &[Option<TypeId>]) -> Agreement {
+        let Some(&Some(first)) = types.first() else {
+            return Agreement::Differ;
+        };
+        if types.iter().all(|&ty| ty == Some(first)) {
+            return Agreement::Same(first);
+        }
+        let tt = self.tysys.type_table.borrow();
+        let shape = |ty: Option<TypeId>| {
+            let ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                ..
+            } = tt.get(ty?)
+            else {
+                return None;
+            };
+            Some(FunctionShape {
+                is_mut: *is_mut,
+                params: params.clone(),
+                return_type: *return_type,
+            })
+        };
+        match shape(Some(first)) {
+            Some(first) if types.iter().all(|&ty| shape(ty).as_ref() == Some(&first)) => {
+                Agreement::RowOnly(first)
+            }
+            Some(_) | None => Agreement::Differ,
+        }
     }
 
     /// One trait implemented for a receiver at two argument lists leaves the
@@ -4365,7 +4445,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TraitLookup::Missing => {}
                 TraitLookup::Reported => return Some(TypeTable::ERROR),
-                TraitLookup::Undecided(_) => unreachable!("decided now"),
+                TraitLookup::Undecided(_) | TraitLookup::AwaitsClosureRow { .. } => {
+                    unreachable!("decided now")
+                }
             }
         }
 
@@ -4497,8 +4579,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (type_args, subst) = self.bind_method_type_args(
             type_args,
             MethodInferenceInput {
-                receiver_type: output_type,
-                method_name: &method_call.method,
                 slots: &method_type_param_ids,
                 own_params: &method_own_params,
                 param_types: &param_types,
@@ -4514,7 +4594,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
         if !subst.is_empty() {
-            return_type = self.substitute_ctx_in_frame(&subst, return_type);
+            return_type = self.substitute_map_in_frame(&subst, return_type);
         }
         if let Some(block) = impl_block {
             self.settle_trait_arg_slots(
@@ -4547,6 +4627,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             bind_nearer(&mut type_bindings, own);
             self.record_default_walk(
                 method_call.id,
+                method_call.span,
                 &args,
                 &param_types,
                 &defaults,

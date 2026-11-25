@@ -11,7 +11,7 @@ The prelude defines iterator traits for generic iteration over collections.
 
 ### Iterator - Core Iteration Trait
 
-<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/iter.wado"} -->
 
 ```wado
 pub affine trait Iterator with _ {
@@ -87,7 +87,7 @@ test "an adapter called on a `&mut I` advances the caller's iterator" {
 
 ### IntoIterator - Conversion Trait
 
-<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/iter.wado"} -->
 
 ```wado
 pub affine trait IntoIterator with _ {
@@ -101,7 +101,7 @@ pub affine trait IntoIterator with _ {
 
 ### FromIterator - Collection Construction
 
-<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/iter.wado"} -->
 
 ```wado
 /// Trait for creating a collection from any iterator of `Elem`.

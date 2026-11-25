@@ -7,7 +7,7 @@ struct core:prelude/string.wado//String {  // TypeId(0)
     mut used: i32,
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
 array Array<u8> (mut u8);  // TypeId(2)
 
@@ -71,16 +71,16 @@ fn "tagged_template_format_loop_site.wado/$cm_binding__wasi:cli/stdout@0.3.0#wri
 }
 
 fn "tagged_template_format_loop_site.wado/$cm_export__run"() {
+    let $cm_pair_7: i64;
+    let new_repr: ref Array<u8>;
     let n: i32;
     let sum: i32;
     let current: i32;
-    let $sroa_$iter_0_start_18: i32;
-    let $cm_pair_7: i64;
-    let new_repr: ref Array<u8>;
-    if n = black_box(20); sum = 0; $sroa_$iter_0_start_18 = 0; b2: block {
+    let $sroa_$iter_0_start_50: i32;
+    if n = black_box(20); sum = 0; $sroa_$iter_0_start_50 = 0; b2: block {
         l3: loop {
-            break_if b2 $sroa_$iter_0_start_18 >= n;
-            $sroa_$iter_0_start_18 = local.tee current($sroa_$iter_0_start_18) + 1;
+            break_if b2 $sroa_$iter_0_start_50 >= n;
+            $sroa_$iter_0_start_50 = local.tee current($sroa_$iter_0_start_50) + 1;
             sum = sum + let $mv_repr_1: ref Array<u8>; multivalue_bind [$mv_repr_1, sum] = "core:prelude/string.wado/core:prelude/string.wado/String::format<tagged_template_format_loop_site.wado/$tmpl$14737082fca00a98,[i32]>$spec0$spec0$sroa[t.h0]"(current); sum;
             continue l3;
         };
@@ -166,11 +166,11 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
                 "wasi/waitable-set-drop"(ptr_18);
                 break $inline_cm_await_blocked_5: status;
             }) >>u 4;
-            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if ptr_18 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_18 == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_18 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_18 == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();

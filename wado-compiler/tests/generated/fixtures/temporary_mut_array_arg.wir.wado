@@ -12,7 +12,7 @@ struct core:prelude/list.wado//List<[core:prelude/string.wado/String,i32]> {  //
     mut used: i32,
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
 
 array Array<u8> (mut u8);  // TypeId(3)
 
@@ -43,7 +43,7 @@ type "functype//temporary_mut_array_arg.wado/$cm_export__run" = fn();  // TypeId
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(15)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(16)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
@@ -84,41 +84,41 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
     let self_20: ref "core:prelude/string.wado//String";
     let a_end: i32;
     let i_36: i32;
-    let $licm_repr_67: ref Array<u8>;
-    let $licm_repr_68: ref Array<u8>;
-    let $licm_used_69: i32;
-    let $licm_repr_70: ref "Array<[core:prelude/string.wado/String,i32]>";
-    let $cse_74: bool;
+    let $licm_repr_63: ref Array<u8>;
+    let $licm_repr_64: ref Array<u8>;
+    let $licm_used_65: i32;
+    let $licm_repr_66: ref "Array<[core:prelude/string.wado/String,i32]>";
+    let $cse_68: bool;
     i_2 = 0;
-    $licm_used_69 = counts.used;
-    $licm_repr_70 = counts.repr;
+    $licm_used_65 = counts.used;
+    $licm_repr_66 = counts.repr;
     b0: block {
         l1: loop {
-            break_if b0 local.tee $cse_74(i_2 < $licm_used_69) == 0;
-            self_20 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_70, i_2).0;
+            break_if b0 local.tee $cse_68(i_2 < $licm_used_65) == 0;
+            self_20 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_66, i_2).0;
             if $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
                 if local.tee a_end(self_20.used) != name.used {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i_36 = 0;
-                $licm_repr_67 = self_20.repr;
-                $licm_repr_68 = name.repr;
+                $licm_repr_63 = self_20.repr;
+                $licm_repr_64 = name.repr;
                 b4: block {
                     l5: loop {
                         break_if b4 (builtin::i64_extend_i32_s(i_36) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
-                        if builtin::array_get_value<u8>($licm_repr_67, i_36) != builtin::array_get_value<u8>($licm_repr_68, i_36) {
+                        if builtin::array_get_value<u8>($licm_repr_63, i_36) != builtin::array_get_value<u8>($licm_repr_64, i_36) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_36 = i_36 + 1;
-                        if builtin::array_get_value<u8>($licm_repr_67, i_36) != builtin::array_get_value<u8>($licm_repr_68, i_36) {
+                        if builtin::array_get_value<u8>($licm_repr_63, i_36) != builtin::array_get_value<u8>($licm_repr_64, i_36) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_36 = i_36 + 1;
-                        if builtin::array_get_value<u8>($licm_repr_67, i_36) != builtin::array_get_value<u8>($licm_repr_68, i_36) {
+                        if builtin::array_get_value<u8>($licm_repr_63, i_36) != builtin::array_get_value<u8>($licm_repr_64, i_36) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_36 = i_36 + 1;
-                        if builtin::array_get_value<u8>($licm_repr_67, i_36) != builtin::array_get_value<u8>($licm_repr_68, i_36) {
+                        if builtin::array_get_value<u8>($licm_repr_63, i_36) != builtin::array_get_value<u8>($licm_repr_64, i_36) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_36 = i_36 + 1;
@@ -128,7 +128,7 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
                 b10: block {
                     l11: loop {
                         break_if b10 i_36 >= a_end;
-                        if builtin::array_get_value<u8>($licm_repr_67, i_36) != builtin::array_get_value<u8>($licm_repr_68, i_36) {
+                        if builtin::array_get_value<u8>($licm_repr_63, i_36) != builtin::array_get_value<u8>($licm_repr_64, i_36) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_36 = i_36 + 1;
@@ -137,29 +137,29 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
                 };
                 break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
             } {
-                $licm_used_69 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_70, i_2).1;
-                $licm_repr_67 = name.repr;
-                builtin::array_copy<u8>(local.tee $licm_repr_68(builtin::array_new<u8>(local.tee a_end(name.used))), 0, $licm_repr_67, 0, a_end);
-                i_36 = $licm_used_69 + 1;
-                if (0 <= i_2) & $cse_74 {
-                    local.tee self_20(local.tee $deref_ref_15(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_70, i_2)).0).repr = $licm_repr_68;
+                $licm_used_65 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_66, i_2).1;
+                $licm_repr_63 = name.repr;
+                builtin::array_copy<u8>(local.tee $licm_repr_64(builtin::array_new<u8>(local.tee a_end(name.used))), 0, $licm_repr_63, 0, a_end);
+                i_36 = $licm_used_65 + 1;
+                if (0 <= i_2) & $cse_68 {
+                    local.tee self_20(local.tee $deref_ref_15(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_66, i_2)).0).repr = $licm_repr_64;
                     self_20.used = a_end;
                     $deref_ref_15.1 = i_36;
                 } else {
-                    $deref_ref_15 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $licm_repr_67(builtin::array_new<u8>(a_end)), 0, $licm_repr_68, 0, a_end); $licm_repr_67, used: a_end }, 1: i_36 };
-                    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_70, i_2, $deref_ref_15);
+                    $deref_ref_15 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $licm_repr_63(builtin::array_new<u8>(a_end)), 0, $licm_repr_64, 0, a_end); $licm_repr_63, used: a_end }, 1: i_36 };
+                    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_66, i_2, $deref_ref_15);
                 }
                 return block -> ref "core:prelude/string.wado//String" {
-                    i_2 = $licm_used_69 + 1;
-                    multivalue_bind [$licm_repr_67, i_2] = "core:prelude/string.wado/core:prelude/string.wado/String::format<temporary_mut_array_arg.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"(name, i_2);
-                    struct.new "core:prelude/string.wado//String" { repr: $licm_repr_67, used: i_2 };
+                    i_2 = $licm_used_65 + 1;
+                    multivalue_bind [$licm_repr_63, i_2] = "core:prelude/string.wado/core:prelude/string.wado/String::format<temporary_mut_array_arg.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"(name, i_2);
+                    struct.new "core:prelude/string.wado//String" { repr: $licm_repr_63, used: i_2 };
                 };
             }
             i_2 = i_2 + 1;
             continue l1;
         };
     };
-    $deref_ref_15 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: i_2 = name.used; struct.new "core:prelude/string.wado//String" { repr: $licm_repr_67 = name.repr; builtin::array_copy<u8>(local.tee $licm_repr_68(builtin::array_new<u8>(i_2)), 0, $licm_repr_67, 0, i_2); $licm_repr_68, used: i_2 }, 1: 1 };
+    $deref_ref_15 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: i_2 = name.used; struct.new "core:prelude/string.wado//String" { repr: $licm_repr_63 = name.repr; builtin::array_copy<u8>(local.tee $licm_repr_64(builtin::array_new<u8>(i_2)), 0, $licm_repr_63, 0, i_2); $licm_repr_64, used: i_2 }, 1: 1 };
     if @unlikely(local.tee i_2(counts.used) >= builtin::array_len(counts.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,i32]>::grow"(counts);
@@ -176,28 +176,24 @@ fn "temporary_mut_array_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-st
 }
 
 fn "temporary_mut_array_arg.wado/$cm_export__run"() {
-    let $load_1: i32;
-    let v: ref "core:prelude/string.wado//String";
+    let result: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
-    v = "temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 111, 111), used: 3 }, struct.new "core:prelude/list.wado//List<[core:prelude/string.wado/String,i32]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(), used: 0 });
-    let $array_clone_src_1: ref Array<u8>;
-    $array_clone_src_1 = v.repr;
-    $load_1 = v.used;
-    let $array_clone_dst_2: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1);
+    let new_repr: ref Array<u8>;
+    let self_24: i32;
+    result = "temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 111, 111), used: 3 }, struct.new "core:prelude/list.wado//List<[core:prelude/string.wado/String,i32]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(), used: 0 });
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_13 = "temporary_mut_array_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
-    builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>($load_1 + 1)), 0, $array_clone_dst_2, 0, $load_1);
-    builtin::array_set_u8($array_clone_src_1, $load_1, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_24(result.used) + 1)), 0, result.repr, 0, self_24);
+    builtin::array_set_u8(new_repr, self_24, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $load_1 = $load_1 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14, $array_clone_src_1, 0, $load_1);
+        self_24 = self_24 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14, new_repr, 0, self_24);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -286,11 +282,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_6: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();

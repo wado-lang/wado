@@ -1,16 +1,19 @@
 //! `Regex` and what a search answers.
 
-use { Node } from "./ast.wado";
+use { Node, each_child } from "./ast.wado";
 use { Hole, PatternError, Syntax, parse } from "./parse.wado";
 use { backtrack, fits } from "./backtrack.wado";
-use { Dfa, runs } from "./dfa.wado";
+use { Dfa, Scan, runs } from "./dfa.wado";
+use { Markers, Oracle } from "./oracle.wado";
 use { Cache, Goal, Within, search } from "./pike.wado";
 use { print } from "./print.wado";
-use { Direction, Program, compile } from "./program.wado";
+use { Direction, LookaroundPrograms, Program, compile, compile_lookarounds } from "./program.wado";
 
 /// A compiled regular expression.
 pub struct Regex {
     program: Program,
+    /// By the index the instruction of each holds.
+    lookarounds: List<LookaroundPrograms>,
     /// The name of each group, by index; group 0 has none.
     names: List<Option<String>>,
     /// What a template splices where this stands in a hole.
@@ -25,8 +28,14 @@ struct Lazy {
     forward: Option<Dfa>,
     reverse: Option<Dfa>,
     /// Whether the Pike VM answers alone: the program holds an assertion the
-    /// DFA does not resolve, or a DFA gave up.
+    /// DFA does not resolve, the pattern more lookarounds than it reads, or a
+    /// DFA gave up.
     off: bool,
+    /// What fills the oracle of each text.
+    markers: Markers,
+    /// What a pattern with no lookaround hands a DFA, so that a search of
+    /// one builds none.
+    no_oracle: Oracle,
 }
 
 impl Lazy {
@@ -75,23 +84,52 @@ impl Display for Regex {
 
 /// Records each named group's name at its index in `names`.
 fn collect_names(node: &Node, names: &mut List<Option<String>>) {
-    match *node {
-        Group(g) => {
-            if let Some(i) = g.index && let Some(name) = g.name {
-                names[i] = Some(name);
-            }
-            collect_names(&g.body, names);
-        },
-        Modified(m) => collect_names(&m.body, names),
-        Repeat(r) => collect_names(&r.body, names),
-        Concat(nodes) | Alternation(nodes) => {
-            for let n of &nodes {
-                collect_names(n, names);
-            }
-        },
-        _ => {
-        },
+    if let Group(g) = *node && let Some(i) = g.index && let Some(name) = g.name {
+        names[i] = Some(name);
     }
+    each_child(node, |n| collect_names(n, names));
+}
+
+/// Fills in the groups of each lookaround that held on the way to the match
+/// `slots` holds, which `program` found: its instruction left in a slot where
+/// it held last, and its body is read from there. That is its own first
+/// match, which nothing after it alters (CompileAssertion, §22.2.2.4).
+fn read_lookarounds(
+    lookarounds: &List<LookaroundPrograms>,
+    program: &Program,
+    cache: &mut Cache,
+    text: StrSlice,
+    slots: &mut List<i32>,
+) {
+    for let index of &program.marked {
+        let Some(reads) = &lookarounds[*index].reads else {
+            unreachable();
+        };
+        let at = slots[reads.from];
+        if at < 0 {
+            continue;
+        }
+        // The oracle found a match from `at`.
+        let mut inner = read_body(&reads.program, cache, text, at);
+        read_lookarounds(lookarounds, &reads.program, cache, text, &mut inner);
+        for let k of reads.from..<reads.until {
+            slots[k] = inner[k];
+        }
+    }
+}
+
+/// The slots of the match of a lookaround's body from `at`, where the oracle
+/// found one: `program` reads the body in its own direction.
+fn read_body(program: &Program, cache: &mut Cache, text: StrSlice, at: i32) -> List<i32> {
+    let forward = program.direction == Direction::Forward;
+    if let Some(len) = program.match_len {
+        let end = if forward { at + len } else { at - len };
+        if fits(program, at, end) {
+            return backtrack(program, cache, text, at, end);
+        }
+    }
+    let limit = if forward { text.len() } else { 0 };
+    return search(program, cache, text, at, Within::Span(limit), Goal::Groups).unwrap();
 }
 
 internal fn build(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> Result<Regex, PatternError> {
@@ -102,8 +140,15 @@ internal fn build(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> 
     }
     collect_names(&tree, &mut names);
     let program = compile(&tree, groups, Direction::Forward)?;
-    let mut lazy = Lazy { forward: null, reverse: null, off: !runs(&program) };
-    return Ok(Regex { program, names, tree, lazy: &mut lazy });
+    let lookarounds = compile_lookarounds(&tree, groups, &program)?;
+    let mut lazy = Lazy {
+        forward: null,
+        reverse: null,
+        off: !runs(&program, lookarounds.len()),
+        markers: Markers::new(&lookarounds),
+        no_oracle: Oracle::new(),
+    };
+    return Ok(Regex { program, lookarounds, names, tree, lazy: &mut lazy });
 }
 
 fn has_name(names: &List<Option<String>>) -> bool {
@@ -127,17 +172,18 @@ impl Regex {
         return !self.lazy.off && !text.is_empty();
     }
 
-    /// Where the forward DFA's scan from `start` ends. Once it gave up, the
-    /// answer means nothing and `self.lazy.off` is set.
-    fn end_by_dfa(&self, text: StrSlice, start: i32, earliest: bool) -> Option<i32> {
+    /// Where the forward DFA's scan from `start` ends, with the oracle of
+    /// `text`. Once it gave up, the answer means nothing and `self.lazy.off`
+    /// is set.
+    fn end_by_dfa(&self, text: StrSlice, oracle: &Oracle, start: i32, earliest: bool) -> Option<i32> {
         let lazy = self.lazy;
         if lazy.forward matches { null } {
-            lazy.forward = Some(Dfa::new(self.program, Direction::Forward));
+            lazy.forward = Some(Dfa::new(self.program, Scan::End, &self.lookarounds));
         }
         let Some(dfa) = &mut lazy.forward else {
             unreachable();
         };
-        let end = dfa.scan_forward(text, start, earliest);
+        let end = dfa.scan_forward(text, oracle, start, earliest);
         if dfa.gave_up {
             lazy.retire();
         }
@@ -146,17 +192,17 @@ impl Regex {
 
     /// Where the match ending at `end` and starting leftmost, at or after
     /// `floor`, starts, by the reverse DFA and under `end_by_dfa`'s terms.
-    fn start_by_dfa(&self, text: StrSlice, floor: i32, end: i32) -> i32 {
+    fn start_by_dfa(&self, text: StrSlice, oracle: &Oracle, floor: i32, end: i32) -> i32 {
         let lazy = self.lazy;
         if lazy.reverse matches { null } {
             // The forward program compiled, and this one is no larger.
             let program = compile(&self.tree, self.names.len() - 1, Direction::Reverse).unwrap();
-            lazy.reverse = Some(Dfa::new(program, Direction::Reverse));
+            lazy.reverse = Some(Dfa::new(program, Scan::Start, &self.lookarounds));
         }
         let Some(dfa) = &mut lazy.reverse else {
             unreachable();
         };
-        let start = dfa.scan_reverse(text, floor, end);
+        let start = dfa.scan_reverse(text, oracle, floor, end);
         if dfa.gave_up {
             lazy.retire();
         }
@@ -166,15 +212,28 @@ impl Regex {
     /// The slots of the leftmost-first match at or after `start`: every
     /// group's under `groups`, and otherwise at least the whole match's.
     fn slots_at(&self, cache: &mut Cache, text: StrSlice, start: i32, groups: bool) -> Option<List<i32>> {
+        if !self.lookarounds.is_empty() && cache.oracle.is_empty() {
+            cache.oracle = self.oracle_of(text);
+        }
+        let mut slots = self.slots_by_dfa(cache, text, start, groups)?;
+        if groups {
+            read_lookarounds(&self.lookarounds, &self.program, cache, text, &mut slots);
+        }
+        return Some(slots);
+    }
+
+    /// `slots_at` before the groups inside the lookarounds are read, with the
+    /// oracle of `text` in `cache`.
+    fn slots_by_dfa(&self, cache: &mut Cache, text: StrSlice, start: i32, groups: bool) -> Option<List<i32>> {
         if self.scans(text) {
-            let end = self.end_by_dfa(text, start, false);
+            let end = self.end_by_dfa(text, &cache.oracle, start, false);
             if !self.lazy.off {
                 let Some(end) = end else {
                     return null;
                 };
                 let from = match self.program.match_len {
                     Some(len) => end - len,
-                    null => self.start_by_dfa(text, start, end),
+                    null => self.start_by_dfa(text, &cache.oracle, start, end),
                 };
                 if !self.lazy.off {
                     if !groups || self.program.captures == 2 {
@@ -190,16 +249,43 @@ impl Regex {
         return search(&self.program, cache, text, start, Within::Text, Goal::Groups);
     }
 
+    /// Where the pattern's lookarounds pass in `text`.
+    fn oracle_of(&self, text: StrSlice) -> Oracle {
+        return Oracle::of(&self.lookarounds, &mut self.lazy.markers, text);
+    }
+
     /// Whether `text` holds a match.
     pub fn is_match<S: AsStrSlice>(&self, text: S) -> bool {
         let view = text.as_str_slice();
-        if self.scans(view) {
-            let end = self.end_by_dfa(view, 0, true);
+        if self.lookarounds.is_empty() {
+            if let Some(found) = self.matches_by_dfa(view, &self.lazy.no_oracle) {
+                return found;
+            }
+            return self.matches_by_pike(view, &mut Cache::new());
+        }
+        let mut cache = Cache::new();
+        cache.oracle = self.oracle_of(view);
+        if let Some(found) = self.matches_by_dfa(view, &cache.oracle) {
+            return found;
+        }
+        return self.matches_by_pike(view, &mut cache);
+    }
+
+    /// `is_match` by the forward DFA, with the oracle of `text`, or null
+    /// where the Pike VM answers.
+    fn matches_by_dfa(&self, text: StrSlice, oracle: &Oracle) -> Option<bool> {
+        if self.scans(text) {
+            let end = self.end_by_dfa(text, oracle, 0, true);
             if !self.lazy.off {
-                return end matches { Some(_) };
+                return Some(end matches { Some(_) });
             }
         }
-        return search(&self.program, &mut Cache::new(), view, 0, Within::Text, Goal::Any) matches { Some(_) };
+        return null;
+    }
+
+    /// `is_match` by the Pike VM, with the oracle of `text` in `cache`.
+    fn matches_by_pike(&self, text: StrSlice, cache: &mut Cache) -> bool {
+        return search(&self.program, cache, text, 0, Within::Text, Goal::Any) matches { Some(_) };
     }
 
     /// The leftmost match in `text`.
@@ -610,6 +696,49 @@ test "a DFA with too many states hands over to the Pike VM, and is released" {
     assert tail.start() == first - 13 && tail.end() == bytes.len();
     assert reverse.lazy.off;
     assert reverse.lazy.reverse matches { null };
+}
+
+test "the DFAs run a pattern of few lookarounds, and the Pike VM one of more" {
+    let few = Regex::new(#"(?<!\d)\d{2}(?!\d)"#).unwrap();
+    assert few.find_iter("a12b345 67").count() == 2;
+    assert !few.lazy.off;
+    assert few.lazy.forward matches { Some(_) };
+
+    let many = Regex::new(#"(?<=a)(?=b)(?!c)(?<!d)|x"#).unwrap();
+    assert many.lazy.off;
+    assert many.find("cab").unwrap().start() == 2;
+}
+
+test "a lookaround whose DFA gives up is read by the oracle's own scan" {
+    // `a` and `b` in an order no short pattern predicts, a `c` every so often.
+    let mut bytes: List<u8> = [];
+    let mut x: u32 = 0x9E3779B9;
+    let mut expected = 0;
+    for let i of 0..<30000 {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        if i % 50 == 49 {
+            expected += (bytes[i - 14] == b'a') as i32;
+            bytes.push(b'c');
+        } else {
+            bytes.push(if x & 1 == 0 { b'a' } else { b'b' });
+        }
+    }
+    let text = String::try_from_utf8(bytes as ByteList).unwrap();
+
+    let r = Regex::new(#"(?<=a[ab]{13})c"#).unwrap();
+    assert r.find_iter(&text).count() == expected;
+    assert expected > 100;
+    assert r.lazy.markers.each[0].off;
+    assert !r.lazy.off;
+}
+
+test "a one-byte body whose DFA gives up is read by the oracle's own scan" {
+    // The branch that never matches holds a thread for each `a?`.
+    let r = Regex::new(#"(?<=(?:a?){499990}[]|z)"#).unwrap();
+    assert r.find("z").unwrap().start() == 1;
+    assert r.lazy.markers.each[0].off;
 }
 
 test "a DFA whose states are large gives up before its tables are" {

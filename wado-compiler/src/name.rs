@@ -115,6 +115,13 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
     format!("{deep_name}$shallow")
 }
 
+/// The name of the clone `copy_elision` mints of a function that returns
+/// copies of its arguments' parts, lending the parts instead: the function's
+/// name with a `$lend` suffix.
+pub fn lending_clone_name(name: &str) -> String {
+    format!("{name}$lend")
+}
+
 /// The name of the function `cold_outline` moves a `cold_path()` region into:
 /// the enclosing function's name with a `$cold` suffix, numbered when it opens
 /// more than one region.
@@ -1469,10 +1476,10 @@ mod tests {
             "$value_copy"
         );
         // A type argument carries a module path of its own.
-        let traits = interner.core("prelude/traits.wado");
+        let reflect = interner.core("prelude/reflect.wado");
         assert_eq!(
             named(
-                &traits,
+                &reflect,
                 "TemplateHole<a.wado/$tmpl$59e1,core:prelude/string.wado/String>::lit$sroa[self.index]"
             ),
             "TemplateHole<$tmpl$59e1,String>::lit"

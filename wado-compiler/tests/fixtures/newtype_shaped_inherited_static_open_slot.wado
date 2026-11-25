@@ -1,0 +1,16 @@
+// A newtype whose parameter sits inside its base's argument, calling a static
+// it inherits, gives the result the newtype even where the slot is still open:
+// what answers the newtype later answers the base's argument too.
+type Wrapped<T> = List<Option<T>>;
+
+fn id<T>(value: T) -> T {
+    return value;
+}
+
+test "an inherited static keeps a shaped newtype through an open slot" {
+    let direct: Wrapped<i32> = Wrapped::with_capacity(2);
+    let through: Wrapped<i32> = id(Wrapped::with_capacity(2));
+    let later = Wrapped::with_capacity(2);
+    let settled: Wrapped<i32> = later;
+    assert direct.len() + through.len() + settled.len() == 0;
+}

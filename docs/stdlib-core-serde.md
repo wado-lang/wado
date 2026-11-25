@@ -245,7 +245,7 @@ with no distinct byte-string form keeps working unchanged.
 
 ### `pub trait DeserializeSeq with ()`
 
-#### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+#### `fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
 
 `#[compiler_item("deserialize_seq_next_element")]`
 
@@ -593,7 +593,7 @@ _Fields are private._
 
 #### `impl DeserializeSeq for NoCompound`
 
-##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+##### `fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
 
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
 

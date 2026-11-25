@@ -18,6 +18,7 @@ use super::callee::CalleeRef;
 use super::coercion::is_primitive_literal_target;
 use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
+use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, KeyCandidate, MethodOwner, OverloadedCallForm, TypeError};
 use super::tysys::TypeSystem;
 use crate::elaborator::trait_env::ImplTargetKey;
@@ -289,38 +290,56 @@ fn condition_binding_names(condition: &ast::Condition) -> Vec<String> {
 
 /// Whether an argument of type `arg` answers a parameter of type `param`,
 /// the reference conversion included: a `&mut T` argument answers a `&T`
-/// parameter, as [`unify`] binds it. A closure whose effects are still a
-/// variable answers a function parameter of its shape, which settles them.
+/// parameter, as [`unify`] binds it. A function answers what the argument's
+/// typecheck lets it fill, `fn` for `fn mut` and an open row included; one
+/// whose effects are still a variable answers every row of its shape.
 pub(super) fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
     if param == arg {
         return true;
     }
-    if let (ResolvedType::Ref(p), ResolvedType::MutRef(a)) = (tt.get(param), tt.get(arg)) {
-        return p == a;
+    match (tt.get(param), tt.get(arg)) {
+        (ResolvedType::Ref(p), ResolvedType::MutRef(a)) => p == a,
+        (ResolvedType::Function { .. }, ResolvedType::Function { .. }) => {
+            check_assignable(arg, param, tt) != TypeCheckResult::Incompatible
+        }
+        _ => false,
     }
-    let (
-        ResolvedType::Function {
-            is_mut: param_mut,
-            params: param_params,
-            return_type: param_return,
-            effects: param_effects,
-        },
-        ResolvedType::Function {
-            is_mut: arg_mut,
-            params: arg_params,
-            return_type: arg_return,
-            effects: arg_effects,
-        },
-    ) = (tt.get(param), tt.get(arg))
-    else {
-        return false;
-    };
-    param_mut == arg_mut
-        && param_params == arg_params
-        && param_return == arg_return
-        && arg_effects
-            .iter()
-            .all(|effect| matches!(effect, EffectRef::Var { .. }) || param_effects.contains(effect))
+}
+
+/// Two function types alike in everything but `fn` versus `fn mut`.
+fn same_but_mutability(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
+    match (tt.get(param), tt.get(arg)) {
+        (
+            ResolvedType::Function {
+                params: p_params,
+                return_type: p_return,
+                effects: p_row,
+                ..
+            },
+            ResolvedType::Function {
+                params: a_params,
+                return_type: a_return,
+                effects: a_row,
+                ..
+            },
+        ) => p_params == a_params && p_return == a_return && p_row == a_row,
+        _ => false,
+    }
+}
+
+/// A function argument whose row is solved: `solved` is `arg` with it.
+struct RowedArg {
+    position: usize,
+    arg: TypeId,
+    solved: TypeId,
+}
+
+/// How closely a parameter takes a function argument, loosest first.
+#[derive(Clone, Copy)]
+enum Fit {
+    Holds,
+    Row,
+    Type,
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -370,6 +389,92 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Narrow `candidates` by the function arguments' solved rows: to those
+    /// whose rows hold them, then to those taking every row exactly where
+    /// any does, then to those taking every type exactly (`fn` over
+    /// `fn mut`). A tier judges all arguments at once, so no position
+    /// outranks another. A closure's row is its body's solution, closed only
+    /// where it selects.
+    pub(super) fn narrow_by_function_rows<C>(
+        &self,
+        candidates: &mut Vec<C>,
+        classes: &[ArgClass],
+        param_at: impl Fn(&C, usize) -> Option<TypeId>,
+    ) {
+        if candidates.len() < 2 {
+            return;
+        }
+        let rowed: Vec<RowedArg> = classes
+            .iter()
+            .enumerate()
+            .filter_map(|(position, class)| {
+                let &ArgClass::Exact(arg) = class else {
+                    return None;
+                };
+                let mut tt = self.tysys.type_table.borrow_mut();
+                if !matches!(tt.get(arg), ResolvedType::Function { .. }) {
+                    return None;
+                }
+                let solved = tt.peek_effect_rows_in(arg);
+                let ResolvedType::Function { effects, .. } = tt.get(solved) else {
+                    unreachable!("solving a row keeps a function a function")
+                };
+                (!effects.iter().any(EffectRef::is_var)).then_some(RowedArg {
+                    position,
+                    arg,
+                    solved,
+                })
+            })
+            .collect();
+        let takes_at = |c: &C, rowed: &RowedArg, fit: Fit| {
+            param_at(c, rowed.position).is_some_and(|param| {
+                let tt = self.tysys.type_table.borrow();
+                match fit {
+                    Fit::Holds => param_takes(&tt, param, rowed.solved),
+                    Fit::Row => same_but_mutability(&tt, param, rowed.solved),
+                    Fit::Type => param == rowed.solved,
+                }
+            })
+        };
+        for rowed in &rowed {
+            self.narrow_reading_rows(candidates, std::slice::from_ref(rowed), |c, r| {
+                takes_at(c, r, Fit::Holds)
+            });
+        }
+        for fit in [Fit::Row, Fit::Type] {
+            let takes_all = |c: &C| rowed.iter().all(|r| takes_at(c, r, fit));
+            if candidates.iter().any(takes_all) {
+                self.narrow_reading_rows(candidates, &rowed, |c, r| takes_at(c, r, fit));
+            }
+        }
+    }
+
+    /// Keep the candidates `takes` admits at every one of `rowed`, reading
+    /// the rows of the arguments that told them apart.
+    fn narrow_reading_rows<C>(
+        &self,
+        candidates: &mut Vec<C>,
+        rowed: &[RowedArg],
+        takes: impl Fn(&C, &RowedArg) -> bool,
+    ) {
+        if candidates.len() < 2 {
+            return;
+        }
+        let mut selects = false;
+        for r in rowed {
+            if !candidates.iter().all(|c| takes(c, r)) {
+                selects = true;
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .read_effect_rows_in(r.arg);
+            }
+        }
+        if selects {
+            candidates.retain(|c| rowed.iter().all(|r| takes(c, r)));
+        }
+    }
+
     /// Whether a candidate's parameter type is in `class`'s denoted set.
     pub(super) fn class_admits(&self, param: TypeId, class: &ArgClass) -> bool {
         let tt = self.tysys.type_table.borrow();
@@ -390,7 +495,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
         match class {
-            ArgClass::Opaque(_) => true,
+            ArgClass::Opaque(OpaqueReason::Closure) => matches!(
+                tt.get(tt.representation_head(param)),
+                ResolvedType::Function { .. }
+            ),
+            ArgClass::Opaque(
+                OpaqueReason::CompoundLiteral | OpaqueReason::Inference | OpaqueReason::Unresolved,
+            ) => true,
             ArgClass::Exact(t) => {
                 if param_takes(&tt, param, *t) {
                     return true;
@@ -567,21 +678,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some((_, _, ty, _)) = self.sem.decls.imported_globals.get(name) {
                 return self.class_of_type(*ty);
             }
-            // A bare function name is a function *reference*, whose type the
-            // expected type instantiates; anything else did not resolve.
+            // A bare function name is a function *reference*: its signature
+            // types it, unless the expected type must settle its type or
+            // effect parameters. Anything else did not resolve.
             let is_function = self.sem.decls.function_return_types.contains_key(name)
                 || self.sem.decls.imported_functions.contains(name);
-            return ArgClass::Opaque(if is_function {
-                OpaqueReason::Inference
-            } else {
-                OpaqueReason::Unresolved
-            });
+            if !is_function {
+                return ArgClass::Opaque(OpaqueReason::Unresolved);
+            }
+            return self.synth_func_ref(id);
         }
         if let Some(AssocConstSig { ty, .. }) = self.tysys.associated_constant_of_path(id) {
             return self.class_of_type(ty);
         }
         let name = name.to_string();
         self.synth_qualified_case(id, &name)
+    }
+
+    /// A function reference's type, which `resolve_func_ref_ident` builds from
+    /// the signature alone where nothing is left to the expected type.
+    fn synth_func_ref(&mut self, id: &ast::IdentExpr) -> ArgClass {
+        let Some((sig, _, _)) = self.tysys.lookup_func_sig_for_ref(id) else {
+            return ArgClass::Opaque(OpaqueReason::Unresolved);
+        };
+        if !id.type_args.is_empty() || !sig.decl.own_effects.is_empty() {
+            return ArgClass::Opaque(OpaqueReason::Inference);
+        }
+        match self.compute_func_ref_type_from_sig(&sig, &[]) {
+            Some(ty) => self.class_of_type(ty),
+            None => ArgClass::Opaque(OpaqueReason::Inference),
+        }
     }
 
     /// `Color::Red`, `Flags::Bit`, and a payload-less case of a non-generic

@@ -1,0 +1,55 @@
+// A function that returns copies of its argument's parts lends the parts
+// instead, to a caller that writes none of them while the result is live:
+// it may read them, or grow the list holding them. The copies inside the
+// callee are gone.
+struct Range { lo: i32, hi: i32 }
+struct Elem { name: String, ranges: List<Range> }
+
+fn width(e: &Elem) -> i32 {
+    let mut w = 0;
+    for let r of &e.ranges { w += r.hi - r.lo; }
+    return w;
+}
+
+#[inline("never")]
+fn suffix(src: &List<Elem>, from: i32) -> List<Elem> {
+    let mut out: List<Elem> = [];
+    for let mut j = from; j < src.len(); j += 1 {
+        out.push(src[j]);
+    }
+    return out;
+}
+
+#[inline("never")]
+fn suffix_width(src: &List<Elem>, from: i32) -> i32 {
+    let rest = suffix(src, from);
+    let mut t = 0;
+    for let e of &rest { t += width(e); }
+    return t;
+}
+
+#[inline("never")]
+fn grown_width(src: &List<Elem>, from: i32) -> i32 {
+    let mut rest = suffix(src, from);
+    rest.push(Elem { name: "z", ranges: [Range { lo: 0, hi: 10 }] });
+    let mut t = 0;
+    for let e of &rest { t += width(e); }
+    return t;
+}
+
+test "the lent parts read as their sources" {
+    let src: List<Elem> = [
+        Elem { name: "a", ranges: [Range { lo: 1, hi: 3 }] },
+        Elem { name: "b", ranges: [Range { lo: 1, hi: 4 }] },
+        Elem { name: "c", ranges: [Range { lo: 1, hi: 5 }] },
+    ];
+    assert suffix_width(&src, builtin::black_box(1)) == 7;
+    assert grown_width(&src, builtin::black_box(1)) == 17;    assert src.len() == 3;
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["nir/copy_elision"]},
+    "test": {},
+    "wir_not_expect:O2": ["$value_copy$"]
+}

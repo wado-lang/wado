@@ -390,13 +390,13 @@ pub enum CompilerItem {
     /// each deserializable struct, providing the static, allocation-free
     /// field-name → index `lookup` that self-describing formats invoke.
     FieldSchema,
-    /// `core:prelude/traits::Iterator` — the trait a `for-of` loop's iterator
+    /// `core:prelude/iter::Iterator` — the trait a `for-of` loop's iterator
     /// must implement.
     Iterator,
-    /// `core:prelude/traits::IntoIterator` — the trait a `for-of` loop's
+    /// `core:prelude/iter::IntoIterator` — the trait a `for-of` loop's
     /// subject must implement.
     IntoIterator,
-    /// `core:prelude/traits::ForOf` — what a `for-of` loop over a value
+    /// `core:prelude/iter::ForOf` — what a `for-of` loop over a value
     /// passes it to.
     ForOf,
     /// `core:prelude/traits::LiteralSpread` — what `..base` inside a literal
@@ -762,16 +762,16 @@ pub enum CompilerItem {
     CmLowerArrayU8,
     /// `core:rt::cm_await_blocked`.
     CmAwaitBlocked,
-    /// `core:prelude/types::CopyResult`, how a CM copy ended.
+    /// `core:prelude/async::CopyResult`, how a CM copy ended.
     CopyResult,
-    /// `core:prelude/types::FutureWriteResult`, how a future write ended.
+    /// `core:prelude/async::FutureWriteResult`, how a future write ended.
     FutureWriteResult,
-    /// `core:prelude/types::FutureWrite`, what one `FutureWritable::write` did
+    /// `core:prelude/async::FutureWrite`, what one `FutureWritable::write` did
     /// not deliver.
     FutureWrite,
-    /// `core:prelude/types::StartedRead`, a `stream.read` not yet settled.
+    /// `core:prelude/async::StartedRead`, a `stream.read` not yet settled.
     StartedRead,
-    /// `core:prelude/types::StartedWrite`, a `stream.write` not yet settled.
+    /// `core:prelude/async::StartedWrite`, a `stream.write` not yet settled.
     StartedWrite,
     /// `core:rt::cm_future_write_result`.
     CmFutureWriteResult,
@@ -2443,13 +2443,6 @@ impl CompilerItems {
         }
     }
 
-    /// Owned `(module, name)` for a struct item — the borrow-then-clone the
-    /// callers of [`Self::require_struct`] would otherwise repeat inline.
-    pub fn struct_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
-        let (module, name) = self.require_struct(item);
-        (module.clone(), name.to_string())
-    }
-
     /// Module + variant name of a [`CompilerItemKind::Variant`] item
     /// (`Option`, `Result`).
     pub fn require_variant(&self, item: CompilerItem) -> (&ModuleSource, &str) {
@@ -2461,25 +2454,6 @@ impl CompilerItems {
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Variant", other),
         }
-    }
-
-    /// Module + enum name of a [`CompilerItemKind::Enum`] item
-    /// (`Ordering`).
-    pub fn require_enum(&self, item: CompilerItem) -> (&ModuleSource, &str) {
-        match self.require(item) {
-            Resolved::Enum {
-                module_source,
-                name,
-                ..
-            } => (module_source, name.as_str()),
-            other => kind_mismatch_ice(item, "Enum", other),
-        }
-    }
-
-    /// Owned `(module, name)` for an enum item — see [`Self::struct_owned`].
-    pub fn enum_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
-        let (module, name) = self.require_enum(item);
-        (module.clone(), name.to_string())
     }
 
     /// Module + trait name of a [`CompilerItemKind::Trait`] item.
@@ -2659,31 +2633,10 @@ impl CompilerItems {
         self.require_variant(item).1
     }
 
-    /// Name-only convenience for a [`CompilerItemKind::Enum`] item.
-    pub fn enum_name(&self, item: CompilerItem) -> &str {
-        self.require_enum(item).1
-    }
-
     /// Name-only convenience for a [`CompilerItemKind::Method`] item.
     /// Returns the unmangled method name (e.g. `"push_str"`).
     pub fn method_name(&self, item: CompilerItem) -> &str {
         self.require_method(item).2
-    }
-
-    /// Module-only accessor for a trait.
-    pub fn trait_module(&self, item: CompilerItem) -> Option<&ModuleSource> {
-        match self.get(item)? {
-            Resolved::Trait { module_source, .. } => Some(module_source),
-            _ => None,
-        }
-    }
-
-    /// Module-only accessor for a struct.
-    pub fn struct_module(&self, item: CompilerItem) -> Option<&ModuleSource> {
-        match self.get(item)? {
-            Resolved::Struct { module_source, .. } => Some(module_source),
-            _ => None,
-        }
     }
 
     /// The template a synthesised call to a [`CompilerItemKind::Method`] or
@@ -2915,7 +2868,16 @@ pub fn parse_compiler_item_attrs(attrs: &[Attribute]) -> (Vec<CompilerItem>, Vec
 mod tests {
     use super::*;
     use crate::ast::AstId;
+    use crate::module_source::ModuleSourceInterner;
     use std::assert_matches;
+
+    fn option_module() -> ModuleSource {
+        ModuleSourceInterner::new().core("prelude/option.wado")
+    }
+
+    fn traits_module() -> ModuleSource {
+        ModuleSourceInterner::new().core("prelude/traits.wado")
+    }
 
     #[test]
     fn all_variants_have_unique_attr_names() {
@@ -2951,7 +2913,7 @@ mod tests {
                 Resolved::Trait {
                     decl: AstId::fresh(),
                     fq: None,
-                    module_source: ModuleSource::types(),
+                    module_source: option_module(),
                     name: "Option".into(),
                     method_name: None,
                     assoc_types: Vec::new(),
@@ -2965,7 +2927,7 @@ mod tests {
     fn register_rejects_duplicate() {
         let mut reg = CompilerItems::new();
         let first = Resolved::Variant {
-            module_source: ModuleSource::types(),
+            module_source: option_module(),
             name: "Option".into(),
             decl: AstId::fresh(),
         };
@@ -2983,7 +2945,7 @@ mod tests {
     fn register_same_value_is_noop() {
         let mut reg = CompilerItems::new();
         let resolved = Resolved::Variant {
-            module_source: ModuleSource::types(),
+            module_source: option_module(),
             name: "Option".into(),
             decl: AstId::fresh(),
         };
@@ -3000,7 +2962,7 @@ mod tests {
             Resolved::Trait {
                 decl: AstId::fresh(),
                 fq: None,
-                module_source: ModuleSource::traits(),
+                module_source: traits_module(),
                 name: "Default".into(),
                 method_name: Some("default".into()),
                 assoc_types: Vec::new(),
@@ -3009,7 +2971,7 @@ mod tests {
         .unwrap();
         let (module, name) = reg.require_trait(CompilerItem::Default);
         assert_eq!(name, "Default");
-        assert_eq!(module, &ModuleSource::traits());
+        assert_eq!(module, &traits_module());
     }
 
     /// Regression: a `Default`-constructed registry must be usable
@@ -3068,7 +3030,7 @@ mod tests {
             Resolved::Trait {
                 decl: AstId::fresh(),
                 fq: None,
-                module_source: ModuleSource::serde(),
+                module_source: ModuleSourceInterner::new().core("serde"),
                 name: "Serializer".to_string(),
                 method_name: None,
                 assoc_types: vec![
@@ -3137,7 +3099,7 @@ mod tests {
         reg.register(
             CompilerItem::OptionSome,
             Resolved::VariantCase {
-                module_source: ModuleSource::types(),
+                module_source: option_module(),
                 parent_type: "Option".to_string(),
                 name: "SomeV2".to_string(),
                 case_index: 0,
@@ -3145,7 +3107,7 @@ mod tests {
         )
         .unwrap();
         let (module, parent, name, index) = reg.require_variant_case(CompilerItem::OptionSome);
-        assert_eq!(module, &ModuleSource::types());
+        assert_eq!(module, &option_module());
         assert_eq!(parent, "Option");
         assert_eq!(name, "SomeV2");
         assert_eq!(index, 0);
@@ -3161,7 +3123,7 @@ mod tests {
         reg.register(
             CompilerItem::OrderingLess,
             Resolved::EnumCase {
-                module_source: ModuleSource::traits(),
+                module_source: traits_module(),
                 parent_type: "Ordering".to_string(),
                 name: "LessV2".to_string(),
                 case_index: 0,
@@ -3169,7 +3131,7 @@ mod tests {
         )
         .unwrap();
         let (module, parent, name, index) = reg.require_enum_case(CompilerItem::OrderingLess);
-        assert_eq!(module, &ModuleSource::traits());
+        assert_eq!(module, &traits_module());
         assert_eq!(parent, "Ordering");
         assert_eq!(name, "LessV2");
         assert_eq!(index, 0);
@@ -3186,7 +3148,7 @@ mod tests {
             .register(
                 CompilerItem::OptionSome,
                 Resolved::EnumCase {
-                    module_source: ModuleSource::types(),
+                    module_source: option_module(),
                     parent_type: "Option".to_string(),
                     name: "Some".to_string(),
                     case_index: 0,

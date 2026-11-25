@@ -11,8 +11,6 @@ That logic once lived in three places: raw instruction emission in codegen,
 per-type converter functions in `internal.wado`, and pattern-matching convention
 structs. Each new WIT type shape needed hand-written support in all three.
 
-The canonical operations on streams, futures and waitable sets are
-[resource canonical attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md).
 [WASI HTTP Integration](./wep-2026-02-21-wasi-http.md) builds its handler on the
 export bindings described here.
 
@@ -221,6 +219,49 @@ TirExprKind::CmRawCall {
 
 Codegen resolves `local_name` to the imported function index. The same node
 carries `task-return` and the other CM intrinsics an export binding calls.
+
+### Canonical operations are declared on the resource
+
+The operations on a stream, a future, a waitable set, a subtask and an error
+context are methods of resources declared in `core:prelude/async.wado`. Each
+carries the canonical it stands for:
+
+```wado
+pub resource Future<T> {
+    #[cm("future-new")]
+    fn new() -> [Future<T>, FutureWritable<T>];
+
+    #[cm("future-read")]
+    fn read(self) -> Option<T>;
+
+    #[cm("future-drop-readable")]
+    fn drop(self);
+}
+```
+
+The attribute is the only link between a method and its canonical. No phase
+matches a type or method name. `resource_rewrite.rs` rewrites a read or a write
+to a binding built per payload type (`$cm_stream_read_<T>`,
+`$cm_future_write_<T>`), out of the same lift and lower as an adapter. It
+rewrites `new()` to the canonical itself, typed by the payload.
+
+The declarations settle four things:
+
+- `Future<T>` and `Stream<T>` name the readable end, and `FutureWritable<T>` and
+  `StreamWritable<T>` the writable one. The CM calls the ends `future-read` and
+  `future-write`. Most APIs receive the readable end, so it takes the short
+  name, as "future" and "promise" mean the consumer side elsewhere.
+- `drop` consumes its receiver. Under `fn drop(&self)` the binding would stay
+  usable after its handle died, and the drop at scope exit would drop it again
+  ([Resource Ownership](./wep-2026-05-21-resource-ownership.md)).
+- `Future::read` returns `Option<T>`. A writer that drops without writing is an
+  ordinary outcome, such as a cancelled task, so it is `None` rather than a
+  trap.
+- `ErrorContext` carries a debug message across the boundary and nothing else.
+  How a copy ended is its `CopyResult`
+  ([Stream Copy Results](./wep-2026-08-30-stream-copy-result.md)), and an
+  application error travels in the payload type, as in
+  `Future<Result<Response, ErrorCode>>`.
 
 ## Roadmap
 

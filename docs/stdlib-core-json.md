@@ -157,7 +157,7 @@ Reads the elements of a JSON array.
 
 #### `impl DeserializeSeq for JsonSeqAccess`
 
-##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+##### `fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
 
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
 

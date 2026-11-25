@@ -24,9 +24,9 @@ struct core:prelude/list.wado//List<i32> {  // TypeId(2)
     mut used: i32,
 }
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(3)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(3)
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(4)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(4)
 
 array Array<u8> (mut u8);  // TypeId(5)
 
@@ -56,7 +56,7 @@ type "functype//loop_unroll_step_mid_body.wado/$cm_export__run" = fn();  // Type
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(18)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(19)
 
 type "functype//core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$spec0$dae[start,marker]" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(20)
 
@@ -169,166 +169,166 @@ fn "loop_unroll_step_mid_body.wado/weighted"(x, n) {
 fn "loop_unroll_step_mid_body.wado/run"() with Stdout {
     let len_0: i32;
     let a: ref Array<i32>;
-    let current_17: i32;
-    let $sroa_$iter_0_start_63: i32;
-    let current_71: i32;
-    let $cm_pair_7_83: i64;
-    let $value_139: i32;
-    let $sroa_text_repr_157: ref Array<u8>;
-    let $sroa_text_used_158: i32;
-    let $sroa_$iter_1_start_159: i32;
-    let $sroa_$iter_1_exhausted_161: bool;
-    let $sroa_write_back_166: ref "core:prelude/string.wado//String";
-    let $sroa_sums_repr_168: ref Array<i32>;
-    let $sroa_weights_repr_170: ref Array<i32>;
-    let $sroa_write_back_172: ref "core:prelude/list.wado//List<i32>";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_24_0_230: ref "core:prelude/format.wado//Formatter";
+    let current_16: i32;
+    let current_63: i32;
+    let $cm_pair_7_75: i64;
+    let $value_131: i32;
+    let $sroa_text_repr_149: ref Array<u8>;
+    let $sroa_text_used_150: i32;
+    let $sroa_write_back_155: ref "core:prelude/string.wado//String";
+    let $sroa_sums_repr_158: ref Array<i32>;
+    let $sroa_weights_repr_160: ref Array<i32>;
+    let $sroa_write_back_162: ref "core:prelude/list.wado//List<i32>";
+    let $temp_inline_core_prelude_reflect_wado_TemplateHole_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_24_0_220: ref "core:prelude/format.wado//Formatter";
+    let $sroa_$iter_0_start_390: i32;
+    let $sroa_$iter_1_start_395: i32;
+    let $sroa_$iter_1_exhausted_397: bool;
     a = builtin::array_new<i32>(local.tee len_0(black_box(10)));
-    $sroa_text_repr_157 = builtin::array_new<u8>(0);
-    $sroa_text_used_158 = 0;
-    $sroa_$iter_0_start_63 = 0;
+    $sroa_text_repr_149 = builtin::array_new<u8>(0);
+    $sroa_text_used_150 = 0;
+    $sroa_$iter_0_start_390 = 0;
     b8: block {
         l9: loop {
-            break_if b8 $sroa_$iter_0_start_63 >= len_0;
-            $sroa_$iter_0_start_63 = local.tee current_17($sroa_$iter_0_start_63) + 1;
-            builtin::array_set<i32>(a, current_17, (current_17 * 3) + 1);
+            break_if b8 $sroa_$iter_0_start_390 >= len_0;
+            $sroa_$iter_0_start_390 = local.tee current_16($sroa_$iter_0_start_390) + 1;
+            builtin::array_set<i32>(a, current_16, (current_16 * 3) + 1);
             continue l9;
         };
     };
-    $sroa_sums_repr_168 = array.new_fixed<i32>();
-    $sroa_$iter_0_start_63 = 0;
-    $sroa_weights_repr_170 = array.new_fixed<i32>();
-    current_17 = 0;
-    $sroa_$iter_1_start_159 = 0;
-    $sroa_$iter_1_exhausted_161 = 0;
+    $sroa_sums_repr_158 = array.new_fixed<i32>();
+    $sroa_$iter_0_start_390 = 0;
+    $sroa_weights_repr_160 = array.new_fixed<i32>();
+    current_16 = 0;
+    $sroa_$iter_1_start_395 = 0;
+    $sroa_$iter_1_exhausted_397 = 0;
     b10: block {
         l11: loop {
-            $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__1: block {
-                break_if b10 $sroa_$iter_1_exhausted_161;
-                break_if b10 $sroa_$iter_1_start_159 > len_0;
-                current_71 = $sroa_$iter_1_start_159;
-                if $sroa_$iter_1_start_159 == len_0 {
-                    $sroa_$iter_1_exhausted_161 = 1;
-                    $value_139 = block -> i32 {
-                        "loop_unroll_step_mid_body.wado/byte_sum"($sroa_text_repr_157, $sroa_text_used_158);
+            $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__1: block {
+                break_if b10 $sroa_$iter_1_exhausted_397;
+                break_if b10 $sroa_$iter_1_start_395 > len_0;
+                current_63 = $sroa_$iter_1_start_395;
+                if $sroa_$iter_1_start_395 == len_0 {
+                    $sroa_$iter_1_exhausted_397 = 1;
+                    $value_131 = block -> i32 {
+                        "loop_unroll_step_mid_body.wado/byte_sum"($sroa_text_repr_149, $sroa_text_used_150);
                     };
-                    if @unlikely($sroa_$iter_0_start_63 >= builtin::array_len($sroa_sums_repr_168)) {
+                    if @unlikely($sroa_$iter_0_start_390 >= builtin::array_len($sroa_sums_repr_158)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_172(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_sums_repr_168, used: $sroa_$iter_0_start_63 }));
-                        $sroa_sums_repr_168 = $sroa_write_back_172.repr;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_162(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_sums_repr_158, used: $sroa_$iter_0_start_390 }));
+                        $sroa_sums_repr_158 = $sroa_write_back_162.repr;
                     }
-                    builtin::array_set<i32>($sroa_sums_repr_168, $sroa_$iter_0_start_63, $value_139);
-                    $sroa_$iter_0_start_63 = $sroa_$iter_0_start_63 + 1;
-                    current_71 = "loop_unroll_step_mid_body.wado/weighted"(a, current_71);
-                    if @unlikely(current_17 >= builtin::array_len($sroa_weights_repr_170)) {
+                    builtin::array_set<i32>($sroa_sums_repr_158, $sroa_$iter_0_start_390, $value_131);
+                    $sroa_$iter_0_start_390 = $sroa_$iter_0_start_390 + 1;
+                    current_63 = "loop_unroll_step_mid_body.wado/weighted"(a, current_63);
+                    if @unlikely(current_16 >= builtin::array_len($sroa_weights_repr_160)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_172(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_weights_repr_170, used: current_17 }));
-                        $sroa_weights_repr_170 = $sroa_write_back_172.repr;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_162(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_weights_repr_160, used: current_16 }));
+                        $sroa_weights_repr_160 = $sroa_write_back_162.repr;
                     }
-                    builtin::array_set<i32>($sroa_weights_repr_170, current_17, current_71);
-                    current_17 = current_17 + 1;
-                    if @unlikely(local.tee current_71($sroa_text_used_158 + 2) > builtin::array_len($sroa_text_repr_157)) {
+                    builtin::array_set<i32>($sroa_weights_repr_160, current_16, current_63);
+                    current_16 = current_16 + 1;
+                    if @unlikely(local.tee current_63($sroa_text_used_150 + 2) > builtin::array_len($sroa_text_repr_149)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_166(struct.new "core:prelude/string.wado//String" { repr: $sroa_text_repr_157, used: $sroa_text_used_158 }), current_71);
-                        $sroa_text_repr_157 = $sroa_write_back_166.repr;
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_155(struct.new "core:prelude/string.wado//String" { repr: $sroa_text_repr_149, used: $sroa_text_used_150 }), current_63);
+                        $sroa_text_repr_149 = $sroa_write_back_155.repr;
                     }
-                    $value_139 = $sroa_text_used_158;
-                    $sroa_text_used_158 = current_71;
-                    builtin::array_copy<u8>($sroa_text_repr_157, $value_139, global:loop_unroll_step_mid_body.wado::$const_obj_0, 0, 2);
-                    break $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__1;
+                    $value_131 = $sroa_text_used_150;
+                    $sroa_text_used_150 = current_63;
+                    builtin::array_copy<u8>($sroa_text_repr_149, $value_131, global:loop_unroll_step_mid_body.wado::$const_obj_0, 0, 2);
+                    break $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__1;
                 }
-                $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__1__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0: block {
-                    if current_71 == 2147483647 {
-                        $sroa_$iter_1_exhausted_161 = 1;
-                        break $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__1__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0;
+                $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__1__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0: block {
+                    if current_63 == 2147483647 {
+                        $sroa_$iter_1_exhausted_397 = 1;
+                        break $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__1__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0;
                     }
-                    $sroa_$iter_1_start_159 = current_71 + 1;
-                    break $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__1__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0;
+                    $sroa_$iter_1_start_395 = current_63 + 1;
+                    break $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__1__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0;
                 };
-                $value_139 = block -> i32 {
-                    "loop_unroll_step_mid_body.wado/byte_sum"($sroa_text_repr_157, $sroa_text_used_158);
+                $value_131 = block -> i32 {
+                    "loop_unroll_step_mid_body.wado/byte_sum"($sroa_text_repr_149, $sroa_text_used_150);
                 };
-                if @unlikely($sroa_$iter_0_start_63 >= builtin::array_len($sroa_sums_repr_168)) {
+                if @unlikely($sroa_$iter_0_start_390 >= builtin::array_len($sroa_sums_repr_158)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_172(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_sums_repr_168, used: $sroa_$iter_0_start_63 }));
-                    $sroa_sums_repr_168 = $sroa_write_back_172.repr;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_162(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_sums_repr_158, used: $sroa_$iter_0_start_390 }));
+                    $sroa_sums_repr_158 = $sroa_write_back_162.repr;
                 }
-                builtin::array_set<i32>($sroa_sums_repr_168, $sroa_$iter_0_start_63, $value_139);
-                $sroa_$iter_0_start_63 = $sroa_$iter_0_start_63 + 1;
-                current_71 = "loop_unroll_step_mid_body.wado/weighted"(a, current_71);
-                if @unlikely(current_17 >= builtin::array_len($sroa_weights_repr_170)) {
+                builtin::array_set<i32>($sroa_sums_repr_158, $sroa_$iter_0_start_390, $value_131);
+                $sroa_$iter_0_start_390 = $sroa_$iter_0_start_390 + 1;
+                current_63 = "loop_unroll_step_mid_body.wado/weighted"(a, current_63);
+                if @unlikely(current_16 >= builtin::array_len($sroa_weights_repr_160)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_172(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_weights_repr_170, used: current_17 }));
-                    $sroa_weights_repr_170 = $sroa_write_back_172.repr;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_162(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_weights_repr_160, used: current_16 }));
+                    $sroa_weights_repr_160 = $sroa_write_back_162.repr;
                 }
-                builtin::array_set<i32>($sroa_weights_repr_170, current_17, current_71);
-                current_17 = current_17 + 1;
-                if @unlikely(local.tee current_71($sroa_text_used_158 + 2) > builtin::array_len($sroa_text_repr_157)) {
+                builtin::array_set<i32>($sroa_weights_repr_160, current_16, current_63);
+                current_16 = current_16 + 1;
+                if @unlikely(local.tee current_63($sroa_text_used_150 + 2) > builtin::array_len($sroa_text_repr_149)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_166(struct.new "core:prelude/string.wado//String" { repr: $sroa_text_repr_157, used: $sroa_text_used_158 }), current_71);
-                    $sroa_text_repr_157 = $sroa_write_back_166.repr;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_155(struct.new "core:prelude/string.wado//String" { repr: $sroa_text_repr_149, used: $sroa_text_used_150 }), current_63);
+                    $sroa_text_repr_149 = $sroa_write_back_155.repr;
                 }
-                $value_139 = $sroa_text_used_158;
-                $sroa_text_used_158 = current_71;
-                builtin::array_copy<u8>($sroa_text_repr_157, $value_139, global:loop_unroll_step_mid_body.wado::$const_obj_0, 0, 2);
-                break $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__1;
+                $value_131 = $sroa_text_used_150;
+                $sroa_text_used_150 = current_63;
+                builtin::array_copy<u8>($sroa_text_repr_149, $value_131, global:loop_unroll_step_mid_body.wado::$const_obj_0, 0, 2);
+                break $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__1;
             };
             continue l11;
         };
     };
-    $sroa_write_back_166 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $sroa_write_back_155 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b__core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b__core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    $temp_inline_core_prelude_traits_wado_TemplateHole_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_24_0_230 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $sroa_write_back_166 };
-    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$spec0$dae[start,marker]"($sroa_sums_repr_168, $sroa_$iter_0_start_63, $temp_inline_core_prelude_traits_wado_TemplateHole_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_24_0_230, 256);
+    $temp_inline_core_prelude_reflect_wado_TemplateHole_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_24_0_220 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $sroa_write_back_155 };
+    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$spec0$dae[start,marker]"($sroa_sums_repr_158, $sroa_$iter_0_start_390, $temp_inline_core_prelude_reflect_wado_TemplateHole_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_24_0_220, 256);
     $inline_core_prelude_string_wado_String__format_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b__core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_36: block {
         break $inline_core_prelude_string_wado_String__format_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b__core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_36;
     };
-    len_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_83("wasi/stream-new"()));
-    $sroa_text_used_158 = builtin::i32_wrap_i64($cm_pair_7_83 >> 32_i64);
+    len_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_75("wasi/stream-new"()));
+    $sroa_text_used_150 = builtin::i32_wrap_i64($cm_pair_7_75 >> 32_i64);
     len_0 = "loop_unroll_step_mid_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(len_0);
-    builtin::array_copy<u8>(local.tee $sroa_text_repr_157(builtin::array_new<u8>(local.tee $sroa_$iter_0_start_63($sroa_write_back_166.used) + 1)), 0, $sroa_write_back_166.repr, 0, $sroa_$iter_0_start_63);
-    builtin::array_set_u8($sroa_text_repr_157, $sroa_$iter_0_start_63, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    builtin::array_copy<u8>(local.tee $sroa_text_repr_149(builtin::array_new<u8>(local.tee $sroa_$iter_0_start_390($sroa_write_back_155.used) + 1)), 0, $sroa_write_back_155.repr, 0, $sroa_$iter_0_start_390);
+    builtin::array_set_u8($sroa_text_repr_149, $sroa_$iter_0_start_390, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $sroa_$iter_0_start_63 = $sroa_$iter_0_start_63 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_text_used_158, $sroa_text_repr_157, 0, $sroa_$iter_0_start_63);
+        $sroa_$iter_0_start_390 = $sroa_$iter_0_start_390 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_text_used_150, $sroa_text_repr_149, 0, $sroa_$iter_0_start_390);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_text_used_158);
+        "wasi/stream-drop-writable"($sroa_text_used_150);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(len_0);
     }
-    $sroa_write_back_166 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $sroa_write_back_155 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b__core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b__core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    $temp_inline_core_prelude_traits_wado_TemplateHole_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_24_0_230 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $sroa_write_back_166 };
-    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$spec0$dae[start,marker]"($sroa_weights_repr_170, current_17, $temp_inline_core_prelude_traits_wado_TemplateHole_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_24_0_230, 256);
+    $temp_inline_core_prelude_reflect_wado_TemplateHole_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_24_0_220 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $sroa_write_back_155 };
+    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$spec0$dae[start,marker]"($sroa_weights_repr_160, current_16, $temp_inline_core_prelude_reflect_wado_TemplateHole_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_24_0_220, 256);
     $inline_core_prelude_string_wado_String__format_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b__core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_36: block {
         break $inline_core_prelude_string_wado_String__format_loop_unroll_step_mid_body_wado__tmpl_7ab51489603b688b__core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_36;
     };
-    len_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_83("wasi/stream-new"()));
-    $sroa_text_used_158 = builtin::i32_wrap_i64($cm_pair_7_83 >> 32_i64);
+    len_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_75("wasi/stream-new"()));
+    $sroa_text_used_150 = builtin::i32_wrap_i64($cm_pair_7_75 >> 32_i64);
     len_0 = "loop_unroll_step_mid_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(len_0);
-    builtin::array_copy<u8>(local.tee $sroa_text_repr_157(builtin::array_new<u8>(local.tee $sroa_$iter_0_start_63($sroa_write_back_166.used) + 1)), 0, $sroa_write_back_166.repr, 0, $sroa_$iter_0_start_63);
-    builtin::array_set_u8($sroa_text_repr_157, $sroa_$iter_0_start_63, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    builtin::array_copy<u8>(local.tee $sroa_text_repr_149(builtin::array_new<u8>(local.tee $sroa_$iter_0_start_390($sroa_write_back_155.used) + 1)), 0, $sroa_write_back_155.repr, 0, $sroa_$iter_0_start_390);
+    builtin::array_set_u8($sroa_text_repr_149, $sroa_$iter_0_start_390, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $sroa_$iter_0_start_63 = $sroa_$iter_0_start_63 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_text_used_158, $sroa_text_repr_157, 0, $sroa_$iter_0_start_63);
+        $sroa_$iter_0_start_390 = $sroa_$iter_0_start_390 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_text_used_150, $sroa_text_repr_149, 0, $sroa_$iter_0_start_390);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_text_used_158);
+        "wasi/stream-drop-writable"($sroa_text_used_150);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -423,11 +423,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_6: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();

@@ -1161,7 +1161,7 @@ fn mint_scalarized_clones(
         project.func_index.insert(func_key, id);
         project.sroa_param_clones.insert(id);
         project.reshapes.insert(id, reshape);
-        copy_function_strings(project, &origin, (clone.module_source.clone(), name));
+        project.copy_function_strings(&origin, (clone.module_source.clone(), name));
         clones.insert(*key, id);
         // Pushed now, so a later source in this run reaching the same clone
         // finds it standing.
@@ -1174,19 +1174,6 @@ fn mint_scalarized_clones(
         project.functions.push(FuncCell::new(clone));
     }
     clones
-}
-
-/// Give the clone its own entry in `function_strings`, which is name-keyed: DCE
-/// reads it to decide which string literals survive, so without one the clone's
-/// literals are pruned out from under it.
-fn copy_function_strings(
-    project: &mut NirPackage,
-    origin: &(ModuleSource, String),
-    clone: (ModuleSource, String),
-) {
-    if let Some(strings) = project.function_strings.get(origin).cloned() {
-        project.function_strings.insert(clone, strings);
-    }
 }
 
 /// A parameter this clone scalarized: the local it occupies and its new type,

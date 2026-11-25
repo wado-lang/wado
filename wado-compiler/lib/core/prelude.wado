@@ -2,13 +2,8 @@
 #![stdlib("core:prelude")]
 //! Auto-imported in every module. Disable with `#![no_prelude]`.
 
-
-// The Wado Prelude Module.
-// Auto-imported in every module. Disable with: #![no_prelude]
-
 pub use {
     Ordering,
-    CaseStyle,
     Eq,
     Ord,
     Hash,
@@ -46,6 +41,7 @@ pub use {
     BitNot,
     Shl,
     Shr,
+<<<<<<< HEAD
     Iterator,
     IntoIterator,
     ForOf,
@@ -53,6 +49,17 @@ pub use {
     Sum,
     Product,
     Extremum,
+||||||| cb4f66e2c
+    Iterator,
+    IntoIterator,
+    IterRefMut,
+    ForOf,
+    FromIterator,
+    Sum,
+    Product,
+    Extremum,
+=======
+>>>>>>> origin/main
     ConvertError,
     Display,
     Error,
@@ -62,6 +69,10 @@ pub use {
     UpperHex,
     LowerExp,
     UpperExp,
+    ref_eq,
+} from "core:prelude/traits.wado";
+pub use {
+    CaseStyle,
     Reflect,
     ReflectStruct,
     ReflectVariant,
@@ -75,14 +86,66 @@ pub use {
     EnumCase,
     FlagsBit,
     TemplateHole,
-    ref_eq,
-} from "core:prelude/traits.wado";
-
-pub use { Alignment, Formatter, PushDisplay } from "core:prelude/format.wado";
-pub use { i128, u128 } from "core:prelude/int128.wado";
+} from "core:prelude/reflect.wado";
 pub use {
-    Option,
-    Result,
+    Iterator,
+    IntoIterator,
+    IterRefMut,
+    ForOf,
+    FromIterator,
+    Sum,
+    Product,
+    Extremum,
+    IterMap,
+    IterFilter,
+    IterEnumerate,
+    IterTake,
+    IterSkip,
+    IterStepBy,
+    IterChain,
+    IterZip,
+} from "core:prelude/iter.wado";
+
+pub use { Option, Result } from "core:prelude/option.wado";
+pub use { ParseBoolError, CharErrorKind, ParseCharError } from "core:prelude/primitive.wado";
+use _ from "core:prelude/numeric.wado";
+pub use { IntErrorKind, ParseIntError, FloatErrorKind, ParseFloatError } from "core:prelude/numparse.wado";
+pub use { i128, u128 } from "core:prelude/int128.wado";
+use _ from "core:prelude/half.wado";
+use _ from "core:prelude/fpfmt.wado";
+
+pub use {
+    String,
+    StrUtf8ByteIter,
+    StrCharIter,
+    StrCharIndicesIter,
+    StrSplitIter,
+    StrSplitNIter,
+    StrSplitWhitespaceIter,
+    StrLinesIter,
+    StrSlice,
+    AsStrSlice,
+    Utf8Error,
+} from "core:prelude/string.wado";
+pub use { Alignment, Formatter, PushDisplay } from "core:prelude/format.wado";
+
+pub use { Array } from "core:prelude/array.wado";
+pub use {
+    Sequence,
+    AsSlice,
+    Slice,
+    SliceValueIter,
+    SliceRefIter,
+    SliceRefMutIter,
+    SliceWindows,
+    SliceChunks,
+} from "core:prelude/slice.wado";
+pub use { List, ListCursor } from "core:prelude/list.wado";
+pub use { ByteArray, ByteList, ByteSlice, AsByteSlice, FromLeBytes, eq_constant_time } from "core:prelude/bytes.wado";
+use _ from "core:prelude/tuple.wado";
+pub use { Step, RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
+
+pub use {
     Stream,
     StreamWritable,
     StreamChunk,
@@ -108,49 +171,8 @@ pub use {
     AsyncCall,
     ErrorContext,
     ResourceId,
-} from "core:prelude/types.wado";
-use _ from "core:prelude/fpfmt.wado";
-pub use { IntErrorKind, ParseIntError, FloatErrorKind, ParseFloatError } from "core:prelude/intparse.wado";
-pub use { ParseBoolError, CharErrorKind, ParseCharError } from "core:prelude/primitive.wado";
-use _ from "core:prelude/half.wado";
-pub use { Array } from "core:prelude/array.wado";
-pub use {
-    Sequence,
-    AsSlice,
-    Slice,
-    SliceValueIter,
-    SliceRefIter,
-    SliceRefMutIter,
-    SliceWindows,
-    SliceChunks,
-} from "core:prelude/slice.wado";
-pub use {
-    String,
-    StrUtf8ByteIter,
-    StrCharIter,
-    StrCharIndicesIter,
-    StrSplitIter,
-    StrSplitNIter,
-    StrSplitWhitespaceIter,
-    StrLinesIter,
-    StrSlice,
-    AsStrSlice,
-    Utf8Error,
-} from "core:prelude/string.wado";
-pub use {
-    IterMap,
-    IterFilter,
-    IterEnumerate,
-    IterTake,
-    IterSkip,
-    IterStepBy,
-    IterChain,
-    IterZip,
-} from "core:prelude/traits.wado";
-pub use { List, ListCursor } from "core:prelude/list.wado";
-pub use { ByteArray, ByteList, ByteSlice, AsByteSlice, FromLeBytes, eq_constant_time } from "core:prelude/bytes.wado";
-use _ from "core:prelude/tuple.wado";
-pub use { Step, RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
+} from "core:prelude/async.wado";
+
 pub use { panic, unreachable } from "core:rt";
 
 #[synopsis]

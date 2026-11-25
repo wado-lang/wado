@@ -2110,7 +2110,7 @@ mod cm_binding_tests {
     fn declared_primitives() -> Vec<String> {
         let source = all_core_modules()
             .iter()
-            .find(|(import, _)| *import == "core:prelude/types.wado")
+            .find(|(import, _)| *import == "core:prelude/async.wado")
             .expect("the prelude declares the Component Model primitives")
             .1;
         parse(source)

@@ -1269,13 +1269,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ctx: &mut FunctionContext,
     ) {
         let defaulted = self.apply_type_param_defaults(type_params, type_id);
-        let resolved = self.resolve_expr(default_ast, ctx, Some(defaulted));
-        let expected = if resolved == type_id {
-            type_id
-        } else {
-            defaulted
-        };
-        self.typecheck_value(default_ast, resolved, expected);
+        // A statement of its own: a report here stands for no slot another
+        // default leaves open.
+        self.in_statement(default_ast.span(), |s| {
+            let resolved = s.resolve_expr(default_ast, ctx, Some(defaulted));
+            let expected = if resolved == type_id {
+                type_id
+            } else {
+                defaulted
+            };
+            s.typecheck_value(default_ast, resolved, expected);
+        });
     }
 
     /// Bind a parameter in its function's body frame. A default is walked for
@@ -1769,8 +1773,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         for (field, &type_id) in struct_decl.fields.iter().zip(field_types) {
             if let Some(default_ast) = &field.default {
-                let resolved = self.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
-                self.typecheck_value(default_ast, resolved, type_id);
+                self.in_statement(default_ast.span(), |s| {
+                    let resolved = s.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
+                    s.typecheck_value(default_ast, resolved, type_id);
+                });
             }
         }
     }
@@ -1954,7 +1960,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.restoring_decls(|this| {
             for func in bodies {
                 this.annotate_ctx.abstract_selections = Some(hashmap::IndexMap::default());
-                this.walk_trait_body(def, func);
+                this.as_body(|this| this.walk_trait_body(def, func));
                 let selections = this
                     .annotate_ctx
                     .abstract_selections
@@ -2022,12 +2028,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// [`Self::resolve_operation_param_defaults`] for a `trait`'s methods, whose
     /// scope binds `Self` as a slot rather than a concrete type.
     pub(super) fn resolve_trait_param_defaults(&mut self, trait_decl: &ast::TraitDecl) {
-        if !declares_a_default(&trait_decl.methods) {
+        let methods = bodiless_with_defaults(&trait_decl.methods);
+        if methods.is_empty() {
             return;
         }
         let (mut scope, _) = self.enter_trait_scope(trait_decl);
         scope.sem.decls.clear_fn_local_items();
-        for method in &trait_decl.methods {
+        for method in methods {
             let mut method_scope = scope.enter_inherited_type_param_scope();
             let method_def = method_scope.tysys.def_at(method.id);
             method_scope.register_generic_params(method_def, &method.type_params, 0);
@@ -2535,7 +2542,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         methods: &[ast::Function],
         resource_self: Option<DefId>,
     ) {
-        if !declares_a_default(methods) {
+        let methods = bodiless_with_defaults(methods);
+        if methods.is_empty() {
             return;
         }
         let (mut scope, _) = self.enter_operation_scope(owner, type_params, resource_self);
@@ -2656,19 +2664,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Resolve a function for its facts.
     pub(super) fn resolve_function(&mut self, func: &Function) {
-        self.resolve_function_with_self(func, None);
+        self.as_body(|this| this.resolve_function_with_self(func, None));
     }
 
     /// [`Self::resolve_function`] on a resource operation's default, where
     /// `Self` is the resource of type `resource`.
     pub(super) fn resolve_resource_default(&mut self, func: &Function, resource: TypeId) {
-        self.resolve_function_with_self(
-            func,
-            Some(SelfBinding {
-                type_id: resource,
-                declaring_trait: None,
-            }),
-        );
+        let binding = SelfBinding {
+            type_id: resource,
+            declaring_trait: None,
+        };
+        self.as_body(|this| this.resolve_function_with_self(func, Some(binding)));
     }
 
     fn resolve_function_with_self(&mut self, func: &Function, self_binding: Option<SelfBinding>) {
@@ -3148,11 +3154,14 @@ impl TypeSystem {
     }
 }
 
-/// Whether any of `methods` gives a parameter a default.
-fn declares_a_default(methods: &[ast::Function]) -> bool {
+/// The methods giving a parameter a default that no body walk reaches. A
+/// method with a body walks its defaults in that body, and walking them again
+/// would rewrite facts one body already settled from another.
+fn bodiless_with_defaults(methods: &[ast::Function]) -> Vec<&ast::Function> {
     methods
         .iter()
-        .any(|m| m.params.iter().any(|p| p.default.is_some()))
+        .filter(|m| m.body.is_none() && m.params.iter().any(|p| p.default.is_some()))
+        .collect()
 }
 
 /// Which declaration an operation belongs to. A resource's operations take a

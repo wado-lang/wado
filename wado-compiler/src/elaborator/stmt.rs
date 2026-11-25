@@ -28,8 +28,15 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
+<<<<<<< HEAD
 use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo, ForOfStart};
+||||||| cb4f66e2c
+use crate::elaborator::orchestration::first_infer_span;
+use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
+=======
+use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
+>>>>>>> origin/main
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
@@ -232,6 +239,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// from the AST; desugared constructs that expand to multiple statements
     /// record their `DesugarKind` tag here.
     pub(super) fn resolve_stmt(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) {
+        self.in_statement(stmt.span(), |this| this.resolve_stmt_kind(stmt, ctx));
+    }
+
+    /// Walk `walk` as the statement at `span`, whose reports absorb the
+    /// variables it mints and none minted outside it.
+    pub(super) fn in_statement<R>(&mut self, span: Span, walk: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = self.infer_holes.statement.replace(span);
+        let walked = walk(self);
+        self.infer_holes.statement = outer;
+        walked
+    }
+
+    fn resolve_stmt_kind(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) {
         match stmt {
             Stmt::Let(let_stmt) => self.resolve_let(let_stmt, ctx),
             Stmt::Expr(expr_stmt) => self.resolve_expr_stmt(expr_stmt, ctx),
@@ -546,15 +566,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
-        if let_stmt
-            .ty
-            .as_ref()
-            .is_some_and(|ty| first_infer_span(ty).is_some())
-        {
-            self.closing_holes_on_error(|e| e.resolve_let_annotated(let_stmt, ctx));
-        } else {
-            self.resolve_let_annotated(let_stmt, ctx);
-        }
+        self.resolve_let_annotated(let_stmt, ctx);
     }
 
     fn resolve_let_annotated(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
@@ -1742,16 +1754,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow()
                     .tuple_representation(scrutinee_type);
-                let element_types = if let Some(types) = elements {
-                    types
-                } else {
-                    let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: "tuple type".to_string(),
-                        found: self.tysys.type_table.borrow().name(scrutinee_type),
-                        span,
-                    });
-                    vec![TypeTable::UNKNOWN; patterns.len()]
-                };
+                let element_types =
+                    if self.reports_open_pack(scrutinee_type, "match its elements", span) {
+                        vec![TypeTable::ERROR; patterns.len()]
+                    } else if let Some(types) = elements {
+                        types
+                    } else {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
+                            expected: "tuple type".to_string(),
+                            found: self.tysys.type_table.borrow().name(scrutinee_type),
+                            span,
+                        });
+                        vec![TypeTable::UNKNOWN; patterns.len()]
+                    };
                 let element_types = self.tuple_pattern_element_types(
                     patterns.len(),
                     *has_rest,
@@ -2635,6 +2650,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.resolve_block(&for_of.body, &mut scope, None);
             return;
         }
+
+        let iterable_type_id =
+            if self.reports_open_pack(iterable_type_id, "walk its elements", for_of.span) {
+                TypeTable::ERROR
+            } else {
+                iterable_type_id
+            };
 
         // Check if it's a tuple type — looking through a single `&`/`&mut`
         // wrapper. A reference iterable (`&[..T]`) iterates element-by-ref

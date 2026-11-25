@@ -12,7 +12,7 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
 
 array Array<u8> (mut u8);  // TypeId(3)
 
@@ -34,7 +34,7 @@ variant wasi:sockets/types.wado//ErrorCode {  // TypeId(4)
     Other(ref null "core:prelude/string.wado//String"),
 }
 
-variant core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode> {  // TypeId(5)
+variant core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode> {  // TypeId(5)
     Ok(ref null "core:prelude//$Resource"),
     Err(ref "wasi:sockets/types.wado//ErrorCode"),
 }
@@ -44,12 +44,12 @@ struct wasi:sockets/types.wado//ErrorCode::Other {  // TypeId(6)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok {  // TypeId(7)
+struct core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok {  // TypeId(7)
     discriminant: i32,
     payload_0: ref null "core:prelude//$Resource",
 }
 
-struct core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Err {  // TypeId(8)
+struct core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Err {  // TypeId(8)
     discriminant: i32,
     payload_0: ref "wasi:sockets/types.wado//ErrorCode",
 }
@@ -72,7 +72,7 @@ type "functype//wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i
 
 type "functype//resource_method_instance.wado/run" = fn();  // TypeId(17)
 
-type "functype//resource_method_instance.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(18)
+type "functype//resource_method_instance.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create" = fn(i32) -> ref null "core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(18)
 
 type "functype//resource_method_instance.wado/$cm_export__run" = fn();  // TypeId(19)
 
@@ -80,9 +80,9 @@ type "functype//core:rt/memory_into_gc_array$dae[at]" = fn(ref Array<u8>, i32, i
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(21)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]" = fn(i32, ref Array<u8>) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]" = fn(i32, ref Array<u8>) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(22)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]" = fn(i32, ref Array<u8>) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]" = fn(i32, ref Array<u8>) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(23)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
@@ -129,14 +129,14 @@ global global:core:builtin::$unit_case$wasi:sockets/types.wado//ErrorCode$12: re
 global global:core:builtin::$unit_case$wasi:sockets/types.wado//ErrorCode$13: ref "wasi:sockets/types.wado//ErrorCode" = struct.new "wasi:sockets/types.wado//ErrorCode" { 13 };
 
 fn "resource_method_instance.wado/run"() with Stdout, TcpSocket {
-    let result: ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
+    let result: ref null "core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
     let socket: ref null "core:prelude//$Resource";
     let $cm_pair_7_11: i64;
     let $sroa_$pattern_temp_0_0_13_17: i32;
     let $sroa_$pattern_temp_0_1_14_18: i32;
     let new_repr_23: ref Array<u8>;
-    if ref.test "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(local.tee result("resource_method_instance.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create"(0))) {
-        socket = ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result).payload_0;
+    if ref.test "core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(local.tee result("resource_method_instance.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create"(0))) {
+        socket = ref.cast "core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result).payload_0;
         result = ref.null none;
         $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
@@ -182,8 +182,8 @@ fn "resource_method_instance.wado/run"() with Stdout, TcpSocket {
         }
     }
     if ref.is_null(result) == 0 {
-        if ref.test "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result) {
-            if ref.is_null(local.tee socket(ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result).payload_0).backing) == 0 {
+        if ref.test "core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result) {
+            if ref.is_null(local.tee socket(ref.cast "core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result).payload_0).backing) == 0 {
             } else {
                 $sroa_$pattern_temp_0_0_13_17 = socket.value;
                 socket.value = 0;
@@ -203,7 +203,7 @@ fn "resource_method_instance.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-s
 
 fn "resource_method_instance.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp-socket.create"(address_family) with TcpSocket {
     let $outptr: i32;
-    let $result_val: ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
+    let $result_val: ref null "core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
     let $local_5: ref "wasi:sockets/types.wado//ErrorCode";
     let $local_7: ref null "core:prelude/string.wado//String";
     let $local_9: i32;
@@ -211,8 +211,8 @@ fn "resource_method_instance.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]
     let arr_16: ref Array<u8>;
     $outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create"(address_family, $outptr);
-    $result_val = (if builtin::load_u8($outptr) == 0 -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
-        struct.new "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4), backing: ref.null eq } };
+    $result_val = (if builtin::load_u8($outptr) == 0 -> ref null "core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
+        struct.new "core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4), backing: ref.null eq } };
     } else {
         $local_5 = (if local.tee address_family(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:sockets/types.wado//ErrorCode" {
             global:core:builtin::$unit_case$wasi:sockets/types.wado//ErrorCode$0;
@@ -256,7 +256,7 @@ fn "resource_method_instance.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]
             }
             struct.new "wasi:sockets/types.wado//ErrorCode::Other" { discriminant: 14, payload_0: $local_7 };
         });
-        struct.new "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_5 };
+        struct.new "core:prelude/option.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_5 };
     });
     drop("mem/realloc"($outptr, 20, 4, 0));
     return $result_val;
@@ -370,11 +370,11 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(handle, data) {
                 "wasi/waitable-set-drop"(ptr_18);
                 break $inline_cm_await_blocked_5: status;
             }) >>u 4;
-            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if ptr_18 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_18 == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_18 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_18 == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
@@ -456,11 +456,11 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]"(handle, data) {
                 "wasi/waitable-set-drop"(ptr_18);
                 break $inline_cm_await_blocked_5: status;
             }) >>u 4;
-            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if ptr_18 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_18 == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_18 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_18 == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();

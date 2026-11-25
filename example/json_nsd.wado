@@ -325,7 +325,7 @@ fn entry_head(de: &mut JsonDeserializer, close: i32, first: bool) -> Result<bool
 }
 
 impl DeserializeSeq for NsdSeqAccess {
-    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+    fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         if !entry_head(self.de, b']', self.first)? {
             return Result::Ok(null);
         }

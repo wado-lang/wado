@@ -7,7 +7,7 @@ struct core:prelude/string.wado//String {  // TypeId(0)
     mut used: i32,
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
 array Array<u8> (mut u8);  // TypeId(2)
 
@@ -31,7 +31,7 @@ type "functype//wir_coalesce_locals.wado/$cm_export__run" = fn();  // TypeId(11)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(12)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(13)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(13)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(14)
 
@@ -64,49 +64,49 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "wir_coalesce_locals.wado/sum_then_product"(n) {
     let total: i32;
-    let current_12: i32;
-    let $sroa_$iter_0_start_24: i32;
-    let current_30: i32;
-    let $sroa_$iter_1_exhausted_42: bool;
+    let current_11: i32;
+    let current_22: i32;
+    let $sroa_$iter_0_start_37: i32;
+    let $sroa_$iter_1_exhausted_44: bool;
     total = 0;
-    $sroa_$iter_0_start_24 = 0;
+    $sroa_$iter_0_start_37 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_start_24 >= n;
-            $sroa_$iter_0_start_24 = local.tee current_12($sroa_$iter_0_start_24) + 1;
-            total = total + current_12;
+            break_if b0 $sroa_$iter_0_start_37 >= n;
+            $sroa_$iter_0_start_37 = local.tee current_11($sroa_$iter_0_start_37) + 1;
+            total = total + current_11;
             continue l1;
         };
     };
-    $sroa_$iter_0_start_24 = 1;
-    current_12 = 1;
-    $sroa_$iter_1_exhausted_42 = 0;
+    $sroa_$iter_0_start_37 = 1;
+    current_11 = 1;
+    $sroa_$iter_1_exhausted_44 = 0;
     b2: block {
         l3: loop {
-            $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0: block {
-                break_if b2 $sroa_$iter_1_exhausted_42;
-                break_if b2 current_12 > n;
-                current_30 = current_12;
-                if current_12 == n {
-                    $sroa_$iter_1_exhausted_42 = 1;
-                    $sroa_$iter_0_start_24 = $sroa_$iter_0_start_24 * current_30;
-                    break $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0;
+            $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__0: block {
+                break_if b2 $sroa_$iter_1_exhausted_44;
+                break_if b2 current_11 > n;
+                current_22 = current_11;
+                if current_11 == n {
+                    $sroa_$iter_1_exhausted_44 = 1;
+                    $sroa_$iter_0_start_37 = $sroa_$iter_0_start_37 * current_22;
+                    break $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__0;
                 }
-                $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0: block {
-                    if current_30 == 2147483647 {
-                        $sroa_$iter_1_exhausted_42 = 1;
-                        break $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0;
+                $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0: block {
+                    if current_22 == 2147483647 {
+                        $sroa_$iter_1_exhausted_44 = 1;
+                        break $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0;
                     }
-                    current_12 = current_30 + 1;
-                    break $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0;
+                    current_11 = current_22 + 1;
+                    break $inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__0;
                 };
-                $sroa_$iter_0_start_24 = $sroa_$iter_0_start_24 * current_30;
-                break $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0;
+                $sroa_$iter_0_start_37 = $sroa_$iter_0_start_37 * current_22;
+                break $fused_$inline_core_prelude_range_wado_RangeInclusive_i32__core_prelude_iter_wado_Iterator__next_sroa_return__0;
             };
             continue l3;
         };
     };
-    return total + $sroa_$iter_0_start_24;
+    return total + $sroa_$iter_0_start_37;
 }
 
 fn "wir_coalesce_locals.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -128,7 +128,7 @@ fn "wir_coalesce_locals.wado/$cm_export__run"() {
     $sroa_$pattern_temp_0_0_13 = "wir_coalesce_locals.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message_0$used + 1)), 0, $mv$message_0$repr, 0, $mv$message_0$used);
     builtin::array_set_u8(new_repr, $mv$message_0$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -222,11 +222,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_6: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();

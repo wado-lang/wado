@@ -35,6 +35,7 @@ pub mod knobs;
 pub mod lsp;
 pub mod manifest;
 mod markdown;
+mod marl;
 pub mod metadata_embed;
 pub mod oci;
 pub mod publish;

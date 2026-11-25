@@ -32,7 +32,7 @@ struct resource_without_cm_default_impl.wado//$Closure_1 {  // TypeId(6)
     mut $capture_0: ref "resource_without_cm_default_impl.wado//Doubling",
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(7)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(7)
 
 array Array<u8> (mut u8);  // TypeId(8)
 
@@ -70,7 +70,7 @@ type "functype//resource_without_cm_default_impl.wado/$cm_export__run" = fn();  
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(22)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(23)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
@@ -109,129 +109,131 @@ global mut global:resource_without_cm_default_impl.wado::$effect_resource_withou
 global global:core:prelude/string.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "resource_without_cm_default_impl.wado/run"() with Stdout, Counter {
-    let $load_10: ref null eq;
+    let $load_8: ref null eq;
     let c_0: ref null "core:prelude//$Resource";
     let d: ref "resource_without_cm_default_impl.wado//Doubling";
-    let $local_0_7: ref null "resource_without_cm_default_impl.wado//$Dispatch_resource_without_cm_default_impl.wado/Counter";
-    let $local_1_8: ref "resource_without_cm_default_impl.wado//$Dispatch_resource_without_cm_default_impl.wado/Counter";
-    let $local_2_9: ref "core:prelude/string.wado//String";
-    let $local_0_19: ref null "resource_without_cm_default_impl.wado//$Dispatch_resource_without_cm_default_impl.wado/Counter";
-    let $cm_pair_7_37: i64;
-    let $sroa_$pattern_temp_0_0_13_43: i32;
-    let $sroa_$pattern_temp_0_1_14_44: i32;
-    let $av_90: i32;
+    let $local_0_6: ref null "resource_without_cm_default_impl.wado//$Dispatch_resource_without_cm_default_impl.wado/Counter";
+    let $local_1_7: ref "resource_without_cm_default_impl.wado//$Dispatch_resource_without_cm_default_impl.wado/Counter";
+    let $local_2_8: ref "core:prelude/string.wado//String";
+    let $local_3_12: i32;
+    let $local_0_17: ref null "resource_without_cm_default_impl.wado//$Dispatch_resource_without_cm_default_impl.wado/Counter";
+    let $cm_pair_7_35: i64;
+    let $sroa_$pattern_temp_0_0_13_41: i32;
+    let $sroa_$pattern_temp_0_1_14_42: i32;
+    let new_repr_47: ref Array<u8>;
     c_0 = struct.new "core:prelude//$Resource" { value: 0, backing: struct.new "resource_without_cm_default_impl.wado//Count" { n: 21 } };
-    multivalue_bind [$array_clone_src_2, $av_90] = ($av_90 = local.tee $local_2_9($inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_3: block -> ref "core:prelude/string.wado//String" {
-        if ref.is_null(local.tee $local_0_7(global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter)) == 0 {
-            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = local.tee $local_1_8(ref.as_non_null($local_0_7)).outer;
-            $local_2_9 = block -> ref "core:prelude/string.wado//String" {
+    let $mv$message_28$repr: ref Array<u8>;
+    multivalue_bind [$mv$message_28$repr, $local_3_12] = ($local_2_8 = $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_2: block -> ref "core:prelude/string.wado//String" {
+        if ref.is_null(local.tee $local_0_6(global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter)) == 0 {
+            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = local.tee $local_1_7(ref.as_non_null($local_0_6)).outer;
+            $local_2_8 = block -> ref "core:prelude/string.wado//String" {
                 let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_1_8.op_label).env);
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_1_7.op_label).env);
             };
-            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = $local_0_7;
-            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_3: $local_2_9;
+            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = $local_0_6;
+            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_2: $local_2_8;
         } else {
-            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("counter"), used: 7 };
+            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("counter"), used: 7 };
         }
         unreachable;
-    }).used; $local_2_9 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = $local_2_9.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_90)), 0, $array_clone_src_2, 0, $av_90); $array_clone_dst_3, used: $av_90 }; $av_90 = $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_5: block -> i32 {
-        if ref.is_null(local.tee $local_0_7(global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter)) == 0 {
-            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = local.tee $local_1_8(ref.as_non_null($local_0_7)).outer;
-            $av_90 = block -> i32 {
-                let $indirect_call_6: ref null "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_6.func, local.tee $indirect_call_6($local_1_8.op_get).env, c_0);
+    }; $local_3_12 = $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_4: block -> i32 {
+        if ref.is_null(local.tee $local_0_6(global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter)) == 0 {
+            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = local.tee $local_1_7(ref.as_non_null($local_0_6)).outer;
+            $local_3_12 = block -> i32 {
+                let $indirect_call_3: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3($local_1_7.op_get).env, c_0);
             };
-            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = $local_0_7;
-            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_5: $av_90;
+            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = $local_0_6;
+            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_4: $local_3_12;
         } else {
-            $inline__effect_default_Counter_get_6: block -> i32 {
-                break $inline__effect_default_Counter_get_6: $thread_$inline_resource_without_cm_default_impl_wado_Counter_core_prelude_traits_wado_Backing__backing_resource_without_cm_default_impl_wado_Count__7: block -> ref "resource_without_cm_default_impl.wado//Count" {
-                    if ref.test "resource_without_cm_default_impl.wado//Count"(local.tee $load_10(c_0.backing)) {
-                        break $thread_$inline_resource_without_cm_default_impl_wado_Counter_core_prelude_traits_wado_Backing__backing_resource_without_cm_default_impl_wado_Count__7: ref.cast "resource_without_cm_default_impl.wado//Count"($load_10);
+            $inline__effect_default_Counter_get_5: block -> i32 {
+                break $inline__effect_default_Counter_get_5: $thread_$inline_resource_without_cm_default_impl_wado_Counter_core_prelude_traits_wado_Backing__backing_resource_without_cm_default_impl_wado_Count__6: block -> ref "resource_without_cm_default_impl.wado//Count" {
+                    if ref.test "resource_without_cm_default_impl.wado//Count"(local.tee $load_8(c_0.backing)) {
+                        break $thread_$inline_resource_without_cm_default_impl_wado_Counter_core_prelude_traits_wado_Backing__backing_resource_without_cm_default_impl_wado_Count__6: ref.cast "resource_without_cm_default_impl.wado//Count"($load_8);
                     }
-                    break $inline__effect_default_Counter_get_6: -1;
+                    break $inline__effect_default_Counter_get_5: -1;
                 }.n;
             };
-            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_5;
+            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_4;
         }
         unreachable;
-    }; "core:prelude/string.wado/core:prelude/string.wado/String::format<resource_without_cm_default_impl.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"($local_2_9, $av_90));
-    $sroa_$pattern_temp_0_0_13_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_37("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_44 = builtin::i32_wrap_i64($cm_pair_7_37 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_43 = "resource_without_cm_default_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_43);
-    builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_90 + 1)), 0, $array_clone_src_2, 0, $av_90);
-    builtin::array_set_u8($array_clone_dst_3, $av_90, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    }; "core:prelude/string.wado/core:prelude/string.wado/String::format<resource_without_cm_default_impl.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"($local_2_8, $local_3_12));
+    $sroa_$pattern_temp_0_0_13_41 = builtin::i32_wrap_i64(local.tee $cm_pair_7_35("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_42 = builtin::i32_wrap_i64($cm_pair_7_35 >> 32_i64);
+    $sroa_$pattern_temp_0_0_13_41 = "resource_without_cm_default_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_41);
+    builtin::array_copy<u8>(local.tee new_repr_47(builtin::array_new<u8>($local_3_12 + 1)), 0, $mv$message_28$repr, 0, $local_3_12);
+    builtin::array_set_u8(new_repr_47, $local_3_12, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $av_90 = $av_90 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_44, $array_clone_dst_3, 0, $av_90);
+        $local_3_12 = $local_3_12 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_42, new_repr_47, 0, $local_3_12);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_44);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_42);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_43);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_41);
     }
     d = struct.new "resource_without_cm_default_impl.wado//Doubling" {};
-    global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = struct.new "resource_without_cm_default_impl.wado//$Dispatch_resource_without_cm_default_impl.wado/Counter" { outer: local.tee $local_0_7(global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter), op_get: struct.new "canonical//CanonicalClosure_0" { env: struct.new "resource_without_cm_default_impl.wado//$Closure_0" { $capture_0: d }, func: ref.func "closure/resource_without_cm_default_impl.wado/$closure_wrapper_0" }, op_label: struct.new "canonical//CanonicalClosure_1" { env: struct.new "resource_without_cm_default_impl.wado//$Closure_1" { $capture_0: d }, func: ref.func "closure/resource_without_cm_default_impl.wado/$closure_wrapper_1" } };
-    multivalue_bind [$array_clone_src_2, $av_90] = ($av_90 = local.tee $local_2_9($inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_9: block -> ref "core:prelude/string.wado//String" {
-        if ref.is_null(local.tee $local_0_19(global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter)) == 0 {
-            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = local.tee $local_1_8(ref.as_non_null($local_0_19)).outer;
-            $local_2_9 = block -> ref "core:prelude/string.wado//String" {
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_1_8.op_label).env);
+    global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = struct.new "resource_without_cm_default_impl.wado//$Dispatch_resource_without_cm_default_impl.wado/Counter" { outer: local.tee $local_0_6(global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter), op_get: struct.new "canonical//CanonicalClosure_0" { env: struct.new "resource_without_cm_default_impl.wado//$Closure_0" { $capture_0: d }, func: ref.func "closure/resource_without_cm_default_impl.wado/$closure_wrapper_0" }, op_label: struct.new "canonical//CanonicalClosure_1" { env: struct.new "resource_without_cm_default_impl.wado//$Closure_1" { $capture_0: d }, func: ref.func "closure/resource_without_cm_default_impl.wado/$closure_wrapper_1" } };
+    multivalue_bind [$mv$message_28$repr, $local_3_12] = ($local_2_8 = $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_7: block -> ref "core:prelude/string.wado//String" {
+        if ref.is_null(local.tee $local_0_17(global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter)) == 0 {
+            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = local.tee $local_1_7(ref.as_non_null($local_0_17)).outer;
+            $local_2_8 = block -> ref "core:prelude/string.wado//String" {
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_1_7.op_label).env);
             };
-            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = $local_0_19;
-            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_9: $local_2_9;
+            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = $local_0_17;
+            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_7: $local_2_8;
         } else {
-            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_9: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("counter"), used: 7 };
+            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__label_7: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("counter"), used: 7 };
         }
         unreachable;
-    }).used; $local_2_9 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_2 = $local_2_9.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_90)), 0, $array_clone_src_2, 0, $av_90); $array_clone_dst_3, used: $av_90 }; $av_90 = $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_11: block -> i32 {
-        if ref.is_null(local.tee $local_0_19(global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter)) == 0 {
-            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = local.tee $local_1_8(ref.as_non_null($local_0_19)).outer;
-            $av_90 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_6.func, local.tee $indirect_call_6($local_1_8.op_get).env, c_0);
+    }; $local_3_12 = $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_9: block -> i32 {
+        if ref.is_null(local.tee $local_0_17(global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter)) == 0 {
+            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = local.tee $local_1_7(ref.as_non_null($local_0_17)).outer;
+            $local_3_12 = block -> i32 {
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3($local_1_7.op_get).env, c_0);
             };
-            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = $local_0_19;
-            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_11: $av_90;
+            global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = $local_0_17;
+            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_9: $local_3_12;
         } else {
-            $inline__effect_default_Counter_get_12: block -> i32 {
-                break $inline__effect_default_Counter_get_12: $thread_$inline_resource_without_cm_default_impl_wado_Counter_core_prelude_traits_wado_Backing__backing_resource_without_cm_default_impl_wado_Count__13: block -> ref "resource_without_cm_default_impl.wado//Count" {
-                    if ref.test "resource_without_cm_default_impl.wado//Count"(local.tee $load_10(c_0.backing)) {
-                        break $thread_$inline_resource_without_cm_default_impl_wado_Counter_core_prelude_traits_wado_Backing__backing_resource_without_cm_default_impl_wado_Count__13: ref.cast "resource_without_cm_default_impl.wado//Count"($load_10);
+            $inline__effect_default_Counter_get_10: block -> i32 {
+                break $inline__effect_default_Counter_get_10: $thread_$inline_resource_without_cm_default_impl_wado_Counter_core_prelude_traits_wado_Backing__backing_resource_without_cm_default_impl_wado_Count__11: block -> ref "resource_without_cm_default_impl.wado//Count" {
+                    if ref.test "resource_without_cm_default_impl.wado//Count"(local.tee $load_8(c_0.backing)) {
+                        break $thread_$inline_resource_without_cm_default_impl_wado_Counter_core_prelude_traits_wado_Backing__backing_resource_without_cm_default_impl_wado_Count__11: ref.cast "resource_without_cm_default_impl.wado//Count"($load_8);
                     }
-                    break $inline__effect_default_Counter_get_12: -1;
+                    break $inline__effect_default_Counter_get_10: -1;
                 }.n;
             };
-            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_11;
+            break $inline__effect_dispatch__resource_without_cm_default_impl_wado_Counter__get_9;
         }
         unreachable;
-    }; "core:prelude/string.wado/core:prelude/string.wado/String::format<resource_without_cm_default_impl.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"($local_2_9, $av_90));
-    $sroa_$pattern_temp_0_0_13_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_37("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_44 = builtin::i32_wrap_i64($cm_pair_7_37 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_43 = "resource_without_cm_default_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_43);
-    builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_90 + 1)), 0, $array_clone_src_2, 0, $av_90);
-    builtin::array_set_u8($array_clone_dst_3, $av_90, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    }; "core:prelude/string.wado/core:prelude/string.wado/String::format<resource_without_cm_default_impl.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"($local_2_8, $local_3_12));
+    $sroa_$pattern_temp_0_0_13_41 = builtin::i32_wrap_i64(local.tee $cm_pair_7_35("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_42 = builtin::i32_wrap_i64($cm_pair_7_35 >> 32_i64);
+    $sroa_$pattern_temp_0_0_13_41 = "resource_without_cm_default_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_41);
+    builtin::array_copy<u8>(local.tee new_repr_47(builtin::array_new<u8>($local_3_12 + 1)), 0, $mv$message_28$repr, 0, $local_3_12);
+    builtin::array_set_u8(new_repr_47, $local_3_12, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $av_90 = $av_90 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_44, $array_clone_dst_3, 0, $av_90);
+        $local_3_12 = $local_3_12 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_42, new_repr_47, 0, $local_3_12);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_44);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_42);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_43);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_41);
     }
-    global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = $local_0_7;
+    global:resource_without_cm_default_impl.wado::$effect_resource_without_cm_default_impl.wado/Counter = $local_0_6;
 }
 
 fn "resource_without_cm_default_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -321,11 +323,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_5: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();

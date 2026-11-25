@@ -1,0 +1,13 @@
+// A closure of the wrong arity is reported once. The report closes the call's
+// variables to the error type, and a check that then meets them is not a
+// second fault to print as `fn(<error>) -> <error>`.
+fn apply<T, U>(f: fn(T) -> U, x: T) -> U {
+    return f(x);
+}
+
+export fn run() {
+    let _g = apply(|x, y| x, 1);
+}
+
+__DATA__
+{"compile_error": "type mismatch", "compile_error_count": 1}

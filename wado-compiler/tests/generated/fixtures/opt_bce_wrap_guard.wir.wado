@@ -7,7 +7,7 @@ struct core:prelude/string.wado//String {  // TypeId(0)
     mut used: i32,
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
 array Array<u8> (mut u8);  // TypeId(2)
 
@@ -33,7 +33,7 @@ type "functype//opt_bce_wrap_guard.wado/$cm_export__run" = fn();  // TypeId(12)
 
 type "functype//opt_bce_wrap_guard.wado/get$spec0$dae[i]" = fn(ref Array<i32>, i32) -> i32;  // TypeId(13)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(14)
+type "functype//core:prelude/numeric.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(14)
 
 type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(15)
 
@@ -41,7 +41,7 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(16)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(17)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(18)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(19)
 
@@ -51,7 +51,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_bce_wrap_guard.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> [ref Array<u8>, i32];  // TypeId(22)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(23)
+type "functype//core:prelude/numeric.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(23)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
@@ -106,7 +106,7 @@ fn "opt_bce_wrap_guard.wado/$cm_export__run"() {
     $sroa_$pattern_temp_0_0_13 = "opt_bce_wrap_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message_4$used + 1)), 0, $mv$message_4$repr, 0, $mv$message_4$used);
     builtin::array_set_u8(new_repr, $mv$message_4$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -129,7 +129,7 @@ fn "opt_bce_wrap_guard.wado/get$spec0$dae[i]"($mv$arr$repr, $mv$arr$used) {
     unreachable;
 }
 
-fn "core:prelude/primitive.wado/count_digits_u64"(val) {
+fn "core:prelude/numeric.wado/count_digits_u64"(val) {
     if val <u 100000_i64 {
         if val <u 100_i64 {
             if val <u 10_i64 {
@@ -194,7 +194,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -306,11 +306,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_5: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
@@ -357,7 +357,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     new_used_300 = out_8.used;
     out_8.used = n_296;
     builtin::array_copy<u8>(out_8.repr, new_used_300, global:core:prelude/list.wado::$const_obj_1, 0, 43);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(index, out_8);
+    "core:prelude/numeric.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(index, out_8);
     if @unlikely(local.tee index(out_8.used + 13) > builtin::array_len(out_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_8, index);
@@ -365,7 +365,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     n_296 = out_8.used;
     out_8.used = index;
     builtin::array_copy<u8>(out_8.repr, n_296, global:core:prelude/list.wado::$const_obj_0, 0, 13);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"($v_1, out_8);
+    "core:prelude/numeric.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"($v_1, out_8);
     if @unlikely(local.tee index(out_8.used + 1) > builtin::array_len(out_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_8, index);
@@ -407,7 +407,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_bce_wra
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
     is_negative_65 = t < 0;
-    t = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
+    t = "core:prelude/numeric.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
     if is_negative_65 {
         if @unlikely(1 > builtin::array_len($sroa_out_repr_301)) {
             cold_path;
@@ -447,7 +447,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_bce_wra
     return $sroa_out_repr_301, $sroa_out_used_302;
 }
 
-fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(self, f) {
+fn "core:prelude/numeric.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(self, f) {
     let is_negative_2: bool;
     let arr: ref Array<u8>;
     let q: u64;
@@ -455,7 +455,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.b
     let x: i64;
     let start_152: i32;
     is_negative_2 = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    self = "core:prelude/numeric.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     if is_negative_2 {
         if @unlikely(local.tee is_negative_2(f.used + 1) > builtin::array_len(f.repr)) {
             cold_path;

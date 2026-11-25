@@ -1,0 +1,126 @@
+// A function returning copies of its argument's parts keeps the copies for a
+// caller where sharing would show: one that writes the result's parts or the
+// argument while the result is live, or hands the result on.
+struct Range { lo: i32, hi: i32 }
+struct Elem { name: String, ranges: List<Range> }
+
+fn width(e: &Elem) -> i32 {
+    let mut w = 0;
+    for let r of &e.ranges { w += r.hi - r.lo; }
+    return w;
+}
+
+#[inline("never")]
+fn suffix(src: &List<Elem>, from: i32) -> List<Elem> {
+    let mut out: List<Elem> = [];
+    for let mut j = from; j < src.len(); j += 1 {
+        out.push(src[j]);
+    }
+    return out;
+}
+
+#[inline("never")]
+fn part_written(src: &List<Elem>) -> i32 {
+    let mut rest = suffix(src, 0);
+    rest[0].ranges[0].hi = 100;
+    return width(&rest[0]);
+}
+
+#[inline("never")]
+fn grown_then_part_written(src: &List<Elem>) -> i32 {
+    let mut rest = suffix(src, 0);
+    rest.push(Elem { name: "z", ranges: [] });
+    rest[0].ranges.push(Range { lo: 0, hi: 10 });
+    return width(&rest[0]);
+}
+
+#[inline("never")]
+fn source_written(src: &mut List<Elem>) -> i32 {
+    let rest = suffix(src, 0);
+    src[0].ranges[0].hi = 100;
+    return width(&rest[0]);
+}
+
+#[inline("never")]
+fn handed_on(src: &List<Elem>) -> List<Elem> {
+    return suffix(src, 0);
+}
+
+#[inline("never")]
+fn stored_into_param(src: &List<Elem>, out: &mut List<List<Elem>>) {
+    out.push(suffix(src, 0));
+}
+
+#[inline("never")]
+fn parts_stored_into_param(src: &List<Elem>, out: &mut List<Elem>) {
+    let rest = suffix(src, 0);
+    out.extend(&rest);
+}
+
+struct Stash { items: List<Elem> }
+
+impl Stash {
+    #[inline("never")]
+    fn keep_first(&mut self, rest: &List<Elem>) {
+        self.items.push(rest[0]);
+    }
+
+    #[inline("never")]
+    fn keep_suffix_of(&mut self, src: &List<Elem>, tail: &List<Elem>) {
+        let mut rest = suffix(src, 0);
+        rest.extend(tail);
+        self.keep_first(&rest);
+    }
+}
+
+fn elems() -> List<Elem> {
+    return [Elem { name: "a", ranges: [Range { lo: 1, hi: builtin::black_box(3) }] }];
+}
+
+test "a write to the result's part keeps the source" {
+    let src = elems();
+    assert part_written(&src) == 99;
+    assert width(&src[0]) == 2;
+}
+
+test "a write to a part of a grown result keeps the source" {
+    let src = elems();
+    assert grown_then_part_written(&src) == 12;
+    assert width(&src[0]) == 2;
+}
+
+test "a write to the argument keeps the result" {
+    let mut src = elems();
+    assert source_written(&mut src) == 2;
+}
+
+test "a result handed on keeps its copies" {
+    let mut src = elems();
+    let rest = handed_on(&src);
+    src[0].ranges[0].hi = 100;
+    assert width(&rest[0]) == 2;
+}
+
+test "a result a parameter holds keeps its copies" {
+    let mut src = elems();
+    let mut out: List<List<Elem>> = [];
+    stored_into_param(&src, &mut out);
+    src[0].ranges[0].hi = 100;
+    assert width(&out[0][0]) == 2;
+}
+
+test "parts a callee stores into a parameter keep their copies" {
+    let mut src = elems();
+    let mut stash = Stash { items: [] };
+    stash.keep_suffix_of(&src, &src);
+    src[0].ranges[0].hi = 100;
+    assert width(&stash.items[0]) == 2;
+}
+
+test "parts a parameter holds keep their copies" {
+    let mut src = elems();
+    let mut out: List<Elem> = [];
+    parts_stored_into_param(&src, &mut out);
+    src[0].ranges[0].hi = 100;
+    assert width(&out[0]) == 2;
+}

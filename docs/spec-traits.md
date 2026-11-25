@@ -889,6 +889,14 @@ as well as `impl Pick<String>`. A method call on such a parameter reads the
 bound that writes arguments. The trait is one either way, so naming it selects
 nothing.
 
+Bounds writing several argument lists of one trait are an overload set, and a
+call selects among them as among impls (see
+[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)). Under
+`T: Take<i64> + Take<i32>`, `t.take(n)` with `n: i32` reads `Take<i32>`, and
+`t.take(42)` is ambiguous: neither bound comes first for being written first.
+A closure argument is read as at a call that cannot wait, so a pair differing
+only in a function type's row leaves it ambiguous.
+
 An impl and a bound already in scope read a written argument differently.
 
 An impl answers a bound only where every position agrees, each side counting the
@@ -1182,11 +1190,39 @@ A range, or a named literal of a generic struct, selects by its head type alone.
 head, such as `Take<RangeExclusive<i32>>` beside `Take<RangeExclusive<i64>>`,
 stay ambiguous for such an argument.
 
-These carry nothing to select on and admit every candidate: a closure, a
-compound literal (a tuple, an anonymous struct, a list, a spread), `?`, a
-tuple comprehension, a labeled block, a tagged template, a static
-call `Type::f(…)`, and a function named as a value. A name the argument binds
-for itself (a block's `let`, a match arm's pattern) is read the same way.
+A function argument selects by its type, row included. A function named as a
+value has the row its declaration states, and a closure the row its body
+performs. A function admits every parameter it could be passed to, so a
+closure admits only function types, and a row admits every row that holds it.
+The candidates taking every function argument's row exactly win, where there
+are any, and among those the ones taking every type exactly, `fn` over
+`fn mut`. Each tier judges all the arguments together, so two candidates
+exact at different arguments are ambiguous. A call whose
+candidates differ only in the rows a closure argument could meet is selected
+once the closure's body is walked.
+
+<!-- {"fixture":"trait_overload_selects_by_function_effects.wado"} -->
+
+```wado
+export fn run() with Stdout {
+    let s = S {};
+    assert s.take(quiet) == 1;
+    assert s.take(loud) == 2;
+    assert s.take(|| {}) == 1;
+    assert s.take(|| { println("closure"); }) == 2;
+    assert through_bound(&s) == 12;
+    // The candidates agree on the parameter types, which type `x`.
+    assert s.apply(|x| x + 1) == 2;
+    assert s.apply(|x| { println("printed"); return x; }) == 20;
+}
+```
+
+These carry nothing to select on and admit every candidate: a compound literal
+(a tuple, an anonymous struct, a list, a spread), `?`, a tuple comprehension, a
+labeled block, a tagged template, a static call `Type::f(…)`, and a function
+named as a value whose type or effect parameters the expected type settles. A
+name the argument binds for itself (a block's `let`, a match arm's pattern) is
+read the same way.
 
 Selection is unique-or-error, with no ranking. An argument whose type the call
 site does not pin admits every candidate it could coerce to and never selects
@@ -1251,8 +1287,9 @@ is where [Specific Impls Win](#specific-impls-win) applies. Survivors naming
 several instantiations are ambiguous; there is no best match, only a unique one.
 Once one impl is selected, the arguments are typed against its signature as for
 any call, so a literal coerces to the chosen parameter type and its range is
-checked there. Selection never reads a literal's value, and never reads effects:
-the chosen method's `with` clause is checked afterwards.
+checked there. Selection never reads a literal's value, and reads effects only
+in a function argument's row: the chosen method's `with` clause is checked
+afterwards.
 
 No survivor is a different error from ambiguity. Every argument was admitted by
 what it could be, so no candidate admitting it means no impl accepts the

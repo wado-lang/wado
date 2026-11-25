@@ -315,7 +315,7 @@ jobs:
         with:
           shared-key: check-windows
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo clippy --locked -p wado-host -p wado-cli --all-targets -- -D warnings
+      - run: cargo clippy --locked -p wado-host -p wado-cli --features wado-cli/dist --all-targets -- -D warnings
 
   # `wado-run-webgpu` is its own workspace, so no job above builds, lints or
   # tests it. The corpus checks and benchmark/ ride here because this job

@@ -114,257 +114,6 @@ only an affine type implements it.
 
 `#[ambient(_)]`
 
-### `pub trait Reflect with ()`
-
-A type's identity: the root every reflected kind sits under. Sealed and
-compiler-synthesized like the kinds. See WEP 2026-06-13.
-
-#### `fn decl_name() -> String`
-
-`#[compiler_item("reflect_decl_name")]`
-
-Returns the declaration's name. A shape no declaration names answers
-for itself: an anonymous struct with `""`, and a tagged template's type
-with its holes (`` `${i32:04}` ``).
-
-#### `fn wire_name_policy() -> CaseStyle`
-
-`#[compiler_item("reflect_wire_name_policy")]`
-
-The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
-kind carries the attribute, and it says the same thing on each: the
-root answers so a caller need not know which kind it holds. A newtype
-answers with the policy of the declaration it wraps.
-
-#### `fn doc() -> Option<String>`
-
-`#[compiler_item("reflect_doc")]`
-
-The `///` comment on the declaration, or `None`: its lines joined by
-`\n`, each without its `///` and one space after it. Every instantiation
-of a generic type answers with its declaration's comment, and a newtype
-with its own, never its base's.
-
-### `pub trait ReflectStruct: Reflect with ()`
-
-Compile-time struct introspection. The compiler synthesizes an impl for
-every struct; it cannot be implemented in user code and is callable only in
-monomorphized contexts (`T` a concrete struct).
-See WEP 2026-06-13.
-
-#### `affine type FieldTypes`
-
-The field types as a tuple `[F_0, F_1, ...]`.
-
-#### `type Members`
-
-The per-field member tuple `[StructField<Self, F_0>, ...]`.
-
-#### `affine type FieldSlots`
-
-The field slots `[Option<F_0>, ...]` — the value-level companion of
-`FieldTypes`. A filled slot is one the wire wrote.
-
-#### `affine type FieldInputs`
-
-What `from_fields` takes: `FieldTypes` when the struct is open (no
-field reaches less far than the struct), `!` when it is closed, so a
-struct guarding a field can be read but never forged.
-
-#### `fn members() -> Self::Members`
-
-`#[compiler_item("reflect_struct_members")]`
-
-Returns the per-field members.
-
-#### `fn from_fields(fields: Self::FieldInputs) -> Self`
-
-`#[compiler_item("reflect_struct_from_fields")]`
-
-Assembles the struct from its field values.
-
-#### `fn default_slot(index: i32) -> Self::FieldSlots`
-
-`#[compiler_item("reflect_struct_default_slot")]`
-
-Empty slots but `index`, which holds that field's declared default
-(`f: T = expr`) if it has one. No other field's default is evaluated.
-
-#### `fn empty_slots() -> Self::FieldSlots`
-
-`#[compiler_item("reflect_struct_empty_slots")]`
-
-All slots empty. Starting here is what makes a filled slot mean "the
-wire wrote this", so a repeat is visible without a second record.
-
-### `pub affine trait Member with ()`
-
-The attr-reading face of a reflected member. Sealed and
-compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
-
-#### `fn name(&self) -> String`
-
-The source field name.
-
-#### `fn wire_name_override(&self) -> Option<String>`
-
-The raw `#[wire(name)]` value (casing not applied), or `None`.
-
-#### `fn doc(&self) -> Option<String>`
-
-The member's `///` comment, as `Reflect::doc` reads a declaration's.
-
-### `pub trait ReflectVariant: Reflect with ()`
-
-Compile-time variant introspection. The compiler synthesizes an impl for
-every variant; it cannot be implemented in user code and is callable only
-in monomorphized contexts (`T` a concrete variant).
-See WEP 2026-06-13 §3.
-
-#### `affine type CasePayloads`
-
-The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
-
-#### `type Members`
-
-The per-case member tuple `[VariantCase<Self, P_0>, ...]`.
-
-#### `fn discriminant(&self) -> i32`
-
-`#[compiler_item("reflect_variant_discriminant")]`
-
-Returns the live case's tag.
-
-#### `fn members() -> Self::Members`
-
-`#[compiler_item("reflect_variant_members")]`
-
-Returns the per-case members.
-
-#### `fn wire_tag() -> Option<String>`
-
-`#[compiler_item("reflect_variant_wire_tag")]`
-
-Returns the key `#[wire(tag)]` writes each case under, or `None` where
-the variant declares none.
-
-### `pub trait ReflectEnum: Reflect with ()`
-
-Compile-time enum introspection. The compiler synthesizes an impl for
-every enum; it cannot be implemented in user code and is callable only
-in monomorphized contexts (`T` a concrete enum).
-See WEP 2026-06-13 §3b.
-
-#### `type Members`
-
-The per-case member tuple `[EnumCase<Self>, ...]`.
-
-#### `fn discriminant(&self) -> i32`
-
-`#[compiler_item("reflect_enum_discriminant")]`
-
-Returns the value's tag.
-
-#### `fn from_discriminant(disc: i32) -> Option<Self>`
-
-`#[compiler_item("reflect_enum_from_discriminant")]`
-
-Returns the case with the given tag; `None` for an unknown tag.
-
-#### `fn members() -> Self::Members`
-
-`#[compiler_item("reflect_enum_members")]`
-
-Returns the per-case members.
-
-### `pub trait ReflectFlags: Reflect with ()`
-
-Compile-time flags introspection. The compiler synthesizes an impl for
-every flags type; it cannot be implemented in user code and is callable
-only in monomorphized contexts (`T` a concrete flags type).
-See WEP 2026-06-13 §3c.
-
-#### `type Members`
-
-The per-bit member tuple `[FlagsBit<Self>, ...]`.
-
-#### `fn bits(&self) -> u64`
-
-`#[compiler_item("reflect_flags_bits")]`
-
-Returns the value's bits, u64-normalized.
-
-#### `fn from_bits(raw: u64) -> Option<Self>`
-
-`#[compiler_item("reflect_flags_from_bits")]`
-
-Returns the value with the given bits; `None` when unknown bits
-are set.
-
-#### `fn members() -> Self::Members`
-
-`#[compiler_item("reflect_flags_members")]`
-
-Returns the per-bit members.
-
-### `pub trait ReflectNewtype: Reflect with ()`
-
-Compile-time newtype introspection. The compiler synthesizes an impl for
-every newtype; it cannot be implemented in user code and is callable only
-in monomorphized contexts (`T` a concrete newtype).
-
-The one kind with no members: a newtype has a base, and the value bridges
-both ways are the `From` the compiler already generates for it. Structure
-it inherits from that base — `ReflectStruct::<T>` on a newtype over a
-struct walks the struct's fields — so only the base is stated here.
-See WEP 2026-06-13.
-
-#### `affine type Base`
-
-The type this newtype wraps: `type UserName = String` → `String`.
-
-### `pub trait ReflectTemplate: Reflect with ()`
-
-Compile-time introspection of a tagged template literal's shape. The
-compiler synthesizes an impl per shape; it cannot be implemented in user
-code and is callable only in monomorphized contexts (`T` the anonymous
-type a template literal denotes). See WEP 2026-01-10.
-
-#### `affine type Holes`
-
-The hole types as a tuple `[V_0, V_1, ...]`.
-
-#### `type Members`
-
-The per-hole member tuple `[TemplateHole<Self, V_0>, ...]`.
-
-#### `fn members() -> Self::Members`
-
-`#[compiler_item("reflect_template_members")]`
-
-Returns the per-hole members.
-
-#### `fn tail(t: &Self) -> StrSlice`
-
-`#[compiler_item("reflect_template_tail")]`
-
-The literal text after the last hole of `t` — the whole template when
-it has none — with escapes processed.
-
-#### `fn raw_tail(t: &Self) -> StrSlice`
-
-`#[compiler_item("reflect_template_raw_tail")]`
-
-`tail(t)` as written: a cooked template's escapes preserved, a raw
-template's text itself.
-
-#### `fn hashes() -> i32`
-
-`#[compiler_item("reflect_template_hashes")]`
-
-How many `#`s delimit the template on each end: 0 for `` `…` ``, 1 for
-``#`…`#``.
-
 ### `pub trait Ref with ()`
 
 Marker for reference-identity types: those whose value is a Wasm GC
@@ -688,6 +437,314 @@ Used with the `${x:E}` format specifier.
 
 Formats the value in uppercase exponential notation and writes to the given formatter.
 
+### `pub affine trait From<affine T> with ()`
+
+Infallible conversion trait.
+Implement this to define how to convert from type `T` into `Self`.
+Usage: `TargetType::from(value)` — the target type is always explicit.
+
+The compiler provides a reflexive blanket impl `From<T> for T` for all types.
+
+#### `fn from(value: T) -> Self`
+
+Converts a value of type `T` into `Self`.
+
+### `pub affine trait TryFrom<affine T> with ()`
+
+Fallible conversion trait. `Err: Error`, so a caller reaching the failure
+through the bound can always report its reason.
+
+#### `type Err: Error`
+
+#### `fn try_from(value: T) -> Result<Self, Self::Err>`
+
+Attempts to convert a value of type `T` into `Self`.
+
+### `pub trait LiteralSpread with ()`
+
+`..base` inside a `{ … }` literal: merge `base` into `self`, last write
+wins. A target without this impl rejects `..base` where it is written.
+
+#### `fn spread_literal(&mut self, base: Self)`
+
+### `pub trait FromStr with ()`
+
+Parse a value from text that may not denote one, where `From<String>` is
+for text that always does. The parameter takes a `StrSlice` among the rest,
+so a field is parsed out of a larger buffer with no substring allocation.
+
+#### `type Err: Error`
+
+#### `fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
+
+Parse the whole of any `AsStrSlice` text as `Self`.
+
+### `pub trait LenientFromStr with ()`
+
+Forgiving sibling of `FromStr`: parse a human-supplied string, accepting
+the common spelling variations for the type (casing, radix prefixes,
+digit separators, alternate boolean words). Leniency widens accepted
+spellings only — an undenotable value still yields `Err`, and whitespace
+is never trimmed (that is the caller's concern). See
+`docs/wep-2026-06-22-lenient-from-str.md`.
+
+#### `type Err: Error`
+
+#### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
+
+Parse the entire string as `Self`, accepting forgiving spellings.
+
+### `pub trait Reflect with ()`
+
+A type's identity: the root every reflected kind sits under. Sealed and
+compiler-synthesized like the kinds. See WEP 2026-06-13.
+
+#### `fn decl_name() -> String`
+
+`#[compiler_item("reflect_decl_name")]`
+
+Returns the declaration's name. A shape no declaration names answers
+for itself: an anonymous struct with `""`, and a tagged template's type
+with its holes (`` `${i32:04}` ``).
+
+#### `fn wire_name_policy() -> CaseStyle`
+
+`#[compiler_item("reflect_wire_name_policy")]`
+
+The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
+kind carries the attribute, and it says the same thing on each: the
+root answers so a caller need not know which kind it holds. A newtype
+answers with the policy of the declaration it wraps.
+
+#### `fn doc() -> Option<String>`
+
+`#[compiler_item("reflect_doc")]`
+
+The `///` comment on the declaration, or `None`: its lines joined by
+`\n`, each without its `///` and one space after it. Every instantiation
+of a generic type answers with its declaration's comment, and a newtype
+with its own, never its base's.
+
+### `pub trait ReflectStruct: Reflect with ()`
+
+Compile-time struct introspection. The compiler synthesizes an impl for
+every struct; it cannot be implemented in user code and is callable only in
+monomorphized contexts (`T` a concrete struct).
+See WEP 2026-06-13.
+
+#### `affine type FieldTypes`
+
+The field types as a tuple `[F_0, F_1, ...]`.
+
+#### `type Members`
+
+The per-field member tuple `[StructField<Self, F_0>, ...]`.
+
+#### `affine type FieldSlots`
+
+The field slots `[Option<F_0>, ...]` — the value-level companion of
+`FieldTypes`. A filled slot is one the wire wrote.
+
+#### `affine type FieldInputs`
+
+What `from_fields` takes: `FieldTypes` when the struct is open (no
+field reaches less far than the struct), `!` when it is closed, so a
+struct guarding a field can be read but never forged.
+
+#### `fn members() -> Self::Members`
+
+`#[compiler_item("reflect_struct_members")]`
+
+Returns the per-field members.
+
+#### `fn from_fields(fields: Self::FieldInputs) -> Self`
+
+`#[compiler_item("reflect_struct_from_fields")]`
+
+Assembles the struct from its field values.
+
+#### `fn default_slot(index: i32) -> Self::FieldSlots`
+
+`#[compiler_item("reflect_struct_default_slot")]`
+
+Empty slots but `index`, which holds that field's declared default
+(`f: T = expr`) if it has one. No other field's default is evaluated.
+
+#### `fn empty_slots() -> Self::FieldSlots`
+
+`#[compiler_item("reflect_struct_empty_slots")]`
+
+All slots empty. Starting here is what makes a filled slot mean "the
+wire wrote this", so a repeat is visible without a second record.
+
+### `pub affine trait Member with ()`
+
+The attr-reading face of a reflected member. Sealed and
+compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
+
+#### `fn name(&self) -> String`
+
+The source field name.
+
+#### `fn wire_name_override(&self) -> Option<String>`
+
+The raw `#[wire(name)]` value (casing not applied), or `None`.
+
+#### `fn doc(&self) -> Option<String>`
+
+The member's `///` comment, as `Reflect::doc` reads a declaration's.
+
+### `pub trait ReflectVariant: Reflect with ()`
+
+Compile-time variant introspection. The compiler synthesizes an impl for
+every variant; it cannot be implemented in user code and is callable only
+in monomorphized contexts (`T` a concrete variant).
+See WEP 2026-06-13 §3.
+
+#### `affine type CasePayloads`
+
+The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
+
+#### `type Members`
+
+The per-case member tuple `[VariantCase<Self, P_0>, ...]`.
+
+#### `fn discriminant(&self) -> i32`
+
+`#[compiler_item("reflect_variant_discriminant")]`
+
+Returns the live case's tag.
+
+#### `fn members() -> Self::Members`
+
+`#[compiler_item("reflect_variant_members")]`
+
+Returns the per-case members.
+
+#### `fn wire_tag() -> Option<String>`
+
+`#[compiler_item("reflect_variant_wire_tag")]`
+
+Returns the key `#[wire(tag)]` writes each case under, or `None` where
+the variant declares none.
+
+### `pub trait ReflectEnum: Reflect with ()`
+
+Compile-time enum introspection. The compiler synthesizes an impl for
+every enum; it cannot be implemented in user code and is callable only
+in monomorphized contexts (`T` a concrete enum).
+See WEP 2026-06-13 §3b.
+
+#### `type Members`
+
+The per-case member tuple `[EnumCase<Self>, ...]`.
+
+#### `fn discriminant(&self) -> i32`
+
+`#[compiler_item("reflect_enum_discriminant")]`
+
+Returns the value's tag.
+
+#### `fn from_discriminant(disc: i32) -> Option<Self>`
+
+`#[compiler_item("reflect_enum_from_discriminant")]`
+
+Returns the case with the given tag; `None` for an unknown tag.
+
+#### `fn members() -> Self::Members`
+
+`#[compiler_item("reflect_enum_members")]`
+
+Returns the per-case members.
+
+### `pub trait ReflectFlags: Reflect with ()`
+
+Compile-time flags introspection. The compiler synthesizes an impl for
+every flags type; it cannot be implemented in user code and is callable
+only in monomorphized contexts (`T` a concrete flags type).
+See WEP 2026-06-13 §3c.
+
+#### `type Members`
+
+The per-bit member tuple `[FlagsBit<Self>, ...]`.
+
+#### `fn bits(&self) -> u64`
+
+`#[compiler_item("reflect_flags_bits")]`
+
+Returns the value's bits, u64-normalized.
+
+#### `fn from_bits(raw: u64) -> Option<Self>`
+
+`#[compiler_item("reflect_flags_from_bits")]`
+
+Returns the value with the given bits; `None` when unknown bits
+are set.
+
+#### `fn members() -> Self::Members`
+
+`#[compiler_item("reflect_flags_members")]`
+
+Returns the per-bit members.
+
+### `pub trait ReflectNewtype: Reflect with ()`
+
+Compile-time newtype introspection. The compiler synthesizes an impl for
+every newtype; it cannot be implemented in user code and is callable only
+in monomorphized contexts (`T` a concrete newtype).
+
+The one kind with no members: a newtype has a base, and the value bridges
+both ways are the `From` the compiler already generates for it. Structure
+it inherits from that base — `ReflectStruct::<T>` on a newtype over a
+struct walks the struct's fields — so only the base is stated here.
+See WEP 2026-06-13.
+
+#### `affine type Base`
+
+The type this newtype wraps: `type UserName = String` → `String`.
+
+### `pub trait ReflectTemplate: Reflect with ()`
+
+Compile-time introspection of a tagged template literal's shape. The
+compiler synthesizes an impl per shape; it cannot be implemented in user
+code and is callable only in monomorphized contexts (`T` the anonymous
+type a template literal denotes). See WEP 2026-01-10.
+
+#### `affine type Holes`
+
+The hole types as a tuple `[V_0, V_1, ...]`.
+
+#### `type Members`
+
+The per-hole member tuple `[TemplateHole<Self, V_0>, ...]`.
+
+#### `fn members() -> Self::Members`
+
+`#[compiler_item("reflect_template_members")]`
+
+Returns the per-hole members.
+
+#### `fn tail(t: &Self) -> StrSlice`
+
+`#[compiler_item("reflect_template_tail")]`
+
+The literal text after the last hole of `t` — the whole template when
+it has none — with escapes processed.
+
+#### `fn raw_tail(t: &Self) -> StrSlice`
+
+`#[compiler_item("reflect_template_raw_tail")]`
+
+`tail(t)` as written: a cooked template's escapes preserved, a raw
+template's text itself.
+
+#### `fn hashes() -> i32`
+
+`#[compiler_item("reflect_template_hashes")]`
+
+How many `#`s delimit the template on each end: 0 for `` `…` ``, 1 for
+``#`…`#``.
+
 ### `pub affine trait Iterator with _`
 
 The core iterator trait for sequences of values.
@@ -848,29 +905,6 @@ iterable is walked through its `IntoIterator`.
 
 #### `fn start(self) -> Self::State`
 
-### `pub affine trait From<affine T> with ()`
-
-Infallible conversion trait.
-Implement this to define how to convert from type `T` into `Self`.
-Usage: `TargetType::from(value)` — the target type is always explicit.
-
-The compiler provides a reflexive blanket impl `From<T> for T` for all types.
-
-#### `fn from(value: T) -> Self`
-
-Converts a value of type `T` into `Self`.
-
-### `pub affine trait TryFrom<affine T> with ()`
-
-Fallible conversion trait. `Err: Error`, so a caller reaching the failure
-through the bound can always report its reason.
-
-#### `type Err: Error`
-
-#### `fn try_from(value: T) -> Result<Self, Self::Err>`
-
-Attempts to convert a value of type `T` into `Self`.
-
 ### `pub trait Sum with ()`
 
 Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
@@ -907,127 +941,6 @@ Trait for creating a collection from any iterator of `Elem`.
 #### `type Elem`
 
 #### `fn from_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _`
-
-### `pub trait LiteralSpread with ()`
-
-`..base` inside a `{ … }` literal: merge `base` into `self`, last write
-wins. A target without this impl rejects `..base` where it is written.
-
-#### `fn spread_literal(&mut self, base: Self)`
-
-### `pub trait FromStr with ()`
-
-Parse a value from text that may not denote one, where `From<String>` is
-for text that always does. The parameter takes a `StrSlice` among the rest,
-so a field is parsed out of a larger buffer with no substring allocation.
-
-#### `type Err: Error`
-
-#### `fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
-
-Parse the whole of any `AsStrSlice` text as `Self`.
-
-### `pub trait LenientFromStr with ()`
-
-Forgiving sibling of `FromStr`: parse a human-supplied string, accepting
-the common spelling variations for the type (casing, radix prefixes,
-digit separators, alternate boolean words). Leniency widens accepted
-spellings only — an undenotable value still yields `Err`, and whitespace
-is never trimmed (that is the caller's concern). See
-`docs/wep-2026-06-22-lenient-from-str.md`.
-
-#### `type Err: Error`
-
-#### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
-
-Parse the entire string as `Self`, accepting forgiving spellings.
-
-### `pub trait PushDisplay with ()`
-
-Writes a `Display` value into a `String` in place, skipping the temporary
-`String` that a `` `${value}` `` template allocates before copying it in. The
-alloc-free counterpart to `buf.push_str(`${value}`)` for a single value with
-no format spec — the hot path in the serde numeric encoders.
-
-A trait (not an inherent `impl String`, which the coherence rules forbid on a
-foreign type) and placed here, not in string.wado, so `String` stays a leaf
-that `Formatter` depends on — mirroring `impl Display for String` above.
-
-#### `fn push_display<T: Display>(&mut self, value: &T)`
-
-### `pub affine trait Waitable with ()`
-
-What a `WaitableSet` waits on: a value the host reports events for by its
-handle. It is sealed, so a set holds only what it can account for: the
-standard library implements it on the calls, and a variant whose cases each
-hold one derives it with `impl Waitable for V;`. A bare stream or future end
-is none, since no copy on it is in flight: a copy started on one,
-`ReadCopy`, `WriteCopy` or `FutureReadCopy`, is one.
-
-#### `fn wait_on(&self) -> WaitOn`
-
-### `pub trait Sequence with ()`
-
-Read-only random-access sequence: `Array<T>`, `List<T>`, and `Slice<T>`.
-
-Implementors supply `len` and `at`; everything else is a default body over
-those two, so no default constructs a `Slice`. Methods needing an `Elem`
-bound (`contains`, `binary_search`, …) cannot live here — an associated
-type carries no bound — and stay bounded inherent impls.
-
-#### `type Elem`
-
-#### `fn len(&self) -> i32`
-
-#### `fn at(&self, index: i32) -> Self::Elem`
-
-- `contract 0 <= index < self.len()`
-
-The element at `index`. `get` answers for an index that may be out of
-range.
-
-#### `fn get_unchecked(&self)`
-
-``#[unavailable("write `unchecked xs.at(i)`")]``
-
-#### `fn is_empty(&self) -> bool`
-
-#### `fn get(&self, index: i32) -> Option<Self::Elem>`
-
-#### `fn first(&self) -> Option<Self::Elem>`
-
-#### `fn last(&self) -> Option<Self::Elem>`
-
-#### `fn position(&self, mut pred: fn mut(Self::Elem) -> bool with _) -> Option<i32> with _`
-
-### `pub trait AsSlice: Sequence with ()`
-
-Reference view over a contiguous sequence. Implemented by `Array<T>`,
-`List<T>`, and `Slice<T>`; the implementations forward to `Slice`, which
-carries the real bodies.
-
-#### `fn as_slice(&self) -> Slice<Self::Elem>`
-
-#### `fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem>`
-
-Sub-view over `[start, end)`, clamped to this sequence.
-
-#### `fn iter_value(&self) -> SliceValueIter<Self::Elem>`
-
-#### `fn iter_ref(&self) -> SliceRefIter<Self::Elem>`
-
-#### `fn windows(&self, size: i32) -> SliceWindows<Self::Elem>`
-
-- `contract size > 0`
-
-Overlapping windows of `size` consecutive elements.
-
-#### `fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>`
-
-- `contract size > 0`
-
-Non-overlapping chunks of up to `size` elements; the last may be
-shorter.
 
 ### `pub trait AsStrSlice: Eq<String> + Display with ()`
 
@@ -1149,6 +1062,82 @@ literals stops folding to one.
 
 #### `fn replacen<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T, count: i32) -> String`
 
+### `pub trait PushDisplay with ()`
+
+Writes a `Display` value into a `String` in place, skipping the temporary
+`String` that a `` `${value}` `` template allocates before copying it in. The
+alloc-free counterpart to `buf.push_str(`${value}`)` for a single value with
+no format spec — the hot path in the serde numeric encoders.
+
+A trait (not an inherent `impl String`, which the coherence rules forbid on a
+foreign type) and placed here, not in string.wado, so `String` stays a leaf
+that `Formatter` depends on — mirroring `impl Display for String` above.
+
+#### `fn push_display<T: Display>(&mut self, value: &T)`
+
+### `pub trait Sequence with ()`
+
+Read-only random-access sequence: `Array<T>`, `List<T>`, and `Slice<T>`.
+
+Implementors supply `len` and `at`; everything else is a default body over
+those two, so no default constructs a `Slice`. Methods needing an `Elem`
+bound (`contains`, `binary_search`, …) cannot live here — an associated
+type carries no bound — and stay bounded inherent impls.
+
+#### `type Elem`
+
+#### `fn len(&self) -> i32`
+
+#### `fn at(&self, index: i32) -> Self::Elem`
+
+- `contract 0 <= index < self.len()`
+
+The element at `index`. `get` answers for an index that may be out of
+range.
+
+#### `fn get_unchecked(&self)`
+
+``#[unavailable("write `unchecked xs.at(i)`")]``
+
+#### `fn is_empty(&self) -> bool`
+
+#### `fn get(&self, index: i32) -> Option<Self::Elem>`
+
+#### `fn first(&self) -> Option<Self::Elem>`
+
+#### `fn last(&self) -> Option<Self::Elem>`
+
+#### `fn position(&self, mut pred: fn mut(Self::Elem) -> bool with _) -> Option<i32> with _`
+
+### `pub trait AsSlice: Sequence with ()`
+
+Reference view over a contiguous sequence. Implemented by `Array<T>`,
+`List<T>`, and `Slice<T>`; the implementations forward to `Slice`, which
+carries the real bodies.
+
+#### `fn as_slice(&self) -> Slice<Self::Elem>`
+
+#### `fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem>`
+
+Sub-view over `[start, end)`, clamped to this sequence.
+
+#### `fn iter_value(&self) -> SliceValueIter<Self::Elem>`
+
+#### `fn iter_ref(&self) -> SliceRefIter<Self::Elem>`
+
+#### `fn windows(&self, size: i32) -> SliceWindows<Self::Elem>`
+
+- `contract size > 0`
+
+Overlapping windows of `size` consecutive elements.
+
+#### `fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>`
+
+- `contract size > 0`
+
+Non-overlapping chunks of up to `size` elements; the last may be
+shorter.
+
 ### `pub trait AsByteSlice with ()`
 
 Conversion to a `ByteSlice` that copies no bytes.
@@ -1177,6 +1166,17 @@ The value whose `bits() / 8` bytes start at `at`.
 Types that can be incremented by one step (for range iteration).
 
 #### `fn next_step(&self) -> Option<Self>`
+
+### `pub affine trait Waitable with ()`
+
+What a `WaitableSet` waits on: a value the host reports events for by its
+handle. It is sealed, so a set holds only what it can account for: the
+standard library implements it on the calls, and a variant whose cases each
+hold one derives it with `impl Waitable for V;`. A bare stream or future end
+is none, since no copy on it is in flight: a copy started on one,
+`ReadCopy`, `WriteCopy` or `FutureReadCopy`, is one.
+
+#### `fn wait_on(&self) -> WaitOn`
 
 ## Resources
 
@@ -1428,1269 +1428,6 @@ A view referencing a byte buffer.
 ##### `fn as_byte_slice(&self) -> ByteSlice`
 
 ## Primitive Types
-
-### `f32`
-
-#### `pub const BITS: i32`
-
-#### `pub const PI: f32`
-
-#### `pub const TAU: f32`
-
-#### `pub const E: f32`
-
-#### `pub const LN2: f32`
-
-#### `pub const LN10: f32`
-
-#### `pub const LOG2_E: f32`
-
-#### `pub const LOG10_E: f32`
-
-#### `pub const SQRT2: f32`
-
-#### `pub const FRAC_1_SQRT2: f32`
-
-#### `pub const FRAC_PI_2: f32`
-
-#### `pub const FRAC_PI_4: f32`
-
-#### `pub const INFINITY: f32`
-
-#### `pub const NEG_INFINITY: f32`
-
-#### `pub const NAN: f32`
-
-#### `pub const MAX: f32`
-
-#### `pub const MIN: f32`
-
-#### `pub const MIN_POSITIVE: f32`
-
-The smallest positive normal value.
-
-#### `pub const EPSILON: f32`
-
-The gap between 1.0 and the next larger value.
-
-#### `pub const RADIX: i32`
-
-#### `pub const MANTISSA_DIGITS: i32`
-
-Significand bits, the implicit leading one included.
-
-#### `pub const DIGITS: i32`
-
-Decimal digits that survive a round trip through the type.
-
-#### `pub const MIN_EXP: i32`
-
-#### `pub const MAX_EXP: i32`
-
-#### `pub const MIN_10_EXP: i32`
-
-#### `pub const MAX_10_EXP: i32`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn abs(x: f32) -> f32`
-
-Absolute value
-
-#### `pub fn ceil(x: f32) -> f32`
-
-Ceiling (round toward +infinity)
-
-#### `pub fn floor(x: f32) -> f32`
-
-Floor (round toward -infinity)
-
-#### `pub fn trunc(x: f32) -> f32`
-
-Truncate toward zero
-
-#### `pub fn round(x: f32) -> f32`
-
-Round to nearest, breaking ties away from zero
-
-Wasm rounds the other way, so this is a software implementation —
-slower than `round_ties_even`.
-
-#### `pub fn round_ties_even(x: f32) -> f32`
-
-Round to nearest, breaking ties toward the even neighbour
-
-#### `pub fn sqrt(x: f32) -> f32`
-
-Square root
-
-#### `pub fn min(x: f32, y: f32) -> f32`
-
-The lesser of two values by the order, where NaN is greatest; `x` when
-they are equal.
-
-#### `pub fn max(x: f32, y: f32) -> f32`
-
-The greater of two values by the order, where NaN is greatest; `y` when
-they are equal.
-
-#### `pub fn ieee754_min(x: f32, y: f32) -> f32`
-
-IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
-`0.0`.
-
-#### `pub fn ieee754_max(x: f32, y: f32) -> f32`
-
-IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
-`0.0`.
-
-#### `pub fn clamp(x: f32, low: f32, high: f32) -> f32`
-
-- `contract !high.is_nan() && low <= high`
-
-`x` confined to `low..=high` by the order, except that a NaN `x` stays
-NaN.
-
-#### `pub fn copysign(x: f32, y: f32) -> f32`
-
-Copy sign from y to x
-
-#### `pub fn sin(x: f32) -> f32`
-
-Sine (in radians)
-
-#### `pub fn cos(x: f32) -> f32`
-
-Cosine (in radians)
-
-#### `pub fn tan(x: f32) -> f32`
-
-Tangent (in radians)
-
-#### `pub fn asin(x: f32) -> f32`
-
-Arc sine (returns radians)
-
-#### `pub fn acos(x: f32) -> f32`
-
-Arc cosine (returns radians)
-
-#### `pub fn atan(x: f32) -> f32`
-
-Arc tangent (returns radians)
-
-#### `pub fn atan2(y: f32, x: f32) -> f32`
-
-Arc tangent of y/x (returns radians)
-
-#### `pub fn sinh(x: f32) -> f32`
-
-Hyperbolic sine
-
-#### `pub fn cosh(x: f32) -> f32`
-
-Hyperbolic cosine
-
-#### `pub fn tanh(x: f32) -> f32`
-
-Hyperbolic tangent
-
-#### `pub fn asinh(x: f32) -> f32`
-
-Inverse hyperbolic sine
-
-#### `pub fn acosh(x: f32) -> f32`
-
-Inverse hyperbolic cosine
-
-#### `pub fn atanh(x: f32) -> f32`
-
-Inverse hyperbolic tangent
-
-#### `pub fn exp(x: f32) -> f32`
-
-e raised to the power x
-
-#### `pub fn exp2(x: f32) -> f32`
-
-2 raised to the power x
-
-#### `pub fn exp10(x: f32) -> f32`
-
-10 raised to the power x
-
-#### `pub fn expm1(x: f32) -> f32`
-
-e^x - 1 (more accurate for small x)
-
-#### `pub fn ln(x: f32) -> f32`
-
-Natural logarithm (base e)
-
-#### `pub fn log2(x: f32) -> f32`
-
-Logarithm base 2
-
-#### `pub fn log10(x: f32) -> f32`
-
-Logarithm base 10
-
-#### `pub fn ln1p(x: f32) -> f32`
-
-ln(1 + x) (more accurate for small x)
-
-#### `pub fn pow(x: f32, y: f32) -> f32`
-
-x raised to the power y
-
-#### `pub fn cbrt(x: f32) -> f32`
-
-Cube root
-
-#### `pub fn hypot(x: f32, y: f32) -> f32`
-
-Euclidean distance: sqrt(x^2 + y^2)
-
-#### `pub fn fmod(x: f32, y: f32) -> f32`
-
-Floating-point remainder of x/y
-
-#### `pub fn erf(x: f32) -> f32`
-
-Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
-
-#### `pub fn erfc(x: f32) -> f32`
-
-Complementary error function: `1 - erf(x)`, accurate where erf is near 1
-
-#### `pub fn gamma(x: f32) -> f32`
-
-Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
-
-#### `pub fn ln_gamma(x: f32) -> f32`
-
-Natural logarithm of `|Γ(x)|`
-
-#### `pub fn mul_add(x: f32, y: f32, z: f32) -> f32`
-
-`x * y + z`, rounded once instead of twice.
-
-Wasm has no scalar FMA instruction, so this is a software
-implementation — slower than `x * y + z`.
-
-#### `pub fn is_nan(&self) -> bool`
-
-#### `pub fn ieee754_eq(&self, other: f32) -> bool`
-
-IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
-
-#### `pub fn ieee754_ne(&self, other: f32) -> bool`
-
-IEEE 754's `!=`: true when either is a NaN.
-
-#### `pub fn ieee754_lt(&self, other: f32) -> bool`
-
-IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
-
-#### `pub fn ieee754_le(&self, other: f32) -> bool`
-
-IEEE 754's `<=`: false when either is a NaN.
-
-#### `pub fn ieee754_gt(&self, other: f32) -> bool`
-
-IEEE 754's `>`: false when either is a NaN.
-
-#### `pub fn ieee754_ge(&self, other: f32) -> bool`
-
-IEEE 754's `>=`: false when either is a NaN.
-
-#### `pub fn is_finite(&self) -> bool`
-
-#### `pub fn to_bits(&self) -> u32`
-
-Reinterprets the bits of this f32 as a u32.
-
-#### `pub fn from_bits(bits: u32) -> f32`
-
-Creates an f32 from its bit representation.
-
-#### `impl From<f16> for f32`
-
-##### `fn from(value: f16) -> f32`
-
-#### `impl From<bf16> for f32`
-
-##### `fn from(value: bf16) -> f32`
-
-#### `impl TryFrom<i128> for f32`
-
-##### `pub fn try_from(value: i128) -> Result<f32, ConvertError>`
-
-#### `impl TryFrom<u128> for f32`
-
-##### `pub fn try_from(value: u128) -> Result<f32, ConvertError>`
-
-#### `impl FromStr for f32`
-
-##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f32, ParseFloatError>`
-
-#### `impl LenientFromStr for f32`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f32, LenientParseError>`
-
-#### `impl Display for f32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for f32`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for f32`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for f32`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Eq for f32`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for f32`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Hash for f32`
-
-##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
-
-#### `impl Default for f32`
-
-##### `pub fn default() -> f32`
-
-#### `impl TryFrom<i64> for f32`
-
-##### `pub fn try_from(value: i64) -> Result<f32, ConvertError>`
-
-#### `impl TryFrom<u64> for f32`
-
-##### `pub fn try_from(value: u64) -> Result<f32, ConvertError>`
-
-#### `impl FromLeBytes for f32`
-
-##### `fn bits() -> i32`
-
-##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f32`
-
-### `f64`
-
-#### `pub const BITS: i32`
-
-#### `pub const PI: f64`
-
-#### `pub const TAU: f64`
-
-#### `pub const E: f64`
-
-#### `pub const LN2: f64`
-
-#### `pub const LN10: f64`
-
-#### `pub const LOG2_E: f64`
-
-#### `pub const LOG10_E: f64`
-
-#### `pub const SQRT2: f64`
-
-#### `pub const FRAC_1_SQRT2: f64`
-
-#### `pub const FRAC_PI_2: f64`
-
-#### `pub const FRAC_PI_4: f64`
-
-#### `pub const INFINITY: f64`
-
-#### `pub const NEG_INFINITY: f64`
-
-#### `pub const NAN: f64`
-
-#### `pub const MAX: f64`
-
-#### `pub const MIN: f64`
-
-#### `pub const MIN_POSITIVE: f64`
-
-The smallest positive normal value.
-
-#### `pub const EPSILON: f64`
-
-The gap between 1.0 and the next larger value.
-
-#### `pub const RADIX: i32`
-
-#### `pub const MANTISSA_DIGITS: i32`
-
-Significand bits, the implicit leading one included.
-
-#### `pub const DIGITS: i32`
-
-Decimal digits that survive a round trip through the type.
-
-#### `pub const MIN_EXP: i32`
-
-#### `pub const MAX_EXP: i32`
-
-#### `pub const MIN_10_EXP: i32`
-
-#### `pub const MAX_10_EXP: i32`
-
-#### `pub const MAX_SAFE_INTEGER: f64`
-
-The largest integer exactly representable in f64: 2^53 - 1.
-Mirrors JS `Number.MAX_SAFE_INTEGER`.
-
-#### `pub const MIN_SAFE_INTEGER: f64`
-
-The smallest integer exactly representable in f64: -(2^53 - 1).
-Mirrors JS `Number.MIN_SAFE_INTEGER`.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn abs(x: f64) -> f64`
-
-Absolute value
-
-#### `pub fn ceil(x: f64) -> f64`
-
-Ceiling (round toward +infinity)
-
-#### `pub fn floor(x: f64) -> f64`
-
-Floor (round toward -infinity)
-
-#### `pub fn trunc(x: f64) -> f64`
-
-Truncate toward zero
-
-#### `pub fn round(x: f64) -> f64`
-
-Round to nearest, breaking ties away from zero
-
-Wasm rounds the other way, so this is a software implementation —
-slower than `round_ties_even`.
-
-#### `pub fn round_ties_even(x: f64) -> f64`
-
-Round to nearest, breaking ties toward the even neighbour
-
-#### `pub fn sqrt(x: f64) -> f64`
-
-Square root
-
-#### `pub fn min(x: f64, y: f64) -> f64`
-
-The lesser of two values by the order, where NaN is greatest; `x` when
-they are equal.
-
-#### `pub fn max(x: f64, y: f64) -> f64`
-
-The greater of two values by the order, where NaN is greatest; `y` when
-they are equal.
-
-#### `pub fn ieee754_min(x: f64, y: f64) -> f64`
-
-IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
-`0.0`.
-
-#### `pub fn ieee754_max(x: f64, y: f64) -> f64`
-
-IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
-`0.0`.
-
-#### `pub fn clamp(x: f64, low: f64, high: f64) -> f64`
-
-- `contract !high.is_nan() && low <= high`
-
-`x` confined to `low..=high` by the order, except that a NaN `x` stays
-NaN.
-
-#### `pub fn copysign(x: f64, y: f64) -> f64`
-
-Copy sign from y to x
-
-#### `pub fn sin(x: f64) -> f64`
-
-Sine (in radians)
-
-#### `pub fn cos(x: f64) -> f64`
-
-Cosine (in radians)
-
-#### `pub fn tan(x: f64) -> f64`
-
-Tangent (in radians)
-
-#### `pub fn asin(x: f64) -> f64`
-
-Arc sine (returns radians)
-
-#### `pub fn acos(x: f64) -> f64`
-
-Arc cosine (returns radians)
-
-#### `pub fn atan(x: f64) -> f64`
-
-Arc tangent (returns radians)
-
-#### `pub fn atan2(y: f64, x: f64) -> f64`
-
-Arc tangent of y/x (returns radians)
-
-#### `pub fn sinh(x: f64) -> f64`
-
-Hyperbolic sine
-
-#### `pub fn cosh(x: f64) -> f64`
-
-Hyperbolic cosine
-
-#### `pub fn tanh(x: f64) -> f64`
-
-Hyperbolic tangent
-
-#### `pub fn asinh(x: f64) -> f64`
-
-Inverse hyperbolic sine
-
-#### `pub fn acosh(x: f64) -> f64`
-
-Inverse hyperbolic cosine
-
-#### `pub fn atanh(x: f64) -> f64`
-
-Inverse hyperbolic tangent
-
-#### `pub fn exp(x: f64) -> f64`
-
-e raised to the power x
-
-#### `pub fn exp2(x: f64) -> f64`
-
-2 raised to the power x
-
-#### `pub fn exp10(x: f64) -> f64`
-
-10 raised to the power x
-
-#### `pub fn expm1(x: f64) -> f64`
-
-e^x - 1 (more accurate for small x)
-
-#### `pub fn ln(x: f64) -> f64`
-
-Natural logarithm (base e)
-
-#### `pub fn log2(x: f64) -> f64`
-
-Logarithm base 2
-
-#### `pub fn log10(x: f64) -> f64`
-
-Logarithm base 10
-
-#### `pub fn ln1p(x: f64) -> f64`
-
-ln(1 + x) (more accurate for small x)
-
-#### `pub fn pow(x: f64, y: f64) -> f64`
-
-x raised to the power y
-
-#### `pub fn cbrt(x: f64) -> f64`
-
-Cube root
-
-#### `pub fn hypot(x: f64, y: f64) -> f64`
-
-Euclidean distance: sqrt(x^2 + y^2)
-
-#### `pub fn fmod(x: f64, y: f64) -> f64`
-
-Floating-point remainder of x/y
-
-#### `pub fn erf(x: f64) -> f64`
-
-Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
-
-#### `pub fn erfc(x: f64) -> f64`
-
-Complementary error function: `1 - erf(x)`, accurate where erf is near 1
-
-#### `pub fn gamma(x: f64) -> f64`
-
-Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
-
-#### `pub fn ln_gamma(x: f64) -> f64`
-
-Natural logarithm of `|Γ(x)|`
-
-#### `pub fn mul_add(x: f64, y: f64, z: f64) -> f64`
-
-`x * y + z`, rounded once instead of twice.
-
-Wasm has no scalar FMA instruction, so this is a software
-implementation — slower than `x * y + z`.
-
-#### `pub fn is_nan(&self) -> bool`
-
-#### `pub fn ieee754_eq(&self, other: f64) -> bool`
-
-IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
-
-#### `pub fn ieee754_ne(&self, other: f64) -> bool`
-
-IEEE 754's `!=`: true when either is a NaN.
-
-#### `pub fn ieee754_lt(&self, other: f64) -> bool`
-
-IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
-
-#### `pub fn ieee754_le(&self, other: f64) -> bool`
-
-IEEE 754's `<=`: false when either is a NaN.
-
-#### `pub fn ieee754_gt(&self, other: f64) -> bool`
-
-IEEE 754's `>`: false when either is a NaN.
-
-#### `pub fn ieee754_ge(&self, other: f64) -> bool`
-
-IEEE 754's `>=`: false when either is a NaN.
-
-#### `pub fn is_finite(&self) -> bool`
-
-#### `pub fn to_bits(&self) -> u64`
-
-Reinterprets the bits of this f64 as a u64.
-
-#### `pub fn from_bits(bits: u64) -> f64`
-
-Creates an f64 from its bit representation.
-
-#### `impl From<f16> for f64`
-
-##### `fn from(value: f16) -> f64`
-
-#### `impl From<bf16> for f64`
-
-##### `fn from(value: bf16) -> f64`
-
-#### `impl TryFrom<i128> for f64`
-
-##### `pub fn try_from(value: i128) -> Result<f64, ConvertError>`
-
-#### `impl TryFrom<u128> for f64`
-
-##### `pub fn try_from(value: u128) -> Result<f64, ConvertError>`
-
-#### `impl FromStr for f64`
-
-##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f64, ParseFloatError>`
-
-#### `impl LenientFromStr for f64`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f64, LenientParseError>`
-
-#### `impl Display for f64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for f64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for f64`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for f64`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Eq for f64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for f64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Hash for f64`
-
-##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
-
-#### `impl Default for f64`
-
-##### `pub fn default() -> f64`
-
-#### `impl From<f32> for f64`
-
-##### `pub fn from(value: f32) -> f64`
-
-#### `impl TryFrom<i64> for f64`
-
-##### `pub fn try_from(value: i64) -> Result<f64, ConvertError>`
-
-#### `impl TryFrom<u64> for f64`
-
-##### `pub fn try_from(value: u64) -> Result<f64, ConvertError>`
-
-#### `impl FromLeBytes for f64`
-
-##### `fn bits() -> i32`
-
-##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f64`
-
-### `f16`
-
-#### `pub const BITS: i32`
-
-#### `pub const MAX: f16`
-
-#### `pub const MIN: f16`
-
-#### `pub const MIN_POSITIVE: f16`
-
-The smallest positive normal value.
-
-#### `pub const EPSILON: f16`
-
-The gap between 1.0 and the next larger value.
-
-#### `pub const INFINITY: f16`
-
-#### `pub const NEG_INFINITY: f16`
-
-#### `pub const NAN: f16`
-
-#### `pub const RADIX: i32`
-
-#### `pub const MANTISSA_DIGITS: i32`
-
-Significand bits, the implicit leading one included.
-
-#### `pub const DIGITS: i32`
-
-Decimal digits that survive a round trip through the type.
-
-#### `pub const MIN_EXP: i32`
-
-#### `pub const MAX_EXP: i32`
-
-#### `pub const MIN_10_EXP: i32`
-
-#### `pub const MAX_10_EXP: i32`
-
-#### `pub fn to_bits(&self) -> u16`
-
-Reinterprets the bits of this f16 as a u16.
-
-#### `pub fn from_bits(bits: u16) -> f16`
-
-Creates an f16 from its bit representation.
-
-#### `pub fn from_f32(v: f32) -> f16`
-
-Rounds `v` to the nearest f16, ties to even, saturating to an infinity.
-Use `f16::try_from` where an inexact value should be refused instead.
-
-#### `pub fn from_f64(v: f64) -> f16`
-
-Rounds `v` once to the nearest f16, ties to even, saturating to an infinity.
-
-#### `pub fn is_nan(&self) -> bool`
-
-True for a NaN, quiet or signaling.
-
-#### `pub fn ieee754_eq(&self, other: f16) -> bool`
-
-IEEE 754's `==`, on the values widened to f32.
-
-#### `pub fn ieee754_ne(&self, other: f16) -> bool`
-
-IEEE 754's `!=`, on the values widened to f32.
-
-#### `pub fn ieee754_lt(&self, other: f16) -> bool`
-
-IEEE 754's `<`, on the values widened to f32.
-
-#### `pub fn ieee754_le(&self, other: f16) -> bool`
-
-IEEE 754's `<=`, on the values widened to f32.
-
-#### `pub fn ieee754_gt(&self, other: f16) -> bool`
-
-IEEE 754's `>`, on the values widened to f32.
-
-#### `pub fn ieee754_ge(&self, other: f16) -> bool`
-
-IEEE 754's `>=`, on the values widened to f32.
-
-#### `impl FromStr for f16`
-
-##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f16, ParseFloatError>`
-
-#### `impl LenientFromStr for f16`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f16, LenientParseError>`
-
-#### `impl TryFrom<f32> for f16`
-
-##### `pub fn try_from(value: f32) -> Result<f16, ConvertError>`
-
-#### `impl TryFrom<f64> for f16`
-
-##### `pub fn try_from(value: f64) -> Result<f16, ConvertError>`
-
-#### `impl Eq for f16`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for f16`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Hash for f16`
-
-##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
-
-#### `impl Default for f16`
-
-##### `pub fn default() -> f16`
-
-#### `impl Display for f16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for f16`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl FromLeBytes for f16`
-
-##### `fn bits() -> i32`
-
-##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f16`
-
-### `bf16`
-
-#### `pub const BITS: i32`
-
-#### `pub const MAX: bf16`
-
-#### `pub const MIN: bf16`
-
-#### `pub const MIN_POSITIVE: bf16`
-
-The smallest positive normal value.
-
-#### `pub const EPSILON: bf16`
-
-The gap between 1.0 and the next larger value.
-
-#### `pub const INFINITY: bf16`
-
-#### `pub const NEG_INFINITY: bf16`
-
-#### `pub const NAN: bf16`
-
-#### `pub const RADIX: i32`
-
-#### `pub const MANTISSA_DIGITS: i32`
-
-Significand bits, the implicit leading one included.
-
-#### `pub const DIGITS: i32`
-
-Decimal digits that survive a round trip through the type.
-
-#### `pub const MIN_EXP: i32`
-
-#### `pub const MAX_EXP: i32`
-
-#### `pub const MIN_10_EXP: i32`
-
-#### `pub const MAX_10_EXP: i32`
-
-#### `pub fn to_bits(&self) -> u16`
-
-Reinterprets the bits of this bf16 as a u16.
-
-#### `pub fn from_bits(bits: u16) -> bf16`
-
-Creates a bf16 from its bit representation.
-
-#### `pub fn from_f32(v: f32) -> bf16`
-
-Rounds `v` to the nearest bf16, ties to even. bf16 takes f32's exponent
-field as is, so the top 16 bits are the result and only the mantissa rounds.
-
-#### `pub fn from_f64(v: f64) -> bf16`
-
-Rounds `v` once to the nearest bf16, ties to even.
-
-#### `pub fn is_nan(&self) -> bool`
-
-True for a NaN, quiet or signaling.
-
-#### `pub fn ieee754_eq(&self, other: bf16) -> bool`
-
-IEEE 754's `==`, on the values widened to f32.
-
-#### `pub fn ieee754_ne(&self, other: bf16) -> bool`
-
-IEEE 754's `!=`, on the values widened to f32.
-
-#### `pub fn ieee754_lt(&self, other: bf16) -> bool`
-
-IEEE 754's `<`, on the values widened to f32.
-
-#### `pub fn ieee754_le(&self, other: bf16) -> bool`
-
-IEEE 754's `<=`, on the values widened to f32.
-
-#### `pub fn ieee754_gt(&self, other: bf16) -> bool`
-
-IEEE 754's `>`, on the values widened to f32.
-
-#### `pub fn ieee754_ge(&self, other: bf16) -> bool`
-
-IEEE 754's `>=`, on the values widened to f32.
-
-#### `impl FromStr for bf16`
-
-##### `fn from_str<S: AsStrSlice>(s: S) -> Result<bf16, ParseFloatError>`
-
-#### `impl LenientFromStr for bf16`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<bf16, LenientParseError>`
-
-#### `impl TryFrom<f32> for bf16`
-
-##### `pub fn try_from(value: f32) -> Result<bf16, ConvertError>`
-
-#### `impl TryFrom<f64> for bf16`
-
-##### `pub fn try_from(value: f64) -> Result<bf16, ConvertError>`
-
-#### `impl Eq for bf16`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for bf16`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Hash for bf16`
-
-##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
-
-#### `impl Default for bf16`
-
-##### `pub fn default() -> bf16`
-
-#### `impl Display for bf16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for bf16`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl FromLeBytes for bf16`
-
-##### `fn bits() -> i32`
-
-##### `fn from_le_at(bytes: ByteSlice, at: i32) -> bf16`
-
-### `i64`
-
-#### `pub const BITS: i32`
-
-#### `pub const MAX: i64`
-
-#### `pub const MIN: i64`
-
-#### `pub fn max(a: i64, b: i64) -> i64`
-
-#### `pub fn min(a: i64, b: i64) -> i64`
-
-#### `pub fn clamp(value: i64, low: i64, high: i64) -> i64`
-
-- `contract low <= high`
-
-`value` confined to `low..=high`.
-
-#### `pub fn abs(x: i64) -> i64`
-
-The magnitude of `x`. `MIN` has none in `i64` and wraps to itself,
-as negating it does.
-
-#### `pub fn div_floor(&self, rhs: i64) -> i64`
-
-`self / rhs` rounded toward negative infinity. Traps where `/` does.
-
-#### `pub fn div_ceil(&self, rhs: i64) -> i64`
-
-`self / rhs` rounded toward positive infinity. Traps where `/` does.
-
-#### `pub fn clz(x: i64) -> i64`
-
-Counts the leading zeros in this integer.
-
-#### `pub fn ctz(x: i64) -> i64`
-
-Counts the trailing zeros in this integer.
-
-#### `pub fn popcnt(x: i64) -> i64`
-
-Counts the number of set bits (population count).
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>`
-
-- `contract 2 <= radix <= 36`
-
-#### `impl TryFrom<u128> for i64`
-
-##### `pub fn try_from(value: u128) -> Result<i64, ConvertError>`
-
-#### `impl TryFrom<i128> for i64`
-
-##### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
-
-#### `impl FromStr for i64`
-
-##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
-
-#### `impl LenientFromStr for i64`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError>`
-
-#### `impl Display for i64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for i64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for i64`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for i64`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for i64`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for i64`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for i64`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for i64`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for i64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for i64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Hash for i64`
-
-##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
-
-#### `impl Default for i64`
-
-##### `pub fn default() -> i64`
-
-#### `impl From<i8> for i64`
-
-##### `pub fn from(value: i8) -> i64`
-
-#### `impl From<i16> for i64`
-
-##### `pub fn from(value: i16) -> i64`
-
-#### `impl From<i32> for i64`
-
-##### `pub fn from(value: i32) -> i64`
-
-#### `impl From<u8> for i64`
-
-##### `pub fn from(value: u8) -> i64`
-
-#### `impl From<u16> for i64`
-
-##### `pub fn from(value: u16) -> i64`
-
-#### `impl From<u32> for i64`
-
-##### `pub fn from(value: u32) -> i64`
-
-#### `impl TryFrom<u64> for i64`
-
-##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
-
-#### `impl FromLeBytes for i64`
-
-##### `fn bits() -> i32`
-
-##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i64`
-
-#### `impl Step for i64`
-
-##### `fn next_step(&self) -> Option<i64>`
-
-### `u64`
-
-#### `pub const BITS: i32`
-
-#### `pub const MAX: u64`
-
-#### `pub const MIN: u64`
-
-#### `pub fn max(a: u64, b: u64) -> u64`
-
-#### `pub fn min(a: u64, b: u64) -> u64`
-
-#### `pub fn clamp(value: u64, low: u64, high: u64) -> u64`
-
-- `contract low <= high`
-
-`value` confined to `low..=high`.
-
-#### `pub fn wrapping_neg(&self) -> u64`
-
-The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
-
-#### `pub fn div_ceil(&self, rhs: u64) -> u64`
-
-`self / rhs` rounded up. Traps where `/` does.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>`
-
-- `contract 2 <= radix <= 36`
-
-#### `impl TryFrom<u128> for u64`
-
-##### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
-
-#### `impl TryFrom<i128> for u64`
-
-##### `pub fn try_from(value: i128) -> Result<u64, ConvertError>`
-
-#### `impl FromStr for u64`
-
-##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
-
-#### `impl LenientFromStr for u64`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError>`
-
-#### `impl Display for u64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for u64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for u64`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for u64`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for u64`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for u64`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for u64`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for u64`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for u64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for u64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Hash for u64`
-
-##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
-
-#### `impl Default for u64`
-
-##### `pub fn default() -> u64`
-
-#### `impl From<u8> for u64`
-
-##### `pub fn from(value: u8) -> u64`
-
-#### `impl From<u16> for u64`
-
-##### `pub fn from(value: u16) -> u64`
-
-#### `impl From<u32> for u64`
-
-##### `pub fn from(value: u32) -> u64`
-
-#### `impl TryFrom<i64> for u64`
-
-##### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
-
-#### `impl FromLeBytes for u64`
-
-##### `fn bits() -> i32`
-
-##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u64`
-
-#### `impl Step for u64`
-
-##### `fn next_step(&self) -> Option<u64>`
 
 ### `i8`
 
@@ -3071,6 +1808,159 @@ Counts the number of set bits (population count).
 
 ##### `fn next_step(&self) -> Option<i32>`
 
+### `i64`
+
+#### `pub const BITS: i32`
+
+#### `pub const MAX: i64`
+
+#### `pub const MIN: i64`
+
+#### `pub fn max(a: i64, b: i64) -> i64`
+
+#### `pub fn min(a: i64, b: i64) -> i64`
+
+#### `pub fn clamp(value: i64, low: i64, high: i64) -> i64`
+
+- `contract low <= high`
+
+`value` confined to `low..=high`.
+
+#### `pub fn abs(x: i64) -> i64`
+
+The magnitude of `x`. `MIN` has none in `i64` and wraps to itself,
+as negating it does.
+
+#### `pub fn div_floor(&self, rhs: i64) -> i64`
+
+`self / rhs` rounded toward negative infinity. Traps where `/` does.
+
+#### `pub fn div_ceil(&self, rhs: i64) -> i64`
+
+`self / rhs` rounded toward positive infinity. Traps where `/` does.
+
+#### `pub fn clz(x: i64) -> i64`
+
+Counts the leading zeros in this integer.
+
+#### `pub fn ctz(x: i64) -> i64`
+
+Counts the trailing zeros in this integer.
+
+#### `pub fn popcnt(x: i64) -> i64`
+
+Counts the number of set bits (population count).
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
+
+#### `impl FromStr for i64`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
+
+#### `impl LenientFromStr for i64`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError>`
+
+#### `impl Display for i64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for i64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i64`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i64`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for i64`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for i64`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for i64`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for i64`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for i64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for i64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for i64`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
+#### `impl Default for i64`
+
+##### `pub fn default() -> i64`
+
+#### `impl From<i8> for i64`
+
+##### `pub fn from(value: i8) -> i64`
+
+#### `impl From<i16> for i64`
+
+##### `pub fn from(value: i16) -> i64`
+
+#### `impl From<i32> for i64`
+
+##### `pub fn from(value: i32) -> i64`
+
+#### `impl From<u8> for i64`
+
+##### `pub fn from(value: u8) -> i64`
+
+#### `impl From<u16> for i64`
+
+##### `pub fn from(value: u16) -> i64`
+
+#### `impl From<u32> for i64`
+
+##### `pub fn from(value: u32) -> i64`
+
+#### `impl TryFrom<u64> for i64`
+
+##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
+
+#### `impl TryFrom<u128> for i64`
+
+##### `pub fn try_from(value: u128) -> Result<i64, ConvertError>`
+
+#### `impl TryFrom<i128> for i64`
+
+##### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
+
+#### `impl FromLeBytes for i64`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i64`
+
+#### `impl Step for i64`
+
+##### `fn next_step(&self) -> Option<i64>`
+
 ### `u8`
 
 #### `pub const BITS: i32`
@@ -3449,6 +2339,1126 @@ The negation modulo 2^32: `0` for `0`, `MAX - self + 1` otherwise.
 
 ##### `fn next_step(&self) -> Option<u32>`
 
+### `u64`
+
+#### `pub const BITS: i32`
+
+#### `pub const MAX: u64`
+
+#### `pub const MIN: u64`
+
+#### `pub fn max(a: u64, b: u64) -> u64`
+
+#### `pub fn min(a: u64, b: u64) -> u64`
+
+#### `pub fn clamp(value: u64, low: u64, high: u64) -> u64`
+
+- `contract low <= high`
+
+`value` confined to `low..=high`.
+
+#### `pub fn wrapping_neg(&self) -> u64`
+
+The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
+
+#### `pub fn div_ceil(&self, rhs: u64) -> u64`
+
+`self / rhs` rounded up. Traps where `/` does.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
+
+#### `impl FromStr for u64`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
+
+#### `impl LenientFromStr for u64`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError>`
+
+#### `impl Display for u64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for u64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u64`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u64`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for u64`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for u64`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for u64`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for u64`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for u64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for u64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for u64`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
+#### `impl Default for u64`
+
+##### `pub fn default() -> u64`
+
+#### `impl From<u8> for u64`
+
+##### `pub fn from(value: u8) -> u64`
+
+#### `impl From<u16> for u64`
+
+##### `pub fn from(value: u16) -> u64`
+
+#### `impl From<u32> for u64`
+
+##### `pub fn from(value: u32) -> u64`
+
+#### `impl TryFrom<i64> for u64`
+
+##### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
+
+#### `impl TryFrom<u128> for u64`
+
+##### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
+
+#### `impl TryFrom<i128> for u64`
+
+##### `pub fn try_from(value: i128) -> Result<u64, ConvertError>`
+
+#### `impl FromLeBytes for u64`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u64`
+
+#### `impl Step for u64`
+
+##### `fn next_step(&self) -> Option<u64>`
+
+### `f32`
+
+#### `pub const BITS: i32`
+
+#### `pub const PI: f32`
+
+#### `pub const TAU: f32`
+
+#### `pub const E: f32`
+
+#### `pub const LN2: f32`
+
+#### `pub const LN10: f32`
+
+#### `pub const LOG2_E: f32`
+
+#### `pub const LOG10_E: f32`
+
+#### `pub const SQRT2: f32`
+
+#### `pub const FRAC_1_SQRT2: f32`
+
+#### `pub const FRAC_PI_2: f32`
+
+#### `pub const FRAC_PI_4: f32`
+
+#### `pub const INFINITY: f32`
+
+#### `pub const NEG_INFINITY: f32`
+
+#### `pub const NAN: f32`
+
+#### `pub const MAX: f32`
+
+#### `pub const MIN: f32`
+
+#### `pub const MIN_POSITIVE: f32`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: f32`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn abs(x: f32) -> f32`
+
+Absolute value
+
+#### `pub fn ceil(x: f32) -> f32`
+
+Ceiling (round toward +infinity)
+
+#### `pub fn floor(x: f32) -> f32`
+
+Floor (round toward -infinity)
+
+#### `pub fn trunc(x: f32) -> f32`
+
+Truncate toward zero
+
+#### `pub fn round(x: f32) -> f32`
+
+Round to nearest, breaking ties away from zero
+
+Wasm rounds the other way, so this is a software implementation —
+slower than `round_ties_even`.
+
+#### `pub fn round_ties_even(x: f32) -> f32`
+
+Round to nearest, breaking ties toward the even neighbour
+
+#### `pub fn sqrt(x: f32) -> f32`
+
+Square root
+
+#### `pub fn min(x: f32, y: f32) -> f32`
+
+The lesser of two values by the order, where NaN is greatest; `x` when
+they are equal.
+
+#### `pub fn max(x: f32, y: f32) -> f32`
+
+The greater of two values by the order, where NaN is greatest; `y` when
+they are equal.
+
+#### `pub fn ieee754_min(x: f32, y: f32) -> f32`
+
+IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
+`0.0`.
+
+#### `pub fn ieee754_max(x: f32, y: f32) -> f32`
+
+IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
+`0.0`.
+
+#### `pub fn clamp(x: f32, low: f32, high: f32) -> f32`
+
+- `contract !high.is_nan() && low <= high`
+
+`x` confined to `low..=high` by the order, except that a NaN `x` stays
+NaN.
+
+#### `pub fn copysign(x: f32, y: f32) -> f32`
+
+Copy sign from y to x
+
+#### `pub fn sin(x: f32) -> f32`
+
+Sine (in radians)
+
+#### `pub fn cos(x: f32) -> f32`
+
+Cosine (in radians)
+
+#### `pub fn tan(x: f32) -> f32`
+
+Tangent (in radians)
+
+#### `pub fn asin(x: f32) -> f32`
+
+Arc sine (returns radians)
+
+#### `pub fn acos(x: f32) -> f32`
+
+Arc cosine (returns radians)
+
+#### `pub fn atan(x: f32) -> f32`
+
+Arc tangent (returns radians)
+
+#### `pub fn atan2(y: f32, x: f32) -> f32`
+
+Arc tangent of y/x (returns radians)
+
+#### `pub fn sinh(x: f32) -> f32`
+
+Hyperbolic sine
+
+#### `pub fn cosh(x: f32) -> f32`
+
+Hyperbolic cosine
+
+#### `pub fn tanh(x: f32) -> f32`
+
+Hyperbolic tangent
+
+#### `pub fn asinh(x: f32) -> f32`
+
+Inverse hyperbolic sine
+
+#### `pub fn acosh(x: f32) -> f32`
+
+Inverse hyperbolic cosine
+
+#### `pub fn atanh(x: f32) -> f32`
+
+Inverse hyperbolic tangent
+
+#### `pub fn exp(x: f32) -> f32`
+
+e raised to the power x
+
+#### `pub fn exp2(x: f32) -> f32`
+
+2 raised to the power x
+
+#### `pub fn exp10(x: f32) -> f32`
+
+10 raised to the power x
+
+#### `pub fn expm1(x: f32) -> f32`
+
+e^x - 1 (more accurate for small x)
+
+#### `pub fn ln(x: f32) -> f32`
+
+Natural logarithm (base e)
+
+#### `pub fn log2(x: f32) -> f32`
+
+Logarithm base 2
+
+#### `pub fn log10(x: f32) -> f32`
+
+Logarithm base 10
+
+#### `pub fn ln1p(x: f32) -> f32`
+
+ln(1 + x) (more accurate for small x)
+
+#### `pub fn pow(x: f32, y: f32) -> f32`
+
+x raised to the power y
+
+#### `pub fn cbrt(x: f32) -> f32`
+
+Cube root
+
+#### `pub fn hypot(x: f32, y: f32) -> f32`
+
+Euclidean distance: sqrt(x^2 + y^2)
+
+#### `pub fn fmod(x: f32, y: f32) -> f32`
+
+Floating-point remainder of x/y
+
+#### `pub fn erf(x: f32) -> f32`
+
+Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
+
+#### `pub fn erfc(x: f32) -> f32`
+
+Complementary error function: `1 - erf(x)`, accurate where erf is near 1
+
+#### `pub fn gamma(x: f32) -> f32`
+
+Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
+
+#### `pub fn ln_gamma(x: f32) -> f32`
+
+Natural logarithm of `|Γ(x)|`
+
+#### `pub fn mul_add(x: f32, y: f32, z: f32) -> f32`
+
+`x * y + z`, rounded once instead of twice.
+
+Wasm has no scalar FMA instruction, so this is a software
+implementation — slower than `x * y + z`.
+
+#### `pub fn is_nan(&self) -> bool`
+
+#### `pub fn ieee754_eq(&self, other: f32) -> bool`
+
+IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
+
+#### `pub fn ieee754_ne(&self, other: f32) -> bool`
+
+IEEE 754's `!=`: true when either is a NaN.
+
+#### `pub fn ieee754_lt(&self, other: f32) -> bool`
+
+IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
+
+#### `pub fn ieee754_le(&self, other: f32) -> bool`
+
+IEEE 754's `<=`: false when either is a NaN.
+
+#### `pub fn ieee754_gt(&self, other: f32) -> bool`
+
+IEEE 754's `>`: false when either is a NaN.
+
+#### `pub fn ieee754_ge(&self, other: f32) -> bool`
+
+IEEE 754's `>=`: false when either is a NaN.
+
+#### `pub fn is_finite(&self) -> bool`
+
+#### `pub fn to_bits(&self) -> u32`
+
+Reinterprets the bits of this f32 as a u32.
+
+#### `pub fn from_bits(bits: u32) -> f32`
+
+Creates an f32 from its bit representation.
+
+#### `impl FromStr for f32`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f32, ParseFloatError>`
+
+#### `impl LenientFromStr for f32`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f32, LenientParseError>`
+
+#### `impl Display for f32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for f32`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for f32`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for f32`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Eq for f32`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for f32`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for f32`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
+#### `impl Default for f32`
+
+##### `pub fn default() -> f32`
+
+#### `impl TryFrom<i64> for f32`
+
+##### `pub fn try_from(value: i64) -> Result<f32, ConvertError>`
+
+#### `impl TryFrom<u64> for f32`
+
+##### `pub fn try_from(value: u64) -> Result<f32, ConvertError>`
+
+#### `impl From<f16> for f32`
+
+##### `fn from(value: f16) -> f32`
+
+#### `impl From<bf16> for f32`
+
+##### `fn from(value: bf16) -> f32`
+
+#### `impl TryFrom<i128> for f32`
+
+##### `pub fn try_from(value: i128) -> Result<f32, ConvertError>`
+
+#### `impl TryFrom<u128> for f32`
+
+##### `pub fn try_from(value: u128) -> Result<f32, ConvertError>`
+
+#### `impl FromLeBytes for f32`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f32`
+
+### `f64`
+
+#### `pub const BITS: i32`
+
+#### `pub const PI: f64`
+
+#### `pub const TAU: f64`
+
+#### `pub const E: f64`
+
+#### `pub const LN2: f64`
+
+#### `pub const LN10: f64`
+
+#### `pub const LOG2_E: f64`
+
+#### `pub const LOG10_E: f64`
+
+#### `pub const SQRT2: f64`
+
+#### `pub const FRAC_1_SQRT2: f64`
+
+#### `pub const FRAC_PI_2: f64`
+
+#### `pub const FRAC_PI_4: f64`
+
+#### `pub const INFINITY: f64`
+
+#### `pub const NEG_INFINITY: f64`
+
+#### `pub const NAN: f64`
+
+#### `pub const MAX: f64`
+
+#### `pub const MIN: f64`
+
+#### `pub const MIN_POSITIVE: f64`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: f64`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
+
+#### `pub const MAX_SAFE_INTEGER: f64`
+
+The largest integer exactly representable in f64: 2^53 - 1.
+Mirrors JS `Number.MAX_SAFE_INTEGER`.
+
+#### `pub const MIN_SAFE_INTEGER: f64`
+
+The smallest integer exactly representable in f64: -(2^53 - 1).
+Mirrors JS `Number.MIN_SAFE_INTEGER`.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn abs(x: f64) -> f64`
+
+Absolute value
+
+#### `pub fn ceil(x: f64) -> f64`
+
+Ceiling (round toward +infinity)
+
+#### `pub fn floor(x: f64) -> f64`
+
+Floor (round toward -infinity)
+
+#### `pub fn trunc(x: f64) -> f64`
+
+Truncate toward zero
+
+#### `pub fn round(x: f64) -> f64`
+
+Round to nearest, breaking ties away from zero
+
+Wasm rounds the other way, so this is a software implementation —
+slower than `round_ties_even`.
+
+#### `pub fn round_ties_even(x: f64) -> f64`
+
+Round to nearest, breaking ties toward the even neighbour
+
+#### `pub fn sqrt(x: f64) -> f64`
+
+Square root
+
+#### `pub fn min(x: f64, y: f64) -> f64`
+
+The lesser of two values by the order, where NaN is greatest; `x` when
+they are equal.
+
+#### `pub fn max(x: f64, y: f64) -> f64`
+
+The greater of two values by the order, where NaN is greatest; `y` when
+they are equal.
+
+#### `pub fn ieee754_min(x: f64, y: f64) -> f64`
+
+IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
+`0.0`.
+
+#### `pub fn ieee754_max(x: f64, y: f64) -> f64`
+
+IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
+`0.0`.
+
+#### `pub fn clamp(x: f64, low: f64, high: f64) -> f64`
+
+- `contract !high.is_nan() && low <= high`
+
+`x` confined to `low..=high` by the order, except that a NaN `x` stays
+NaN.
+
+#### `pub fn copysign(x: f64, y: f64) -> f64`
+
+Copy sign from y to x
+
+#### `pub fn sin(x: f64) -> f64`
+
+Sine (in radians)
+
+#### `pub fn cos(x: f64) -> f64`
+
+Cosine (in radians)
+
+#### `pub fn tan(x: f64) -> f64`
+
+Tangent (in radians)
+
+#### `pub fn asin(x: f64) -> f64`
+
+Arc sine (returns radians)
+
+#### `pub fn acos(x: f64) -> f64`
+
+Arc cosine (returns radians)
+
+#### `pub fn atan(x: f64) -> f64`
+
+Arc tangent (returns radians)
+
+#### `pub fn atan2(y: f64, x: f64) -> f64`
+
+Arc tangent of y/x (returns radians)
+
+#### `pub fn sinh(x: f64) -> f64`
+
+Hyperbolic sine
+
+#### `pub fn cosh(x: f64) -> f64`
+
+Hyperbolic cosine
+
+#### `pub fn tanh(x: f64) -> f64`
+
+Hyperbolic tangent
+
+#### `pub fn asinh(x: f64) -> f64`
+
+Inverse hyperbolic sine
+
+#### `pub fn acosh(x: f64) -> f64`
+
+Inverse hyperbolic cosine
+
+#### `pub fn atanh(x: f64) -> f64`
+
+Inverse hyperbolic tangent
+
+#### `pub fn exp(x: f64) -> f64`
+
+e raised to the power x
+
+#### `pub fn exp2(x: f64) -> f64`
+
+2 raised to the power x
+
+#### `pub fn exp10(x: f64) -> f64`
+
+10 raised to the power x
+
+#### `pub fn expm1(x: f64) -> f64`
+
+e^x - 1 (more accurate for small x)
+
+#### `pub fn ln(x: f64) -> f64`
+
+Natural logarithm (base e)
+
+#### `pub fn log2(x: f64) -> f64`
+
+Logarithm base 2
+
+#### `pub fn log10(x: f64) -> f64`
+
+Logarithm base 10
+
+#### `pub fn ln1p(x: f64) -> f64`
+
+ln(1 + x) (more accurate for small x)
+
+#### `pub fn pow(x: f64, y: f64) -> f64`
+
+x raised to the power y
+
+#### `pub fn cbrt(x: f64) -> f64`
+
+Cube root
+
+#### `pub fn hypot(x: f64, y: f64) -> f64`
+
+Euclidean distance: sqrt(x^2 + y^2)
+
+#### `pub fn fmod(x: f64, y: f64) -> f64`
+
+Floating-point remainder of x/y
+
+#### `pub fn erf(x: f64) -> f64`
+
+Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
+
+#### `pub fn erfc(x: f64) -> f64`
+
+Complementary error function: `1 - erf(x)`, accurate where erf is near 1
+
+#### `pub fn gamma(x: f64) -> f64`
+
+Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
+
+#### `pub fn ln_gamma(x: f64) -> f64`
+
+Natural logarithm of `|Γ(x)|`
+
+#### `pub fn mul_add(x: f64, y: f64, z: f64) -> f64`
+
+`x * y + z`, rounded once instead of twice.
+
+Wasm has no scalar FMA instruction, so this is a software
+implementation — slower than `x * y + z`.
+
+#### `pub fn is_nan(&self) -> bool`
+
+#### `pub fn ieee754_eq(&self, other: f64) -> bool`
+
+IEEE 754's `==`: false when either is a NaN, where `==` holds for two.
+
+#### `pub fn ieee754_ne(&self, other: f64) -> bool`
+
+IEEE 754's `!=`: true when either is a NaN.
+
+#### `pub fn ieee754_lt(&self, other: f64) -> bool`
+
+IEEE 754's `<`: false when either is a NaN, where `<` orders NaN last.
+
+#### `pub fn ieee754_le(&self, other: f64) -> bool`
+
+IEEE 754's `<=`: false when either is a NaN.
+
+#### `pub fn ieee754_gt(&self, other: f64) -> bool`
+
+IEEE 754's `>`: false when either is a NaN.
+
+#### `pub fn ieee754_ge(&self, other: f64) -> bool`
+
+IEEE 754's `>=`: false when either is a NaN.
+
+#### `pub fn is_finite(&self) -> bool`
+
+#### `pub fn to_bits(&self) -> u64`
+
+Reinterprets the bits of this f64 as a u64.
+
+#### `pub fn from_bits(bits: u64) -> f64`
+
+Creates an f64 from its bit representation.
+
+#### `impl FromStr for f64`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f64, ParseFloatError>`
+
+#### `impl LenientFromStr for f64`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f64, LenientParseError>`
+
+#### `impl Display for f64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for f64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for f64`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for f64`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Eq for f64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for f64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for f64`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
+#### `impl Default for f64`
+
+##### `pub fn default() -> f64`
+
+#### `impl From<f32> for f64`
+
+##### `pub fn from(value: f32) -> f64`
+
+#### `impl TryFrom<i64> for f64`
+
+##### `pub fn try_from(value: i64) -> Result<f64, ConvertError>`
+
+#### `impl TryFrom<u64> for f64`
+
+##### `pub fn try_from(value: u64) -> Result<f64, ConvertError>`
+
+#### `impl From<f16> for f64`
+
+##### `fn from(value: f16) -> f64`
+
+#### `impl From<bf16> for f64`
+
+##### `fn from(value: bf16) -> f64`
+
+#### `impl TryFrom<i128> for f64`
+
+##### `pub fn try_from(value: i128) -> Result<f64, ConvertError>`
+
+#### `impl TryFrom<u128> for f64`
+
+##### `pub fn try_from(value: u128) -> Result<f64, ConvertError>`
+
+#### `impl FromLeBytes for f64`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f64`
+
+### `v128`
+
+#### `impl Eq for v128`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Inspect for v128`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+### `f16`
+
+#### `pub const BITS: i32`
+
+#### `pub const MAX: f16`
+
+#### `pub const MIN: f16`
+
+#### `pub const MIN_POSITIVE: f16`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: f16`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const INFINITY: f16`
+
+#### `pub const NEG_INFINITY: f16`
+
+#### `pub const NAN: f16`
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
+
+#### `pub fn to_bits(&self) -> u16`
+
+Reinterprets the bits of this f16 as a u16.
+
+#### `pub fn from_bits(bits: u16) -> f16`
+
+Creates an f16 from its bit representation.
+
+#### `pub fn from_f32(v: f32) -> f16`
+
+Rounds `v` to the nearest f16, ties to even, saturating to an infinity.
+Use `f16::try_from` where an inexact value should be refused instead.
+
+#### `pub fn from_f64(v: f64) -> f16`
+
+Rounds `v` once to the nearest f16, ties to even, saturating to an infinity.
+
+#### `pub fn is_nan(&self) -> bool`
+
+True for a NaN, quiet or signaling.
+
+#### `pub fn ieee754_eq(&self, other: f16) -> bool`
+
+IEEE 754's `==`, on the values widened to f32.
+
+#### `pub fn ieee754_ne(&self, other: f16) -> bool`
+
+IEEE 754's `!=`, on the values widened to f32.
+
+#### `pub fn ieee754_lt(&self, other: f16) -> bool`
+
+IEEE 754's `<`, on the values widened to f32.
+
+#### `pub fn ieee754_le(&self, other: f16) -> bool`
+
+IEEE 754's `<=`, on the values widened to f32.
+
+#### `pub fn ieee754_gt(&self, other: f16) -> bool`
+
+IEEE 754's `>`, on the values widened to f32.
+
+#### `pub fn ieee754_ge(&self, other: f16) -> bool`
+
+IEEE 754's `>=`, on the values widened to f32.
+
+#### `impl FromStr for f16`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f16, ParseFloatError>`
+
+#### `impl LenientFromStr for f16`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f16, LenientParseError>`
+
+#### `impl TryFrom<f32> for f16`
+
+##### `pub fn try_from(value: f32) -> Result<f16, ConvertError>`
+
+#### `impl TryFrom<f64> for f16`
+
+##### `pub fn try_from(value: f64) -> Result<f16, ConvertError>`
+
+#### `impl Eq for f16`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for f16`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for f16`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
+#### `impl Default for f16`
+
+##### `pub fn default() -> f16`
+
+#### `impl Display for f16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for f16`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl FromLeBytes for f16`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f16`
+
+### `bf16`
+
+#### `pub const BITS: i32`
+
+#### `pub const MAX: bf16`
+
+#### `pub const MIN: bf16`
+
+#### `pub const MIN_POSITIVE: bf16`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: bf16`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const INFINITY: bf16`
+
+#### `pub const NEG_INFINITY: bf16`
+
+#### `pub const NAN: bf16`
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
+
+#### `pub fn to_bits(&self) -> u16`
+
+Reinterprets the bits of this bf16 as a u16.
+
+#### `pub fn from_bits(bits: u16) -> bf16`
+
+Creates a bf16 from its bit representation.
+
+#### `pub fn from_f32(v: f32) -> bf16`
+
+Rounds `v` to the nearest bf16, ties to even. bf16 takes f32's exponent
+field as is, so the top 16 bits are the result and only the mantissa rounds.
+
+#### `pub fn from_f64(v: f64) -> bf16`
+
+Rounds `v` once to the nearest bf16, ties to even.
+
+#### `pub fn is_nan(&self) -> bool`
+
+True for a NaN, quiet or signaling.
+
+#### `pub fn ieee754_eq(&self, other: bf16) -> bool`
+
+IEEE 754's `==`, on the values widened to f32.
+
+#### `pub fn ieee754_ne(&self, other: bf16) -> bool`
+
+IEEE 754's `!=`, on the values widened to f32.
+
+#### `pub fn ieee754_lt(&self, other: bf16) -> bool`
+
+IEEE 754's `<`, on the values widened to f32.
+
+#### `pub fn ieee754_le(&self, other: bf16) -> bool`
+
+IEEE 754's `<=`, on the values widened to f32.
+
+#### `pub fn ieee754_gt(&self, other: bf16) -> bool`
+
+IEEE 754's `>`, on the values widened to f32.
+
+#### `pub fn ieee754_ge(&self, other: bf16) -> bool`
+
+IEEE 754's `>=`, on the values widened to f32.
+
+#### `impl FromStr for bf16`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<bf16, ParseFloatError>`
+
+#### `impl LenientFromStr for bf16`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<bf16, LenientParseError>`
+
+#### `impl TryFrom<f32> for bf16`
+
+##### `pub fn try_from(value: f32) -> Result<bf16, ConvertError>`
+
+#### `impl TryFrom<f64> for bf16`
+
+##### `pub fn try_from(value: f64) -> Result<bf16, ConvertError>`
+
+#### `impl Eq for bf16`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for bf16`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for bf16`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
+#### `impl Default for bf16`
+
+##### `pub fn default() -> bf16`
+
+#### `impl Display for bf16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for bf16`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl FromLeBytes for bf16`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> bf16`
+
 ### `bool`
 
 #### `pub fn to_string(&self) -> String`
@@ -3582,6 +3592,10 @@ Encodes this character as UTF-8, returning the bytes.
 
 ##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<char, LenientParseError>`
 
+#### `impl TryFrom<u32> for char`
+
+##### `pub fn try_from(value: u32) -> Result<char, ConvertError>`
+
 #### `impl Display for char`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -3606,25 +3620,41 @@ Encodes this character as UTF-8, returning the bytes.
 
 ##### `pub fn default() -> char`
 
-#### `impl TryFrom<u32> for char`
-
-##### `pub fn try_from(value: u32) -> Result<char, ConvertError>`
-
 #### `impl Step for char`
 
 ##### `fn next_step(&self) -> Option<char>`
 
-### `v128`
-
-#### `impl Eq for v128`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Inspect for v128`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
 ## Structs
+
+### `pub struct ConvertError`
+
+Error type returned by fallible conversions.
+
+#### `message: String`
+
+#### `pub fn new(message: String) -> ConvertError`
+
+#### `impl Display for ConvertError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+### `pub struct LenientParseError`
+
+Error returned by the lenient string parsers (`LenientFromStr`). All
+built-in impls share this single type, carrying a short human-readable
+reason. See `docs/wep-2026-06-22-lenient-from-str.md`.
+
+_Fields are private._
+
+#### `pub fn new(reason: String) -> LenientParseError`
+
+#### `pub fn reason(&self) -> String`
+
+A short description of why parsing failed.
+
+#### `impl Display for LenientParseError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct VariantCase<affine T, affine P>`
 
@@ -3937,184 +3967,83 @@ Generic zip iterator adapter that pairs elements from two iterators.
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
+<<<<<<< HEAD
 ### `pub struct ConvertError`
+||||||| cb4f66e2c
+### `pub struct IterRefMut<affine I: Iterator>`
 
-Error type returned by fallible conversions.
-
-#### `message: String`
-
-#### `pub fn new(message: String) -> ConvertError`
-
-#### `impl Display for ConvertError`
-
-##### `fn fmt(&self, f: &mut Formatter)`
-
-### `pub struct LenientParseError`
-
-Error returned by the lenient string parsers (`LenientFromStr`). All
-built-in impls share this single type, carrying a short human-readable
-reason. See `docs/wep-2026-06-22-lenient-from-str.md`.
+An iterator walked through a reference, so what takes from it leaves the
+iterator itself advanced: what `for let x of &mut iter` walks.
 
 _Fields are private._
 
-#### `pub fn new(reason: String) -> LenientParseError`
+#### `impl Iterator for IterRefMut<I>`
 
-#### `pub fn reason(&self) -> String`
+##### `fn next(&mut self) -> Option<I::Item> with _`
 
-A short description of why parsing failed.
+### `pub struct ConvertError`
+=======
+### `pub struct IterRefMut<affine I: Iterator>`
 
-#### `impl Display for LenientParseError`
+An iterator walked through a reference, so what takes from it leaves the
+iterator itself advanced: what `for let x of &mut iter` walks.
+
+_Fields are private._
+
+#### `impl Iterator for IterRefMut<I>`
+
+##### `fn next(&mut self) -> Option<I::Item> with _`
+
+### `pub struct ParseBoolError {}`
+>>>>>>> origin/main
+
+Error returned by `bool::from_str`, which takes `true` and `false` alone.
+
+#### `impl Display for ParseBoolError`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
 
-### `pub struct Formatter`
+### `pub struct ParseCharError`
 
-Formatter that writes directly into a referenced output buffer.
-The Formatter does not own its buffer; it writes into the caller's `&mut String`.
-This avoids intermediate allocations.
+Error returned by char parsing.
 
-Format specification fields match Rust's format syntax:
-`[[fill]align][sign][#][0][width][.precision]type`
+#### `kind: CharErrorKind`
 
-Unset width and precision use the sentinels on `impl Formatter`.
+#### `pub fn new(kind: CharErrorKind) -> ParseCharError`
 
-#### `fill: char`
+#### `pub fn kind(&self) -> CharErrorKind`
 
-Fill character for padding (default: ' ')
+#### `impl Display for ParseCharError`
 
-#### `align: Alignment`
+##### `fn fmt(&self, f: &mut Formatter)`
 
-Text alignment mode
+### `pub struct ParseIntError`
 
-#### `sign_plus: bool`
+Error returned by integer parsing.
 
-Whether to always show `+` sign for positive numbers
+#### `kind: IntErrorKind`
 
-#### `alternate: bool`
+#### `pub fn new(kind: IntErrorKind) -> ParseIntError`
 
-Whether the spec asked for the alternate form (`#` flag): a radix
-prefix, or the indented multi-line `Inspect`.
+#### `pub fn kind(&self) -> IntErrorKind`
 
-#### `zero_pad: bool`
+#### `impl Display for ParseIntError`
 
-Whether to use zero-padding (`0` flag)
+##### `fn fmt(&self, f: &mut Formatter)`
 
-#### `width: i32`
+### `pub struct ParseFloatError`
 
-Minimum field width in characters; `NO_WIDTH` for none
+Error returned by float parsing.
 
-#### `precision: i32`
+#### `kind: FloatErrorKind`
 
-Decimal places for floats; max rendered length for sequences (chars /
-elements). Negative values are the sentinels below.
+#### `pub fn new(kind: FloatErrorKind) -> ParseFloatError`
 
-#### `indent: i32`
+#### `pub fn kind(&self) -> FloatErrorKind`
 
-Current indentation level for the alternate (`#`) `Inspect`
+#### `impl Display for ParseFloatError`
 
-#### `buf: &mut String`
-
-Reference to the output buffer
-
-#### `pub const NO_WIDTH: i32`
-
-No width given: every padding path is a no-op.
-
-#### `pub const PRECISION_DEFAULT: i32`
-
-No precision given: sequence Inspect uses `DEFAULT_SEQ_LIMIT`, others ignore.
-
-#### `pub const PRECISION_INFINITE: i32`
-
-Render uncapped: sequence Inspect skips truncation.
-
-#### `pub const DEFAULT_SEQ_LIMIT: i32`
-
-Default sequence Inspect cap: chars for `String`, elements for `List`.
-
-#### `pub fn resolved_seq_limit(&self) -> i32`
-
-The element/char cap a sequence Inspect should apply: the explicit
-precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
-(`PRECISION_INFINITE`) means uncapped.
-
-#### `pub fn new(buf: &mut String) -> Formatter`
-
-`#[compiler_item("formatter_new")]`
-
-Create a Formatter with the default spec, writing into the given buffer.
-
-#### `pub fn write_str<S: AsStrSlice>(&mut self, s: S)`
-
-`#[compiler_item("formatter_write_str")]`
-
-Write any `AsStrSlice` text to the output buffer.
-
-#### `pub fn write_display<T: Display>(&mut self, value: &T)`
-
-Write a `Display` value with the default spec, as `write_str` writes
-text as it stands: the spec belongs to the value, not to its parts.
-
-#### `pub fn write_char(&mut self, c: char)`
-
-Write a single character to the output buffer.
-
-#### `pub fn write_char_n(&mut self, c: char, n: i32)`
-
-Write `n` copies of a character to the output buffer.
-
-#### `pub fn pad<S: AsStrSlice>(&mut self, content: S)`
-
-Pad a pre-formatted content string to the configured width.
-If no width is set or content is already as wide, writes content as-is.
-Width counts characters, so a multi-byte content pads by what it renders.
-
-#### `pub fn mark(&self) -> i32`
-
-Return the current byte position in the output buffer.
-Used with `apply_padding` for the speculative-write pattern:
-
-1. Call `mark()` to record the start position
-2. Write content directly to `buf_mut()`
-3. Call `apply_padding(mark)` to insert padding if needed
-
-#### `pub fn apply_padding(&mut self, start_pos: i32)`
-
-Apply width/alignment padding to content already written at `start_pos`.
-Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
-
-#### `pub fn write_from_memory(&mut self, ptr: i32, len: i32)`
-
-Write raw bytes from linear memory, applying width/alignment padding.
-Used only for values produced by bundled Wasm functions (e.g., f64_to_buffer).
-
-#### `pub fn prepare_int_write<S: AsStrSlice>(&mut self, is_negative: bool, alt_prefix: S, digit_count: i32) -> i32`
-
-Prepare the output buffer for integer digits.
-
-Writes sign, prefix, and any padding/fill, then reserves `digit_count`
-uninitialised bytes and returns their byte-offset inside `buf`.
-The caller **must** fill exactly `digit_count` bytes (backwards) via
-`buf.internal_raw_bytes()` at the returned offset.
-`alt_prefix` is the radix marker (`0x`, `0b`, `0o`) the alternate form
-asks for; a plain spec drops it without the caller having to hand over an
-empty string, which would leave a value copy behind.
-
-#### `pub fn write_indent(&mut self)`
-
-Write indentation (2 spaces per level) for pretty-printing.
-
-#### `pub fn write_newline_indent(&mut self)`
-
-Write a newline followed by indentation for pretty-printing.
-
-#### `pub fn open_brace<S: AsStrSlice>(&mut self, open: S)`
-
-Open a pretty-printed brace: write opening delimiter, increase indent.
-
-#### `pub fn close_brace<S: AsStrSlice>(&mut self, close: S)`
-
-Close a pretty-printed brace: decrease indent, write newline+indent, write closing delimiter.
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct u128`
 
@@ -4644,483 +4573,6 @@ Not through `div_rem`: `MIN % -1` is 0, though `MIN / -1` overflows.
 #### `impl Step for i128`
 
 ##### `fn next_step(&self) -> Option<i128>`
-
-### `pub struct ResourceId`
-
-The identity of a live affine resource, which owns nothing. A dropped
-resource's identity may come back for a later one, since the host reuses a
-freed handle index. Nothing converts it back into a resource.
-
-_Fields are private._
-
-#### `pub fn of<affine R: AffineResource>(r: &R) -> ResourceId`
-
-The identity of `r`. A static function rather than a method, so it
-takes no name from any resource.
-
-### `pub affine struct FutureReadCopy<affine T>`
-
-A read started on a future end, holding the end until it is finished.
-Dropping one in flight cancels it, and drops a value it had read.
-
-_Fields are private._
-
-#### `pub fn finish(self) -> Option<T> with Future`
-
-The value, or None where the writer dropped without writing. Waits for a
-read that has not settled, so a read never inserted into a set finishes
-as well. The end drops, as a read consumes it.
-
-#### `impl Drop for FutureReadCopy<T>`
-
-##### `fn drop(self)`
-
-#### `impl Waitable for FutureReadCopy<T>`
-
-##### `fn wait_on(&self) -> WaitOn`
-
-### `pub struct StreamChunk<affine T>`
-
-What one read copy moved, and how that copy ended. A copy carries elements
-and the peer's drop together, so `result` is what says more follows.
-
-#### `items: List<T>`
-
-#### `result: CopyResult`
-
-### `pub struct StreamWrite<affine T>`
-
-What one write copy did not deliver, and how it ended. A reader may take a
-prefix, and the elements it left come back in `rest`.
-
-#### `rest: List<T>`
-
-#### `result: CopyResult`
-
-### `pub struct FutureWrite<affine T>`
-
-What `FutureWritable::write` did not deliver, and how its copy ended: the
-value comes back in `rest` where the reader dropped first.
-
-#### `rest: Option<T>`
-
-#### `result: FutureWriteResult`
-
-### `pub struct ReadInto`
-
-Where a host copy started by `Stream::begin_read` lands: memory the copy
-allocates for itself, or memory `core:*` lends it, which the host writes
-into directly. Only `core:*` lends, so no raw address is ever handed out.
-
-A handler holds the value it is handed, and may forward it to another
-read. So lent memory says how much of it there is, and whether the lender
-still lends it: a read asking for more is held to the room, and one after
-the lend ended traps rather than writing what someone else now owns.
-
-_Fields are private._
-
-#### `pub fn fresh() -> ReadInto`
-
-Memory the copy allocates for itself, and frees once it has settled.
-
-### `pub affine struct StartedRead<affine T>`
-
-A read copy as `Stream::begin_read` started it: one the host may still be
-copying into `buffer`, or one a handler settled with its `items`.
-
-_Fields are private._
-
-#### `pub fn settled(chunk: StreamChunk<T>) -> StartedRead<T>`
-
-A copy that already moved `chunk`, for a handler to answer
-`Stream::begin_read` with.
-
-#### `impl Waitable for StartedRead<T>`
-
-##### `fn wait_on(&self) -> WaitOn`
-
-### `pub affine struct ReadCopy<affine T>`
-
-One copy started on a stream end, holding the end until it is finished.
-Dropping one in flight cancels it, and drops what it had copied.
-
-_Fields are private._
-
-#### `pub fn finish(self) -> [Stream<T>, StreamChunk<T>] with Stream`
-
-The end and what the copy moved. Waits for a copy that has not settled,
-so a copy never inserted into a set finishes as well.
-
-#### `impl Drop for ReadCopy<T>`
-
-##### `fn drop(self)`
-
-#### `impl Waitable for ReadCopy<T>`
-
-##### `fn wait_on(&self) -> WaitOn`
-
-### `pub affine struct StartedWrite<affine T>`
-
-A write copy as `StreamWritable::begin_write` started it: one the host may
-still be copying out of `buffer`, which holds `data` lowered, or one a
-handler settled.
-
-_Fields are private._
-
-#### `pub fn settled(written: StreamWrite<T>) -> StartedWrite<T>`
-
-A copy that already ended as `written` says, for a handler to answer
-`StreamWritable::begin_write` with.
-
-#### `impl Drop for StartedWrite<T>`
-
-##### `fn drop(self)`
-
-What the copy did not deliver is still the writer's, so it drops here.
-
-### `pub affine struct WriteCopy<affine T>`
-
-One copy started on a writable end, holding the end until it is finished.
-Dropping one in flight cancels it.
-
-_Fields are private._
-
-#### `pub fn finish(self) -> [StreamWritable<T>, StreamWrite<T>]`
-
-The end and what the copy left of its data. Waits for a copy that has
-not settled, so a copy never inserted into a set finishes as well.
-
-#### `impl Drop for WriteCopy<T>`
-
-##### `fn drop(self)`
-
-#### `impl Waitable for WriteCopy<T>`
-
-##### `fn wait_on(&self) -> WaitOn`
-
-### `pub affine struct WaitableSet<affine W: Waitable>`
-
-A set of values the host reports events for, owning each while it waits.
-A wait moves the member that is ready back out. Dropping the set drops the
-members it still holds.
-
-A set has one member type. A loop waiting on several kinds declares a
-variant of its own and derives `Waitable` on it with `impl Waitable for V;`.
-
-_Fields are private._
-
-#### `pub fn new() -> WaitableSet<W>`
-
-`#[ambient(RawWaitableSet)]`
-
-#### `pub fn insert(&mut self, member: W)`
-
-Moves `member` into the set. A member is in one set at a time, so
-whether the host has an event left for it is settled here.
-
-#### `pub fn wait(&mut self) -> Ready<W>`
-
-`#[ambient(RawWaitableSet)]`
-
-Blocks until a member is ready, and moves it out: a copy once it
-settled, a call once it resolved. A member ready without the host comes
-first. Traps on an empty set.
-
-#### `pub fn poll(&mut self) -> Option<Ready<W>>`
-
-`#[ambient(RawWaitableSet)]`
-
-The member that is ready, as `wait` means it, moved out, or None where
-none is yet.
-
-#### `pub fn drain(&mut self) -> List<W>`
-
-Moves every member out, the ready ones first, leaving the set empty. A
-race keeps its losers this way, where dropping the set would drop them.
-
-#### `pub fn len(&self) -> i32`
-
-#### `pub fn is_empty(&self) -> bool`
-
-#### `impl Drop for WaitableSet<W>`
-
-##### `fn drop(self)`
-
-Drops the members first, each leaving the host's set as it drops: the
-host traps on dropping a set that still has one.
-
-### `pub struct Ready<affine W>`
-
-A member of a `WaitableSet` that is ready, moved out of the set with
-the event.
-
-#### `member: W`
-
-#### `event: ReadyEvent`
-
-### `pub affine struct AsyncCall<affine T>`
-
-A handle to an in-flight CM async import call, parameterised by the
-result type `T`. Returned by the synthesised adapter for a WIT
-`async func` import.
-
-`AsyncCall<T>` holds the CM subtask with the linear-memory buffer into
-which the host writes the async result. `wait` blocks until the call
-returns and takes the lifted result; `cancel` aborts the in-flight call.
-Either one consumes the call, and dropping a call cancels it.
-
-An `async` web import answers a promise of the host's in place of a
-subtask. `wait` suspends until it settles; `cancel` and a drop stop the
-waiting and nothing else, since a promise cannot be cancelled.
-
-The subtask begins running the moment the adapter returns, so writes to
-stream parameters (e.g. a request body) made after the adapter call and
-before `wait` / `cancel` are rendezvoused with the host subtask.
-
-Example (HTTP POST body):
-
-```wado
-let [body_rx, body_tx] = Stream::<u8>::new();
-let [req, _tx_future] = Request::new(headers, Option::Some(body_rx), ...);
-let task = Client::send(req);       // host subtask starts
-body_tx.write_all(body_bytes);      // rendezvous with host read
-body_tx.drop();
-let resp = task.wait();             // block for response
-```
-
-The synthesized adapter builds one with a literal, which reaches the
-private fields, so user code can neither peek nor forge one.
-
-_Fields are private._
-
-#### `pub fn wait(self) -> T with Subtask`
-
-Wait for the subtask to complete and return the lifted result.
-
-#### `pub fn cancel(self) with Subtask`
-
-Cancel the in-flight subtask. A result it returned before the cancel
-is lifted and dropped, since it may own handles.
-
-#### `impl Drop for AsyncCall<T>`
-
-##### `fn drop(self)`
-
-Cancels a call nobody waited on, and drops a result the callee
-returned, which owns handles only a lift reaches.
-
-#### `impl Waitable for AsyncCall<T>`
-
-##### `fn wait_on(&self) -> WaitOn`
-
-### `pub struct ParseIntError`
-
-Error returned by integer parsing.
-
-#### `kind: IntErrorKind`
-
-#### `pub fn new(kind: IntErrorKind) -> ParseIntError`
-
-#### `pub fn kind(&self) -> IntErrorKind`
-
-#### `impl Display for ParseIntError`
-
-##### `fn fmt(&self, f: &mut Formatter)`
-
-### `pub struct ParseFloatError`
-
-Error returned by float parsing.
-
-#### `kind: FloatErrorKind`
-
-#### `pub fn new(kind: FloatErrorKind) -> ParseFloatError`
-
-#### `pub fn kind(&self) -> FloatErrorKind`
-
-#### `impl Display for ParseFloatError`
-
-##### `fn fmt(&self, f: &mut Formatter)`
-
-### `pub struct ParseBoolError {}`
-
-Error returned by `bool::from_str`, which takes `true` and `false` alone.
-
-#### `impl Display for ParseBoolError`
-
-##### `fn fmt(&self, f: &mut Formatter)`
-
-### `pub struct ParseCharError`
-
-Error returned by char parsing.
-
-#### `kind: CharErrorKind`
-
-#### `pub fn new(kind: CharErrorKind) -> ParseCharError`
-
-#### `pub fn kind(&self) -> CharErrorKind`
-
-#### `impl Display for ParseCharError`
-
-##### `fn fmt(&self, f: &mut Formatter)`
-
-### `pub struct Slice<T>`
-
-A contiguous view into a backing `Array<T>` over the half-open range
-`[start, end)`. Holds a reference to the whole array, so creating a slice
-never copies elements.
-
-A slice of a `List` is bound by the contract on `List`: once the list
-shrinks, the slice must not read past the list's new length.
-
-_Fields are private._
-
-#### `pub fn len(&self) -> i32`
-
-`#[compiler_item("byte_slice_len")]`
-
-Also the byte-length anchor for the synthesised `FieldSchema::lookup`
-(on `Slice<u8>`), routed through `#[compiler_item]` so a rename here
-cannot silently break code generation.
-
-#### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
-
-Sub-slice over `[start, end)` relative to this one, clamped to its
-bounds.
-
-#### `pub fn iter_value(&self) -> SliceValueIter<T>`
-
-#### `pub fn iter_ref(&self) -> SliceRefIter<T>`
-
-#### `pub fn windows(&self, size: i32) -> SliceWindows<T>`
-
-- `contract size > 0`
-
-Overlapping windows of `size` consecutive elements.
-
-#### `pub fn chunks(&self, size: i32) -> SliceChunks<T>`
-
-- `contract size > 0`
-
-Non-overlapping chunks of up to `size` elements; the last may be
-shorter.
-
-#### `pub fn to_array(&self) -> Array<T>`
-
-#### `pub fn to_list(&self) -> List<T>`
-
-#### `pub fn contains(&self, value: &T) -> bool`
-
-#### `impl Sequence for Slice<T>`
-
-##### `fn len(&self) -> i32`
-
-##### `fn at(&self, index: i32) -> T`
-
-- `contract 0 <= index < self.len()`
-
-#### `impl AsSlice for Slice<T>`
-
-##### `fn as_slice(&self) -> Slice<T>`
-
-#### `impl IndexValue<i32> for Slice<T>`
-
-##### `fn index_value(&self, index: i32) -> Self::Output`
-
-`#[compiler_item("byte_slice_index_value")]`
-
-Also the byte-read anchor for the synthesised `FieldSchema::lookup`
-(on `Slice<u8>`), as `len` is for byte length.
-
-#### `impl IndexRef<i32> for Slice<T>`
-
-##### `fn index_ref(&self, index: i32) -> &T`
-
-#### `impl IndexValue<RangeExclusive<i32>> for Slice<T>`
-
-##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T>`
-
-#### `impl IndexValue<RangeInclusive<i32>> for Slice<T>`
-
-##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
-
-#### `impl Eq for Slice<T>`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for Slice<T>`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Inspect for Slice<T>`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl Display for Slice<T>`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl IntoIterator for Slice<T>`
-
-##### `fn into_iter(&self) -> Self::Iter`
-
-### `pub struct SliceValueIter<T>`
-
-A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
-
-_Fields are private._
-
-#### `pub fn collect(&mut self) -> List<T>`
-
-One bulk copy of the remaining range, not an element-at-a-time loop.
-
-#### `impl Iterator for SliceValueIter<T>`
-
-##### `fn next(&mut self) -> Option<Self::Item>`
-
-### `pub struct SliceRefIter<affine T>`
-
-A by-reference forward iterator over a backing `Array<T>` range. Each `&T`
-points to a fresh copy of the element — Wasm GC has no interior references —
-so it reads but never writes the backing array. Backs `for x of &list`.
-
-_Fields are private._
-
-#### `pub fn iter_value(&self) -> SliceValueIter<T>`
-
-The same remaining range yielded by value. Named for the axis rather
-than Rust's `copied()`: every element read in Wado is a copy already.
-
-#### `impl Iterator for SliceRefIter<T>`
-
-##### `fn next(&mut self) -> Option<Self::Item>`
-
-### `pub struct SliceRefMutIter<T>`
-
-_Fields are private._
-
-#### `impl Iterator for SliceRefMutIter<T>`
-
-##### `fn next(&mut self) -> Option<Self::Item>`
-
-### `pub struct SliceWindows<T>`
-
-Each item is a `Slice<T>` viewing the backing array, not a copy of it.
-
-_Fields are private._
-
-#### `impl Iterator for SliceWindows<T>`
-
-##### `fn next(&mut self) -> Option<Self::Item>`
-
-### `pub struct SliceChunks<T>`
-
-Each item is a `Slice<T>` viewing the backing array, not a copy of it.
-
-_Fields are private._
-
-#### `impl Iterator for SliceChunks<T>`
-
-##### `fn next(&mut self) -> Option<Self::Item>`
 
 ### `pub struct Utf8Error`
 
@@ -5799,6 +5251,314 @@ If `count` is negative, replaces all occurrences.
 
 ##### `pub fn eq(&self, other: &String) -> bool`
 
+### `pub struct Formatter`
+
+Formatter that writes directly into a referenced output buffer.
+The Formatter does not own its buffer; it writes into the caller's `&mut String`.
+This avoids intermediate allocations.
+
+Format specification fields match Rust's format syntax:
+`[[fill]align][sign][#][0][width][.precision]type`
+
+Unset width and precision use the sentinels on `impl Formatter`.
+
+#### `fill: char`
+
+Fill character for padding (default: ' ')
+
+#### `align: Alignment`
+
+Text alignment mode
+
+#### `sign_plus: bool`
+
+Whether to always show `+` sign for positive numbers
+
+#### `alternate: bool`
+
+Whether the spec asked for the alternate form (`#` flag): a radix
+prefix, or the indented multi-line `Inspect`.
+
+#### `zero_pad: bool`
+
+Whether to use zero-padding (`0` flag)
+
+#### `width: i32`
+
+Minimum field width in characters; `NO_WIDTH` for none
+
+#### `precision: i32`
+
+Decimal places for floats; max rendered length for sequences (chars /
+elements). Negative values are the sentinels below.
+
+#### `indent: i32`
+
+Current indentation level for the alternate (`#`) `Inspect`
+
+#### `buf: &mut String`
+
+Reference to the output buffer
+
+#### `pub const NO_WIDTH: i32`
+
+No width given: every padding path is a no-op.
+
+#### `pub const PRECISION_DEFAULT: i32`
+
+No precision given: sequence Inspect uses `DEFAULT_SEQ_LIMIT`, others ignore.
+
+#### `pub const PRECISION_INFINITE: i32`
+
+Render uncapped: sequence Inspect skips truncation.
+
+#### `pub const DEFAULT_SEQ_LIMIT: i32`
+
+Default sequence Inspect cap: chars for `String`, elements for `List`.
+
+#### `pub fn resolved_seq_limit(&self) -> i32`
+
+The element/char cap a sequence Inspect should apply: the explicit
+precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
+(`PRECISION_INFINITE`) means uncapped.
+
+#### `pub fn new(buf: &mut String) -> Formatter`
+
+`#[compiler_item("formatter_new")]`
+
+Create a Formatter with the default spec, writing into the given buffer.
+
+#### `pub fn write_str<S: AsStrSlice>(&mut self, s: S)`
+
+`#[compiler_item("formatter_write_str")]`
+
+Write any `AsStrSlice` text to the output buffer.
+
+#### `pub fn write_display<T: Display>(&mut self, value: &T)`
+
+Write a `Display` value with the default spec, as `write_str` writes
+text as it stands: the spec belongs to the value, not to its parts.
+
+#### `pub fn write_char(&mut self, c: char)`
+
+Write a single character to the output buffer.
+
+#### `pub fn write_char_n(&mut self, c: char, n: i32)`
+
+Write `n` copies of a character to the output buffer.
+
+#### `pub fn pad<S: AsStrSlice>(&mut self, content: S)`
+
+Pad a pre-formatted content string to the configured width.
+If no width is set or content is already as wide, writes content as-is.
+Width counts characters, so a multi-byte content pads by what it renders.
+
+#### `pub fn mark(&self) -> i32`
+
+Return the current byte position in the output buffer.
+Used with `apply_padding` for the speculative-write pattern:
+
+1. Call `mark()` to record the start position
+2. Write content directly to `buf_mut()`
+3. Call `apply_padding(mark)` to insert padding if needed
+
+#### `pub fn apply_padding(&mut self, start_pos: i32)`
+
+Apply width/alignment padding to content already written at `start_pos`.
+Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
+
+#### `pub fn write_from_memory(&mut self, ptr: i32, len: i32)`
+
+Write raw bytes from linear memory, applying width/alignment padding.
+Used only for values produced by bundled Wasm functions (e.g., f64_to_buffer).
+
+#### `pub fn prepare_int_write<S: AsStrSlice>(&mut self, is_negative: bool, alt_prefix: S, digit_count: i32) -> i32`
+
+Prepare the output buffer for integer digits.
+
+Writes sign, prefix, and any padding/fill, then reserves `digit_count`
+uninitialised bytes and returns their byte-offset inside `buf`.
+The caller **must** fill exactly `digit_count` bytes (backwards) via
+`buf.internal_raw_bytes()` at the returned offset.
+`alt_prefix` is the radix marker (`0x`, `0b`, `0o`) the alternate form
+asks for; a plain spec drops it without the caller having to hand over an
+empty string, which would leave a value copy behind.
+
+#### `pub fn write_indent(&mut self)`
+
+Write indentation (2 spaces per level) for pretty-printing.
+
+#### `pub fn write_newline_indent(&mut self)`
+
+Write a newline followed by indentation for pretty-printing.
+
+#### `pub fn open_brace<S: AsStrSlice>(&mut self, open: S)`
+
+Open a pretty-printed brace: write opening delimiter, increase indent.
+
+#### `pub fn close_brace<S: AsStrSlice>(&mut self, close: S)`
+
+Close a pretty-printed brace: decrease indent, write newline+indent, write closing delimiter.
+
+### `pub struct Slice<T>`
+
+A contiguous view into a backing `Array<T>` over the half-open range
+`[start, end)`. Holds a reference to the whole array, so creating a slice
+never copies elements.
+
+A slice of a `List` is bound by the contract on `List`: once the list
+shrinks, the slice must not read past the list's new length.
+
+_Fields are private._
+
+#### `pub fn len(&self) -> i32`
+
+`#[compiler_item("byte_slice_len")]`
+
+Also the byte-length anchor for the synthesised `FieldSchema::lookup`
+(on `Slice<u8>`), routed through `#[compiler_item]` so a rename here
+cannot silently break code generation.
+
+#### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
+
+Sub-slice over `[start, end)` relative to this one, clamped to its
+bounds.
+
+#### `pub fn iter_value(&self) -> SliceValueIter<T>`
+
+#### `pub fn iter_ref(&self) -> SliceRefIter<T>`
+
+#### `pub fn windows(&self, size: i32) -> SliceWindows<T>`
+
+- `contract size > 0`
+
+Overlapping windows of `size` consecutive elements.
+
+#### `pub fn chunks(&self, size: i32) -> SliceChunks<T>`
+
+- `contract size > 0`
+
+Non-overlapping chunks of up to `size` elements; the last may be
+shorter.
+
+#### `pub fn to_array(&self) -> Array<T>`
+
+#### `pub fn to_list(&self) -> List<T>`
+
+#### `pub fn contains(&self, value: &T) -> bool`
+
+#### `impl Sequence for Slice<T>`
+
+##### `fn len(&self) -> i32`
+
+##### `fn at(&self, index: i32) -> T`
+
+- `contract 0 <= index < self.len()`
+
+#### `impl AsSlice for Slice<T>`
+
+##### `fn as_slice(&self) -> Slice<T>`
+
+#### `impl IndexValue<i32> for Slice<T>`
+
+##### `fn index_value(&self, index: i32) -> Self::Output`
+
+`#[compiler_item("byte_slice_index_value")]`
+
+Also the byte-read anchor for the synthesised `FieldSchema::lookup`
+(on `Slice<u8>`), as `len` is for byte length.
+
+#### `impl IndexRef<i32> for Slice<T>`
+
+##### `fn index_ref(&self, index: i32) -> &T`
+
+#### `impl IndexValue<RangeExclusive<i32>> for Slice<T>`
+
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T>`
+
+#### `impl IndexValue<RangeInclusive<i32>> for Slice<T>`
+
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
+
+#### `impl Eq for Slice<T>`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for Slice<T>`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Inspect for Slice<T>`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl Display for Slice<T>`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl IntoIterator for Slice<T>`
+
+##### `fn into_iter(&self) -> Self::Iter`
+
+### `pub struct SliceValueIter<T>`
+
+A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
+
+_Fields are private._
+
+#### `pub fn collect(&mut self) -> List<T>`
+
+One bulk copy of the remaining range, not an element-at-a-time loop.
+
+#### `impl Iterator for SliceValueIter<T>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct SliceRefIter<affine T>`
+
+A by-reference forward iterator over a backing `Array<T>` range. Each `&T`
+points to a fresh copy of the element — Wasm GC has no interior references —
+so it reads but never writes the backing array. Backs `for x of &list`.
+
+_Fields are private._
+
+#### `pub fn iter_value(&self) -> SliceValueIter<T>`
+
+The same remaining range yielded by value. Named for the axis rather
+than Rust's `copied()`: every element read in Wado is a copy already.
+
+#### `impl Iterator for SliceRefIter<T>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct SliceRefMutIter<T>`
+
+_Fields are private._
+
+#### `impl Iterator for SliceRefMutIter<T>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct SliceWindows<T>`
+
+Each item is a `Slice<T>` viewing the backing array, not a copy of it.
+
+_Fields are private._
+
+#### `impl Iterator for SliceWindows<T>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct SliceChunks<T>`
+
+Each item is a `Slice<T>` viewing the backing array, not a copy of it.
+
+_Fields are private._
+
+#### `impl Iterator for SliceChunks<T>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
 ### `pub struct List<affine T>`
 
 A growable sequence.
@@ -6122,6 +5882,274 @@ Returns true if the range contains no elements.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+### `pub struct ResourceId`
+
+The identity of a live affine resource, which owns nothing. A dropped
+resource's identity may come back for a later one, since the host reuses a
+freed handle index. Nothing converts it back into a resource.
+
+_Fields are private._
+
+#### `pub fn of<affine R: AffineResource>(r: &R) -> ResourceId`
+
+The identity of `r`. A static function rather than a method, so it
+takes no name from any resource.
+
+### `pub affine struct FutureReadCopy<affine T>`
+
+A read started on a future end, holding the end until it is finished.
+Dropping one in flight cancels it, and drops a value it had read.
+
+_Fields are private._
+
+#### `pub fn finish(self) -> Option<T> with Future`
+
+The value, or None where the writer dropped without writing. Waits for a
+read that has not settled, so a read never inserted into a set finishes
+as well. The end drops, as a read consumes it.
+
+#### `impl Drop for FutureReadCopy<T>`
+
+##### `fn drop(self)`
+
+#### `impl Waitable for FutureReadCopy<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
+
+### `pub struct StreamChunk<affine T>`
+
+What one read copy moved, and how that copy ended. A copy carries elements
+and the peer's drop together, so `result` is what says more follows.
+
+#### `items: List<T>`
+
+#### `result: CopyResult`
+
+### `pub struct StreamWrite<affine T>`
+
+What one write copy did not deliver, and how it ended. A reader may take a
+prefix, and the elements it left come back in `rest`.
+
+#### `rest: List<T>`
+
+#### `result: CopyResult`
+
+### `pub struct FutureWrite<affine T>`
+
+What `FutureWritable::write` did not deliver, and how its copy ended: the
+value comes back in `rest` where the reader dropped first.
+
+#### `rest: Option<T>`
+
+#### `result: FutureWriteResult`
+
+### `pub struct ReadInto`
+
+Where a host copy started by `Stream::begin_read` lands: memory the copy
+allocates for itself, or memory `core:*` lends it, which the host writes
+into directly. Only `core:*` lends, so no raw address is ever handed out.
+
+A handler holds the value it is handed, and may forward it to another
+read. So lent memory says how much of it there is, and whether the lender
+still lends it: a read asking for more is held to the room, and one after
+the lend ended traps rather than writing what someone else now owns.
+
+_Fields are private._
+
+#### `pub fn fresh() -> ReadInto`
+
+Memory the copy allocates for itself, and frees once it has settled.
+
+### `pub affine struct StartedRead<affine T>`
+
+A read copy as `Stream::begin_read` started it: one the host may still be
+copying into `buffer`, or one a handler settled with its `items`.
+
+_Fields are private._
+
+#### `pub fn settled(chunk: StreamChunk<T>) -> StartedRead<T>`
+
+A copy that already moved `chunk`, for a handler to answer
+`Stream::begin_read` with.
+
+#### `impl Waitable for StartedRead<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
+
+### `pub affine struct ReadCopy<affine T>`
+
+One copy started on a stream end, holding the end until it is finished.
+Dropping one in flight cancels it, and drops what it had copied.
+
+_Fields are private._
+
+#### `pub fn finish(self) -> [Stream<T>, StreamChunk<T>] with Stream`
+
+The end and what the copy moved. Waits for a copy that has not settled,
+so a copy never inserted into a set finishes as well.
+
+#### `impl Drop for ReadCopy<T>`
+
+##### `fn drop(self)`
+
+#### `impl Waitable for ReadCopy<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
+
+### `pub affine struct StartedWrite<affine T>`
+
+A write copy as `StreamWritable::begin_write` started it: one the host may
+still be copying out of `buffer`, which holds `data` lowered, or one a
+handler settled.
+
+_Fields are private._
+
+#### `pub fn settled(written: StreamWrite<T>) -> StartedWrite<T>`
+
+A copy that already ended as `written` says, for a handler to answer
+`StreamWritable::begin_write` with.
+
+#### `impl Drop for StartedWrite<T>`
+
+##### `fn drop(self)`
+
+What the copy did not deliver is still the writer's, so it drops here.
+
+### `pub affine struct WriteCopy<affine T>`
+
+One copy started on a writable end, holding the end until it is finished.
+Dropping one in flight cancels it.
+
+_Fields are private._
+
+#### `pub fn finish(self) -> [StreamWritable<T>, StreamWrite<T>]`
+
+The end and what the copy left of its data. Waits for a copy that has
+not settled, so a copy never inserted into a set finishes as well.
+
+#### `impl Drop for WriteCopy<T>`
+
+##### `fn drop(self)`
+
+#### `impl Waitable for WriteCopy<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
+
+### `pub affine struct WaitableSet<affine W: Waitable>`
+
+A set of values the host reports events for, owning each while it waits.
+A wait moves the member that is ready back out. Dropping the set drops the
+members it still holds.
+
+A set has one member type. A loop waiting on several kinds declares a
+variant of its own and derives `Waitable` on it with `impl Waitable for V;`.
+
+_Fields are private._
+
+#### `pub fn new() -> WaitableSet<W>`
+
+`#[ambient(RawWaitableSet)]`
+
+#### `pub fn insert(&mut self, member: W)`
+
+Moves `member` into the set. A member is in one set at a time, so
+whether the host has an event left for it is settled here.
+
+#### `pub fn wait(&mut self) -> Ready<W>`
+
+`#[ambient(RawWaitableSet)]`
+
+Blocks until a member is ready, and moves it out: a copy once it
+settled, a call once it resolved. A member ready without the host comes
+first. Traps on an empty set.
+
+#### `pub fn poll(&mut self) -> Option<Ready<W>>`
+
+`#[ambient(RawWaitableSet)]`
+
+The member that is ready, as `wait` means it, moved out, or None where
+none is yet.
+
+#### `pub fn drain(&mut self) -> List<W>`
+
+Moves every member out, the ready ones first, leaving the set empty. A
+race keeps its losers this way, where dropping the set would drop them.
+
+#### `pub fn len(&self) -> i32`
+
+#### `pub fn is_empty(&self) -> bool`
+
+#### `impl Drop for WaitableSet<W>`
+
+##### `fn drop(self)`
+
+Drops the members first, each leaving the host's set as it drops: the
+host traps on dropping a set that still has one.
+
+### `pub struct Ready<affine W>`
+
+A member of a `WaitableSet` that is ready, moved out of the set with
+the event.
+
+#### `member: W`
+
+#### `event: ReadyEvent`
+
+### `pub affine struct AsyncCall<affine T>`
+
+A handle to an in-flight CM async import call, parameterised by the
+result type `T`. Returned by the synthesised adapter for a WIT
+`async func` import.
+
+`AsyncCall<T>` holds the CM subtask with the linear-memory buffer into
+which the host writes the async result. `wait` blocks until the call
+returns and takes the lifted result; `cancel` aborts the in-flight call.
+Either one consumes the call, and dropping a call cancels it.
+
+An `async` web import answers a promise of the host's in place of a
+subtask. `wait` suspends until it settles; `cancel` and a drop stop the
+waiting and nothing else, since a promise cannot be cancelled.
+
+The subtask begins running the moment the adapter returns, so writes to
+stream parameters (e.g. a request body) made after the adapter call and
+before `wait` / `cancel` are rendezvoused with the host subtask.
+
+Example (HTTP POST body):
+
+```wado
+let [body_rx, body_tx] = Stream::<u8>::new();
+let [req, _tx_future] = Request::new(headers, Option::Some(body_rx), ...);
+let task = Client::send(req);       // host subtask starts
+body_tx.write_all(body_bytes);      // rendezvous with host read
+body_tx.drop();
+let resp = task.wait();             // block for response
+```
+
+The synthesized adapter builds one with a literal, which reaches the
+private fields, so user code can neither peek nor forge one.
+
+_Fields are private._
+
+#### `pub fn wait(self) -> T with Subtask`
+
+Wait for the subtask to complete and return the lifted result.
+
+#### `pub fn cancel(self) with Subtask`
+
+Cancel the in-flight subtask. A result it returned before the cancel
+is lifted and dropped, since it may own handles.
+
+#### `impl Drop for AsyncCall<T>`
+
+##### `fn drop(self)`
+
+Cancels a call nobody waited on, and drops a result the callee
+returned, which owns handles only a lift reaches.
+
+#### `impl Waitable for AsyncCall<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
+
 ## Variants
 
 ### `pub variant Option<T>`
@@ -6293,6 +6321,50 @@ not applied here — `core:serde::wire_name` resolves it). See WEP 2026-06-13.
 
 #### `ScreamingKebab`
 
+### `pub enum CharErrorKind`
+
+Kind of failure returned by char parsing.
+
+#### `Empty`
+
+The input string was empty.
+
+#### `TooManyChars`
+
+The input held more than one Unicode scalar.
+
+### `pub enum IntErrorKind`
+
+Kind of failure returned by integer parsing.
+
+#### `Empty`
+
+The input string was empty.
+
+#### `InvalidDigit`
+
+The input contained a character that is not a valid digit in the radix.
+
+#### `PosOverflow`
+
+The value was greater than the maximum representable in the target type.
+
+#### `NegOverflow`
+
+The value was less than the minimum representable in the target type.
+
+### `pub enum FloatErrorKind`
+
+Kind of failure returned by float parsing.
+
+#### `Empty`
+
+The input string was empty.
+
+#### `Invalid`
+
+The input was malformed.
+
 ### `pub enum Alignment`
 
 Text alignment for padding.
@@ -6361,47 +6433,3 @@ The state an async call moved to (`CanonicalABI.md`, `Subtask.State`).
 
 Whether the call resolved, by returning or by a cancel. Only a resolved
 call's subtask may drop: the Component Model traps on one in flight.
-
-### `pub enum IntErrorKind`
-
-Kind of failure returned by integer parsing.
-
-#### `Empty`
-
-The input string was empty.
-
-#### `InvalidDigit`
-
-The input contained a character that is not a valid digit in the radix.
-
-#### `PosOverflow`
-
-The value was greater than the maximum representable in the target type.
-
-#### `NegOverflow`
-
-The value was less than the minimum representable in the target type.
-
-### `pub enum FloatErrorKind`
-
-Kind of failure returned by float parsing.
-
-#### `Empty`
-
-The input string was empty.
-
-#### `Invalid`
-
-The input was malformed.
-
-### `pub enum CharErrorKind`
-
-Kind of failure returned by char parsing.
-
-#### `Empty`
-
-The input string was empty.
-
-#### `TooManyChars`
-
-The input held more than one Unicode scalar.

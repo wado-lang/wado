@@ -1,14 +1,21 @@
 #![no_prelude]
 #![stdlib("core:prelude/traits.wado")]
-// Prelude Traits
-// This module defines all traits that are automatically available in every Wado module.
+//! The traits the language itself reads: comparison, hashing, defaults,
+//! markers, indexing, operators, conversion and formatting.
 
-use { Option, Result } from "core:prelude/types.wado";
+use { Option, Result } from "core:prelude/option.wado";
 use { Formatter } from "core:prelude/format.wado";
-use { String, StrSlice, AsStrSlice } from "core:prelude/string.wado";
-use { List } from "core:prelude/list.wado";
+use { String, AsStrSlice } from "core:prelude/string.wado";
 use { ByteSlice } from "core:prelude/bytes.wado";
-use { panic } from "core:rt";
+use {
+    Reflect,
+    ReflectStruct,
+    ReflectVariant,
+    ReflectEnum,
+    ReflectFlags,
+    ReflectNewtype,
+    ReflectTemplate,
+} from "core:prelude/reflect.wado";
 
 /// Result of a comparison between two values.
 #[compiler_item("ordering")]
@@ -128,645 +135,6 @@ pub affine trait Default with () {
 pub affine trait Drop with () {
     #[ambient(_)]
     fn drop(self);
-}
-
-/// A type's identity: the root every reflected kind sits under. Sealed and
-/// compiler-synthesized like the kinds. See WEP 2026-06-13.
-#[compiler_item("reflect")]
-pub trait Reflect with () {
-    /// Returns the declaration's name. A shape no declaration names answers
-    /// for itself: an anonymous struct with `""`, and a tagged template's type
-    /// with its holes (`` `${i32:04}` ``).
-    #[compiler_item("reflect_decl_name")]
-    fn decl_name() -> String;
-
-    /// The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
-    /// kind carries the attribute, and it says the same thing on each: the
-    /// root answers so a caller need not know which kind it holds. A newtype
-    /// answers with the policy of the declaration it wraps.
-    #[compiler_item("reflect_wire_name_policy")]
-    fn wire_name_policy() -> CaseStyle;
-
-    /// The `///` comment on the declaration, or `None`: its lines joined by
-    /// `\n`, each without its `///` and one space after it. Every instantiation
-    /// of a generic type answers with its declaration's comment, and a newtype
-    /// with its own, never its base's.
-    #[compiler_item("reflect_doc")]
-    fn doc() -> Option<String>;
-}
-
-/// Compile-time struct introspection. The compiler synthesizes an impl for
-/// every struct; it cannot be implemented in user code and is callable only in
-/// monomorphized contexts (`T` a concrete struct).
-/// See WEP 2026-06-13.
-#[compiler_item("reflect_struct")]
-pub trait ReflectStruct: Reflect with () {
-    /// The field types as a tuple `[F_0, F_1, ...]`.
-    affine type FieldTypes;
-
-    /// The per-field member tuple `[StructField<Self, F_0>, ...]`.
-    type Members;
-
-    /// The field slots `[Option<F_0>, ...]` — the value-level companion of
-    /// `FieldTypes`. A filled slot is one the wire wrote.
-    affine type FieldSlots;
-
-    /// What `from_fields` takes: `FieldTypes` when the struct is open (no
-    /// field reaches less far than the struct), `!` when it is closed, so a
-    /// struct guarding a field can be read but never forged.
-    affine type FieldInputs;
-
-    /// Returns the per-field members.
-    #[compiler_item("reflect_struct_members")]
-    fn members() -> Self::Members;
-
-    /// Assembles the struct from its field values.
-    #[compiler_item("reflect_struct_from_fields")]
-    fn from_fields(fields: Self::FieldInputs) -> Self;
-
-    /// Empty slots but `index`, which holds that field's declared default
-    /// (`f: T = expr`) if it has one. No other field's default is evaluated.
-    #[compiler_item("reflect_struct_default_slot")]
-    fn default_slot(index: i32) -> Self::FieldSlots;
-
-    /// All slots empty. Starting here is what makes a filled slot mean "the
-    /// wire wrote this", so a repeat is visible without a second record.
-    #[compiler_item("reflect_struct_empty_slots")]
-    fn empty_slots() -> Self::FieldSlots;
-}
-
-/// The wire-naming policy declared by `#[wire(name_policy = "...")]` (casing
-/// not applied here — `core:serde::wire_name` resolves it). See WEP 2026-06-13.
-#[compiler_item("case_style")]
-pub enum CaseStyle {
-    #[compiler_item("case_style_identity")]
-    Identity,
-    #[compiler_item("case_style_camel")]
-    Camel,
-    #[compiler_item("case_style_snake")]
-    Snake,
-    #[compiler_item("case_style_screaming_snake")]
-    ScreamingSnake,
-    #[compiler_item("case_style_pascal")]
-    Pascal,
-    #[compiler_item("case_style_kebab")]
-    Kebab,
-    #[compiler_item("case_style_screaming_kebab")]
-    ScreamingKebab,
-}
-
-/// The attr-reading face of a reflected member. Sealed and
-/// compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
-#[compiler_item("member")]
-pub affine trait Member with () {
-    /// The source field name.
-    fn name(&self) -> String;
-
-    /// The raw `#[wire(name)]` value (casing not applied), or `None`.
-    fn wire_name_override(&self) -> Option<String>;
-
-    /// The member's `///` comment, as `Reflect::doc` reads a declaration's.
-    fn doc(&self) -> Option<String>;
-}
-
-/// Compile-time variant introspection. The compiler synthesizes an impl for
-/// every variant; it cannot be implemented in user code and is callable only
-/// in monomorphized contexts (`T` a concrete variant).
-/// See WEP 2026-06-13 §3.
-#[compiler_item("reflect_variant")]
-pub trait ReflectVariant: Reflect with () {
-    /// The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
-    affine type CasePayloads;
-
-    /// The per-case member tuple `[VariantCase<Self, P_0>, ...]`.
-    type Members;
-
-    /// Returns the live case's tag.
-    #[compiler_item("reflect_variant_discriminant")]
-    fn discriminant(&self) -> i32;
-
-    /// Returns the per-case members.
-    #[compiler_item("reflect_variant_members")]
-    fn members() -> Self::Members;
-
-    /// Returns the key `#[wire(tag)]` writes each case under, or `None` where
-    /// the variant declares none.
-    #[compiler_item("reflect_variant_wire_tag")]
-    fn wire_tag() -> Option<String>;
-}
-
-/// Compile-time enum introspection. The compiler synthesizes an impl for
-/// every enum; it cannot be implemented in user code and is callable only
-/// in monomorphized contexts (`T` a concrete enum).
-/// See WEP 2026-06-13 §3b.
-#[compiler_item("reflect_enum")]
-pub trait ReflectEnum: Reflect with () {
-    /// The per-case member tuple `[EnumCase<Self>, ...]`.
-    type Members;
-
-    /// Returns the value's tag.
-    #[compiler_item("reflect_enum_discriminant")]
-    fn discriminant(&self) -> i32;
-
-    /// Returns the case with the given tag; `None` for an unknown tag.
-    #[compiler_item("reflect_enum_from_discriminant")]
-    fn from_discriminant(disc: i32) -> Option<Self>;
-
-    /// Returns the per-case members.
-    #[compiler_item("reflect_enum_members")]
-    fn members() -> Self::Members;
-}
-
-/// Compile-time flags introspection. The compiler synthesizes an impl for
-/// every flags type; it cannot be implemented in user code and is callable
-/// only in monomorphized contexts (`T` a concrete flags type).
-/// See WEP 2026-06-13 §3c.
-#[compiler_item("reflect_flags")]
-pub trait ReflectFlags: Reflect with () {
-    /// The per-bit member tuple `[FlagsBit<Self>, ...]`.
-    type Members;
-
-    /// Returns the value's bits, u64-normalized.
-    #[compiler_item("reflect_flags_bits")]
-    fn bits(&self) -> u64;
-
-    /// Returns the value with the given bits; `None` when unknown bits
-    /// are set.
-    #[compiler_item("reflect_flags_from_bits")]
-    fn from_bits(raw: u64) -> Option<Self>;
-
-    /// Returns the per-bit members.
-    #[compiler_item("reflect_flags_members")]
-    fn members() -> Self::Members;
-}
-
-/// Compile-time newtype introspection. The compiler synthesizes an impl for
-/// every newtype; it cannot be implemented in user code and is callable only
-/// in monomorphized contexts (`T` a concrete newtype).
-///
-/// The one kind with no members: a newtype has a base, and the value bridges
-/// both ways are the `From` the compiler already generates for it. Structure
-/// it inherits from that base — `ReflectStruct::<T>` on a newtype over a
-/// struct walks the struct's fields — so only the base is stated here.
-/// See WEP 2026-06-13.
-#[compiler_item("reflect_newtype")]
-pub trait ReflectNewtype: Reflect with () {
-    /// The type this newtype wraps: `type UserName = String` → `String`.
-    affine type Base;
-}
-
-/// Compile-time introspection of a tagged template literal's shape. The
-/// compiler synthesizes an impl per shape; it cannot be implemented in user
-/// code and is callable only in monomorphized contexts (`T` the anonymous
-/// type a template literal denotes). See WEP 2026-01-10.
-#[compiler_item("reflect_template")]
-pub trait ReflectTemplate: Reflect with () {
-    /// The hole types as a tuple `[V_0, V_1, ...]`.
-    affine type Holes;
-
-    /// The per-hole member tuple `[TemplateHole<Self, V_0>, ...]`.
-    type Members;
-
-    /// Returns the per-hole members.
-    #[compiler_item("reflect_template_members")]
-    fn members() -> Self::Members;
-
-    /// The literal text after the last hole of `t` — the whole template when
-    /// it has none — with escapes processed.
-    #[compiler_item("reflect_template_tail")]
-    fn tail(t: &Self) -> StrSlice;
-
-    /// `tail(t)` as written: a cooked template's escapes preserved, a raw
-    /// template's text itself.
-    #[compiler_item("reflect_template_raw_tail")]
-    fn raw_tail(t: &Self) -> StrSlice;
-
-    /// How many `#`s delimit the template on each end: 0 for `` `…` ``, 1 for
-    /// `` #`…`# ``.
-    #[compiler_item("reflect_template_hashes")]
-    fn hashes() -> i32;
-}
-
-/// A case handle minted by `ReflectVariant::members()`: the payload type `P`
-/// is static, the case index is a value. `extract` / `construct` bridge a
-/// variant value and its payload in both directions.
-/// See WEP 2026-06-13 §3e.
-#[compiler_item("variant_case")]
-pub struct VariantCase<affine T, affine P> {
-    index: i32,
-    case_name: String,
-    wire_override: Option<String>,
-    is_unit: bool,
-    doc: Option<String>,
-}
-
-impl<affine T, affine P> VariantCase<T, P> {
-    /// The case's tag.
-    pub fn discriminant(&self) -> i32 {
-        return self.index;
-    }
-
-    /// Whether the case carries no payload.
-    pub fn is_unit(&self) -> bool {
-        return self.is_unit;
-    }
-
-    /// Whether `v`'s live case is this case.
-    pub fn holds(&self, v: &T) -> bool {
-        return builtin::variant_tag(v) == self.index;
-    }
-
-    /// Builds this case around `payload`.
-    pub fn construct(&self, payload: P) -> T {
-        return builtin::variant_case_construct(payload, self.index);
-    }
-
-    /// Builds this case with no payload. Traps unless `is_unit()`.
-    pub fn make(&self) -> T {
-        return builtin::variant_case_construct((), self.index);
-    }
-
-    /// The payload of this case in `v`, by reference, so an affine payload is
-    /// not copied. Traps unless `holds(v)`.
-    pub fn extract_ref(&self, v: &T) -> &P {
-        return builtin::variant_case_ref(v, self.index);
-    }
-}
-
-impl<affine T, P> VariantCase<T, P> {
-    /// The payload of this case in `v`. Traps unless `holds(v)`.
-    pub fn extract(&self, v: &T) -> P {
-        return builtin::variant_case_extract(v, self.index);
-    }
-}
-
-impl<affine T, affine P> Member for VariantCase<T, P> {
-    fn name(&self) -> String {
-        return self.case_name;
-    }
-
-    fn wire_name_override(&self) -> Option<String> {
-        return self.wire_override;
-    }
-
-    fn doc(&self) -> Option<String> {
-        return self.doc;
-    }
-}
-
-/// A case handle minted by `ReflectEnum::members()`: an enum case carries
-/// no payload, so the member holds the case value itself. `make` mints it and
-/// `holds` tests a value's live case. See WEP 2026-06-13 §3b.
-#[compiler_item("enum_case")]
-pub struct EnumCase<T> {
-    discriminant: i32,
-    value: T,
-    case_name: String,
-    wire_override: Option<String>,
-    doc: Option<String>,
-}
-
-impl<T: ReflectEnum> EnumCase<T> {
-    /// The case's discriminant.
-    pub fn discriminant(&self) -> i32 {
-        return self.discriminant;
-    }
-
-    /// Whether `v` is this case.
-    pub fn holds(&self, v: &T) -> bool {
-        return ReflectEnum::<T>::discriminant(v) == self.discriminant;
-    }
-
-    /// The enum value for this case.
-    pub fn make(&self) -> T {
-        return self.value;
-    }
-}
-
-impl<T> Member for EnumCase<T> {
-    fn name(&self) -> String {
-        return self.case_name;
-    }
-
-    fn wire_name_override(&self) -> Option<String> {
-        return self.wire_override;
-    }
-
-    fn doc(&self) -> Option<String> {
-        return self.doc;
-    }
-}
-
-/// A bit handle minted by `ReflectFlags::members()`: the member holds the
-/// single-bit flags value. `set` mints it and `is_set` tests a value for the
-/// bit. See WEP 2026-06-13 §3c.
-#[compiler_item("flags_bit")]
-pub struct FlagsBit<T> {
-    bit: u64,
-    value: T,
-    member_name: String,
-    doc: Option<String>,
-}
-
-impl<T: ReflectFlags> FlagsBit<T> {
-    /// The member's bitmask, u64-normalized.
-    pub fn bit(&self) -> u64 {
-        return self.bit;
-    }
-
-    /// Whether `v` has this bit set.
-    pub fn is_set(&self, v: &T) -> bool {
-        return ReflectFlags::<T>::bits(v) & self.bit != 0;
-    }
-
-    /// The flags value with only this bit set.
-    pub fn set(&self) -> T {
-        return self.value;
-    }
-}
-
-impl<T> Member for FlagsBit<T> {
-    fn name(&self) -> String {
-        return self.member_name;
-    }
-
-    fn wire_name_override(&self) -> Option<String> {
-        return Option::None;
-    }
-
-    fn doc(&self) -> Option<String> {
-        return self.doc;
-    }
-}
-
-/// A hole handle minted by `ReflectTemplate::members()`: the hole's position
-/// and specifier are constants of the shape, and `lit` / `raw` / `get` /
-/// `get_ref` / `fmt` reach what a template value holds. See WEP 2026-01-10.
-#[compiler_item("template_hole")]
-pub struct TemplateHole<T, affine V> {
-    index: i32,
-    spec: Option<String>,
-}
-
-impl<T, affine V> TemplateHole<T, V> {
-    /// The hole's position in the template.
-    pub fn index(&self) -> i32 {
-        return self.index;
-    }
-
-    /// The literal text in `t` between the previous hole (or the start) and
-    /// this one, escapes processed.
-    pub fn lit(&self, t: &T) -> StrSlice {
-        return builtin::template_segment(t, 2 * self.index).internal_view();
-    }
-
-    /// `lit(t)` with escapes preserved: `\n` is a backslash and an `n`.
-    pub fn raw(&self, t: &T) -> StrSlice {
-        return builtin::template_segment(t, 2 * self.index + 1).internal_view();
-    }
-
-    /// Whether the hole wrote a `:spec`.
-    pub fn has_spec(&self) -> bool {
-        return self.spec matches { Some(_) };
-    }
-
-    /// The specifier as written after the `:`, or `None` without one.
-    pub fn spec(&self) -> Option<String> {
-        return self.spec;
-    }
-
-    /// A reference to the hole's value in `t`, which copies nothing, so it
-    /// reaches a hole of an affine type as well.
-    pub fn get_ref(&self, t: &T) -> &V {
-        return builtin::hole_ref(t, self.index);
-    }
-
-    /// Renders the value through the trait method the specifier's type
-    /// selects (`Display::fmt` when it names none), on a `Formatter` carrying
-    /// the specifier's settings over `f`'s buffer.
-    pub fn fmt(&self, t: &T, f: &mut Formatter) {
-        builtin::hole_fmt(t, self.index, f);
-    }
-}
-
-impl<T, V> TemplateHole<T, V> {
-    /// The hole's value in `t`.
-    pub fn get(&self, t: &T) -> V {
-        return builtin::hole_get(t, self.index);
-    }
-}
-
-/// A field handle minted by `ReflectStruct::members()`: the field type `F` is
-/// static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
-#[compiler_item("struct_field")]
-pub struct StructField<affine T, affine F> {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-    doc: Option<String>,
-}
-
-impl<affine T, affine F> StructField<T, F> {
-    /// The field's declaration index.
-    pub fn index(&self) -> i32 {
-        return self.index;
-    }
-
-    /// Whether the field declares a default value.
-    pub fn has_default(&self) -> bool {
-        return self.has_default;
-    }
-
-    /// Whether the field is marked `#[secret]`.
-    pub fn is_secret(&self) -> bool {
-        return self.is_secret;
-    }
-
-    /// This field in `v`, by reference.
-    pub fn get_ref(&self, v: &T) -> &F {
-        return builtin::struct_field_ref(v, self.index);
-    }
-}
-
-impl<affine T, F> StructField<T, F> {
-    /// The value of this field in `v`.
-    pub fn get(&self, v: &T) -> F {
-        return builtin::struct_field_get(v, self.index);
-    }
-}
-
-impl<affine T, affine F> Member for StructField<T, F> {
-    fn name(&self) -> String {
-        return self.field_name;
-    }
-
-    fn wire_name_override(&self) -> Option<String> {
-        return self.wire_override;
-    }
-
-    fn doc(&self) -> Option<String> {
-        return self.doc;
-    }
-}
-
-// The member handles are sealed against reflection (WEP 2026-06-13), so
-// they cannot use the `ReflectStruct` derivations above and write their own
-// impls instead. The output matches what a derived struct produces.
-
-// `Option<String>`'s own `Inspect` is synthesized in `prelude/types.wado`,
-// which is not yet resolvable while this module is elaborated. Render the two
-// cases directly, matching what the variant derive emits.
-internal fn inspect_option_string(v: &Option<String>, f: &mut Formatter) {
-    match v {
-        Option::Some(s) => {
-            f.write_str("Option::Some(");
-            s.inspect(f);
-            f.write_str(")");
-        },
-        Option::None => {
-            f.write_str("Option::None");
-        },
-    }
-}
-
-/// Opens `Name { `, or `Name {` and an indent under the alternate form.
-internal fn struct_open(f: &mut Formatter, name: String) {
-    if f.alternate {
-        f.open_brace(name + " {");
-        return;
-    }
-    f.write_str(&name);
-    f.write_str(" { ");
-}
-
-/// Writes the separator before a field, then its `name: ` label.
-internal fn struct_field(f: &mut Formatter, name: String, first: bool) {
-    if f.alternate {
-        f.write_newline_indent();
-    } else if !first {
-        f.write_str(", ");
-    }
-    f.write_str(&name);
-    f.write_str(": ");
-}
-
-/// Closes the field a `struct_field` label opened.
-internal fn struct_field_end(f: &mut Formatter) {
-    if f.alternate {
-        f.write_str(",");
-    }
-}
-
-/// Closes what `struct_open` opened.
-internal fn struct_close(f: &mut Formatter) {
-    if f.alternate {
-        f.close_brace("}");
-        return;
-    }
-    f.write_str(" }");
-}
-
-impl<affine T, affine F> Inspect for StructField<T, F> {
-    fn inspect(&self, f: &mut Formatter) {
-        struct_open(f, "StructField");
-        struct_field(f, "index", true);
-        self.index.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "field_name", false);
-        self.field_name.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "wire_override", false);
-        inspect_option_string(&self.wire_override, f);
-        struct_field_end(f);
-        struct_field(f, "has_default", false);
-        self.has_default.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "is_secret", false);
-        self.is_secret.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "doc", false);
-        inspect_option_string(&self.doc, f);
-        struct_field_end(f);
-        struct_close(f);
-    }
-}
-
-impl<affine T, affine P> Inspect for VariantCase<T, P> {
-    fn inspect(&self, f: &mut Formatter) {
-        struct_open(f, "VariantCase");
-        struct_field(f, "index", true);
-        self.index.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "case_name", false);
-        self.case_name.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "wire_override", false);
-        inspect_option_string(&self.wire_override, f);
-        struct_field_end(f);
-        struct_field(f, "is_unit", false);
-        self.is_unit.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "doc", false);
-        inspect_option_string(&self.doc, f);
-        struct_field_end(f);
-        struct_close(f);
-    }
-}
-
-impl<T: Inspect> Inspect for EnumCase<T> {
-    fn inspect(&self, f: &mut Formatter) {
-        struct_open(f, "EnumCase");
-        struct_field(f, "discriminant", true);
-        self.discriminant.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "value", false);
-        self.value.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "case_name", false);
-        self.case_name.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "wire_override", false);
-        inspect_option_string(&self.wire_override, f);
-        struct_field_end(f);
-        struct_field(f, "doc", false);
-        inspect_option_string(&self.doc, f);
-        struct_field_end(f);
-        struct_close(f);
-    }
-}
-
-impl<T: Inspect> Inspect for FlagsBit<T> {
-    fn inspect(&self, f: &mut Formatter) {
-        struct_open(f, "FlagsBit");
-        struct_field(f, "bit", true);
-        self.bit.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "value", false);
-        self.value.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "member_name", false);
-        self.member_name.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "doc", false);
-        inspect_option_string(&self.doc, f);
-        struct_field_end(f);
-        struct_close(f);
-    }
-}
-
-impl<T, affine V> Inspect for TemplateHole<T, V> {
-    fn inspect(&self, f: &mut Formatter) {
-        struct_open(f, "TemplateHole");
-        struct_field(f, "index", true);
-        self.index.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "spec", false);
-        inspect_option_string(&self.spec, f);
-        struct_field_end(f);
-        struct_close(f);
-    }
 }
 
 /// Marker for reference-identity types: those whose value is a Wasm GC
@@ -1286,6 +654,7 @@ pub trait UpperExp with () {
     fn fmt_upper_exp(&self, f: &mut Formatter);
 }
 
+<<<<<<< HEAD
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
 #[compiler_item("iterator")]
@@ -1777,6 +1146,495 @@ impl<affine I: Iterator> ForOf for I {
     }
 }
 
+||||||| cb4f66e2c
+/// The core iterator trait for sequences of values.
+/// Types implementing this trait can be iterated over using `for-of` loops.
+#[compiler_item("iterator")]
+pub affine trait Iterator with _ {
+    type Item;
+
+    /// Advances the iterator and returns the next value.
+    /// Returns None when iteration is complete.
+    fn next(&mut self) -> Option<Self::Item>;
+
+    /// Collects the remaining elements into any `FromIterator` target,
+    /// defaulting to `List<Self::Item>`.
+    fn collect<C: FromIterator<Elem = Self::Item> = List<Self::Item>>(&mut self) -> C {
+        return C::from_iter(self);
+    }
+
+    /// Counts the number of remaining elements in the iterator.
+    fn count(&mut self) -> i32 {
+        let mut n = 0;
+        while let Some(_) = self.next() {
+            n += 1;
+        }
+        return n;
+    }
+
+    /// Transforms each element using a function.
+    fn map<U, effect E, F: fn mut(Self::Item) -> U with E>(self, f: F) -> IterMap<Self, F> with () {
+        return IterMap { inner: self, f };
+    }
+
+    /// Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
+    /// Always returns a value (unlike `reduce`, which returns None for empty iterators).
+    fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc with _) -> Acc with _ {
+        let mut acc = init;
+        while let Some(item) = self.next() {
+            acc = f(acc, item);
+        }
+        return acc;
+    }
+
+    /// Calls `f` for every remaining element. Consumes the iterator.
+    fn for_each(&mut self, mut f: fn mut(Self::Item) with _) with _ {
+        while let Some(item) = self.next() {
+            f(item);
+        }
+    }
+
+    /// Returns the first element for which `pred` returns true, advancing the iterator up to that point.
+    fn find(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> Option<Self::Item> with _ {
+        while let Some(item) = self.next() {
+            if pred(item) {
+                return Option::Some(item);
+            }
+        }
+        return null;
+    }
+
+    /// Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
+    /// Short-circuits: stops advancing the iterator as soon as a matching element is found.
+    fn any(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> bool with _ {
+        while let Some(item) = self.next() {
+            if pred(item) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Returns true if `pred` returns true for every element (∀). True for empty iterators.
+    /// Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
+    fn all(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> bool with _ {
+        while let Some(item) = self.next() {
+            if !pred(item) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Advances the entire iterator and returns the last element, or None if empty.
+    fn last(&mut self) -> Option<Self::Item> {
+        let mut result: Option<Self::Item> = null;
+        while let Some(item) = self.next() {
+            result = Option::Some(item);
+        }
+        return result;
+    }
+
+    /// Returns the nth element (0-indexed), advancing the iterator up to and including it.
+    fn nth(&mut self, n: i32) -> Option<Self::Item> {
+        let mut remaining = n;
+        while let Some(item) = self.next() {
+            if remaining <= 0 {
+                return Option::Some(item);
+            }
+            remaining -= 1;
+        }
+        return null;
+    }
+
+    /// Returns the 0-based index of the first element for which `pred` returns true, or None.
+    fn position(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> Option<i32> with _ {
+        let mut idx = 0;
+        while let Some(item) = self.next() {
+            if pred(item) {
+                return Option::Some(idx);
+            }
+            idx += 1;
+        }
+        return null;
+    }
+
+    /// Reduces elements to a single value without an initial accumulator.
+    /// Returns None if the iterator is empty.
+    fn reduce(&mut self, mut f: fn mut(Self::Item, Self::Item) -> Self::Item with _) -> Option<Self::Item> with _ {
+        if let Some(first) = self.next() {
+            let mut acc = first;
+            while let Some(item) = self.next() {
+                acc = f(acc, item);
+            }
+            return Option::Some(acc);
+        }
+        return null;
+    }
+
+    /// Returns an adapter that skips elements for which `pred` returns false.
+    fn filter<effect E, F: fn mut(Self::Item) -> bool with E>(self, pred: F) -> IterFilter<Self, F> with () {
+        return IterFilter { inner: self, pred };
+    }
+
+    /// Returns an adapter that yields `[i, element]` tuples, where `i` starts at 0.
+    fn enumerate(self) -> IterEnumerate<Self> with () {
+        return IterEnumerate { inner: self, count: 0 };
+    }
+
+    /// Returns an adapter that stops after yielding at most `n` elements.
+    fn take(self, n: i32) -> IterTake<Self> with () {
+        return IterTake { inner: self, remaining: n };
+    }
+
+    /// Returns an adapter that discards the first `n` elements before yielding the rest.
+    fn skip(self, n: i32) -> IterSkip<Self> with () {
+        return IterSkip { inner: self, remaining: n };
+    }
+
+    /// Returns an adapter that yields the first element, then every `step`-th after it.
+    fn step_by(self, step: i32) -> IterStepBy<Self> with ()
+        contract step > 0
+    {
+        return IterStepBy { inner: self, gap: step - 1, started: false };
+    }
+
+    /// Returns an adapter that yields all elements of `self`, then all elements of `other`.
+    fn chain<affine J: Iterator<Item = Self::Item>>(self, other: J) -> IterChain<Self, J> with () {
+        return IterChain { first: self, second: other, first_done: false };
+    }
+
+    /// Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
+    fn zip<affine J: Iterator>(self, other: J) -> IterZip<Self, J> with () {
+        return IterZip { first: self, second: other };
+    }
+
+    /// Adds the remaining elements. None for an empty iterator.
+    fn sum<S: Sum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<S> {
+        return S::sum_iter(self);
+    }
+
+    /// Multiplies the remaining elements. None for an empty iterator.
+    fn product<P: Product<Elem = Self::Item> = Self::Item>(&mut self) -> Option<P> {
+        return P::product_iter(self);
+    }
+
+    /// The smallest remaining element, the first on ties. None for an empty iterator.
+    fn min<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E> {
+        return E::min_iter(self);
+    }
+
+    /// The largest remaining element, the last on ties. None for an empty iterator.
+    fn max<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E> {
+        return E::max_iter(self);
+    }
+
+    /// The smallest remaining element under `cmp`, the first on ties.
+    fn min_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering with _) -> Option<Self::Item> with _ {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            while let Some(item) = self.next() {
+                if let _::Less = cmp(&item, &best) {
+                    best = item;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
+
+    /// The largest remaining element under `cmp`, the last on ties.
+    fn max_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering with _) -> Option<Self::Item> with _ {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            while let Some(item) = self.next() {
+                if cmp(&best, &item) != Ordering::Greater {
+                    best = item;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
+
+    /// The remaining element with the smallest `key`, the first on ties.
+    fn min_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K with _) -> Option<Self::Item> with _ {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            let mut best_key = key(first);
+            while let Some(item) = self.next() {
+                let item_key = key(item);
+                if let _::Less = item_key.cmp(&best_key) {
+                    best = item;
+                    best_key = item_key;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
+
+    /// The remaining element with the largest `key`, the last on ties.
+    fn max_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K with _) -> Option<Self::Item> with _ {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            let mut best_key = key(first);
+            while let Some(item) = self.next() {
+                let item_key = key(item);
+                if best_key.cmp(&item_key) != Ordering::Greater {
+                    best = item;
+                    best_key = item_key;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
+}
+
+/// Generic map iterator adapter that wraps any Iterator. Its type carries the
+/// function's, so advancing it performs what the function does.
+pub struct IterMap<affine I: Iterator, F> {
+    pub inner: I,
+    pub f: F,
+}
+
+impl<affine I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator for IterMap<I, F> {
+    type Item = U;
+
+    fn next(&mut self) -> Option<Self::Item> with E {
+        if let Some(item) = self.inner.next() {
+            return Option::Some((self.f)(item));
+        }
+        return null;
+    }
+}
+
+// Its own impl: through the blanket one over `Iterator`, `into_iter` is
+// charged the effects of the function the adapter holds.
+impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> IntoIterator for IterMap<I, F> {
+    type Item = U;
+    type Iter = IterMap<I, F>;
+
+    fn into_iter(&self) -> IterMap<I, F> {
+        return *self;
+    }
+}
+
+/// Generic filter iterator adapter that wraps any Iterator. Its type carries
+/// the predicate's, so advancing it performs what the predicate does.
+pub struct IterFilter<affine I: Iterator, F> {
+    pub inner: I,
+    pub pred: F,
+}
+
+impl<affine I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> Iterator for IterFilter<I, F> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> with E {
+        loop {
+            if let Some(item) = self.inner.next() {
+                if (self.pred)(item) {
+                    return Option::Some(item);
+                }
+            } else {
+                return null;
+            }
+        }
+    }
+}
+
+// Its own impl, as `IterMap`'s is.
+impl<I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> IntoIterator for IterFilter<I, F> {
+    type Item = I::Item;
+    type Iter = IterFilter<I, F>;
+
+    fn into_iter(&self) -> IterFilter<I, F> {
+        return *self;
+    }
+}
+
+/// Generic enumerate iterator adapter that yields (index, element) pairs.
+pub struct IterEnumerate<affine I: Iterator> {
+    pub inner: I,
+    pub count: i32,
+}
+
+impl<affine I: Iterator> Iterator for IterEnumerate<I> {
+    type Item = [i32, I::Item];
+
+    fn next(&mut self) -> Option<Self::Item> with _ {
+        if let Some(item) = self.inner.next() {
+            let idx = self.count;
+            self.count += 1;
+            return Option::Some([idx, item]);
+        }
+        return null;
+    }
+}
+
+/// Generic take iterator adapter that limits elements from any Iterator.
+pub struct IterTake<affine I: Iterator> {
+    pub inner: I,
+    pub remaining: i32,
+}
+
+impl<affine I: Iterator> Iterator for IterTake<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> with _ {
+        if self.remaining <= 0 {
+            return null;
+        }
+        if let Some(item) = self.inner.next() {
+            self.remaining -= 1;
+            return Option::Some(item);
+        }
+        self.remaining = 0;
+        return null;
+    }
+}
+
+/// Generic skip iterator adapter that skips elements from any Iterator.
+pub struct IterSkip<affine I: Iterator> {
+    pub inner: I,
+    pub remaining: i32,
+}
+
+impl<affine I: Iterator> Iterator for IterSkip<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> with _ {
+        while self.remaining > 0 {
+            if let Some(_) = self.inner.next() {
+                self.remaining -= 1;
+            } else {
+                return null;
+            }
+        }
+        return self.inner.next();
+    }
+}
+
+/// Generic step iterator adapter that yields every `gap + 1`-th element of any Iterator.
+pub struct IterStepBy<affine I: Iterator> {
+    pub inner: I,
+    pub gap: i32,
+    pub started: bool,
+}
+
+impl<affine I: Iterator> Iterator for IterStepBy<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> with _ {
+        if self.started {
+            return self.inner.nth(self.gap);
+        }
+        self.started = true;
+        return self.inner.next();
+    }
+}
+
+/// Generic chain iterator adapter that chains two iterators of the same item type.
+pub struct IterChain<affine I: Iterator, affine J: Iterator> {
+    pub first: I,
+    pub second: J,
+    pub first_done: bool,
+}
+
+impl<affine I: Iterator, affine J: Iterator<Item = I::Item>> Iterator for IterChain<I, J> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> with _ {
+        if !self.first_done {
+            if let Some(item) = self.first.next() {
+                return Option::Some(item);
+            }
+            self.first_done = true;
+        }
+        return self.second.next();
+    }
+}
+
+/// Generic zip iterator adapter that pairs elements from two iterators.
+pub struct IterZip<affine I: Iterator, affine J: Iterator> {
+    pub first: I,
+    pub second: J,
+}
+
+impl<affine I: Iterator, affine J: Iterator> Iterator for IterZip<I, J> {
+    type Item = [I::Item, J::Item];
+
+    fn next(&mut self) -> Option<Self::Item> with _ {
+        if let Some(a) = self.first.next() {
+            if let Some(b) = self.second.next() {
+                return Option::Some([a, b]);
+            }
+        }
+        return null;
+    }
+}
+
+/// Conversion into an Iterator.
+/// Types implementing this trait can be used in `for-of` loops directly.
+#[compiler_item("into_iterator")]
+pub affine trait IntoIterator with _ {
+    type Item;
+    type Iter: Iterator<Item = Self::Item>;
+
+    /// Creates an iterator from a value.
+    fn into_iter(&self) -> Self::Iter;
+}
+
+/// Every Iterator is also an IntoIterator (returns a copy of itself).
+/// This allows `for let x of iter` to work directly on any iterator.
+impl<I: Iterator> IntoIterator for I {
+    type Item = I::Item;
+    type Iter = I;
+
+    fn into_iter(&self) -> I {
+        return *self;
+    }
+}
+
+/// An iterator walked through a reference, so what takes from it leaves the
+/// iterator itself advanced: what `for let x of &mut iter` walks.
+pub struct IterRefMut<affine I: Iterator> {
+    internal inner: &mut I,
+}
+
+impl<affine I: Iterator> Iterator for IterRefMut<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<I::Item> with _ {
+        return self.inner.next();
+    }
+}
+
+/// What `for let x of e` walks when `e` is a value of a type implementing it:
+/// the loop passes `e` to `start` and calls the state's
+/// `next(&mut self) -> Option<Item>` until it answers `None`. The loop owns
+/// what it walks, so an affine element moves into the binding once. Any other
+/// iterable is walked through its `IntoIterator`.
+#[compiler_item("for_of")]
+pub affine trait ForOf with _ {
+    affine type Item;
+    affine type State;
+
+    fn start(self) -> Self::State;
+}
+
+impl<affine I: Iterator> ForOf for I {
+    type Item = I::Item;
+    type State = I;
+
+    fn start(self) -> I {
+        return self;
+    }
+}
+
+=======
+>>>>>>> origin/main
 /// Infallible conversion trait.
 /// Implement this to define how to convert from type `T` into `Self`.
 /// Usage: `TargetType::from(value)` — the target type is always explicit.
@@ -1815,62 +1673,6 @@ impl Display for ConvertError {
 }
 
 impl Error for ConvertError {
-}
-
-/// Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
-/// bound. Implemented for every `Add<Output = Self>`.
-pub trait Sum with () {
-    type Elem;
-    fn sum_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
-}
-
-impl<T: Add<Output = T>> Sum for T {
-    type Elem = T;
-
-    fn sum_iter<affine I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
-        return iter.reduce(|a: T, b: T| a + b);
-    }
-}
-
-/// Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
-/// element bound. Implemented for every `Mul<Output = Self>`.
-pub trait Product with () {
-    type Elem;
-    fn product_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
-}
-
-impl<T: Mul<Output = T>> Product for T {
-    type Elem = T;
-
-    fn product_iter<affine I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
-        return iter.reduce(|a: T, b: T| a * b);
-    }
-}
-
-/// Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
-/// `max`'s element bound. Implemented for every `Ord`.
-pub trait Extremum with () {
-    type Elem;
-    fn min_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
-    fn max_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
-}
-
-impl<T: Ord> Extremum for T {
-    type Elem = T;
-
-    fn min_iter<affine I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
-        return iter.min_by(|a: &T, b: &T| a.cmp(b));
-    }
-
-    fn max_iter<affine I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
-        return iter.max_by(|a: &T, b: &T| a.cmp(b));
-    }
-}
-
-/// Trait for creating a collection from any iterator of `Elem`.
-pub trait FromIterator with () {
-    type Elem;
-    fn from_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _;
 }
 
 /// `..base` inside a `{ … }` literal: merge `base` into `self`, last write

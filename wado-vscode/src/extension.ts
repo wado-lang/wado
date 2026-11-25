@@ -94,7 +94,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 //
 // The `resourceLabelFormatters` contribution in `package.json` renders the
 // tab label as `core:json` / `wasi:io` instead of the bare basename `json`.
-// Submodules with a `/` (e.g. `core:prelude/types.wado`) still show just the
+// Submodules with a `/` (e.g. `core:prelude/option.wado`) still show just the
 // basename, since VS Code basenames the label; the full path stays in the
 // breadcrumb.
 function registerStdlibContentProvider(context: vscode.ExtensionContext): void {

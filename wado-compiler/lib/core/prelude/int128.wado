@@ -10,12 +10,12 @@ use {
     split_sign,
     split_plus,
     lenient_int_preprocess,
-} from "core:prelude/intparse.wado";
-use { count_digits_u64, write_decimal_digits } from "core:prelude/primitive.wado";
+} from "core:prelude/numparse.wado";
+use { count_digits_u64, write_decimal_digits } from "core:prelude/numeric.wado";
 use { u64_bit_len } from "core:prelude/fpfmt.wado";
 use { String, StrSlice, AsStrSlice } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
-use { Option, Result } from "core:prelude/types.wado";
+use { Option, Result } from "core:prelude/option.wado";
 use { Step } from "core:prelude/range.wado";
 use {
     Add,
@@ -539,7 +539,7 @@ fn round_off_digits_u128(val: u128, drop: i32) -> u128 {
     return quotient;
 }
 
-/// The 128-bit counterpart of `write_int_exp` in `core:prelude/primitive.wado`:
+/// The 128-bit counterpart of `write_int_exp` in `core:prelude/numeric.wado`:
 /// a mantissa of `precision + 1` digits, or the digits with trailing zeros
 /// stripped, then `e`/`E` and the decimal exponent.
 fn write_int_exp_128(f: &mut Formatter, is_negative: bool, abs_value: u128, upper: bool) {

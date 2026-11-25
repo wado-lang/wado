@@ -19,8 +19,14 @@
  * whose name contains NAME, which isolates a timed phase from setup (a model's
  * load from its generation loop).
  *
+ * `--callers NAME` adds a CALLERS report: for each sample whose leaf contains
+ * NAME, the nearest frame up the stack whose name does not, under the share of
+ * all samples whose leaf contains NAME. A helper the
+ * compiler calls from many places, such as `$value_copy$`, reads as one hot
+ * leaf; this names the call sites that pay for it.
+ *
  * Runs directly on Node.js >= 23.6 (type stripping is on by default):
- *   ./analyze_guest_profile.ts profile.json [--top N] [--under NAME]
+ *   ./analyze_guest_profile.ts profile.json [--top N] [--under NAME] [--callers NAME]
  */
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
@@ -37,22 +43,28 @@ const { values, positionals } = parseArgs({
   options: {
     top: { type: "string", short: "n", default: "25" },
     under: { type: "string" },
+    callers: { type: "string" },
   },
   allowPositionals: true,
 });
 
 const path = positionals[0];
 if (!path) {
-  console.error("usage: analyze_guest_profile.ts PROFILE.json [--top N] [--under NAME]");
+  console.error(
+    "usage: analyze_guest_profile.ts PROFILE.json [--top N] [--under NAME] [--callers NAME]",
+  );
   process.exit(1);
 }
 const top = Number(values.top);
 const under = values.under;
+const callee = values.callers;
 
 const data = JSON.parse(readFileSync(path, "utf8")) as { threads: Thread[] };
 
 const self = new Map<string, number>();
 const inclusive = new Map<string, number>();
+const callers = new Map<string, number>();
+let calleeTotal = 0;
 let total = 0;
 
 const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
@@ -75,6 +87,11 @@ for (const t of data.threads) {
     for (const nm of new Set(stack)) {
       bump(inclusive, nm);
     }
+    if (callee != null && stack[0].includes(callee)) {
+      calleeTotal++;
+      const caller = stack.find((nm) => !nm.includes(callee));
+      if (caller != null) bump(callers, caller);
+    }
   }
 }
 
@@ -90,3 +107,7 @@ const report = (title: string, m: Map<string, number>) => {
 console.log(`total samples: ${total}`);
 report("SELF (leaf)", self);
 report("INCLUSIVE", inclusive);
+if (callee != null) {
+  const pct = ((100 * calleeTotal) / total).toFixed(1);
+  report(`CALLERS (${calleeTotal} samples, ${pct}%, in ${callee})`, callers);
+}

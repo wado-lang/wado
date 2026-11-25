@@ -259,8 +259,6 @@ pub(crate) struct VariantInfo {
     /// follow resources nested in variant case payloads.
     pub(crate) cases: Vec<VariantCaseData>,
     /// `TypeIds` of the variant's own type parameters in declaration order.
-    /// Used by `infer_variant_type_args` to fill type params from payload args
-    /// and expected type context.
     pub(super) type_param_type_ids: Vec<TypeId>,
 }
 
@@ -953,17 +951,6 @@ pub enum TypeError {
         /// How to spell the receiver, rendered (`value`, `&value`,
         /// `&mut value`).
         spelled: String,
-        span: Span,
-    },
-
-    /// A method's own type parameters that the arguments do not settle. Left
-    /// unspelled they reach codegen unsubstituted.
-    UninferredMethodTypeArgs {
-        receiver: String,
-        method: String,
-        /// The method's own parameters the call must spell, in declaration
-        /// order. Never empty.
-        params: Vec<String>,
         span: Span,
     },
 
@@ -1800,15 +1787,24 @@ impl TypeError {
     /// [`Self::cannot_infer`]'s sentence, for a variable to raise if it is
     /// never answered.
     pub(super) fn cannot_infer_message(names: &[String], owner: &str, turbofish: &str) -> String {
+        Self::cannot_infer_naming(names, &Self::cannot_infer_owner(owner, turbofish))
+    }
+
+    /// The sentence naming `names` before `owner`, a
+    /// [`Self::cannot_infer_owner`].
+    pub(super) fn cannot_infer_naming<S: AsRef<str>>(names: &[S], owner: &str) -> String {
         let named = names
             .iter()
-            .map(|n| format!("`{}`", written_param_name(n)))
+            .map(|n| format!("`{}`", written_param_name(n.as_ref())))
             .collect::<Vec<_>>()
             .join(", ");
-        format!(
-            "cannot infer type parameter {named} of {owner}; \
-             add a turbofish ({turbofish}) or a type annotation"
-        )
+        format!("cannot infer type parameter {named} {owner}")
+    }
+
+    /// [`Self::cannot_infer_message`] past the parameters it names, which a
+    /// variable left open carries until the end of its body says which.
+    pub(super) fn cannot_infer_owner(owner: &str, turbofish: &str) -> String {
+        format!("of {owner}; add a turbofish ({turbofish}) or a type annotation")
     }
 
     /// This error as its `(code, message, span)` triple, which is what
@@ -2413,32 +2409,6 @@ impl TypeError {
                 format!(
                     "'{trait_name}::{method}' takes '{expected}'; the receiver spells its own mode: '{trait_name}::{method}({spelled}, …)'"
                 ),
-                *span,
-            ),
-            TypeError::UninferredMethodTypeArgs {
-                receiver,
-                method,
-                params,
-                span,
-            } => (
-                Code::NeedsTypeAnnotation,
-                {
-                    assert!(!params.is_empty(), "the emitter found an unspelled slot");
-                    let named = params
-                        .iter()
-                        .map(|p| format!("'{p}'"))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let (plural, verb, them) = if params.len() == 1 {
-                        ("", "is", "it")
-                    } else {
-                        ("s", "are", "them")
-                    };
-                    let spelled = params.join(", ");
-                    format!(
-                        "'{receiver}::{method}' declares the type parameter{plural} {named}, which {verb} not inferred from the arguments here; spell {them}: '{receiver}::{method}::<{spelled}>(…)'"
-                    )
-                },
                 *span,
             ),
             TypeError::AmbiguousStaticArgument {
@@ -4467,13 +4437,32 @@ pub(super) enum TraitLookup {
     /// The impls that may answer depend on what the receiver's variables
     /// settle to: the blocks the order names, each `None` for a derived body.
     Undecided(Vec<Option<DefId>>),
+    /// The impls that may answer differ only in the rows a closure argument
+    /// could meet, which its body solves once it is walked. `trait_args` is
+    /// what they agree on at each trait argument, a function type's row left
+    /// open where only the row differs.
+    AwaitsClosureRow {
+        live: Vec<Option<DefId>>,
+        trait_args: Vec<Option<TypeId>>,
+    },
 }
 
 impl TraitLookup {
+    /// The first of `matches`, which answers a call whose selection was
+    /// decided or reported, or `Missing` where there is none.
+    pub(super) fn first_of(matches: Vec<TraitMethodMatch>) -> Self {
+        matches
+            .into_iter()
+            .next()
+            .map_or(Self::Missing, |found| Self::Found(Box::new(found)))
+    }
+
     pub(super) fn found(self) -> Option<TraitMethodMatch> {
         match self {
             Self::Found(found) => Some(*found),
-            Self::Missing | Self::Reported | Self::Undecided(_) => None,
+            Self::Missing | Self::Reported | Self::Undecided(_) | Self::AwaitsClosureRow { .. } => {
+                None
+            }
         }
     }
 }

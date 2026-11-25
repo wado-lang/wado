@@ -633,7 +633,7 @@ fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {
     }
 }
 
-fn current_thread_runtime() -> tokio::runtime::Runtime {
+pub(crate) fn current_thread_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

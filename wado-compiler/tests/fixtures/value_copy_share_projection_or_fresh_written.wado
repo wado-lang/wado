@@ -1,0 +1,37 @@
+// A binding of a call that may hand back its argument's storage must not share
+// it when the argument is written while the binding is live.
+struct Range { lo: i32, hi: i32 }
+struct Class { ranges: List<Range>, neg: bool }
+
+fn holds(c: &Class, x: i32) -> bool {
+    for let r of &c.ranges {
+        if r.lo <= x && x <= r.hi { return !c.neg; }
+    }
+    return c.neg;
+}
+
+#[inline("never")]
+fn folded(c: &Class, fold: bool) -> Class {
+    if !fold {
+        return *c;
+    }
+    return Class { ranges: [], neg: c.neg };
+}
+
+#[inline("never")]
+fn count_after_write(c: &mut Class, xs: &List<i32>) -> i32 {
+    let f = folded(c, builtin::black_box(false));
+    c.ranges[0].hi = 100;
+    let mut n = 0;
+    for let x of xs { if holds(&f, *x) { n += 1; } }
+    return n;
+}
+
+test "a write to the argument keeps the copy" {
+    let mut c = Class { ranges: [Range { lo: 1, hi: 3 }], neg: false };
+    let xs: List<i32> = [2, 5];
+    assert count_after_write(&mut c, &xs) == 1;
+}
+
+__DATA__
+{"test": {}}

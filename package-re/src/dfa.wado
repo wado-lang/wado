@@ -1,11 +1,21 @@
 //! The lazy DFA: each of its states is the set of threads the Pike VM would
 //! hold at one position, built the first time a search reaches it, so a
 //! search does one table lookup for each byte it reads. It tells where a
-//! match ends, or where one starts when it runs the reversed program, and
-//! leaves the groups to the Pike VM.
+//! match ends, where one starts when it runs the reversed program, or every
+//! position a lookaround's body matches from, and leaves the groups to the
+//! Pike VM.
+//!
+//! A lookaround is part of what the DFA reads: beside each byte, the bits
+//! saying which lookarounds' bodies match at the position the byte leads
+//! to. So a state never waits on one, and a pattern's lookarounds widen each
+//! row of the table by a factor of two apiece.
 
 use { HashMap } from "core:collections";
-use { Direction, Look, Program } from "./program.wado";
+use { Oracle } from "./oracle.wado";
+use { Direction, Look, LookaroundPrograms, Program } from "./program.wado";
+
+/// How many lookarounds a pattern may hold for the DFAs to run its programs.
+global MAX_DFA_LOOKAROUNDS: i32 = 3;
 
 /// How many transitions a DFA may hold. Some patterns reach a number of states
 /// exponential in their size, and a search that would pass this gives up
@@ -29,9 +39,13 @@ global NO_IDLE: i32 = -2;
 /// others. The skip pays where it runs long, so where few bytes end it.
 global MAX_IDLE_EXITS: i32 = 16;
 
-/// Whether the DFA can run `program`: it resolves `^` and `$` outside `m` at
-/// the ends of the text, and no other assertion.
-internal fn runs(program: &Program) -> bool {
+/// Whether the DFA can run `program`, whose pattern holds `lookarounds`
+/// lookarounds: it resolves `^` and `$` outside `m` at the ends of the text,
+/// and no other assertion.
+internal fn runs(program: &Program, lookarounds: i32) -> bool {
+    if lookarounds > MAX_DFA_LOOKAROUNDS {
+        return false;
+    }
     for let inst of &program.insts {
         if let Assert(look) = *inst && !look matches { _::StartText | _::EndText } {
             return false;
@@ -40,15 +54,35 @@ internal fn runs(program: &Program) -> bool {
     return true;
 }
 
+/// What a DFA's scan tells.
+internal enum Scan {
+    /// Where the leftmost-first match ends: a thread starts at every position
+    /// until a match is found, and the threads keep the Pike VM's order.
+    End,
+    /// Where a match that ends where the scan starts may start. It asks only
+    /// what matches, not which match is preferred, so a thread is its
+    /// instruction alone and every `Progress` passes: an empty iteration adds
+    /// nothing to what matches.
+    Start,
+    /// Every position a match ends at, read the way the program reads: a
+    /// thread starts at every position. It asks what `Start` asks.
+    Every,
+}
+
 internal struct Dfa {
     program: Program,
-    direction: Direction,
+    scan: Scan,
+    /// How many bits of lookarounds a transition reads above its byte: the
+    /// pattern's count where the program holds a lookaround, and else none.
+    looks: i32,
+    /// The bits of the negated lookarounds, which hold where theirs is unset.
+    negated: i32,
     /// The class of each byte: two bytes share one when every `Byte` of the
     /// program takes both or neither.
     class_of: List<u8>,
-    /// `transitions[state * 256 + byte]`. A row is as wide as the bytes are,
-    /// not the classes, so that a scan reads one table for each byte and not
-    /// two.
+    /// `transitions[(state << 8 + looks) + (bits << 8) + byte]`. A row is as
+    /// wide as the bytes are, not the classes, so that a scan reads one table
+    /// for each byte and not two.
     transitions: List<i32>,
     /// State `i`'s key is `keys[bounds[i]..<bounds[i + 1]]`: whether a match
     /// was found before it, then its threads in priority order, each an
@@ -57,7 +91,8 @@ internal struct Dfa {
     /// the scan ends.
     keys: List<i32>,
     bounds: List<i32>,
-    /// Whether a state accepts where the scan ends: -1 until asked.
+    /// Whether a state accepts where the scan ends, under each setting of
+    /// the bits there: -1 until asked.
     accepts_at_end: List<i32>,
     /// The state each key names, as a transition holds it.
     index: HashMap<List<i32>, i32>,
@@ -65,8 +100,8 @@ internal struct Dfa {
     /// list being built.
     seen: List<i32>,
     stamp: i32,
-    /// The state a scan starts in, by whether it starts where the text does;
-    /// `UNKNOWN` until one did.
+    /// The state a scan starts in, by the bits where it starts and whether
+    /// that is where the text does; `UNKNOWN` until one did.
     starts: List<i32>,
     /// The state a forward scan waits in for a match to start, where few
     /// bytes start one; `UNKNOWN` until the first scan, and `NO_IDLE` where
@@ -80,13 +115,24 @@ internal struct Dfa {
 }
 
 impl Dfa {
-    internal fn new(program: Program, direction: Direction) -> Dfa {
+    /// The DFA of `program`, whose pattern holds `lookarounds`.
+    internal fn new(program: Program, scan: Scan, lookarounds: &List<LookaroundPrograms>) -> Dfa
+        contract runs(&program, lookarounds.len())
+    {
         let mut starts_class: List<bool> = List::filled(257, false);
+        let mut looks = 0;
         for let inst of &program.insts {
             if let Byte([lo, hi]) = *inst {
                 starts_class[lo as i32] = true;
                 starts_class[hi as i32 + 1] = true;
             }
+            if *inst matches { Lookaround(_) } {
+                looks = lookarounds.len();
+            }
+        }
+        let mut negated = 0;
+        for let index of 0..<lookarounds.len() {
+            negated |= lookarounds[index].negated as i32 << index;
         }
         let mut class_of: List<u8> = [];
         let mut class: u8 = 0;
@@ -96,10 +142,12 @@ impl Dfa {
             }
             class_of.push(class);
         }
-        let seen: List<i32> = List::filled(program.state_base[program.insts.len()], -1);
+        let seen: List<i32> = List::filled(program.states(), -1);
         return Dfa {
             program,
-            direction,
+            scan,
+            looks,
+            negated,
             class_of,
             transitions: [],
             keys: [],
@@ -108,7 +156,7 @@ impl Dfa {
             index: HashMap::<List<i32>, i32>::new(),
             seen,
             stamp: 0,
-            starts: [UNKNOWN, UNKNOWN],
+            starts: List::filled(2 << looks, UNKNOWN),
             idle: UNKNOWN,
             idles_on: [],
             exit: -1,
@@ -118,16 +166,23 @@ impl Dfa {
 
     /// The assertion that holds only where the scan starts.
     fn start_look(&self) -> Look {
-        return if self.direction == Direction::Reverse { Look::EndText } else { Look::StartText };
+        return if self.program.direction == Direction::Reverse { Look::EndText } else { Look::StartText };
+    }
+
+    /// Whether a thread starts at a position reached after a match if `found`.
+    fn restarts(&self, found: bool) -> bool {
+        return match self.scan {
+            _::End => !found,
+            _::Start => false,
+            _::Every => true,
+        };
     }
 
     /// Follows every instruction that consumes nothing from `from`, as the Pike
-    /// VM's `add` does, appending the threads it reaches to `out`. A reverse
-    /// scan asks only what matches, not which match is preferred, so there a
-    /// thread is its instruction alone and every `Progress` passes: an empty
-    /// iteration adds nothing to what matches.
-    fn close(&mut self, from: i32, at_start: bool, at_end: bool, out: &mut List<i32>) {
-        let forward = self.direction == Direction::Forward;
+    /// VM's `add` does, appending the threads it reaches to `out`. `bits` says
+    /// which lookarounds' bodies match here.
+    fn close(&mut self, from: i32, bits: i32, at_start: bool, at_end: bool, out: &mut List<i32>) {
+        let forward = self.scan == Scan::End;
         let start_look = self.start_look();
         let mut stack: List<i32> = [from, 0];
         while let Some(came_entered) = stack.pop() {
@@ -184,6 +239,12 @@ impl Dfa {
                 },
                 _::Fail => {
                 },
+                Lookaround([index, _]) => {
+                    if (bits ^ self.negated) >> index & 1 != 0 {
+                        stack.push(pc + 1);
+                        stack.push(entered);
+                    }
+                },
                 Byte(_) | _::Match => {
                     out.push(pc);
                     out.push(0);
@@ -196,7 +257,7 @@ impl Dfa {
     fn intern(&mut self, found: bool, threads: List<i32>) -> i32 {
         let mut key: List<i32> = [found as i32];
         let mut accept = false;
-        if self.direction == Direction::Forward {
+        if self.scan == Scan::End {
             for let i of 0..<threads.len() / 2 {
                 key.push(threads[2 * i]);
                 key.push(threads[2 * i + 1]);
@@ -222,46 +283,51 @@ impl Dfa {
         if let Some(state) = self.index.get(key) {
             return state;
         }
-        let mut state = self.accepts_at_end.len() << 2;
+        let mut state = self.bounds.len() - 1 << 2;
         if accept {
             state |= ACCEPT;
         }
-        if key.len() == 1 {
+        // With no thread left nothing matches from here on, unless one may
+        // start further on that a lookaround kept from starting here.
+        if key.len() == 1 && (self.looks == 0 || !self.restarts(found)) {
             state |= DEAD;
         }
         for let k of &key {
             self.keys.push(*k);
         }
         self.bounds.push(self.keys.len());
-        self.accepts_at_end.push(-1);
-        for let _b of 0..<256 {
+        for let _m of 0..<1 << self.looks {
+            self.accepts_at_end.push(-1);
+        }
+        for let _b of 0..<256 << self.looks {
             self.transitions.push(UNKNOWN);
         }
         self.index.try_insert(key, state);
         return state;
     }
 
-    /// The state a scan starts in. A forward scan starts a thread at every
-    /// position until it finds a match, a reverse one only where it starts.
-    fn start(&mut self, at_start: bool) -> i32 {
-        let slot = at_start as i32;
+    /// The state a scan starts in, where `bits` is `close`'s.
+    fn start(&mut self, at_start: bool, bits: i32) -> i32 {
+        let slot = (bits << 1) + at_start as i32;
         if self.starts[slot] == UNKNOWN {
             let mut threads: List<i32> = [];
             self.stamp += 1;
-            self.close(0, at_start, false, &mut threads);
+            self.close(0, bits, at_start, false, &mut threads);
             self.starts[slot] = self.intern(false, threads);
         }
         return self.starts[slot];
     }
 
-    /// Fills the transitions leaving state `from` on `byte` and on every byte
-    /// of its class.
-    fn step(&mut self, from: i32, byte: u8) -> i32 {
+    /// Fills the transitions leaving state `from` on `symbol`, a byte below
+    /// the bits of the position it leads to, and on every byte of its class
+    /// under those bits.
+    fn step(&mut self, from: i32, symbol: i32) -> i32 {
         if self.transitions.len() >= MAX_TRANSITIONS || self.keys.len() >= 2 * MAX_STATE_THREADS {
             self.gave_up = true;
             return DEAD;
         }
-        let forward = self.direction == Direction::Forward;
+        let byte = (symbol & 255) as u8;
+        let bits = symbol >> 8;
         let mut found = self.keys[self.bounds[from]] != 0;
         let mut threads: List<i32> = [];
         self.stamp += 1;
@@ -270,25 +336,26 @@ impl Dfa {
             match self.program.insts[pc] {
                 Byte([lo, hi]) => {
                     if byte >= lo && byte <= hi {
-                        self.close(pc + 1, false, false, &mut threads);
+                        self.close(pc + 1, bits, false, false, &mut threads);
                     }
                 },
                 // A new start has the lowest priority, and none is tried once
                 // a match is found.
-                _::Match => found = found || forward,
+                _::Match => found = found || self.scan == Scan::End,
                 // An assertion about the scan's end, which is not here.
                 _ => {
                 },
             }
         }
-        if forward && !found {
-            self.close(0, false, false, &mut threads);
+        if self.restarts(found) {
+            self.close(0, bits, false, false, &mut threads);
         }
         let to = self.intern(found, threads);
         let class = self.class_of[byte as i32];
+        let row = (from << 8 + self.looks) + (bits << 8);
         for let b of 0..<256 {
             if self.class_of[b] == class {
-                self.transitions[from * 256 + b] = to;
+                self.transitions[row + b] = to;
             }
         }
         return to;
@@ -297,10 +364,10 @@ impl Dfa {
     /// Settles `idle`: the state a scan starts in past the text's start, if
     /// it reports nothing and few bytes leave it.
     fn find_idle(&mut self) {
-        let state = self.start(false);
+        let state = self.start(false, 0);
         let mut exits = 0;
         for let b of 0..<256 {
-            let stays = self.next(state, b as u8) == state;
+            let stays = self.next(state, b) == state;
             self.idles_on.push(stays as u8);
             if !stays {
                 exits += 1;
@@ -314,16 +381,17 @@ impl Dfa {
         self.idle = if reports || exits > MAX_IDLE_EXITS { NO_IDLE } else { state };
     }
 
-    /// The state `state` leads to on `byte`.
-    fn next(&mut self, state: i32, byte: u8) -> i32 {
-        let next = self.transitions[(state >> 2 << 8) + byte as i32];
-        return if next == UNKNOWN { self.step(state >> 2, byte) } else { next };
+    /// The state `state` leads to on `symbol`.
+    fn next(&mut self, state: i32, symbol: i32) -> i32 {
+        let next = self.transitions[(state >> 2 << 8 + self.looks) + symbol];
+        return if next == UNKNOWN { self.step(state >> 2, symbol) } else { next };
     }
 
     /// Whether `state` accepts where the scan ends, which is not where it
-    /// started.
-    fn accepts_end(&mut self, state: i32) -> bool {
-        if self.accepts_at_end[state] < 0 {
+    /// started, under the `bits` there.
+    fn accepts_end(&mut self, state: i32, bits: i32) -> bool {
+        let slot = (state << self.looks) + bits;
+        if self.accepts_at_end[slot] < 0 {
             let mut threads: List<i32> = [];
             self.stamp += 1;
             for let i of (self.bounds[state] + 1..<self.bounds[state + 1]).step_by(2) {
@@ -335,31 +403,36 @@ impl Dfa {
                         threads.push(pc);
                         threads.push(0);
                     },
-                    _ => self.close(pc + 1, false, true, &mut threads),
+                    _ => self.close(pc + 1, bits, false, true, &mut threads),
                 }
             }
             let mut accepts = false;
             for let i of (0..<threads.len()).step_by(2) {
                 accepts = accepts || self.program.insts[threads[i]] matches { _::Match };
             }
-            self.accepts_at_end[state] = accepts as i32;
+            self.accepts_at_end[slot] = accepts as i32;
         }
-        return self.accepts_at_end[state] == 1;
+        return self.accepts_at_end[slot] == 1;
     }
 
     /// Where the leftmost-first match at or after `start` ends, or, under
-    /// `earliest`, where any match does. `text` is not empty, and the answer
-    /// means nothing once the DFA gave up.
-    internal fn scan_forward(&mut self, text: StrSlice, start: i32, earliest: bool) -> Option<i32>
+    /// `earliest`, where any match does. `text` is not empty, `oracle` is its
+    /// own where the program reads a lookaround, and the answer means nothing
+    /// once the DFA gave up.
+    internal fn scan_forward(&mut self, text: StrSlice, oracle: &Oracle, start: i32, earliest: bool) -> Option<i32>
         contract !text.is_empty()
     {
         let len = text.len();
+        let shift = 8 + self.looks;
         if self.idle == UNKNOWN {
             self.find_idle();
         }
-        let mut state = self.start(start == 0);
+        let mut state = self.start(start == 0, self.bits_at(oracle, start));
         let mut end: Option<i32> = null;
         let mut pos = start;
+        // The first position past `pos` where a lookaround's body may match,
+        // as of the last time the scan idled.
+        let mut marked = pos;
         loop {
             if state & ACCEPT != 0 {
                 end = Some(pos);
@@ -371,15 +444,21 @@ impl Dfa {
                 return end;
             }
             if state == self.idle {
+                if self.looks > 0 && marked <= pos {
+                    marked = oracle.next_marked(pos + 1);
+                }
+                // Every step short of here leads to a position where no
+                // body matches, so the byte alone tells whether it idles.
+                let unmarked = if self.looks == 0 || marked > len { len } else { marked - 1 };
                 // Up to the byte that leaves, so that the run below starts
                 // on it and does not hand back at once.
                 if self.exit >= 0 {
                     let exit = self.exit as u8;
-                    while pos < len && unchecked text.byte_at(pos) != exit {
+                    while pos < unmarked && unchecked text.byte_at(pos) != exit {
                         pos += 1;
                     }
                 } else {
-                    while pos < len && unchecked self.idles_on[unchecked text.byte_at(pos) as i32] != 0 {
+                    while pos < unmarked && unchecked self.idles_on[unchecked text.byte_at(pos) as i32] != 0 {
                         pos += 1;
                     }
                 }
@@ -388,37 +467,72 @@ impl Dfa {
             // included: it sets both flags. It stops back in the idle state,
             // for the skip above to take over.
             let mut next = state;
-            while pos < len {
-                let byte = unchecked text.byte_at(pos);
-                next = unchecked self.transitions[(state >> 2 << 8) + byte as i32];
-                if next & (ACCEPT | DEAD) != 0 {
-                    break;
+            let mut symbol = 0;
+            if self.looks == 0 {
+                while pos < len {
+                    symbol = unchecked text.byte_at(pos) as i32;
+                    next = unchecked self.transitions[(state >> 2 << 8) + symbol];
+                    if next & (ACCEPT | DEAD) != 0 {
+                        break;
+                    }
+                    state = next;
+                    pos += 1;
+                    if state == self.idle {
+                        break;
+                    }
                 }
-                state = next;
-                pos += 1;
-                if state == self.idle {
-                    break;
+            } else {
+                while pos < len {
+                    symbol = (unchecked oracle.bits[pos + 1] as i32 << 8) + unchecked text.byte_at(pos) as i32;
+                    next = unchecked self.transitions[(state >> 2 << shift) + symbol];
+                    if next & (ACCEPT | DEAD) != 0 {
+                        break;
+                    }
+                    state = next;
+                    pos += 1;
+                    if state == self.idle {
+                        break;
+                    }
                 }
             }
             if pos == len {
-                if self.accepts_end(state >> 2) {
+                if self.accepts_end(state >> 2, self.bits_at(oracle, len)) {
                     end = Some(len);
                 }
                 return end;
             }
             if next & (ACCEPT | DEAD) != 0 {
-                state = self.next(state, text.byte_at(pos));
+                state = self.next(state, symbol);
                 pos += 1;
             }
         }
     }
 
+    /// For each byte, whether the program matches it alone, unless the DFA
+    /// gives up.
+    internal fn matches_byte(&mut self) -> Option<List<bool>> {
+        assert self.looks == 0;
+        let mut matched: List<bool> = [];
+        let start = self.start(false, 0);
+        for let b of 0..<256 {
+            matched.push(self.next(start, b) & ACCEPT != 0);
+        }
+        return if self.gave_up { null } else { Some(matched) };
+    }
+
+    /// Which lookarounds' bodies match at `pos`, for a transition to read.
+    fn bits_at(&self, oracle: &Oracle, pos: i32) -> i32 {
+        return if self.looks == 0 { 0 } else { oracle.bits[pos] as i32 };
+    }
+
     /// Where the match ending at `end` and starting leftmost, no further left
-    /// than `floor`, starts. `text` is not empty and holds such a match.
-    internal fn scan_reverse(&mut self, text: StrSlice, floor: i32, end: i32) -> i32
+    /// than `floor`, starts. `text` is not empty and holds such a match, and
+    /// `oracle` is `scan_forward`'s.
+    internal fn scan_reverse(&mut self, text: StrSlice, oracle: &Oracle, floor: i32, end: i32) -> i32
         contract !text.is_empty()
     {
-        let mut state = self.start(end == text.len());
+        let shift = 8 + self.looks;
+        let mut state = self.start(end == text.len(), self.bits_at(oracle, end));
         let mut start = -1;
         let mut pos = end;
         loop {
@@ -428,25 +542,93 @@ impl Dfa {
             if state & DEAD != 0 {
                 break;
             }
-            while pos > floor {
-                let byte = unchecked text.byte_at(pos - 1);
-                let next = unchecked self.transitions[(state >> 2 << 8) + byte as i32];
-                if next & (ACCEPT | DEAD) != 0 {
-                    break;
+            let mut symbol = 0;
+            if self.looks == 0 {
+                while pos > floor {
+                    symbol = unchecked text.byte_at(pos - 1) as i32;
+                    let next = unchecked self.transitions[(state >> 2 << 8) + symbol];
+                    if next & (ACCEPT | DEAD) != 0 {
+                        break;
+                    }
+                    state = next;
+                    pos -= 1;
                 }
-                state = next;
-                pos -= 1;
+            } else {
+                while pos > floor {
+                    symbol = (unchecked oracle.bits[pos - 1] as i32 << 8) + unchecked text.byte_at(pos - 1) as i32;
+                    let next = unchecked self.transitions[(state >> 2 << shift) + symbol];
+                    if next & (ACCEPT | DEAD) != 0 {
+                        break;
+                    }
+                    state = next;
+                    pos -= 1;
+                }
             }
             if pos == floor {
-                if floor == 0 && self.accepts_end(state >> 2) {
+                if floor == 0 && self.accepts_end(state >> 2, self.bits_at(oracle, 0)) {
                     start = 0;
                 }
                 break;
             }
-            state = self.next(state, text.byte_at(pos - 1));
+            state = self.next(state, symbol);
             pos -= 1;
         }
         assert start >= 0 || self.gave_up;
         return start;
+    }
+
+    /// Records in `oracle` each position a match of the program ends at, as
+    /// one where the body of lookaround `index` matches. The bits above
+    /// `index` are those of the lookarounds the program may read, and are
+    /// settled; `text` is not empty. Once the DFA gave up, what it recorded
+    /// means nothing.
+    internal fn mark(&mut self, text: StrSlice, oracle: &mut Oracle, index: i32)
+        contract !text.is_empty()
+    {
+        assert self.scan == Scan::Every;
+        let settled = if self.looks == 0 { 0 } else { -1 << index + 1 };
+        let lookarounds = &oracle.bits;
+        let shift = 8 + self.looks;
+        if self.looks == 0 && self.idle == UNKNOWN {
+            self.find_idle();
+        }
+        // `behind` is how far before a position the byte a step reads lies.
+        let [mut pos, limit, step, behind] = if self.program.direction == Direction::Forward {
+            [0, text.len(), 1, 0];
+        } else {
+            [text.len(), 0, -1, 1];
+        };
+        let mut state = self.start(true, lookarounds[pos] as i32 & settled);
+        while pos != limit {
+            if state == self.idle {
+                if self.exit >= 0 {
+                    let exit = self.exit as u8;
+                    while pos != limit && unchecked text.byte_at(pos - behind) != exit {
+                        pos += step;
+                    }
+                } else {
+                    while pos != limit && unchecked self.idles_on[unchecked text.byte_at(pos - behind) as i32] != 0 {
+                        pos += step;
+                    }
+                }
+                if pos == limit {
+                    break;
+                }
+            }
+            if state & ACCEPT != 0 {
+                oracle.set(text, index, pos);
+            }
+            let byte = unchecked text.byte_at(pos - behind) as i32;
+            pos += step;
+            let symbol = ((unchecked lookarounds[pos] as i32 & settled) << 8) + byte;
+            let next = unchecked self.transitions[(state >> 2 << shift) + symbol];
+            state = if next == UNKNOWN { self.step(state >> 2, symbol) } else { next };
+            if self.gave_up {
+                return;
+            }
+        }
+        if state & ACCEPT != 0 || self.accepts_end(state >> 2, lookarounds[pos] as i32 & settled) {
+            oracle.set(text, index, pos);
+        }
     }
 }
