@@ -7,6 +7,7 @@
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
+use crate::parallel::Executor;
 use value_copy::callgraph::SpecializedCalls;
 
 pub mod boxing;
@@ -29,6 +30,7 @@ pub fn plan(
     flat: &mut FlatPackage,
     errors: &dyn ErrorSink,
     profiler: &dyn SpanEmitter,
+    exec: &Executor,
 ) -> Result<LowerPlan, Bail> {
     in_span(profiler, "lower/globals", || globals::extract(flat, errors))?;
     // The write-back and boxing ask which types are affine.
@@ -85,6 +87,7 @@ pub fn plan(
         &closure.functor_infos,
         &SpecializedCalls::of(&closure),
         profiler,
+        exec,
     );
     Ok(LowerPlan {
         box_plan,

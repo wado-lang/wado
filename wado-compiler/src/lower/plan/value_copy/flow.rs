@@ -38,8 +38,8 @@ use crate::tir::{
     TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::parallel::Executor;
 use crate::type_table::TypeTable;
-use std::collections::VecDeque;
 
 /// A location a call's caller can name, as its callee's summary speaks of it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -141,7 +141,6 @@ impl Flow {
 /// What the resolver knows of the package while it solves one body.
 struct Package<'a> {
     type_table: &'a TypeTable,
-    names: HoldsHandle<'a>,
     builtins: &'a BuiltinDeclarations,
     functions: FuncIndex,
     callees: Vec<Callee>,
@@ -170,6 +169,7 @@ pub fn compute(
     fields: &StructFields,
     functors: &[ClosureFunctor],
     hands_out_payload: &dyn Fn(&TirFunction) -> bool,
+    exec: &Executor,
 ) -> Flow {
     let type_table = flat.type_table.borrow();
     let mut functions = FuncIndex::default();
@@ -219,7 +219,6 @@ pub fn compute(
         .collect();
     let mut package = Package {
         type_table: &type_table,
-        names: HoldsHandle::new(&type_table, fields, Handle::Names),
         builtins: &flat.builtin_declarations,
         functions,
         callees,
@@ -240,28 +239,39 @@ pub fn compute(
     let mut summaries = vec![Summary::default(); n];
     let mut outlived: Vec<IndexSet<u32>> = vec![IndexSet::default(); n];
     let mut readers: Vec<IndexSet<u32>> = vec![IndexSet::default(); n];
-    let mut queue: VecDeque<u32> = (0..u32::try_from(n).unwrap())
+    // A least fixpoint, so it is the same whatever order the bodies are solved
+    // in: each round solves every stale body against the last round's
+    // summaries, on `exec`'s threads.
+    let bodies: Vec<_> = flat.functions.iter().map(|f| f.borrow()).collect();
+    let bodies: Vec<&TirFunction> = bodies.iter().map(|f| &**f).collect();
+    let type_table: &TypeTable = &type_table;
+    let names = || HoldsHandle::new(type_table, fields, Handle::Names);
+    let mut stale: Vec<u32> = (0..u32::try_from(n).unwrap())
         .filter(|&id| package.callees[id as usize].analyzed)
         .collect();
-    let mut queued: Vec<bool> = (0..n).map(|i| package.callees[i].analyzed).collect();
-    while let Some(id) = queue.pop_front() {
-        queued[id as usize] = false;
-        let func = flat.functions[id as usize].borrow();
-        let solved = summarize(&package, &summaries, &func);
-        for callee in solved.read {
-            readers[callee as usize].insert(id);
-        }
-        outlived[id as usize] = solved.outlived;
-        let summary = solved.summary;
-        if summary != summaries[id as usize] {
-            summaries[id as usize] = summary;
-            for &reader in &readers[id as usize] {
-                if !queued[reader as usize] {
-                    queued[reader as usize] = true;
-                    queue.push_back(reader);
-                }
+    while !stale.is_empty() {
+        let solved = exec.map_init(&stale, names, |names, &id| {
+            summarize(&package, names, &summaries, bodies[id as usize])
+        });
+        let mut changed = Vec::new();
+        for (id, solved) in stale.into_iter().zip(solved) {
+            for callee in solved.read {
+                readers[callee as usize].insert(id);
+            }
+            outlived[id as usize] = solved.outlived;
+            if solved.summary != summaries[id as usize] {
+                summaries[id as usize] = solved.summary;
+                changed.push(id);
             }
         }
+        // Only once every read of the round is recorded: a body that read a
+        // summary this round changed is stale whichever was solved first.
+        let next: IndexSet<u32> = changed
+            .iter()
+            .flat_map(|&id| readers[id as usize].iter().copied())
+            .collect();
+        stale = next.into_iter().collect();
+        stale.sort_unstable();
     }
     for (func, (summary, outlived)) in flat.functions.iter().zip(summaries.iter().zip(&outlived)) {
         compiler_trace!(
@@ -369,9 +379,14 @@ struct ParamLocs {
 }
 
 /// Solve `func`'s body and read off its summary.
-fn summarize(package: &Package<'_>, summaries: &[Summary], func: &TirFunction) -> Solved {
+fn summarize<'a>(
+    package: &Package<'a>,
+    names: &HoldsHandle<'a>,
+    summaries: &[Summary],
+    func: &TirFunction,
+) -> Solved {
     let body = func.body.as_ref().expect("only a body is summarized");
-    let mut b = Body::new(package, summaries, func);
+    let mut b = Body::new(package, names, summaries, func);
     let params: Vec<ParamLocs> = func
         .params
         .iter()
@@ -507,6 +522,8 @@ fn summarize(package: &Package<'_>, summaries: &[Summary], func: &TirFunction) -
 /// One body's graph under construction.
 struct Body<'p, 'a> {
     package: &'p Package<'a>,
+    /// Which types hold a handle: a memo of the solving thread's own.
+    names: &'p HoldsHandle<'a>,
     summaries: &'p [Summary],
     g: Graph,
     locals: IndexMap<u32, u32>,
@@ -548,7 +565,12 @@ struct Body<'p, 'a> {
 }
 
 impl<'p, 'a> Body<'p, 'a> {
-    fn new(package: &'p Package<'a>, summaries: &'p [Summary], func: &TirFunction) -> Self {
+    fn new(
+        package: &'p Package<'a>,
+        names: &'p HoldsHandle<'a>,
+        summaries: &'p [Summary],
+        func: &TirFunction,
+    ) -> Self {
         let mut g = Graph::default();
         let result = g.node();
         let returned = g.node();
@@ -566,6 +588,7 @@ impl<'p, 'a> Body<'p, 'a> {
             .collect();
         let mut b = Body {
             package,
+            names,
             summaries,
             g,
             locals: IndexMap::default(),
@@ -620,7 +643,7 @@ impl<'p, 'a> Body<'p, 'a> {
         let node = self.g.node();
         self.locals.insert(local, node);
         if let Some(&ty) = self.local_types.get(&local)
-            && !self.package.names.of(ty)
+            && !self.names.of(ty)
         {
             self.g.inert.insert(node);
         }
@@ -887,8 +910,7 @@ impl<'p, 'a> Body<'p, 'a> {
         let value = if matches!(expr.kind, TirExprKind::Local { .. }) {
             self.eval(expr)
         } else {
-            self.package
-                .names
+            self.names
                 .of(expr.type_id)
                 .then(|| self.held_by(place))
         };
@@ -1019,7 +1041,7 @@ impl<'p, 'a> Body<'p, 'a> {
                 spec,
                 args[spec.source].type_id,
                 self.package.type_table,
-                &self.package.names,
+                self.names,
             ) {
                 continue;
             }
@@ -1357,7 +1379,7 @@ impl<'p, 'a> Body<'p, 'a> {
     fn eval(&mut self, expr: &TirExpr) -> Option<u32> {
         let value = self
             .eval_kind(expr)
-            .filter(|_| self.package.names.of(expr.type_id));
+            .filter(|_| self.names.of(expr.type_id));
         self.values.insert(key(expr), value);
         value
     }

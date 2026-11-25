@@ -29,7 +29,7 @@ pub fn lower(
     // Ahead of the plan, which binds the locals a copied clause brings.
     contract_checks::lower(&mut flat);
     let plan = in_span(profiler, "lower/plan", || {
-        plan::plan(&mut flat, errors, profiler)
+        plan::plan(&mut flat, errors, profiler, exec)
     })?;
     // `translate` mints canonical FuncIds and stamps every call node at
     // construction ("born resolved"); there is no post-pass id assignment.

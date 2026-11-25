@@ -20,6 +20,7 @@ pub mod retention;
 pub mod synthesize;
 
 use crate::compiler_host::{SpanEmitter, in_span};
+use crate::parallel::Executor;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
@@ -185,6 +186,7 @@ pub fn plan(
     functors: &[tir::ClosureFunctor],
     specialized: &callgraph::SpecializedCalls,
     profiler: &dyn SpanEmitter,
+    exec: &Executor,
 ) -> ValueCopyPlan {
     // Again: closure lifting has added its environment structs since `plan`
     // registered the rest.
@@ -245,6 +247,7 @@ pub fn plan(
             &tir::struct_fields(&flat.structs),
             functors,
             &|func| hands_out_payload(func, &return_paths),
+            exec,
         )
     });
     conventions
