@@ -993,45 +993,63 @@ impl<'a> Engine<'a> {
     }
 
     /// Whether `node` is reachable from the root. Every edit that drops a child
-    /// clears its parent edge, so the edges alone answer.
+    /// clears its parent edge, so the edges alone answer; [`Engine::run`]
+    /// asserts that they do.
     fn is_attached(&self, node: NodeRef) -> bool {
         let root = NodeRef::Block(self.body.root());
         let mut at = node;
-        let attached = loop {
+        loop {
             if at == root {
-                break true;
+                return true;
             }
             match self.parent_of(at) {
                 Some(parent) => at = parent,
-                None => break false,
+                None => return false,
             }
-        };
-        debug_assert_eq!(
-            attached,
-            self.is_held_from_root(node),
-            "[NIR engine] {node:?} keeps a parent edge its parent dropped: an edit \
-             wrote the body outside the edit API"
-        );
-        attached
+        }
     }
 
-    /// [`Engine::is_attached`] checked edge by edge against each parent's
-    /// children.
-    fn is_held_from_root(&self, mut node: NodeRef) -> bool {
-        let root = NodeRef::Block(self.body.root());
-        while node != root {
-            let Some(parent) = self.parent_of(node) else {
-                return false;
-            };
-            let mut held = false;
-            self.body
-                .for_each_child(parent, |child| held |= child == node);
-            if !held {
-                return false;
-            }
-            node = parent;
+    /// [`Engine::is_attached`] answers as a walk of each parent's children
+    /// from the root would. Checked once per run rather than per query: walking
+    /// each ancestor's children at every pop cost a dev build of a large
+    /// program 3% of its compile time.
+    #[cfg(debug_assertions)]
+    fn assert_attachment_held(&self) {
+        let body = &self.body;
+        let mut held = [
+            vec![false; body.exprs.len()],
+            vec![false; body.stmts.len()],
+            vec![false; body.blocks.len()],
+            vec![false; body.pats.len()],
+        ];
+        let slot = |node: NodeRef| match node {
+            NodeRef::Expr(id) => (0, id.index()),
+            NodeRef::Stmt(id) => (1, id.index()),
+            NodeRef::Block(id) => (2, id.index()),
+            NodeRef::Pat(id) => (3, id.index()),
+        };
+        let mut stack = vec![NodeRef::Block(body.root())];
+        while let Some(node) = stack.pop() {
+            let (arena, i) = slot(node);
+            held[arena][i] = true;
+            body.for_each_child(node, |child| {
+                if self.parent_of(child) == Some(node) {
+                    stack.push(child);
+                }
+            });
         }
-        true
+        let nodes = (body.exprs.keys().map(NodeRef::Expr))
+            .chain(body.stmts.keys().map(NodeRef::Stmt))
+            .chain(body.blocks.keys().map(NodeRef::Block))
+            .chain(body.pats.keys().map(NodeRef::Pat));
+        for node in nodes {
+            let (arena, i) = slot(node);
+            assert!(
+                held[arena][i] || !self.is_attached(node),
+                "[NIR engine] {node:?} keeps a parent edge its parent dropped: an edit \
+                 wrote the body outside the edit API"
+            );
+        }
     }
 
     /// Push a node onto the worklist unless it is already queued.
@@ -1550,6 +1568,8 @@ impl<'a> Engine<'a> {
                 }
             }
         }
+        #[cfg(debug_assertions)]
+        self.assert_attachment_held();
         #[cfg(debug_assertions)]
         if let Some(local) = self.body.surviving_read(&self.buf.elided_locals) {
             panic!(
