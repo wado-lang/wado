@@ -9,7 +9,7 @@ use { HashSet } from "core:collections";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { format } from "./format.wado";
-use { render } from "./fmt_html.wado";
+use { renders_alike } from "./fmt_html.wado";
 
 struct Cli {
     /// Files or directories to format; empty means the whole preopened tree.
@@ -54,7 +54,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         if formatted == original {
             continue;
         }
-        if render(formatted).html != render(original).html {
+        if !renders_alike(original, formatted) {
             eprintln(`marl-format: formatting would change what ${path} renders to; left as is`);
             had_errors = true;
             continue;
