@@ -1674,7 +1674,7 @@ fn specialize_round(
     // would become its only caller, whose constants then fold the original
     // into a copy of the clone.
     retarget_calls(project, &retarget);
-    let minted = build_clones(project, state, &planned);
+    let minted = build_clones(project, state, &planned, gate.exec());
     // A clone is reachable through the call just pointed at it, and reaches
     // nothing its original did not.
     let first_minted = project.functions.len();
@@ -1955,16 +1955,25 @@ fn build_clones(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
     planned: &[Planned<'_>],
+    exec: &Executor,
 ) -> Vec<FuncRef> {
     if planned.is_empty() {
         return Vec::new();
     }
-    let mut settler = BranchSettler::new(project);
+    let mut settler = BranchSettler::new(project, exec);
     settler.run_clones_as_originals(planned);
+    let clones = {
+        let types = project.type_table.borrow();
+        let (functions, types, settler) = (&project.functions, &*types, &settler);
+        exec.map(planned, |&(site, id, ordinal)| {
+            build_clone(functions, types, site, id, ordinal, settler)
+        })
+    };
     planned
         .iter()
-        .map(|&(site, id, ordinal)| {
-            let clone = build_clone(project, site, id, ordinal, &settler);
+        .zip(clones)
+        .map(|(&(site, id, _), clone)| {
+            register_clone(project, site, id, &clone.function);
             // A clone of a clone knows what its source did, and what it adds.
             let mut seeds = state
                 .param_consts
@@ -1982,7 +1991,7 @@ fn build_clones(
                 }
             }
             state.param_consts.insert(id, seeds);
-            clone.function
+            FuncCell::new(clone.function)
         })
         .collect()
 }
@@ -2012,9 +2021,9 @@ struct BranchSettler {
 }
 
 impl BranchSettler {
-    fn new(project: &NirPackage) -> Self {
+    fn new(project: &NirPackage, exec: &Executor) -> Self {
         BranchSettler {
-            callees: build_callee_map(project, &Executor::default(), |_| false),
+            callees: build_callee_map(project, exec, |_| false),
             ctfe_builtins: build_ctfe_builtin_map(project),
             pure_builtin_callees: project.pure_builtin_callee_ids(),
             markers: MarkerBuiltins::of(project),
@@ -2057,25 +2066,25 @@ impl BranchSettler {
 
 /// A freshly minted clone and the facts recorded for it.
 struct Clone {
-    function: FuncRef,
+    function: NirFunction,
     param_consts: IndexMap<String, ParamSeed>,
 }
 
-/// Clone `site.callee` with its bindings substituted, registered so its call
-/// sites are born resolved. The size budget is the caller's to check.
+/// Clone `site.callee` with its bindings substituted. The size budget is the
+/// caller's to check.
 ///
 /// The clone's identity must differ from the original's along every axis the
 /// call graph keys on, `method_name` included — DCE resolves a method call
 /// through `method_info`, and would prune the clone as unreachable.
 fn build_clone(
-    project: &mut NirPackage,
+    functions: &[FuncRef],
+    types: &TypeTable,
     site: &Site,
     id: FuncId,
     ordinal: usize,
     settler: &BranchSettler,
 ) -> Clone {
-    let mut clone = project.functions[site.callee.index()].borrow().clone();
-    let origin = (clone.module_source.clone(), clone.name.clone());
+    let mut clone = functions[site.callee.index()].borrow().clone();
     let name = param_spec_name(&clone.name, ordinal);
     clone.name.clone_from(&name);
     if let Some(info) = &mut clone.method_info {
@@ -2105,7 +2114,6 @@ fn build_clone(
         }
     }
 
-    let types = project.type_table.borrow();
     let body = clone.body.as_mut().expect("specialized callee has a body");
     let mut buffers = EngineBuffers::default();
     let params = bound.keys().copied().collect();
@@ -2119,36 +2127,46 @@ fn build_clone(
         locals,
         own_params,
         &mut buffers,
-        &types,
+        types,
         &read_through,
     );
-    substitute_locals(body, locals, own_params, &mut buffers, &types, &whole);
-    settler.settle(body, locals, own_params, &mut buffers, &types);
+    substitute_locals(body, locals, own_params, &mut buffers, types, &whole);
+    settler.settle(body, locals, own_params, &mut buffers, types);
 
     let param_consts: IndexMap<String, ParamSeed> = clone
         .params
         .iter()
         .filter_map(|param| {
             let consts = bound.get(&param.local_index)?.clone();
-            let pointee = held_struct(param.type_id, &types)?;
+            let pointee = held_struct(param.type_id, types)?;
             Some((param.name.clone(), ParamSeed { pointee, consts }))
         })
         .collect();
-    drop(types);
+    Clone {
+        function: clone,
+        param_consts,
+    }
+}
 
-    let key = FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
+/// Register `clone`, minted as `id` for `site`, so its call sites are born
+/// resolved.
+fn register_clone(project: &mut NirPackage, site: &Site, id: FuncId, clone: &NirFunction) {
+    let key = FunctionRef::from_resolved(clone, clone.module_source.clone()).function_id();
     project.func_index.insert(key, id);
     if let Some(reshape) = project.reshapes.get(&site.callee) {
         let method_name = clone.method_info.as_ref().map(|m| m.method_name.clone());
-        let respelled = reshape.respelled(name.clone(), method_name);
+        let respelled = reshape.respelled(clone.name.clone(), method_name);
         project.reshapes.insert(id, respelled);
     }
-    copy_function_strings(project, &origin, (clone.module_source.clone(), name));
-
-    Clone {
-        function: FuncCell::new(clone),
-        param_consts,
-    }
+    let origin = {
+        let original = project.functions[site.callee.index()].borrow();
+        (original.module_source.clone(), original.name.clone())
+    };
+    copy_function_strings(
+        project,
+        &origin,
+        (clone.module_source.clone(), clone.name.clone()),
+    );
 }
 
 /// Give the clone its own entry in `function_strings`, which is name-keyed:
