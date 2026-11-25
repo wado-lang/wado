@@ -193,7 +193,7 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
     let used_19: i32;
     let out_46: ref "core:prelude/string.wado//String";
     let x: i64;
-    let $licm_arith_151: i32;
+    let $licm_arith_153: i32;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
@@ -213,11 +213,11 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
     sr = builtin::array_get_value<ref "opt_licm_immut_ref_multi.wado//Stats">(elements_18, 0);
     used_17 = 0;
     used_19 = 0;
-    $licm_arith_151 = cr.threshold * sr.count;
+    $licm_arith_153 = cr.threshold * sr.count;
     b2: block {
         l3: loop {
             break_if b2 used_19 >= 4;
-            used_17 = used_17 + ($licm_arith_151 * used_19);
+            used_17 = used_17 + ($licm_arith_153 * used_19);
             used_19 = used_19 + 1;
             continue l3;
         };
@@ -294,22 +294,22 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_46, used_19);
         }
-        $licm_arith_151 = out_46.used;
+        $licm_arith_153 = out_46.used;
         out_46.used = used_19;
-        builtin::array_set_u8(out_46.repr, $licm_arith_151, 45);
+        builtin::array_set_u8(out_46.repr, $licm_arith_153, 45);
     } else {
     }
     if @unlikely(local.tee used_19(out_46.used + used_17) > builtin::array_len(out_46.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_46, used_19);
     }
-    $licm_arith_151 = out_46.used;
+    $licm_arith_153 = out_46.used;
     out_46.used = used_19;
     arr = out_46.repr;
-    used_17 = $licm_arith_151 + used_17;
+    used_17 = $licm_arith_153 + used_17;
     b26: block {
         l27: loop {
-            break_if b26 (used_17 - $licm_arith_151) < 2;
+            break_if b26 (used_17 - $licm_arith_153) < 2;
             q = x /u 100_i64;
             tens = local.tee used_19(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, used_17 - 1, (48 + used_19) - (tens * 10));
@@ -319,8 +319,8 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
             continue l27;
         };
     };
-    if used_17 > $licm_arith_151 {
-        builtin::array_set_u8(arr, $licm_arith_151, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if used_17 > $licm_arith_153 {
+        builtin::array_set_u8(arr, $licm_arith_153, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_48: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_48;
@@ -328,14 +328,14 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
     used_17 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     used_19 = builtin::i32_wrap_i64(x >> 32_i64);
     used_17 = "opt_licm_immut_ref_multi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_17);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee $licm_arith_151(out_46.used) + 1)), 0, out_46.repr, 0, $licm_arith_151);
-    builtin::array_set_u8(arr, $licm_arith_151, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee $licm_arith_153(out_46.used) + 1)), 0, out_46.repr, 0, $licm_arith_153);
+    builtin::array_set_u8(arr, $licm_arith_153, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $licm_arith_151 = $licm_arith_151 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(used_19, arr, 0, $licm_arith_151);
+        $licm_arith_153 = $licm_arith_153 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(used_19, arr, 0, $licm_arith_153);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

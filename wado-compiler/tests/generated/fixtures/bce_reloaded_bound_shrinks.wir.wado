@@ -264,7 +264,7 @@ fn "bce_reloaded_bound_shrinks.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_182: i32;
+    let start_192: i32;
     hh = struct.new "bce_reloaded_bound_shrinks.wado//Holder" { data: global:bce_reloaded_bound_shrinks.wado::$const_obj_1 };
     out_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     "bce_reloaded_bound_shrinks.wado/probe"(hh, hh, out_1);
@@ -341,22 +341,22 @@ fn "bce_reloaded_bound_shrinks.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_81);
         }
-        start_182 = out_18.used;
+        start_192 = out_18.used;
         out_18.used = is_negative_81;
-        builtin::array_set_u8(out_18.repr, start_182, 45);
+        builtin::array_set_u8(out_18.repr, start_192, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_81(out_18.used + self_24) > builtin::array_len(out_18.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_81);
     }
-    start_182 = out_18.used;
+    start_192 = out_18.used;
     out_18.used = is_negative_81;
     arr = out_18.repr;
-    self_24 = start_182 + self_24;
+    self_24 = start_192 + self_24;
     b34: block {
         l35: loop {
-            break_if b34 (self_24 - start_182) < 2;
+            break_if b34 (self_24 - start_192) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_81(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, self_24 - 1, (48 + is_negative_81) - (tens * 10));
@@ -366,8 +366,8 @@ fn "bce_reloaded_bound_shrinks.wado/run"() with Stdout {
             continue l35;
         };
     };
-    if self_24 > start_182 {
-        builtin::array_set_u8(arr, start_182, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if self_24 > start_192 {
+        builtin::array_set_u8(arr, start_192, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;
@@ -375,14 +375,14 @@ fn "bce_reloaded_bound_shrinks.wado/run"() with Stdout {
     self_24 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_81 = builtin::i32_wrap_i64(x >> 32_i64);
     self_24 = "bce_reloaded_bound_shrinks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_24);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_182(out_18.used) + 1)), 0, out_18.repr, 0, start_182);
-    builtin::array_set_u8(arr, start_182, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_192(out_18.used) + 1)), 0, out_18.repr, 0, start_192);
+    builtin::array_set_u8(arr, start_192, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_182 = start_182 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_81, arr, 0, start_182);
+        start_192 = start_192 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_81, arr, 0, start_192);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

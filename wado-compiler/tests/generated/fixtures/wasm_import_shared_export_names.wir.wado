@@ -2140,10 +2140,10 @@ fn "core:prelude/fpfmt.wado/unrounded_div$spec0$dae[d]"(u) {
 
 fn "core:prelude/numeric.wado/fmt_float_special$spec0"(f, is_neg, kind, $mv$zero_repr$repr, $mv$zero_repr$used) {
     let $load_0: ref "core:prelude/string.wado//String";
-    let self_6: i32;
+    let self_5: i32;
     let other_21: ref "core:prelude/string.wado//String";
     let start_33: i32;
-    self_6 = local.tee $load_0(f.buf).used;
+    self_5 = local.tee $load_0(f.buf).used;
     if kind == 3 {
         if @unlikely(local.tee is_neg($load_0.used + 3) > builtin::array_len($load_0.repr)) {
             cold_path;
@@ -2193,16 +2193,16 @@ fn "core:prelude/numeric.wado/fmt_float_special$spec0"(f, is_neg, kind, $mv$zero
         builtin::array_copy<u8>($load_0.repr, kind, $mv$zero_repr$repr, 0, 1);
     }
     if f.width > 0 {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_slow"(f, self_6);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_slow"(f, self_5);
     }
 }
 
 fn "core:prelude/numeric.wado/fmt_float_special$spec1"(f, is_neg, kind, $mv$zero_repr$repr, $mv$zero_repr$used) {
     let $load_0: ref "core:prelude/string.wado//String";
-    let self_6: i32;
+    let self_5: i32;
     let other_21: ref "core:prelude/string.wado//String";
     let start_33: i32;
-    self_6 = local.tee $load_0(f.buf).used;
+    self_5 = local.tee $load_0(f.buf).used;
     if kind == 3 {
         if @unlikely(local.tee is_neg($load_0.used + 3) > builtin::array_len($load_0.repr)) {
             cold_path;
@@ -2252,7 +2252,7 @@ fn "core:prelude/numeric.wado/fmt_float_special$spec1"(f, is_neg, kind, $mv$zero
         builtin::array_copy<u8>($load_0.repr, kind, $mv$zero_repr$repr, 0, 3);
     }
     if f.width > 0 {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_slow"(f, self_6);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_slow"(f, self_5);
     }
 }
 
@@ -3412,7 +3412,7 @@ fn "core:prelude/reflect.wado/core:prelude/reflect.wado/TemplateHole<wasm_import
 
 fn "core:prelude/numeric.wado/f64::inspect_into$sroa[self.value]"(self, f) {
     let exp: i32;
-    let self_16: i32;
+    let self_15: i32;
     let $av_19: i32;
     if local.tee $av_19(f.precision) >= 0 {
         "core:prelude/numeric.wado/f64::fmt_fixed$sroa[self.value]"(self, $av_19, f);
@@ -3431,7 +3431,7 @@ fn "core:prelude/numeric.wado/f64::inspect_into$sroa[self.value]"(self, f) {
     let $mv$result$digits: u64;
     multivalue_bind [$mv$result$digits, $av_19, $mv$$pattern_temp_0$2] = "core:prelude/fpfmt.wado/short"(self);
     exp = ($av_19 + $mv$$pattern_temp_0$2) - 1;
-    self_16 = local.tee $mv_arg_4(f.buf).used;
+    self_15 = local.tee $mv_arg_4(f.buf).used;
     "core:prelude/numeric.wado/fmt_float_sign"(f, $mv$$pattern_temp_0$1);
     if (exp < -4) | (exp >= 16) {
         "core:prelude/fpfmt.wado/write_exp$dae[upper]"($mv_arg_4, $mv$result$digits, $av_19, $mv$$pattern_temp_0$2);
@@ -3442,7 +3442,7 @@ fn "core:prelude/numeric.wado/f64::inspect_into$sroa[self.value]"(self, f) {
     } else {
         "core:prelude/fpfmt.wado/write_decimal"($mv_arg_4, $mv$result$digits, $av_19, $mv$$pattern_temp_0$2);
     }
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding"(f, self_16);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding"(f, self_15);
 }
 
 fn "core:prelude/numeric.wado/f64::fmt_fixed$sroa[self.value]"(self, precision, f) {

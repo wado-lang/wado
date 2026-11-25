@@ -173,7 +173,7 @@ fn "value_copy_return_after_handler_install.wado/run"() with Stdout {
     let $temp_inline_core_prelude_reflect_wado_TemplateHole_value_copy_return_after_handler_install_wado__tmpl_2e4b604754e48185_core_prelude_list_wado_List_core_prelude_string_wado_String____fmt_30_0: ref "core:prelude/format.wado//Formatter";
     let $sroa_$pattern_temp_0_1_109: i32;
     let new_repr: ref Array<u8>;
-    let self_124: i32;
+    let self_126: i32;
     if @unlikely(local.tee used(local.tee got("value_copy_return_after_handler_install.wado/collect"()).used) >= builtin::array_len(got.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(got);
@@ -192,14 +192,14 @@ fn "value_copy_return_after_handler_install.wado/run"() with Stdout {
     used = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_109 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     used = "value_copy_return_after_handler_install.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_124(out_20.used) + 1)), 0, out_20.repr, 0, self_124);
-    builtin::array_set_u8(new_repr, self_124, 10);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_126(out_20.used) + 1)), 0, out_20.repr, 0, self_126);
+    builtin::array_set_u8(new_repr, self_126, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        self_124 = self_124 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_109, new_repr, 0, self_124);
+        self_126 = self_126 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_109, new_repr, 0, self_126);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -781,9 +781,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     let val_i64_66: i64;
     let q: i32;
     let digit: i32;
-    let $sroa_out_repr_273: ref Array<u8>;
-    let $sroa_write_back_275: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_273 = builtin::array_new<u8>(16);
+    let $sroa_out_repr_275: ref Array<u8>;
+    let $sroa_write_back_277: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_275 = builtin::array_new<u8>(16);
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
@@ -795,19 +795,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
         break $inline_count_digits_u64_base_29: select i32((t - (q * 4)) != 0, (local.tee q(local.tee t(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_66))) / 4) + 1) + ((t ^ 4) >> 31), q);
     }) > 16) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_275(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_273, used: 0 }), t);
-        $sroa_out_repr_273 = $sroa_write_back_275.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_277(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_275, used: 0 }), t);
+        $sroa_out_repr_275 = $sroa_write_back_277.repr;
     }
     q = t;
     if val_i64_66 == 0_i64 {
-        builtin::array_set_u8($sroa_out_repr_273, 0, 48);
+        builtin::array_set_u8($sroa_out_repr_275, 0, 48);
     } else {
         b81: block {
             l82: loop {
                 break_if b81 val_i64_66 == 0_i64;
                 q = q - 1;
                 digit = builtin::i32_wrap_i64(val_i64_66 & 15_i64);
-                builtin::array_set_u8($sroa_out_repr_273, q, select i32(digit < 10, 48 + digit, (97 + digit) - 10));
+                builtin::array_set_u8($sroa_out_repr_275, q, select i32(digit < 10, 48 + digit, (97 + digit) - 10));
                 val_i64_66 = val_i64_66 >>u 4_i64;
                 continue l82;
             };
@@ -816,7 +816,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
     };
-    return $sroa_out_repr_273, t;
+    return $sroa_out_repr_275, t;
 }
 
 fn "closure/value_copy_return_after_handler_install.wado/$closure_wrapper_0"($env, $p_0) {

@@ -80,7 +80,7 @@ fn "bug_equal_arms_delete_trap.wado/run"() with Stdout {
     let $sroa_$pattern_temp_0_1_14_14: i32;
     let new_repr_19: ref Array<u8>;
     let out_93: ref "core:prelude/string.wado//String";
-    let start_339: i32;
+    let start_341: i32;
     let q: u64;
     let tens: i32;
     $sroa_$pattern_temp_0_0_13_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
@@ -188,22 +188,22 @@ fn "bug_equal_arms_delete_trap.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_93, $sroa_$pattern_temp_0_1_14_14);
         }
-        start_339 = out_93.used;
+        start_341 = out_93.used;
         out_93.used = $sroa_$pattern_temp_0_1_14_14;
-        builtin::array_set_u8(out_93.repr, start_339, 45);
+        builtin::array_set_u8(out_93.repr, start_341, 45);
     } else {
     }
     if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_14(out_93.used + $sroa_$pattern_temp_0_0_13_13) > builtin::array_len(out_93.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_93, $sroa_$pattern_temp_0_1_14_14);
     }
-    start_339 = out_93.used;
+    start_341 = out_93.used;
     out_93.used = $sroa_$pattern_temp_0_1_14_14;
     new_repr_19 = out_93.repr;
-    $sroa_$pattern_temp_0_0_13_13 = start_339 + $sroa_$pattern_temp_0_0_13_13;
+    $sroa_$pattern_temp_0_0_13_13 = start_341 + $sroa_$pattern_temp_0_0_13_13;
     b29: block {
         l30: loop {
-            break_if b29 ($sroa_$pattern_temp_0_0_13_13 - start_339) < 2;
+            break_if b29 ($sroa_$pattern_temp_0_0_13_13 - start_341) < 2;
             q = $cm_pair_7_7 /u 100_i64;
             tens = local.tee $sroa_$pattern_temp_0_1_14_14(builtin::i32_wrap_i64($cm_pair_7_7 - (q * 100_i64))) / 10;
             builtin::array_set_u8(new_repr_19, $sroa_$pattern_temp_0_0_13_13 - 1, (48 + $sroa_$pattern_temp_0_1_14_14) - (tens * 10));
@@ -213,8 +213,8 @@ fn "bug_equal_arms_delete_trap.wado/run"() with Stdout {
             continue l30;
         };
     };
-    if $sroa_$pattern_temp_0_0_13_13 > start_339 {
-        builtin::array_set_u8(new_repr_19, start_339, 48 + builtin::i32_wrap_i64($cm_pair_7_7 %u 10_i64));
+    if $sroa_$pattern_temp_0_0_13_13 > start_341 {
+        builtin::array_set_u8(new_repr_19, start_341, 48 + builtin::i32_wrap_i64($cm_pair_7_7 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__format_bug_equal_arms_delete_trap_wado__tmpl_fb51c04d54491732__i32___spec1_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_bug_equal_arms_delete_trap_wado__tmpl_fb51c04d54491732__i32___spec1_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39;
@@ -222,14 +222,14 @@ fn "bug_equal_arms_delete_trap.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_0_13_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_14 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_13 = "bug_equal_arms_delete_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_13);
-    builtin::array_copy<u8>(local.tee new_repr_19(builtin::array_new<u8>(local.tee start_339(out_93.used) + 1)), 0, out_93.repr, 0, start_339);
-    builtin::array_set_u8(new_repr_19, start_339, 10);
+    builtin::array_copy<u8>(local.tee new_repr_19(builtin::array_new<u8>(local.tee start_341(out_93.used) + 1)), 0, out_93.repr, 0, start_341);
+    builtin::array_set_u8(new_repr_19, start_341, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_339 = start_339 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_14, new_repr_19, 0, start_339);
+        start_341 = start_341 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_14, new_repr_19, 0, start_341);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

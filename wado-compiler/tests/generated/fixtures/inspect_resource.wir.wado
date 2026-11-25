@@ -2655,14 +2655,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_res
     let self_90: i32;
     let q: i32;
     let digit: i32;
-    let $sroa_out_repr_348: ref Array<u8>;
-    let $sroa_write_back_350: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_348 = builtin::array_new<u8>(16);
+    let $sroa_out_repr_350: ref Array<u8>;
+    let $sroa_write_back_352: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_350 = builtin::array_new<u8>(16);
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_350(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_348, used: 0 }), 21);
-    builtin::array_copy<u8>(local.tee $sroa_out_repr_348($sroa_write_back_350.repr), 0, global:inspect_resource.wado::$const_obj_2, 0, 21);
+    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_352(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_350, used: 0 }), 21);
+    builtin::array_copy<u8>(local.tee $sroa_out_repr_350($sroa_write_back_352.repr), 0, global:inspect_resource.wado::$const_obj_2, 0, 21);
     val_i64_83 = builtin::i64_extend_i32_u(if @unlikely(ref.is_null(t.backing) == 0) {
         unreachable;
     }; t.value);
@@ -2672,21 +2672,21 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_res
         }
         break $inline_count_digits_u64_base_36: select i32((self_90 - (q * 4)) != 0, (local.tee q(local.tee self_90(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_83))) / 4) + 1) + ((self_90 ^ 4) >> 31), q);
     };
-    if @unlikely(local.tee q(21 + self_90) > builtin::array_len($sroa_out_repr_348)) {
+    if @unlikely(local.tee q(21 + self_90) > builtin::array_len($sroa_out_repr_350)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_350(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_348, used: 21 }), q);
-        $sroa_out_repr_348 = $sroa_write_back_350.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_352(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_350, used: 21 }), q);
+        $sroa_out_repr_350 = $sroa_write_back_352.repr;
     }
     self_90 = 21 + self_90;
     if val_i64_83 == 0_i64 {
-        builtin::array_set_u8($sroa_out_repr_348, 21, 48);
+        builtin::array_set_u8($sroa_out_repr_350, 21, 48);
     } else {
         b344: block {
             l345: loop {
                 break_if b344 val_i64_83 == 0_i64;
                 self_90 = self_90 - 1;
                 digit = builtin::i32_wrap_i64(val_i64_83 & 15_i64);
-                builtin::array_set_u8($sroa_out_repr_348, self_90, select i32(digit < 10, 48 + digit, (97 + digit) - 10));
+                builtin::array_set_u8($sroa_out_repr_350, self_90, select i32(digit < 10, 48 + digit, (97 + digit) - 10));
                 val_i64_83 = val_i64_83 >>u 4_i64;
                 continue l345;
             };
@@ -2695,7 +2695,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_res
     $inline_core_prelude_string_wado_String__internal_push_view_48: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_48;
     };
-    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_348, used: q };
+    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_350, used: q };
 }
 
 export fn "inspect_resource.wado/$cm_export__$test_0_resource_inspect_renders_the_handle_in_hex" as "$test_0_resource_inspect_renders_the_handle_in_hex"

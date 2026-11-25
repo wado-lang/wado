@@ -97,8 +97,8 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     let $sroa_write_back_141: ref "core:prelude/list.wado//List<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
     let arr: ref Array<u8>;
     let q: u64;
-    let v_549: ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
-    let $hfs_index_551: i32;
+    let v_555: ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
+    let $hfs_index_557: i32;
     $sroa_pairs_repr_135 = array.new_fixed<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">();
     if @unlikely(0 >= builtin::array_len($sroa_pairs_repr_135)) {
         cold_path;
@@ -114,25 +114,25 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     builtin::array_set<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">($sroa_pairs_repr_135, 1, struct.new "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]" { 0: struct.new "hfs_letdestructure_loop_local.wado//Acc" { sum: 0 }, 1: 10 });
     total = 0;
     $sroa_pairs_repr_135 = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>" { repr: $sroa_pairs_repr_135, index: 0, end: 2 }).repr;
-    $hfs_index_551 = 0;
+    $hfs_index_557 = 0;
     b2: block {
         l3: loop {
             if ref.is_null(local.tee $match_5($inline_core_prelude_slice_wado_SliceValueIter__hfs_letdestructure_loop_local_wado_Acc_i32___core_prelude_iter_wado_Iterator__next_10: block -> ref null "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]" {
-                if $hfs_index_551 >= 2 {
+                if $hfs_index_557 >= 2 {
                     break $inline_core_prelude_slice_wado_SliceValueIter__hfs_letdestructure_loop_local_wado_Acc_i32___core_prelude_iter_wado_Iterator__next_10: ref.null none;
                 }
-                v_549 = struct.new "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]" { 0: struct.new "hfs_letdestructure_loop_local.wado//Acc" { sum: local.tee v_549(builtin::array_get_value<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">($sroa_pairs_repr_135, $hfs_index_551)).0.sum }, 1: v_549.1 };
-                $hfs_index_551 = $hfs_index_551 + 1;
-                break $inline_core_prelude_slice_wado_SliceValueIter__hfs_letdestructure_loop_local_wado_Acc_i32___core_prelude_iter_wado_Iterator__next_10: v_549;
+                v_555 = struct.new "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]" { 0: struct.new "hfs_letdestructure_loop_local.wado//Acc" { sum: local.tee v_555(builtin::array_get_value<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">($sroa_pairs_repr_135, $hfs_index_557)).0.sum }, 1: v_555.1 };
+                $hfs_index_557 = $hfs_index_557 + 1;
+                break $inline_core_prelude_slice_wado_SliceValueIter__hfs_letdestructure_loop_local_wado_Acc_i32___core_prelude_iter_wado_Iterator__next_10: v_555;
             })) == 0 {
-                a = local.tee v_549(ref.as_non_null($match_5)).0;
-                n_4 = v_549.1;
+                a = local.tee v_555(ref.as_non_null($match_5)).0;
+                n_4 = v_555.1;
                 $load_9 = a.sum + n_4;
                 total = total + $load_9;
                 a.sum = local.tee n_4($load_9 + n_4);
                 total = total + n_4;
             } else {
-                break b2: $iter_0.index = $hfs_index_551;
+                break b2: $iter_0.index = $hfs_index_557;
             }
             continue l3;
         };
@@ -141,7 +141,7 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_33: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_33;
     };
-    $hfs_index_551 = total < 0;
+    $hfs_index_557 = total < 0;
     x = builtin::i64_extend_i32_s(total);
     x = select i64(x < 0_i64, 0_i64 - x, x);
     total = $inline_count_digits_u64_1: block -> i32 {
@@ -204,30 +204,30 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if $hfs_index_551 {
-        if @unlikely(local.tee $hfs_index_551(0 + 1) > builtin::array_len(out_40.repr)) {
+    if $hfs_index_557 {
+        if @unlikely(local.tee $hfs_index_557(0 + 1) > builtin::array_len(out_40.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_40, $hfs_index_551);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_40, $hfs_index_557);
         }
         n_4 = out_40.used;
-        out_40.used = $hfs_index_551;
+        out_40.used = $hfs_index_557;
         builtin::array_set_u8(out_40.repr, n_4, 45);
     } else {
     }
-    if @unlikely(local.tee $hfs_index_551(out_40.used + total) > builtin::array_len(out_40.repr)) {
+    if @unlikely(local.tee $hfs_index_557(out_40.used + total) > builtin::array_len(out_40.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_40, $hfs_index_551);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_40, $hfs_index_557);
     }
     n_4 = out_40.used;
-    out_40.used = $hfs_index_551;
+    out_40.used = $hfs_index_557;
     arr = out_40.repr;
     total = n_4 + total;
     b28: block {
         l29: loop {
             break_if b28 (total - n_4) < 2;
             q = x /u 100_i64;
-            $load_9 = local.tee $hfs_index_551(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, total - 1, (48 + $hfs_index_551) - ($load_9 * 10));
+            $load_9 = local.tee $hfs_index_557(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, total - 1, (48 + $hfs_index_557) - ($load_9 * 10));
             builtin::array_set_u8(arr, total - 2, 48 + $load_9);
             total = total - 2;
             x = q;
@@ -241,7 +241,7 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__internal_push_view_52;
     };
     total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $hfs_index_551 = builtin::i32_wrap_i64(x >> 32_i64);
+    $hfs_index_557 = builtin::i32_wrap_i64(x >> 32_i64);
     total = "hfs_letdestructure_loop_local.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(total);
     builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee n_4(out_40.used) + 1)), 0, out_40.repr, 0, n_4);
     builtin::array_set_u8(arr, n_4, 10);
@@ -250,11 +250,11 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
             unreachable;
         }
         n_4 = n_4 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($hfs_index_551, arr, 0, n_4);
+        "core:rt/cm_stream_write_raw_all_u8"($hfs_index_557, arr, 0, n_4);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($hfs_index_551);
+        "wasi/stream-drop-writable"($hfs_index_557);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {

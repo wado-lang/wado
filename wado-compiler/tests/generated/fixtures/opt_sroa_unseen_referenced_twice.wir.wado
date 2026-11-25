@@ -197,7 +197,7 @@ fn "opt_sroa_unseen_referenced_twice.wado/f"(a, bad) with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_179: i32;
+    let start_189: i32;
     p = struct.new "opt_sroa_unseen_referenced_twice.wado//Point" { x: a, y: 2 };
     h_3 = struct.new "opt_sroa_unseen_referenced_twice.wado//Holder" { a: ref.null none, b: ref.null none };
     if @unlikely(bad) {
@@ -282,22 +282,22 @@ fn "opt_sroa_unseen_referenced_twice.wado/f"(a, bad) with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, bad);
         }
-        start_179 = out_7.used;
+        start_189 = out_7.used;
         out_7.used = bad;
-        builtin::array_set_u8(out_7.repr, start_179, 45);
+        builtin::array_set_u8(out_7.repr, start_189, 45);
     } else {
     }
     if @unlikely(local.tee bad(out_7.used + a) > builtin::array_len(out_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, bad);
     }
-    start_179 = out_7.used;
+    start_189 = out_7.used;
     out_7.used = bad;
     arr = out_7.repr;
-    a = start_179 + a;
+    a = start_189 + a;
     b25: block {
         l26: loop {
-            break_if b25 (a - start_179) < 2;
+            break_if b25 (a - start_189) < 2;
             q = x /u 100_i64;
             tens = local.tee bad(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, a - 1, (48 + bad) - (tens * 10));
@@ -307,8 +307,8 @@ fn "opt_sroa_unseen_referenced_twice.wado/f"(a, bad) with Stdout {
             continue l26;
         };
     };
-    if a > start_179 {
-        builtin::array_set_u8(arr, start_179, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if a > start_189 {
+        builtin::array_set_u8(arr, start_189, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_40: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_40;
@@ -316,14 +316,14 @@ fn "opt_sroa_unseen_referenced_twice.wado/f"(a, bad) with Stdout {
     a = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     bad = builtin::i32_wrap_i64(x >> 32_i64);
     a = "opt_sroa_unseen_referenced_twice.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_179(out_7.used) + 1)), 0, out_7.repr, 0, start_179);
-    builtin::array_set_u8(arr, start_179, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_189(out_7.used) + 1)), 0, out_7.repr, 0, start_189);
+    builtin::array_set_u8(arr, start_189, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_179 = start_179 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(bad, arr, 0, start_179);
+        start_189 = start_189 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(bad, arr, 0, start_189);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

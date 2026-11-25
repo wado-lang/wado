@@ -276,10 +276,10 @@ fn "linear_array_drop_frees.wado/round_trip"(round) {
 fn "linear_array_drop_frees.wado/run"() with Stdout {
     let current: i32;
     let new_repr: ref Array<u8>;
-    let $sroa_$iter_0_start_140: i32;
-    let $sroa_out_repr_346: ref Array<u8>;
-    let $sroa_write_back_348: ref "core:prelude/string.wado//String";
-    let array_349: ref null "core:linear//LinearArray<u64>";
+    let $sroa_$iter_0_start_142: i32;
+    let $sroa_out_repr_352: ref Array<u8>;
+    let $sroa_write_back_354: ref "core:prelude/string.wado//String";
+    let array_355: ref null "core:linear//LinearArray<u64>";
     let $drop_spill_2: u64;
     let $v_3: i32;
     $v_3 = 2147483647 / 8;
@@ -290,51 +290,51 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
     }
     let $mv_block_1: ref null "core:linear//Block";
     multivalue_bind [$mv_block_1, $v_3] = "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"();
-    array_349 = struct.new "core:linear//LinearArray<u64>" { block: $mv_block_1, len: $v_3 };
+    array_355 = struct.new "core:linear//LinearArray<u64>" { block: $mv_block_1, len: $v_3 };
     if @unlikely(0 >= $v_3) {
         cold_path;
         "core:linear/core:linear/LinearArray<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $v_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_drop_frees.wado:9"), used: 30 });
         unreachable;
     }
     $drop_spill_2 = builtin::load_i64($mv_block_1.ptr + (0 * 8));
-    if ref.is_null(array_349) == 0 {
+    if ref.is_null(array_355) == 0 {
         if ref.is_null($mv_block_1) == 0 {
             drop("mem/realloc"($mv_block_1.ptr, $mv_block_1.bytes, 16, 0));
         }
-        array_349.block = ref.null none;
+        array_355.block = ref.null none;
     }
     $v_3 = builtin::memory_size();
-    $sroa_$iter_0_start_140 = 1;
+    $sroa_$iter_0_start_142 = 1;
     b8: block {
         l9: loop {
-            break_if b8 $sroa_$iter_0_start_140 >= 50;
-            $sroa_$iter_0_start_140 = local.tee current($sroa_$iter_0_start_140) + 1;
+            break_if b8 $sroa_$iter_0_start_142 >= 50;
+            $sroa_$iter_0_start_142 = local.tee current($sroa_$iter_0_start_142) + 1;
             $drop_spill_2 = $drop_spill_2 + "linear_array_drop_frees.wado/round_trip"(current);
             continue l9;
         };
     };
-    if @unlikely(local.tee $sroa_$iter_0_start_140(builtin::memory_size()) != $v_3) {
+    if @unlikely(local.tee $sroa_$iter_0_start_142(builtin::memory_size()) != $v_3) {
         cold_path;
-        "linear_array_drop_frees.wado/run$cold0"($v_3, $sroa_$iter_0_start_140);
+        "linear_array_drop_frees.wado/run$cold0"($v_3, $sroa_$iter_0_start_142);
         unreachable;
     }
-    $sroa_out_repr_346 = builtin::array_new<u8>(16);
+    $sroa_out_repr_352 = builtin::array_new<u8>(16);
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_26;
     };
-    if @unlikely(local.tee $v_3("core:prelude/numeric.wado/count_digits_u64"($drop_spill_2)) > builtin::array_len($sroa_out_repr_346)) {
+    if @unlikely(local.tee $v_3("core:prelude/numeric.wado/count_digits_u64"($drop_spill_2)) > builtin::array_len($sroa_out_repr_352)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_348(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_346, used: 0 }), $v_3);
-        $sroa_out_repr_346 = $sroa_write_back_348.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_354(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_352, used: 0 }), $v_3);
+        $sroa_out_repr_352 = $sroa_write_back_354.repr;
     }
-    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_346, 0, $drop_spill_2, $v_3);
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_352, 0, $drop_spill_2, $v_3);
     $inline_core_prelude_string_wado_String__internal_push_view_44: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_44;
     };
-    $sroa_$iter_0_start_140 = builtin::i32_wrap_i64(local.tee $drop_spill_2("wasi/stream-new"()));
+    $sroa_$iter_0_start_142 = builtin::i32_wrap_i64(local.tee $drop_spill_2("wasi/stream-new"()));
     current = builtin::i32_wrap_i64($drop_spill_2 >> 32_i64);
-    $sroa_$iter_0_start_140 = "linear_array_drop_frees.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_140);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($v_3 + 1)), 0, $sroa_out_repr_346, 0, $v_3);
+    $sroa_$iter_0_start_142 = "linear_array_drop_frees.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_142);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($v_3 + 1)), 0, $sroa_out_repr_352, 0, $v_3);
     builtin::array_set_u8(new_repr, $v_3, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
@@ -349,7 +349,7 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_140);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_142);
     }
 }
 

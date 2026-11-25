@@ -121,26 +121,26 @@ fn "value_graph_aggregate_written_by_call.wado/run"() with Stdout {
     let i: i32;
     let x_80: i64;
     let new_repr: ref Array<u8>;
-    let start_345: i32;
-    let $sroa_items_repr_959: ref Array<i32>;
-    let $sroa_items_used_960: i32;
-    let $sroa_write_back_973: ref "core:prelude/list.wado//List<i32>";
-    let $sroa_out_repr_974: ref Array<u8>;
-    let $sroa_write_back_976: ref "core:prelude/string.wado//String";
+    let start_361: i32;
+    let $sroa_items_repr_975: ref Array<i32>;
+    let $sroa_items_used_976: i32;
+    let $sroa_write_back_983: ref "core:prelude/list.wado//List<i32>";
+    let $sroa_out_repr_984: ref Array<u8>;
+    let $sroa_write_back_986: ref "core:prelude/string.wado//String";
     let $mv$$pattern_temp_0$0: ref "value_graph_aggregate_written_by_call.wado//Holder";
     let $mv$$pattern_temp_0$1: i32;
     multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "value_graph_aggregate_written_by_call.wado/count"(black_box(4));
     n_6 = black_box(3);
-    $sroa_items_repr_959 = array.new_fixed<i32>();
-    $sroa_items_used_960 = 0;
+    $sroa_items_repr_975 = array.new_fixed<i32>();
+    $sroa_items_used_976 = 0;
     i = 0;
     b3: block {
         l4: loop {
             break_if b3 @likely(i >= n_6);
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(local.tee $sroa_write_back_973(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_items_repr_959, used: $sroa_items_used_960 }), i);
-            $sroa_items_repr_959 = $sroa_write_back_973.repr;
-            $sroa_items_used_960 = $sroa_write_back_973.used;
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(local.tee $sroa_write_back_983(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_items_repr_975, used: $sroa_items_used_976 }), i);
+            $sroa_items_repr_975 = $sroa_write_back_983.repr;
+            $sroa_items_used_976 = $sroa_write_back_983.used;
             i = i + 1;
             continue l4;
         };
@@ -149,80 +149,80 @@ fn "value_graph_aggregate_written_by_call.wado/run"() with Stdout {
     i = 0;
     b5: block {
         l6: loop {
-            break_if b5 i >= $sroa_items_used_960;
+            break_if b5 i >= $sroa_items_used_976;
             n_6 = n_6 + 1;
             i = i + 1;
             continue l6;
         };
     };
-    $sroa_out_repr_974 = builtin::array_new<u8>(33);
-    $sroa_items_used_960 = 0;
+    $sroa_out_repr_984 = builtin::array_new<u8>(33);
+    $sroa_items_used_976 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_19: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_19;
     };
     i = $mv$$pattern_temp_0$1 < 0;
     $mv$$pattern_temp_0$1 = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_80(x_80 = builtin::i64_extend_i32_s($mv$$pattern_temp_0$1); select i64(x_80 < 0_i64, 0_i64 - x_80, x_80)));
     if i {
-        if @unlikely(1 > builtin::array_len($sroa_out_repr_974)) {
+        if @unlikely(1 > builtin::array_len($sroa_out_repr_984)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_976(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_974, used: 0 }), 1);
-            $sroa_out_repr_974 = $sroa_write_back_976.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_986(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_984, used: 0 }), 1);
+            $sroa_out_repr_984 = $sroa_write_back_986.repr;
         }
-        $sroa_items_used_960 = 1;
-        builtin::array_set_u8($sroa_out_repr_974, 0, 45);
+        $sroa_items_used_976 = 1;
+        builtin::array_set_u8($sroa_out_repr_984, 0, 45);
     } else {
     }
-    if @unlikely(local.tee i($sroa_items_used_960 + $mv$$pattern_temp_0$1) > builtin::array_len($sroa_out_repr_974)) {
+    if @unlikely(local.tee i($sroa_items_used_976 + $mv$$pattern_temp_0$1) > builtin::array_len($sroa_out_repr_984)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_976(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_974, used: $sroa_items_used_960 }), i);
-        $sroa_out_repr_974 = $sroa_write_back_976.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_986(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_984, used: $sroa_items_used_976 }), i);
+        $sroa_out_repr_984 = $sroa_write_back_986.repr;
     }
-    start_345 = $sroa_items_used_960;
-    $sroa_items_used_960 = i;
-    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_974, start_345, x_80, $mv$$pattern_temp_0$1);
-    if @unlikely(local.tee $mv$$pattern_temp_0$1($sroa_items_used_960 + 1) > builtin::array_len($sroa_out_repr_974)) {
+    start_361 = $sroa_items_used_976;
+    $sroa_items_used_976 = i;
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_984, start_361, x_80, $mv$$pattern_temp_0$1);
+    if @unlikely(local.tee $mv$$pattern_temp_0$1($sroa_items_used_976 + 1) > builtin::array_len($sroa_out_repr_984)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_976(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_974, used: $sroa_items_used_960 }), $mv$$pattern_temp_0$1);
-        $sroa_out_repr_974 = $sroa_write_back_976.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_986(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_984, used: $sroa_items_used_976 }), $mv$$pattern_temp_0$1);
+        $sroa_out_repr_984 = $sroa_write_back_986.repr;
     }
-    i = $sroa_items_used_960;
-    $sroa_items_used_960 = $mv$$pattern_temp_0$1;
-    builtin::array_copy<u8>($sroa_out_repr_974, i, global:value_graph_aggregate_written_by_call.wado::$const_obj_0, 0, 1);
+    i = $sroa_items_used_976;
+    $sroa_items_used_976 = $mv$$pattern_temp_0$1;
+    builtin::array_copy<u8>($sroa_out_repr_984, i, global:value_graph_aggregate_written_by_call.wado::$const_obj_0, 0, 1);
     $mv$$pattern_temp_0$1 = n_6 < 0;
     n_6 = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_80(x_80 = builtin::i64_extend_i32_s(n_6); select i64(x_80 < 0_i64, 0_i64 - x_80, x_80)));
     if $mv$$pattern_temp_0$1 {
-        if @unlikely(local.tee $mv$$pattern_temp_0$1($sroa_items_used_960 + 1) > builtin::array_len($sroa_out_repr_974)) {
+        if @unlikely(local.tee $mv$$pattern_temp_0$1($sroa_items_used_976 + 1) > builtin::array_len($sroa_out_repr_984)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_976(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_974, used: $sroa_items_used_960 }), $mv$$pattern_temp_0$1);
-            $sroa_out_repr_974 = $sroa_write_back_976.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_986(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_984, used: $sroa_items_used_976 }), $mv$$pattern_temp_0$1);
+            $sroa_out_repr_984 = $sroa_write_back_986.repr;
         }
-        i = $sroa_items_used_960;
-        $sroa_items_used_960 = $mv$$pattern_temp_0$1;
-        builtin::array_set_u8($sroa_out_repr_974, i, 45);
+        i = $sroa_items_used_976;
+        $sroa_items_used_976 = $mv$$pattern_temp_0$1;
+        builtin::array_set_u8($sroa_out_repr_984, i, 45);
     } else {
     }
-    if @unlikely(local.tee $mv$$pattern_temp_0$1($sroa_items_used_960 + n_6) > builtin::array_len($sroa_out_repr_974)) {
+    if @unlikely(local.tee $mv$$pattern_temp_0$1($sroa_items_used_976 + n_6) > builtin::array_len($sroa_out_repr_984)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_976(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_974, used: $sroa_items_used_960 }), $mv$$pattern_temp_0$1);
-        $sroa_out_repr_974 = $sroa_write_back_976.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_986(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_984, used: $sroa_items_used_976 }), $mv$$pattern_temp_0$1);
+        $sroa_out_repr_984 = $sroa_write_back_986.repr;
     }
-    i = $sroa_items_used_960;
-    $sroa_items_used_960 = $mv$$pattern_temp_0$1;
-    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_974, i, x_80, n_6);
+    i = $sroa_items_used_976;
+    $sroa_items_used_976 = $mv$$pattern_temp_0$1;
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_984, i, x_80, n_6);
     $inline_core_prelude_string_wado_String__internal_push_view_64: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_64;
     };
     $mv$$pattern_temp_0$1 = builtin::i32_wrap_i64(local.tee x_80("wasi/stream-new"()));
     n_6 = builtin::i32_wrap_i64(x_80 >> 32_i64);
     $mv$$pattern_temp_0$1 = "value_graph_aggregate_written_by_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$$pattern_temp_0$1);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($sroa_items_used_960 + 1)), 0, $sroa_out_repr_974, 0, $sroa_items_used_960);
-    builtin::array_set_u8(new_repr, $sroa_items_used_960, 10);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($sroa_items_used_976 + 1)), 0, $sroa_out_repr_984, 0, $sroa_items_used_976);
+    builtin::array_set_u8(new_repr, $sroa_items_used_976, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $sroa_items_used_960 = $sroa_items_used_960 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(n_6, new_repr, 0, $sroa_items_used_960);
+        $sroa_items_used_976 = $sroa_items_used_976 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(n_6, new_repr, 0, $sroa_items_used_976);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

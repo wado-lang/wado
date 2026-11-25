@@ -846,9 +846,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> [i32, i32, bool];  // TypeId(292)
 
-type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(293)
+type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(293)
 
-type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(294)
+type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(294)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(295)
 
@@ -6717,20 +6717,6 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]"(self
     return from, stop, valid;
 }
 
-fn "core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]"($mv$self$repr, $mv$self$start, $mv$self$end, start, end, valid) {
-    let s: ref "core:prelude/string.wado//String";
-    let $qm_e: ref "core:serde//DeserializeError";
-    let $match_7: ref null "core:serde//DeserializeError";
-    s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(end - start), used: 0 };
-    if @likely(ref.is_null(local.tee $match_7("core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]"($mv$self$repr, $mv$self$start, $mv$self$end, s, start, end, valid)))) {
-    } else {
-        $qm_e = ref.as_non_null($match_7);
-        cold_path;
-        return 1, ref.null none, $qm_e;
-    }
-    return 0, s, ref.null none;
-}
-
 fn "core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]"($mv$self$repr, $mv$self$start, $mv$self$end, dst, start, end, valid) {
     let slice_5: ref "core:prelude/slice.wado//Slice<u8>";
     if @unlikely(valid == 0) {
@@ -6765,6 +6751,20 @@ fn "core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]"($
         builtin::array_copy<u8>(dst.repr, start, slice_5.repr, slice_5.start, $mv$self$start);
     };
     return ref.null none;
+}
+
+fn "core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]"($mv$self$repr, $mv$self$start, $mv$self$end, start, end, valid) {
+    let s: ref "core:prelude/string.wado//String";
+    let $qm_e: ref "core:serde//DeserializeError";
+    let $match_7: ref null "core:serde//DeserializeError";
+    s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(end - start), used: 0 };
+    if @likely(ref.is_null(local.tee $match_7("core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]"($mv$self$repr, $mv$self$start, $mv$self$end, s, start, end, valid)))) {
+    } else {
+        $qm_e = ref.as_non_null($match_7);
+        cold_path;
+        return 1, ref.null none, $qm_e;
+    }
+    return 0, s, ref.null none;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {

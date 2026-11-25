@@ -67,8 +67,8 @@ fn "niri_char_builtin_fold.wado/run"() with Stdout {
     let c_1: char;
     let out_28: ref "core:prelude/string.wado//String";
     let x_119: i64;
-    let new_used_191: i32;
-    let start_192: i32;
+    let new_used_195: i32;
+    let start_196: i32;
     let q: u64;
     let tens: i32;
     c_1 = (local.tee c_1(black_box(81) & 127) | (((c_1 - 65) <u 26) * 32)) == 113;
@@ -77,23 +77,23 @@ fn "niri_char_builtin_fold.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__internal_push_view_23;
     };
     $inline_char_core_prelude_traits_wado_Display__fmt_sroa_self_value__7__$inline_core_prelude_string_wado_String__push_1: block {
-        if @unlikely(local.tee new_used_191(0 + 1) > builtin::array_len(out_28.repr)) {
+        if @unlikely(local.tee new_used_195(0 + 1) > builtin::array_len(out_28.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_28, new_used_191);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_28, new_used_195);
         }
-        start_192 = out_28.used;
-        out_28.used = new_used_191;
-        builtin::array_set_u8(out_28.repr, start_192, 107);
+        start_196 = out_28.used;
+        out_28.used = new_used_195;
+        builtin::array_set_u8(out_28.repr, start_196, 107);
         break $inline_char_core_prelude_traits_wado_Display__fmt_sroa_self_value__7__$inline_core_prelude_string_wado_String__push_1;
     };
-    if @unlikely(local.tee new_used_191(out_28.used + 1) > builtin::array_len(out_28.repr)) {
+    if @unlikely(local.tee new_used_195(out_28.used + 1) > builtin::array_len(out_28.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_28, new_used_191);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_28, new_used_195);
     }
-    start_192 = out_28.used;
-    out_28.used = new_used_191;
-    builtin::array_copy<u8>(local.tee $load_8(out_28.repr), start_192, global:niri_char_builtin_fold.wado::$const_obj_0, 0, 1);
-    start_192 = c_1 < 0;
+    start_196 = out_28.used;
+    out_28.used = new_used_195;
+    builtin::array_copy<u8>(local.tee $load_8(out_28.repr), start_196, global:niri_char_builtin_fold.wado::$const_obj_0, 0, 1);
+    start_196 = c_1 < 0;
     x_119 = builtin::i64_extend_i32_s(c_1);
     x_119 = select i64(x_119 < 0_i64, 0_i64 - x_119, x_119);
     c_1 = $inline_count_digits_u64_10: block -> i32 {
@@ -156,57 +156,57 @@ fn "niri_char_builtin_fold.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_10: 20;
     };
-    if start_192 {
-        if @unlikely(local.tee new_used_191(new_used_191 + 1) > builtin::array_len($load_8)) {
+    if start_196 {
+        if @unlikely(local.tee new_used_195(new_used_195 + 1) > builtin::array_len($load_8)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_28, new_used_191);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_28, new_used_195);
         }
-        start_192 = out_28.used;
-        out_28.used = new_used_191;
-        builtin::array_set_u8(out_28.repr, start_192, 45);
+        start_196 = out_28.used;
+        out_28.used = new_used_195;
+        builtin::array_set_u8(out_28.repr, start_196, 45);
     } else {
     }
-    if @unlikely(local.tee new_used_191(out_28.used + c_1) > builtin::array_len(out_28.repr)) {
+    if @unlikely(local.tee new_used_195(out_28.used + c_1) > builtin::array_len(out_28.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_28, new_used_191);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_28, new_used_195);
     }
-    start_192 = out_28.used;
-    out_28.used = new_used_191;
+    start_196 = out_28.used;
+    out_28.used = new_used_195;
     $load_8 = out_28.repr;
-    c_1 = start_192 + c_1;
+    c_1 = start_196 + c_1;
     b24: block {
         l25: loop {
-            break_if b24 (c_1 - start_192) < 2;
+            break_if b24 (c_1 - start_196) < 2;
             q = x_119 /u 100_i64;
-            tens = local.tee new_used_191(builtin::i32_wrap_i64(x_119 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_8, c_1 - 1, (48 + new_used_191) - (tens * 10));
+            tens = local.tee new_used_195(builtin::i32_wrap_i64(x_119 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_8, c_1 - 1, (48 + new_used_195) - (tens * 10));
             builtin::array_set_u8($load_8, c_1 - 2, 48 + tens);
             c_1 = c_1 - 2;
             x_119 = q;
             continue l25;
         };
     };
-    if c_1 > start_192 {
-        builtin::array_set_u8($load_8, start_192, 48 + builtin::i32_wrap_i64(x_119 %u 10_i64));
+    if c_1 > start_196 {
+        builtin::array_set_u8($load_8, start_196, 48 + builtin::i32_wrap_i64(x_119 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_58: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_58;
     };
     c_1 = builtin::i32_wrap_i64(local.tee x_119("wasi/stream-new"()));
-    new_used_191 = builtin::i32_wrap_i64(x_119 >> 32_i64);
+    new_used_195 = builtin::i32_wrap_i64(x_119 >> 32_i64);
     c_1 = "niri_char_builtin_fold.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(c_1);
-    builtin::array_copy<u8>(local.tee $load_8(builtin::array_new<u8>(local.tee start_192(out_28.used) + 1)), 0, out_28.repr, 0, start_192);
-    builtin::array_set_u8($load_8, start_192, 10);
+    builtin::array_copy<u8>(local.tee $load_8(builtin::array_new<u8>(local.tee start_196(out_28.used) + 1)), 0, out_28.repr, 0, start_196);
+    builtin::array_set_u8($load_8, start_196, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_192 = start_192 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(new_used_191, $load_8, 0, start_192);
+        start_196 = start_196 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(new_used_195, $load_8, 0, start_196);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"(new_used_191);
+        "wasi/stream-drop-writable"(new_used_195);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
