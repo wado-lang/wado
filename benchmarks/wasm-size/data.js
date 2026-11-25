@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795603524712,
+  "lastUpdate": 1795610064931,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82337,6 +82337,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aa6e586b4b1caba9dfe62d79d945e9fa59a2e371"
         },
         "date": 1795603524231,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24986,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353988,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f7b704dea4ef906713f6b56b6597366cefba6145",
+          "message": "Merge pull request #2756 from wado-lang/gfx/dreamy-cannon-o9z19p\n\nperf(re): a pattern with lookarounds runs on the DFAs, within ten times Node's RegExp",
+          "timestamp": "2026-11-25T21:18:30+09:00",
+          "tree_id": "d1c211f153e916df33d3e5d95deb6d1fffb03712",
+          "url": "https://github.com/wado-lang/wado/commit/f7b704dea4ef906713f6b56b6597366cefba6145"
+        },
+        "date": 1795610063862,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
