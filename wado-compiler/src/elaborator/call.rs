@@ -5137,8 +5137,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let def = key.decl()?;
         let (instance, vars) = match self.lookup_generic_newtype_of_decl(def) {
             Some(info) => {
-                let arity = info.type_params.len();
-                let vars: Vec<TypeId> = (0..arity).map(|_| self.mint_infer_var()).collect();
+                let names: Vec<String> = info.type_params.iter().map(|p| p.name.clone()).collect();
+                let vars: Vec<TypeId> =
+                    names.iter().map(|name| self.mint_infer_var_named(name)).collect();
                 (self.generic_newtype_instance(def, vars.clone()), vars)
             }
             None => (self.lookup_newtype_of_decl(def)?, Vec::new()),

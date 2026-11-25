@@ -1250,14 +1250,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             default_methods: self.sem.default_method_facts.len(),
         };
         let walked = walk(self);
-        self.finalize_infer_holes(mark);
+        self.finalize_infer_holes(&mark);
         walked
     }
 
     /// Settle the body the facts past `since` were recorded by: report what
     /// nothing answered, close it to `error`, and substitute every answer into
     /// those facts.
-    fn finalize_infer_holes(&mut self, since: FactsMark) {
+    fn finalize_infer_holes(&mut self, since: &FactsMark) {
         if self.infer_holes.is_empty() {
             // The reports the body made reach no later body.
             self.infer_holes = InferHoleTable::default();
@@ -1630,7 +1630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// can carry a `TypeId`. Trait default-method bodies record into their own
     /// facts in `default_method_facts`, not the main `types`; sweep those too,
     /// or a hole minted in a default-method body leaks past reify.
-    fn sweep_recorded_facts(&mut self, subst: &IndexMap<InferVarId, TypeId>, since: FactsMark) {
+    fn sweep_recorded_facts(&mut self, subst: &IndexMap<InferVarId, TypeId>, since: &FactsMark) {
         if subst.is_empty() {
             return;
         }

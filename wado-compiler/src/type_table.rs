@@ -6039,6 +6039,7 @@ impl TypeTable {
             ResolvedType::TypeParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
             ResolvedType::AssocParam { .. } => family_is_open,
