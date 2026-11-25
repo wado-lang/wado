@@ -212,7 +212,9 @@ pub fn json_object<T: Deserialize>(text: &String) -> Result<T, String> {
             continue;
         }
         match from_string::<T, String>(text.substr_bytes(start, end + 1)) {
-            Ok(v) => return Ok(v),
+            Ok(v) => {
+                return Ok(v);
+            },
             Err(e) => if error.is_empty() {
                 error = `${e:?}: `;
             },
