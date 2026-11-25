@@ -1,5 +1,5 @@
-//! The `self_by_value` lint: a by-value `self` on a type that can hold no
-//! resource, which every call copies. See
+//! The `self_by_value` lint: a by-value `self` on a type every value of which
+//! is copyable, which every call copies. See
 //! `docs/wep-2026-10-17-affine-types.md`.
 
 use crate::Lints;

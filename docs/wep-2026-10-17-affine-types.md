@@ -301,8 +301,8 @@ fields it was built with.
 ### A by-value `self` is a parameter like any other
 
 A by-value `self` is copied when its type is copyable and moved when it is
-affine, as every by-value parameter is. Two rules follow, and nothing else is
-special about a receiver.
+affine, as every by-value parameter is. Three rules follow, and nothing else
+is special about a receiver.
 
 - Any type may declare one. A concrete type every value of which is copyable
   used to be refused, which left the rule in three parts: allowed on an affine
