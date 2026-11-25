@@ -1227,7 +1227,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return_type,
                 method_type_args,
                 consumes_self,
-                (consumes_self && is_ref && !is_ref_impl).then_some(written_receiver),
+                (consumes_self && !is_ref_impl && {
+                    let (references, _) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .reference_path(written_receiver);
+                    !references.is_empty()
+                })
+                .then_some(written_receiver),
             );
             if waits_for_selection {
                 self.wait_for_selection(PendingCall {

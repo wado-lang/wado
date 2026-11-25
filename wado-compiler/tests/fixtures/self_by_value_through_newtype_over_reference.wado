@@ -1,0 +1,48 @@
+// A newtype over a reference is that reference: a by-value `self` read through
+// it is read out of the reference, and refused as it is through `&mut T`.
+// Regression: the check looked at the receiver's own type alone, so a move or
+// a copy through the newtype went unreported.
+
+affine struct Job { id: i32 }
+
+impl Drop for Job {
+    fn drop(self) {}
+}
+
+impl Job {
+    fn finish(self) -> i32 { return self.id; }
+}
+
+struct Point { x: i32 }
+
+impl Point {
+    #[allow(self_by_value)]
+    fn bumped(self) -> i32 { return self.x + 1; }
+}
+
+type JobHandle = &mut Job;
+type PointHandle = &mut Point;
+
+fn finish_through(h: JobHandle) -> i32 {
+    return h.finish();
+}
+
+fn bump_through(h: PointHandle) -> i32 {
+    return h.bumped();
+}
+
+fn bump_through_nested(h: &PointHandle) -> i32 {
+    return h.bumped();
+}
+
+export fn run() {
+    let mut j = Job { id: 7 };
+    let _ = finish_through(&mut j as JobHandle);
+    let mut p = Point { x: 1 };
+    let _ = bump_through(&mut p as PointHandle);
+    let h = &mut p as PointHandle;
+    let _ = bump_through_nested(&h);
+}
+
+__DATA__
+{"compile_error": ":27:12: analysis error: cannot move affine type `Job` out of a reference", "compile_errors_contains": [":31:12: analysis error: `bumped` takes `self` by value, and the receiver is `PointHandle`; write `*` to copy what it points to", ":35:12: analysis error: `bumped` takes `self` by value, and the receiver is `&PointHandle`; write `*` to copy what it points to"]}

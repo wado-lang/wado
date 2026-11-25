@@ -31,6 +31,8 @@ trait Out with () {
 
 struct Plain {}
 
+impl Tagged for Plain { fn tag(&self) -> i32 { return 0; } }
+
 impl<T: Tagged> Out for &T {
     type Of = i32;
     fn out(self) -> i32 { return (*self).tag(); }

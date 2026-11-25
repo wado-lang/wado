@@ -2958,10 +2958,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|link| tt.fq_type_name(link))
                     .filter(|name| name.binder_name().is_none())
                     .any(|name| {
-                        self.tysys.trait_env.has_any_methodful_impl_by_receiver(
-                            &Receiver::RefTo(kind, name.head_only()),
-                            trait_,
-                        )
+                        self.tysys
+                            .trait_env
+                            .methodful_impls_by_receiver(
+                                &Receiver::RefTo(kind, name.head_only()),
+                                trait_,
+                            )
+                            .any(|entry| tt.impl_reaches_instance(entry, into_iter_receiver_type))
                     })
                 })
         };

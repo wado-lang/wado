@@ -1,0 +1,107 @@
+// An associated type read off a reference is the binding of the impl dispatch
+// selects, whichever of these tells the impls apart: the bound a blanket puts
+// on its parameter, the trait argument a blanket leaves to a default, or the
+// newtype a reference impl is written for.
+// Regression: blankets of one trait at the same arguments overwrote each
+// other, a blanket writing no argument answered at every argument, and an impl
+// for a reference to a newtype was looked up under the newtype's base.
+
+trait Named with () { fn name(&self) -> String; }
+trait Counted with () { fn count(&self) -> i32; }
+
+trait Out with () {
+    type Of;
+    fn out(self) -> Self::Of;
+}
+
+impl<A: Named> Out for &A {
+    type Of = String;
+    fn out(self) -> String { return (*self).name(); }
+}
+
+impl<B: Counted> Out for &B {
+    type Of = i32;
+    fn out(self) -> i32 { return (*self).count(); }
+}
+
+struct Label {}
+struct Tally {}
+
+impl Named for Label { fn name(&self) -> String { return "label"; } }
+impl Counted for Tally { fn count(&self) -> i32 { return 3; } }
+
+fn out_of<X: Out>(x: X) -> X::Of {
+    return x.out();
+}
+
+trait Conv<T = i32> with () {
+    type To;
+    fn conv(self, t: T) -> Self::To;
+}
+
+impl<I> Conv for &I {
+    type To = i32;
+    fn conv(self, t: i32) -> i32 { return t + 1; }
+}
+
+impl<I> Conv<String> for &I {
+    type To = String;
+    fn conv(self, t: String) -> String { return `${t}!`; }
+}
+
+fn conv_default<C: Conv>(c: C) -> C::To {
+    return c.conv(1);
+}
+
+fn conv_text<C: Conv<String>>(c: C) -> C::To {
+    return c.conv("hi");
+}
+
+trait Kind with () {
+    type Of;
+    fn kind(self) -> Self::Of;
+}
+
+struct Base {}
+type Wrapped = Base;
+
+impl Kind for &Base {
+    type Of = i32;
+    fn kind(self) -> i32 { return 1; }
+}
+
+impl Kind for &Wrapped {
+    type Of = String;
+    fn kind(self) -> String { return "wrapped"; }
+}
+
+fn kind_of<K: Kind>(k: K) -> K::Of {
+    return k.kind();
+}
+
+fn via_named<A: Named>(a: &A) -> String { return out_of(a); }
+fn via_counted<B: Counted>(b: &B) -> i32 { return out_of(b); }
+
+test "blankets told apart by their bounds" {
+    let label = Label {};
+    let tally = Tally {};
+    assert out_of(&label) == "label";
+    assert out_of(&tally) == 3;
+    assert via_named(&label) == "label";
+    assert via_counted(&tally) == 3;
+}
+
+test "a blanket at the trait's default argument" {
+    let label = Label {};
+    let n = conv_default(&label);
+    assert n == 2;
+    let s = conv_text(&label);
+    assert s == "hi!";
+}
+
+test "an impl for a reference to a newtype" {
+    let base = Base {};
+    let wrapped = Base {} as Wrapped;
+    assert kind_of(&base) == 1;
+    assert kind_of(&wrapped) == "wrapped";
+}

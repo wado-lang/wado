@@ -3180,15 +3180,24 @@ impl TypeTable {
         matches!(self.get(type_id), ResolvedType::MutRef(_))
     }
 
-    /// Whether a `&mut` is among the references holding `type_id`'s pointee:
-    /// `&&mut X` is, `&&X` is not.
-    pub fn reaches_through_mut_ref(&self, mut type_id: TypeId) -> bool {
+    /// [`Self::ref_kind`] of what `type_id` is represented as: a newtype over
+    /// a reference is that reference to anything asking what it can reach.
+    pub fn represented_ref_kind(&self, type_id: TypeId) -> Option<RefKind> {
+        self.ref_kind(self.representation_head(type_id))
+    }
+
+    /// The references holding `type_id`'s pointee, outermost first, and the
+    /// pointee: `&&mut X` is `[Shared, Mut]` and `X`. A newtype over a
+    /// reference is that reference, at any depth.
+    pub fn reference_path(&self, mut type_id: TypeId) -> (Vec<RefKind>, TypeId) {
+        let mut kinds = Vec::new();
         loop {
-            match self.get(type_id) {
-                ResolvedType::MutRef(_) => return true,
-                ResolvedType::Ref(inner) => type_id = *inner,
-                _ => return false,
-            }
+            let head = self.representation_head(type_id);
+            let Some((kind, inner)) = self.ref_kind(head).zip(self.ref_pointee(head)) else {
+                return (kinds, type_id);
+            };
+            kinds.push(kind);
+            type_id = inner;
         }
     }
 
@@ -4355,6 +4364,7 @@ impl TypeTable {
         assoc_name: String,
         param: TypeId,
         binding: TypeId,
+        impl_def: DefId,
     ) {
         let blankets = self
             .ref_blanket_assoc_type_defs
@@ -4368,11 +4378,9 @@ impl TypeTable {
             trait_args: trait_ref.args,
             param,
             binding,
+            impl_def,
         };
-        match blankets
-            .iter_mut()
-            .find(|known| known.trait_args == def.trait_args)
-        {
+        match blankets.iter_mut().find(|known| known.impl_def == impl_def) {
             Some(known) => *known = def,
             None => blankets.push(def),
         }
@@ -4380,8 +4388,10 @@ impl TypeTable {
 
     /// What a blanket over a reference binds `assoc_name` to for `base`, its
     /// parameter standing for what `base` points to: the blanket whose trait
-    /// arguments are `trait_args`, or the one every blanket agrees on where a
-    /// bound names none.
+    /// arguments, defaults filled, are `trait_args`, or else the one a bare
+    /// bound names. Blankets that differ only in their bounds answer nothing
+    /// here: no bound is checked, so what the elaborator registered for the
+    /// reference is the answer.
     fn ref_blanket_projection(
         &mut self,
         base: TypeId,
@@ -4396,7 +4406,7 @@ impl TypeTable {
         };
         let blankets = self.ref_blanket_assoc_type_defs.get(&key)?.clone();
         let referent = self.ref_pointee(base)?;
-        let mut answers = Vec::new();
+        let mut answers = AssocAnswers::default();
         for def in blankets {
             let substitution = self.bind_params(&[def.param], &[referent]);
             let written: Vec<TypeId> = def
@@ -4404,17 +4414,31 @@ impl TypeTable {
                 .iter()
                 .map(|&arg| self.substitute_type_params(arg, &substitution))
                 .collect();
-            if trait_args.is_some_and(|wanted| !written.is_empty() && written != wanted) {
-                continue;
-            }
+            let filled = self.filled_trait_args(
+                &TraitRef {
+                    decl: *owning_trait,
+                    args: written.clone(),
+                },
+                base,
+            );
             let answer = self.substitute_type_params(def.binding, &substitution);
-            if !answers.contains(&answer) {
-                answers.push(answer);
-            }
+            answers.0.push(AssocAnswer {
+                written,
+                filled,
+                answer,
+                impl_def: Some(def.impl_def),
+            });
         }
-        match answers[..] {
-            [answer] => Some(answer),
-            _ => None,
+        let at_wanted: Vec<(bool, TypeId)> = answers
+            .0
+            .iter()
+            .filter(|entry| trait_args.is_some() && entry.filled.as_deref() == trait_args)
+            .map(|entry| (true, entry.answer))
+            .collect();
+        if at_wanted.is_empty() {
+            answers.bare()
+        } else {
+            one_assoc_answer(at_wanted.into_iter())
         }
     }
 
@@ -8169,6 +8193,7 @@ struct RefBlanketAssocType {
     trait_args: Vec<TypeId>,
     param: TypeId,
     binding: TypeId,
+    impl_def: DefId,
 }
 
 /// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather

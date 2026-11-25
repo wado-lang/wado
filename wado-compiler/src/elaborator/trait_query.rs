@@ -12,7 +12,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, TypeHead, display_generic_name};
+use crate::name::{FqTypeName, Receiver, RefKind, TypeHead, display_generic_name};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, StructDef, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
@@ -3747,45 +3747,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .zip(tt.ref_pointee(concrete_type_id))
         };
         let referent = reference.map(|(_, referent)| referent);
-        // Get the base type name and concrete type args for impl block lookup.
-        // For newtypes, follow the chain to the underlying type to find the trait impl,
-        // but registration (below) still uses concrete_type_id so the monomorphizer can
-        // resolve e.g. `MyBytes::Iter` when `MyBytes` is a newtype over `List<u8>`.
-        let (type_name, concrete_type_args) = {
+        // A newtype inherits its immediate base's impls, so the chain answers a
+        // link at a time and the nearest link carrying one wins. Registration
+        // (below) still uses concrete_type_id so the monomorphizer can resolve
+        // e.g. `MyBytes::Iter` when `MyBytes` is a newtype over `List<u8>`.
+        let links: Vec<(FqTypeName, Vec<TypeId>)> = {
             let tt = self.tysys.type_table.borrow();
-            let effective_id = tt.representation_head(referent.unwrap_or(concrete_type_id));
             let list_name = tt.compiler_struct_fq_name(CompilerItem::List);
-            if let Some((_, type_args)) = tt.instance_parts(effective_id) {
-                (
-                    tt.fq_type_name(effective_id).head_only(),
-                    type_args.to_vec(),
-                )
-            } else {
-                match tt.get(effective_id).clone() {
+            std::iter::successors(Some(referent.unwrap_or(concrete_type_id)), |&link| {
+                tt.link_below(link)
+            })
+            .filter_map(|link| {
+                if let Some((_, type_args)) = tt.instance_parts(link) {
+                    return Some((tt.fq_type_name(link).head_only(), type_args.to_vec()));
+                }
+                match tt.get(link) {
                     // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
                     // with associated types just like structs. Without this arm,
                     // a generic call like `parse_range::<i32>(...)` would skip
                     // the `i32::Err = ParseIntError` registration and leave
                     // `T::Err` unresolved at the caller's binding site.
                     ResolvedType::Struct { .. } | ResolvedType::Primitive(_) => {
-                        (tt.fq_type_name(effective_id), vec![])
+                        Some((tt.fq_type_name(link), vec![]))
                     }
-                    ResolvedType::BuiltinArray(elem) => (list_name, vec![elem]),
-                    _ => {
-                        drop(tt);
-                        // A reference to a reference is keyed by neither
-                        // layer, and answers through what it points to.
-                        if let Some(referent) = referent {
-                            self.register_assoc_types_for_concrete_type_and_trait(referent, trait_);
-                        }
-                        return;
-                    }
+                    ResolvedType::Newtype { .. } => Some((
+                        tt.fq_type_name(link).head_only(),
+                        tt.declared_type_args(link).unwrap_or_default(),
+                    )),
+                    ResolvedType::BuiltinArray(elem) => Some((list_name.clone(), vec![*elem])),
+                    _ => None,
                 }
-            }
-        };
-        let receiver = match reference {
-            Some((kind, _)) => Receiver::RefTo(kind, type_name),
-            None => Receiver::Type(type_name),
+            })
+            .collect()
         };
 
         // Collect matching impl block info (avoids borrow conflicts during resolution)
@@ -3805,7 +3798,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             target: ast::Type,
         }
         let trait_env = self.tysys.trait_env.clone();
-        let impl_infos: Vec<ImplInfo> = {
+        let mut concrete_type_args = vec![];
+        let mut impl_infos: Vec<ImplInfo> = vec![];
+        for (type_name, link_args) in links {
+            let receiver = match reference {
+                Some((kind, _)) => Receiver::RefTo(kind, type_name),
+                None => Receiver::Type(type_name),
+            };
+            concrete_type_args = link_args;
             let mut result = vec![];
             {
                 let entries = trait_env.entries_by_receiver_vec(&receiver);
@@ -3841,16 +3841,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
             }
-            result
-        };
-        // An impl written for a reference answers it alone. Without one the
-        // type table's blanket over a reference answers, or else the
-        // referent, whose registration either reads.
-        if let Some(referent) = referent
-            && impl_infos.is_empty()
-        {
-            return self.register_assoc_types_for_concrete_type_and_trait(referent, trait_);
+            impl_infos = result;
+            if !impl_infos.is_empty() {
+                break;
+            }
         }
+        let answered_by_own_impl = !impl_infos.is_empty();
 
         for info in impl_infos {
             let mut scope = self.enter_inherited_type_param_scope();
@@ -3893,65 +3889,87 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let trait_ref = scope.impl_trait_ref(&info.trait_type, &info.target, info.trait_key);
             scope.register_assoc_types(concrete_type_id, &trait_ref, &info.assoc_types);
         }
-        if referent.is_some() {
+        // An impl written for a reference answers it alone, as it does in
+        // dispatch.
+        if referent.is_some() && answered_by_own_impl {
             return;
         }
 
-        // Also check blanket impls: `impl<I: Trait> OtherTrait for I`.
-        // For example, `impl<I: Iterator> IntoIterator for I` applies to StrUtf8ByteIter.
+        // Also check blanket impls: `impl<I: Trait> OtherTrait for I`, which
+        // applies to `StrUtf8ByteIter`, and `impl<I: Trait> OtherTrait for &I`,
+        // which applies to a reference whose referent keeps the bounds.
         struct BlanketImplInfo {
             blanket_param: ParamRef,
             blanket_param_bounds: Vec<ast::TraitBound>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
             /// The trait this blanket implements, as its own header names it.
             trait_key: DefId,
+            trait_type: ast::Type,
+            target: ast::Type,
         }
+        let (blanket_receiver, blanket_subject) = match reference {
+            Some((kind, referent)) => (
+                BlanketReceiver::Ref {
+                    is_mut: kind == RefKind::Mut,
+                },
+                referent,
+            ),
+            None => (BlanketReceiver::Value, concrete_type_id),
+        };
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
             for blanket in trait_env.blanket_impls.get(&trait_).into_iter().flatten() {
                 let header = &trait_env.impl_headers[&blanket.def];
-                if header.associated_types.is_empty() {
+                if header.associated_types.is_empty() || blanket.receiver != blanket_receiver {
                     continue;
                 }
-                if blanket.receiver != BlanketReceiver::Value {
-                    continue;
-                }
-                let Some(blanket_param) = header
-                    .type_params
-                    .iter()
-                    .find(|tp| tp.name == blanket.param && !tp.bounds.is_empty())
-                else {
+                // A value blanket with no bound reaches every type, and is
+                // answered where its parameter is bound.
+                let Some(blanket_param) = header.type_params.iter().find(|tp| {
+                    tp.name == blanket.param && (reference.is_some() || !tp.bounds.is_empty())
+                }) else {
                     continue;
                 };
                 let bounds_ok = blanket_param.bounds.iter().all(|bound| {
                     self.tysys.bound_written(bound).is_some_and(|trait_| {
                         self.tysys.type_implements_trait(
                             &self.annotate_ctx,
-                            concrete_type_id,
+                            blanket_subject,
                             &trait_,
                         )
                     })
                 });
-                if bounds_ok {
-                    let Some(trait_key) = header.trait_def() else {
-                        continue;
-                    };
-                    result.push(BlanketImplInfo {
-                        blanket_param: ParamRef::of(blanket.def, &blanket_param.name),
-                        blanket_param_bounds: blanket_param.bounds.clone(),
-                        assoc_types: header.associated_types.clone(),
-                        trait_key,
-                    });
+                if !bounds_ok {
+                    continue;
                 }
+                let (Some(trait_key), Some(trait_type)) = (header.trait_def(), header.trait_ty())
+                else {
+                    continue;
+                };
+                result.push(BlanketImplInfo {
+                    blanket_param: ParamRef::of(blanket.def, &blanket_param.name),
+                    blanket_param_bounds: blanket_param.bounds.clone(),
+                    assoc_types: header.associated_types.clone(),
+                    trait_key,
+                    trait_type: trait_type.clone(),
+                    target: header.ty.clone(),
+                });
             }
             result
         };
+        // A reference no blanket reaches answers through what it points to.
+        if let Some(referent) = referent
+            && blanket_infos.is_empty()
+        {
+            return self.register_assoc_types_for_concrete_type_and_trait(referent, trait_);
+        }
 
         for info in blanket_infos {
             let mut scope = self.enter_inherited_type_param_scope();
 
-            // A blanket's target is its parameter, so the type registered for
-            // is what both `Self` and that parameter stand for.
+            // `Self` is the type registered for, and the blanket's parameter
+            // the type its bounds were checked on: the same type, or what a
+            // reference points to.
             let implementing = SelfBinding {
                 type_id: concrete_type_id,
                 declaring_trait: Some(info.trait_key),
@@ -3959,15 +3977,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             scope.set_self_binding(implementing);
             scope.bind_param(
                 &info.blanket_param.name,
-                BinderInScope::standing_for(0, concrete_type_id, &info.blanket_param),
+                BinderInScope::standing_for(0, blanket_subject, &info.blanket_param),
                 ScopedBound::pin_all(&info.blanket_param_bounds, Some(implementing)),
             );
 
-            scope.register_assoc_types(
-                concrete_type_id,
-                &TraitRef::bare(info.trait_key),
-                &info.assoc_types,
-            );
+            let trait_ref = scope.impl_trait_ref(&info.trait_type, &info.target, info.trait_key);
+            scope.register_assoc_types(concrete_type_id, &trait_ref, &info.assoc_types);
         }
     }
 

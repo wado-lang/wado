@@ -119,6 +119,7 @@ pub fn holds_with_args(
         asking: Vec::new(),
         member_next: false,
         at_itself: None,
+        following: Vec::new(),
     }
     .holds(ty, trait_, args)
 }
@@ -224,6 +225,10 @@ struct Query<'a> {
     /// (`docs/wep-2026-09-01-trait-resolution.md`). The subject stays the same
     /// through a chained blanket's bounds, so the restriction travels with it.
     at_itself: Option<SolverType>,
+    /// The projections whose stated equality [`Self::normalized`] is reading.
+    /// An equality that leads back to one of them states nothing for it:
+    /// `I: Src<Item = I::Item>`, or two bounds naming each other's.
+    following: Vec<SolverType>,
 }
 
 impl Query<'_> {
@@ -930,12 +935,13 @@ impl Query<'_> {
                         .map(|eq| &eq.ty);
                     if let Some(first) = stated.next()
                         && stated.all(|other| other == first)
-                        // One written as itself (`Item = I::Item`) states
-                        // nothing, and reading it would not end.
-                        && first != ty
+                        && !self.following.contains(ty)
                     {
                         let first = first.clone();
-                        return self.normalized(&first);
+                        self.following.push(ty.clone());
+                        let read = self.normalized(&first);
+                        self.following.pop();
+                        return read;
                     }
                 }
                 let args: Vec<SolverType> = args.iter().map(|a| self.normalized(a)).collect();
@@ -1176,6 +1182,7 @@ pub(super) fn impl_applies(
         asking: Vec::new(),
         member_next: false,
         at_itself: Some(ty.clone()),
+        following: Vec::new(),
     }
     .impl_answers(id, def, ty, asked)
     .map(|answer| answer.trait_args)
@@ -1228,6 +1235,7 @@ pub(super) fn admits(program: &Program, env: &Env, source: &Source, ty: &SolverT
         asking: Vec::new(),
         member_next: false,
         at_itself: None,
+        following: Vec::new(),
     };
     let mut bindings: Vec<Option<Binding>> = vec![None; source.params];
     let mut deferred = Vec::new();

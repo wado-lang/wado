@@ -313,7 +313,9 @@ special about a receiver.
   would move it out of the reference, and a `&` is refused for the same
   reason. For a copyable value it would act on a copy, where `&mut` says the
   caller meant the value itself. A written `*` asks for the copy. The standard
-  library and seven packages held no such call when the rule was adopted.
+  library and seven packages held no such call when the rule was adopted. A
+  newtype over a reference (`type H = &mut T`) is that reference here
+  (`self_by_value_through_newtype_over_reference.wado`).
 - Through a `&`, a copyable receiver is copied as before. A shared reference
   cannot write, so the copy and the referent are the same value to every
   reader, and `r.unwrap()` on an `&Option<T>` is too common to ask a `*` of.

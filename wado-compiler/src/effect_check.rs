@@ -2996,7 +2996,11 @@ impl EffectIndex<'_> {
     /// Parameter type ids for a method / static dispatch target.
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
         match self.bound_dispatch_decl(func_ref) {
-            Some(declaration) => self.fn_params.get(&declaration).cloned().unwrap_or_default(),
+            Some(declaration) => self
+                .fn_params
+                .get(&declaration)
+                .cloned()
+                .unwrap_or_default(),
             None => self.callee_entry(func_ref, self.fn_params, self.mangled_params),
         }
     }

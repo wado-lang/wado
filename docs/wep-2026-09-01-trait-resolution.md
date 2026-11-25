@@ -749,14 +749,31 @@ under the trait and the reference kind
 projection off a reference reads it before the referent settles, so
 `<&mut I as Iterator>::Item` is `I::Item` inside a generic body. An impl
 written for the reference itself is asked first, and a blanket answers at the
-trait arguments it wrote
+trait arguments it wrote, defaults filled
 (`assoc_type_of_reference_own_impl_outranks_blanket.wado`).
+
+The type table checks no bound, so blankets that differ only in their bounds
+answer nothing there. The elaborator registers the binding for each reference
+it meets, from the blanket whose bounds the referent keeps
+(`register_assoc_types_for_concrete_type_and_trait`), and the type table reads
+that registration first (`assoc_type_of_reference_blanket_by_bound.wado`).
+
+A reference blanket's instance is keyed by its pointee alone
+(`ref_blanket_instance`), so a second parameter that a bound projects, `A` in
+`impl<A, T: Source<Item = A>> Tag<A> for &T`, is never bound. A call through
+such a blanket is refused at monomorphization: "type `&S` does not implement
+trait `Tag<A>`". A value blanket of the same shape works (`blanket_impl_args`).
+
+- [ ] Key a reference blanket's instance by every parameter, as
+  `blanket_impl_args` does for a value blanket.
 
 A bound's associated-type binding reaches the solver as an equality on the
 parameter (`Env::param_assoc`). A solver projection names no trait arguments,
 so two bounds on one trait that bind the name differently state nothing
 (`assoc_binding_of_two_bounds_states_nothing.wado`), and an impl bound that
-needs one of them is not met.
+needs one of them is not met. Equalities that lead back to the projection being
+read state nothing either
+(`assoc_binding_of_mutual_bounds_states_nothing.wado`).
 
 A value blanket does not answer a reference either (`blanket_trait_impl_applies`
 mints no instance for one), so `&mut I` is an `Iterator` and not an
