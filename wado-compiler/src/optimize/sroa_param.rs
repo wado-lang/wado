@@ -66,6 +66,21 @@ pub fn sroa_single_field_parameters(
     gate: &mut FunctionGate,
     state: &mut SroaParamState,
 ) -> bool {
+    // A clone's scalar parameter can be a one-field struct reference again, one
+    // level down a nested chain. Peeling it now rather than next round keeps a
+    // chain deeper than the round cap from holding the fixpoint open.
+    let mut changed = false;
+    while scalarize_one_level(project, gate, state) {
+        changed = true;
+    }
+    changed
+}
+
+fn scalarize_one_level(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    state: &mut SroaParamState,
+) -> bool {
     let mut candidates = collect_and_validate(project, gate, state);
     if candidates.is_empty() {
         return false;

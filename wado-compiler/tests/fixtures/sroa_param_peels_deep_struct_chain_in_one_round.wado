@@ -1,0 +1,48 @@
+// `n_of` reads one field of each struct down a chain deeper than the
+// optimizer's round cap. Each parameter it scalarizes is a one-field struct
+// reference again, so the chain converges only if one `sroa_param` run peels
+// every level, not one level per round.
+struct L17 { n: i32, pad: i32 }
+struct L16 { l17: L17, pad: i32 }
+struct L15 { l16: L16, pad: i32 }
+struct L14 { l15: L15, pad: i32 }
+struct L13 { l14: L14, pad: i32 }
+struct L12 { l13: L13, pad: i32 }
+struct L11 { l12: L12, pad: i32 }
+struct L10 { l11: L11, pad: i32 }
+struct L9 { l10: L10, pad: i32 }
+struct L8 { l9: L9, pad: i32 }
+struct L7 { l8: L8, pad: i32 }
+struct L6 { l7: L7, pad: i32 }
+struct L5 { l6: L6, pad: i32 }
+struct L4 { l5: L5, pad: i32 }
+struct L3 { l4: L4, pad: i32 }
+struct L2 { l3: L3, pad: i32 }
+struct L1 { l2: L2, pad: i32 }
+struct Holder { l1: L1, pad: i32 }
+
+fn n_of(h: &Holder) -> i32 {
+    return h.l1.l2.l3.l4.l5.l6.l7.l8.l9.l10.l11.l12.l13.l14.l15.l16.l17.n;
+}
+
+test {
+    let l17 = L17 { n: builtin::black_box(4), pad: 0 };
+    let l16 = L16 { l17, pad: 0 };
+    let l15 = L15 { l16, pad: 0 };
+    let l14 = L14 { l15, pad: 0 };
+    let l13 = L13 { l14, pad: 0 };
+    let l12 = L12 { l13, pad: 0 };
+    let l11 = L11 { l12, pad: 0 };
+    let l10 = L10 { l11, pad: 0 };
+    let l9 = L9 { l10, pad: 0 };
+    let l8 = L8 { l9, pad: 0 };
+    let l7 = L7 { l8, pad: 0 };
+    let l6 = L6 { l7, pad: 0 };
+    let l5 = L5 { l6, pad: 0 };
+    let l4 = L4 { l5, pad: 0 };
+    let l3 = L3 { l4, pad: 0 };
+    let l2 = L2 { l3, pad: 0 };
+    let l1 = L1 { l2, pad: 0 };
+    let h = Holder { l1, pad: 0 };
+    assert n_of(&h) == 4;
+}
