@@ -72,32 +72,32 @@ Rust's `contains`, `find` and `split` take a `Pattern`, which a `&str`, a
 
 `List<T>`:
 
-| Rust                                             | Instead                                 |
-| ------------------------------------------------ | --------------------------------------- |
-| `sort_by_key(f)`                                 | `sort_by`                               |
-| `sort_unstable()`                                | `sort()` is stable; no unstable sibling |
-| `binary_search(&x)`                              | `TreeMap` / `TreeSet`                   |
-| `dedup()`, `dedup_by(f)`                         | `TreeSet`                               |
-| `retain(pred)`                                   | `.iter().filter().collect()`            |
-| `split_at(i)`, `split_off(i)`                    | `slice` and `truncate`                  |
-| `drain(..)`                                      | an iterator                             |
-| `rotate_left(n)`, `rotate_right(n)`              | niche                                   |
-| `resize(n, val)`                                 | `truncate` and `extend`                 |
-| `as_slice()`, `as_mut_slice()`                   | no borrowing distinction                |
-| `into_boxed_slice()`, `leak()`                   | no ownership model                      |
+| Rust                                | Instead                                 |
+| ----------------------------------- | --------------------------------------- |
+| `sort_by_key(f)`                    | `sort_by`                               |
+| `sort_unstable()`                   | `sort()` is stable; no unstable sibling |
+| `binary_search(&x)`                 | `TreeMap` / `TreeSet`                   |
+| `dedup()`, `dedup_by(f)`            | `TreeSet`                               |
+| `retain(pred)`                      | `.iter().filter().collect()`            |
+| `split_at(i)`, `split_off(i)`       | `slice` and `truncate`                  |
+| `drain(..)`                         | an iterator                             |
+| `rotate_left(n)`, `rotate_right(n)` | niche                                   |
+| `resize(n, val)`                    | `truncate` and `extend`                 |
+| `as_slice()`, `as_mut_slice()`      | no borrowing distinction                |
+| `into_boxed_slice()`, `leak()`      | no ownership model                      |
 
 `String`:
 
-| Rust                                | Instead                                                   |
-| ----------------------------------- | --------------------------------------------------------- |
-| `rsplit(pat)`, `rsplitn(n, pat)`    | niche; `rsplit_once` covers the common case               |
-| `to_lowercase()`, `to_uppercase()`  | `core:icu`'s `Locale`: case mapping depends on the locale |
-| `as_str()`                          | no borrowing distinction                                  |
-| `into_bytes()`                      | no ownership transfer                                     |
-| `drain(..)`                         | an iterator                                               |
-| `retain(pred)`                      | `.chars().filter().collect()`                             |
-| `split_off(i)`                      | niche                                                     |
-| `encode_utf16()`                    | not needed for Wasm and WASI                              |
+| Rust                               | Instead                                                   |
+| ---------------------------------- | --------------------------------------------------------- |
+| `rsplit(pat)`, `rsplitn(n, pat)`   | niche; `rsplit_once` covers the common case               |
+| `to_lowercase()`, `to_uppercase()` | `core:icu`'s `Locale`: case mapping depends on the locale |
+| `as_str()`                         | no borrowing distinction                                  |
+| `into_bytes()`                     | no ownership transfer                                     |
+| `drain(..)`                        | an iterator                                               |
+| `retain(pred)`                     | `.chars().filter().collect()`                             |
+| `split_off(i)`                     | niche                                                     |
+| `encode_utf16()`                   | not needed for Wasm and WASI                              |
 
 ## Consequences
 

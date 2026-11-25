@@ -249,10 +249,9 @@ Neutral:
 
 - [Async Canonical Options for `stream.read` / `stream.write`](./wep-2026-07-25-async-stream-canonical.md)
   — the BLOCKED protocol these copies run under.
-- [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
-  — the resource surface the stream methods are declared on.
 - [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)
-  — the phase this WEP moves.
+  — the phase this WEP moves, and the resource surface the stream methods are
+  declared on.
 - [Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)
   — component-to-component streaming, which made the discarded status
   deterministic rather than latent.

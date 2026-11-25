@@ -223,7 +223,6 @@ trailers_tx.write(Result::Ok(null));
 ## References
 
 - [Resource Ownership and a Resource-Scoped Borrow Checker](./wep-2026-05-21-resource-ownership.md)
-- [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
 - [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)
 - [WASI HTTP Integration](./wep-2026-02-21-wasi-http.md)
 - [Component Model Concurrency](../vendor/component-model/design/mvp/Concurrency.md)
