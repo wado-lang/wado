@@ -240,9 +240,10 @@ pub resource Future<T> {
 ```
 
 The attribute is the only link between a method and its canonical. No phase
-matches a type or method name: `resource_rewrite.rs` rewrites each call to a
-binding built per payload type (`$cm_stream_read_<T>`, `$cm_future_write_<T>`),
-out of the same lift and lower as an adapter.
+matches a type or method name. `resource_rewrite.rs` rewrites a read or a write
+to a binding built per payload type (`$cm_stream_read_<T>`,
+`$cm_future_write_<T>`), out of the same lift and lower as an adapter. It
+rewrites `new()` to the canonical itself, typed by the payload.
 
 The declarations settle four things:
 

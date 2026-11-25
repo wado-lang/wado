@@ -77,7 +77,7 @@ Rust's `contains`, `find` and `split` take a `Pattern`, which a `&str`, a
 | `sort_by_key(f)`                    | `sort_by`                               |
 | `sort_unstable()`                   | `sort()` is stable; no unstable sibling |
 | `binary_search(&x)`                 | `TreeMap` / `TreeSet`                   |
-| `dedup()`, `dedup_by(f)`            | `TreeSet`                               |
+| `dedup()`, `dedup_by(f)`            | a loop; they drop adjacent repeats only |
 | `retain(pred)`                      | `.iter().filter().collect()`            |
 | `split_at(i)`, `split_off(i)`       | a `Slice` of each part, and `truncate`  |
 | `drain(..)`                         | an iterator                             |

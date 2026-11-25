@@ -23,7 +23,7 @@ subtype per case adds that case's payload fields.
 
 ```wat
 ;; Result<i32, String>
-(type $Result<i32,String>      (struct (field $discriminant i32)))
+(type $Result<i32,String>      (sub (struct (field $discriminant i32))))
 (type $Result<i32,String>::Ok  (sub $Result<i32,String> (struct (field $discriminant i32) (field $payload i32))))
 (type $Result<i32,String>::Err (sub $Result<i32,String> (struct (field $discriminant i32) (field $payload (ref $String)))))
 ```
