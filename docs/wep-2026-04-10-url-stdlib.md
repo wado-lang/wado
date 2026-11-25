@@ -416,7 +416,7 @@ Key implementation details:
 
 - [WASI HTTP Integration](./wep-2026-02-21-wasi-http.md) — the primary consumer of `core:url`
 - [String Type Design](./wep-2026-01-15-string-type-design.md) — string manipulation used in URL parsing
-- [Redesign String and List APIs](./wep-2026-03-29-redesign-string-array-api.md) — string methods used in implementation
+- [String and List API Conventions](./wep-2026-03-29-redesign-string-array-api.md) — string methods used in implementation
 - [Base64 Encoding API](./wep-2026-02-27-base64-api.md) — similar stdlib module design pattern
 
 ## References

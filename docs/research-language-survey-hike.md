@@ -249,7 +249,7 @@ Refuse:
 - `cstring` as a second string type. Hike splits it from `string` so non-UTF-8
   bytes cannot enter the managed type. Wado holds the same invariant with a
   discipline instead,
-  [checked / unchecked / internal](./wep-2026-05-16-string-checked-unchecked-discipline.md),
+  [contracts and `internal_*` methods](./wep-2026-03-29-redesign-string-array-api.md#preconditions),
   and validates at the CM boundary. A second surface type would add a spelling
   without adding a guarantee.
 - A gate against two spellings of one keyword. Checked, and structurally

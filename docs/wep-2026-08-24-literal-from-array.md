@@ -4,9 +4,8 @@
 
 Wado coerced `[…]` and `{…}` literals to collection types through a four-trait
 builder protocol — `SequenceLiteralBuilder` / `SequenceLiteral` and
-`KeyValueLiteralBuilder` / `KeyValueLiteral`, plus two blanket impls
-([Literal-to-Collection Coercion](./wep-2026-01-18-iterator-based-literal-coercion.md)).
-The compiler expanded a literal into `new_literal(capacity)`, N ×
+`KeyValueLiteralBuilder` / `KeyValueLiteral`, plus two blanket impls. The
+compiler expanded a literal into `new_literal(capacity)`, N ×
 `push_literal` / `insert_literal`, and `build()`, synthesizing the TIR for that
 block by hand.
 
@@ -288,7 +287,6 @@ mechanism needs.
 
 ## Related WEPs
 
-- [Literal-to-Collection Coercion](./wep-2026-01-18-iterator-based-literal-coercion.md) — superseded by this WEP
 - [Conversion Traits (From, TryFrom, `?` operator)](./wep-2026-03-16-conversion-traits.md)
 - [Literal Type Conversion Rules](./wep-2026-01-12-literal-type-conversion.md)
 - [Literal Spread (`..base`)](./wep-2026-07-03-literal-spread.md)
