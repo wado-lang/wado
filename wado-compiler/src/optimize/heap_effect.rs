@@ -672,7 +672,11 @@ impl HeapEffectsCache {
                     .calls
                     .iter()
                     .copied()
-                    .chain(f.calls_indirect.iter().map(|s| len + self.signature_node(s)))
+                    .chain(
+                        f.calls_indirect
+                            .iter()
+                            .map(|s| len + self.signature_node(s)),
+                    )
                     .collect(),
                 Callee::Builtin(_) | Callee::Opaque { .. } => Vec::new(),
             })

@@ -15,9 +15,7 @@ use std::sync::Arc;
 
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{
-    FuncId, FuncParts, FuncRef, FunctionRef, NirFunction, NirUnaryOp, StructDecls,
-};
+use crate::nir::{FuncId, FuncParts, FuncRef, FunctionRef, NirFunction, NirUnaryOp, StructDecls};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -456,11 +454,7 @@ fn build_method_catalog(
 
 /// The families a call in one of `holding`'s bodies reaches: the only ones the
 /// plans and the rewrite look up by callee.
-fn called_families(
-    project: &NirPackage,
-    holding: &[FuncId],
-    sig: &MethodSig,
-) -> IndexSet<SigKey> {
+fn called_families(project: &NirPackage, holding: &[FuncId], sig: &MethodSig) -> IndexSet<SigKey> {
     let mut called = IndexSet::default();
     for fid in holding {
         let func = project.functions[fid.index()].borrow();

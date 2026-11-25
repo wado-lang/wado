@@ -607,10 +607,8 @@ fn build_analysis_graph(
     let analyses = exec.map(&project.functions, |f| {
         function_analysis(&f.borrow(), type_table, descriptors, &functors)
     });
-    let mut positions = FuncPositions::with_capacity_and_hasher(
-        project.functions.len(),
-        rustc_hash::FxBuildHasher,
-    );
+    let mut positions =
+        FuncPositions::with_capacity_and_hasher(project.functions.len(), rustc_hash::FxBuildHasher);
     extend_positions(project, &mut positions);
     assemble_analysis_graph(
         project,

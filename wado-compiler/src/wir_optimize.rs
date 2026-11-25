@@ -357,7 +357,13 @@ fn optimize_wasm_modules(
         for i in wasm_module.dead_func_indices.clone() {
             wasm_module.dead_type_indices.insert(i);
         }
-        optimize_scoped(wasm_module, opt_level, profiler, PassScope(Some(name)), exec);
+        optimize_scoped(
+            wasm_module,
+            opt_level,
+            profiler,
+            PassScope(Some(name)),
+            exec,
+        );
     }
     module.wasm_modules = wasm_modules;
 }

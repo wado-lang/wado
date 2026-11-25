@@ -877,7 +877,12 @@ fn close_over_forwards(facts: &mut IndexMap<(FuncId, u32), ParamFacts>) {
     // parameter is not a tracked struct reference, so nothing is known about it.
     let targets: Vec<Vec<Option<usize>>> = facts
         .values()
-        .map(|f| f.forwards.iter().map(|key| facts.get_index_of(key)).collect())
+        .map(|f| {
+            f.forwards
+                .iter()
+                .map(|key| facts.get_index_of(key))
+                .collect()
+        })
         .collect();
     let mut forwarders: Vec<Vec<usize>> = vec![Vec::new(); facts.len()];
     for (index, targets) in targets.iter().enumerate() {
@@ -897,8 +902,16 @@ fn close_over_forwards(facts: &mut IndexMap<(FuncId, u32), ParamFacts>) {
                     let reads = !from.reads.is_subset(&current.reads);
                     let writes = !from.writes.is_subset(&current.writes);
                     (reads || writes || from.opaque && !current.opaque).then(|| ParamFacts {
-                        reads: if reads { from.reads.clone() } else { IndexSet::default() },
-                        writes: if writes { from.writes.clone() } else { IndexSet::default() },
+                        reads: if reads {
+                            from.reads.clone()
+                        } else {
+                            IndexSet::default()
+                        },
+                        writes: if writes {
+                            from.writes.clone()
+                        } else {
+                            IndexSet::default()
+                        },
                         opaque: from.opaque,
                         forwards: Vec::new(),
                     })

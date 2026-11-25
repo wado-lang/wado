@@ -682,7 +682,11 @@ impl<'a> Analyzer<'a> {
         // field ends anywhere, so only its type can rule either out. So may a
         // callee's write past a handle of this frame's own, through the
         // references the handle holds.
-        let writes = self.mutations.iter().zip(&inputs.at_write).zip(&inputs.landed);
+        let writes = self
+            .mutations
+            .iter()
+            .zip(&inputs.at_write)
+            .zip(&inputs.landed);
         writes.into_iter().all(|((m, r), landed)| {
             let placed = !path.through_ref
                 && (!behind_root

@@ -3,7 +3,7 @@
 //! reference a local index, every call a resolved target, and all syntactic
 //! sugar is already desugared.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -1090,8 +1090,57 @@ pub struct TirExpr {
     /// What a pass decided about this node, written where it decided it while
     /// it held the body by reference. The node is its own identity: a span is
     /// none, since every synthesized node shares one, and a copy carries the
-    /// decision along.
-    marks: Cell<ExprMarks>,
+    /// decision along. Atomic so lowering's ownership walk can mark the bodies
+    /// of different functions on different threads.
+    marks: MarkCell,
+}
+
+/// An [`ExprMarks`] packed into one atomic byte.
+#[derive(Default)]
+struct MarkCell(std::sync::atomic::AtomicU8);
+
+impl MarkCell {
+    const IN_PLACE: u8 = 1;
+    const MOVES: u8 = 2;
+    const WRITTEN: u8 = 4;
+    const EXTENDED: u8 = 8;
+
+    fn get(&self) -> ExprMarks {
+        let bits = self.0.load(std::sync::atomic::Ordering::Relaxed);
+        ExprMarks {
+            in_place: bits & Self::IN_PLACE != 0,
+            moves: bits & Self::MOVES != 0,
+            written: bits & Self::WRITTEN != 0,
+            extended: bits & Self::EXTENDED != 0,
+        }
+    }
+
+    fn set(&self, marks: ExprMarks) {
+        let bits = [
+            (marks.in_place, Self::IN_PLACE),
+            (marks.moves, Self::MOVES),
+            (marks.written, Self::WRITTEN),
+            (marks.extended, Self::EXTENDED),
+        ]
+        .into_iter()
+        .filter(|(set, _)| *set)
+        .fold(0, |bits, (_, bit)| bits | bit);
+        self.0.store(bits, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl Clone for MarkCell {
+    fn clone(&self) -> Self {
+        let copy = Self::default();
+        copy.set(self.get());
+        copy
+    }
+}
+
+impl std::fmt::Debug for MarkCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.get().fmt(f)
+    }
 }
 
 /// What lowering's ownership walk decided about one expression.
@@ -1118,7 +1167,7 @@ impl TirExpr {
             kind,
             type_id,
             span,
-            marks: Cell::default(),
+            marks: MarkCell::default(),
         }
     }
 

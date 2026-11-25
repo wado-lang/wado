@@ -2044,16 +2044,16 @@ fn collect_licm_ref_bindings(
         } = &body.stmts[s].kind
     {
         *let_counts.entry(*local_index).or_insert(0) += 1;
-        let source = value.and_then(Operand::as_expr).and_then(|ve| {
-            match &body.exprs[ve].kind {
+        let source = value
+            .and_then(Operand::as_expr)
+            .and_then(|ve| match &body.exprs[ve].kind {
                 ExprKind::Unary {
                     op: NirUnaryOp::Ref,
                     expr: source,
                 } if matches!(type_table.get(*type_id), ResolvedType::Ref(_)) => source.as_expr(),
                 ExprKind::Local { .. } if is_gc_heap_type(*type_id, type_table) => Some(ve),
                 _ => None,
-            }
-        });
+            });
         if let Some(se) = source
             && let ExprKind::Local {
                 index: source_idx,
