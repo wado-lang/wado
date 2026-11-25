@@ -1590,7 +1590,7 @@ impl MoveWalker<'_, '_> {
     }
 
     /// Refuse a by-value `self` that `call` reads out of the reference its
-    /// receiver is, where the referent is affine.
+    /// receiver is: a move of an affine referent, a copy of any other.
     fn refuse_self_out_of_reference(&mut self, call: &ast::MethodCallExpr) {
         if !self.sem().method_call_reads_self_out_of_reference(call.id) {
             return;
@@ -1600,21 +1600,16 @@ impl MoveWalker<'_, '_> {
             .expression_type(call.receiver.id())
             .expect("a dispatched call's receiver has a type");
         let referent = self.sem().types.peel_refs(receiver);
-        if self.is_affine(referent) {
-            let type_name = self.sem().types.name(referent);
-            self.report(
-                MoveError::MoveOutOfReference { type_name },
-                call.receiver.span(),
-            );
+        let type_name = self.sem().types.name(referent);
+        let refusal = if self.is_affine(referent) {
+            MoveError::MoveOutOfReference { type_name }
         } else {
-            self.report(
-                MoveError::SelfCopiedOutOfReference {
-                    method: call.method.clone(),
-                    type_name: self.sem().types.name(referent),
-                },
-                call.receiver.span(),
-            );
-        }
+            MoveError::SelfCopiedOutOfReference {
+                method: call.method.clone(),
+                type_name,
+            }
+        };
+        self.report(refusal, call.receiver.span());
     }
 
     /// The base an affine value read by value from `expr` would leave its
