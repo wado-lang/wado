@@ -58,13 +58,13 @@ impl Markers {
         let mut by_byte: List<i32> = List::filled(256, 0);
         let mut any = false;
         let marks = lookarounds.len() <= MAX_BYTE_MARKED;
+        let none: List<LookaroundPrograms> = [];
         for let index of 0..<lookarounds.len() {
             let body = &lookarounds[index].holds;
             let mut marker = Marker { dfa: null, off: !runs(body, lookarounds.len()), by_byte: false };
             // A body that matches one byte and nothing else asks about the
             // byte beside the position: a lookahead's matches where its byte
             // stands, and a lookbehind's at the position after.
-            let none: List<LookaroundPrograms> = [];
             if marks
                 && body.match_len == Some(1)
                 && asserts_nothing(body)
