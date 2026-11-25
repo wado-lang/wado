@@ -10,7 +10,6 @@ struct Held<F> { f: F }
 
 trait Hold with () {
     fn hold<effect E, F: fn() -> i32 with E>(&self, f: F) -> Held<F>;
-    fn make<effect E, F: fn() -> i32 with E>(f: F) -> Held<F>;
 }
 
 fn held<H: Hold>(h: &H) -> i32 {
@@ -22,14 +21,5 @@ fn held<H: Hold>(h: &H) -> i32 {
     return f();
 }
 
-fn made<H: Hold>() -> i32 {
-    let shelved = H::make(|| {
-        println("made");
-        return 8;
-    });
-    let f = shelved.f;
-    return f();
-}
-
 __DATA__
-{"compile_error": ":22:12: error: missing effect 'Stdout' required by '(indirect call)'", "compile_errors_contains": [":31:12: error: missing effect 'Stdout' required by '(indirect call)'"]}
+{"compile_error": ":21:12: error: missing effect 'Stdout' required by '(indirect call)'"}

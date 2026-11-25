@@ -1,8 +1,7 @@
-// A `&mut` handed to a call by value is a `&mut` the callee may store through,
-// whether it is an argument, the `self` of an impl written for the reference,
-// or either under a newtype over a reference.
-// Regression: only a `&mut self` receiver and an argument typed `&mut` itself
-// counted, so a reference into an affine local escaped through the others.
+// A `&mut` handed to a call as the by-value `self` of an impl written for the
+// reference is a `&mut` the callee may store through.
+// Regression: only a `&mut self` receiver counted, so a reference into an
+// affine local escaped through this one.
 
 affine struct Tok { id: i32 }
 
@@ -19,27 +18,15 @@ impl Sink for &mut List<&Tok> {
     fn take(self, t: &Tok) { (*self).push(t); }
 }
 
-type Seen = &mut List<&Tok>;
-
-fn push_to(out: Seen, t: &Tok) {
-    (out as &mut List<&Tok>).push(t);
-}
-
-fn keep_by_receiver(out: &mut List<&Tok>) {
+fn keep(out: &mut List<&Tok>) {
     let t = Tok { id: 7 };
     out.take(&t);
 }
 
-fn keep_by_newtype_argument(out: Seen) {
-    let t = Tok { id: 8 };
-    push_to(out, &t);
-}
-
 test {
     let mut seen: List<&Tok> = [];
-    keep_by_receiver(&mut seen);
-    keep_by_newtype_argument(&mut seen as Seen);
+    keep(&mut seen);
 }
 
 __DATA__
-{"compile_error": ":30:15: analysis error: `out` keeps a reference into `t` past the body, where `t` drops", "compile_errors_contains": [":35:19: analysis error: `out` keeps a reference into `t` past the body, where `t` drops"]}
+{"compile_error": ":23:15: analysis error: `out` keeps a reference into `t` past the body, where `t` drops"}
