@@ -52,13 +52,16 @@ static CORE_PRELUDE_INT128: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/int128.wado"));
 static CORE_PRELUDE_PRIMITIVE: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/primitive.wado"));
+static CORE_PRELUDE_NUMERIC: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/numeric.wado"));
 static CORE_PRELUDE_HALF: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/half.wado"));
-static CORE_PRELUDE_TYPES: LazyLock<Arc<str>> =
-    LazyLock::new(|| Arc::<str>::from("prelude/types.wado"));
+static CORE_PRELUDE_OPTION: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/option.wado"));
 static CORE_PRELUDE_TRAITS: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/traits.wado"));
-static CORE_PRELUDE_RANGE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("prelude/range"));
+static CORE_PRELUDE_RANGE: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/range.wado"));
 static CORE_SERDE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("serde"));
 
 // Well-known WASI interface names embedded in the compiler.
@@ -92,8 +95,9 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         CORE_PRELUDE_FORMAT.clone(),
         CORE_PRELUDE_INT128.clone(),
         CORE_PRELUDE_PRIMITIVE.clone(),
+        CORE_PRELUDE_NUMERIC.clone(),
         CORE_PRELUDE_HALF.clone(),
-        CORE_PRELUDE_TYPES.clone(),
+        CORE_PRELUDE_OPTION.clone(),
         CORE_PRELUDE_TRAITS.clone(),
         CORE_PRELUDE_RANGE.clone(),
         CORE_SERDE.clone(),
@@ -1137,15 +1141,17 @@ impl ModuleSource {
         pub fn format() = Core { name: CORE_PRELUDE_FORMAT },
         /// `core:prelude/int128.wado` — 128-bit integer types.
         pub fn int128() = Core { name: CORE_PRELUDE_INT128 },
-        /// `core:prelude/primitive.wado` — primitive type methods.
+        /// `core:prelude/primitive.wado` — the `()`, `bool` and `char` methods.
         pub fn primitive() = Core { name: CORE_PRELUDE_PRIMITIVE },
+        /// `core:prelude/numeric.wado` — the integer and float methods.
+        pub fn numeric() = Core { name: CORE_PRELUDE_NUMERIC },
         /// `core:prelude/half.wado` — the `f16` and `bf16` methods.
         pub fn half() = Core { name: CORE_PRELUDE_HALF },
-        /// `core:prelude/types.wado` — core type definitions.
-        pub fn types() = Core { name: CORE_PRELUDE_TYPES },
+        /// `core:prelude/option.wado` — `Option` and `Result`.
+        pub fn option() = Core { name: CORE_PRELUDE_OPTION },
         /// `core:prelude/traits.wado` — builtin trait definitions.
         pub fn traits() = Core { name: CORE_PRELUDE_TRAITS },
-        /// `core:prelude/range` — range types.
+        /// `core:prelude/range.wado` — range types.
         pub fn range() = Core { name: CORE_PRELUDE_RANGE },
         /// `core:rt` — runtime support helpers (panic, assert, CM ABI glue).
         pub fn rt() = Core { name: CORE_RT },
@@ -1220,7 +1226,7 @@ impl ModuleSource {
         self
     }
 
-    /// The module holding `prim`'s impls. `v128` answers `primitive.wado` even
+    /// The module holding `prim`'s impls. `v128` answers `numeric.wado` even
     /// though `core:simd` writes its impls, which a lookup reaches by name.
     #[must_use]
     pub fn of_primitive(prim: PrimitiveType) -> Self {
@@ -1236,9 +1242,8 @@ impl ModuleSource {
             | PrimitiveType::U64
             | PrimitiveType::F32
             | PrimitiveType::F64
-            | PrimitiveType::V128
-            | PrimitiveType::Bool
-            | PrimitiveType::Char => Self::primitive(),
+            | PrimitiveType::V128 => Self::numeric(),
+            PrimitiveType::Bool | PrimitiveType::Char => Self::primitive(),
         }
     }
 
@@ -2140,10 +2145,11 @@ mod tests {
             (ModuleSource::format(), i.core("prelude/format.wado")),
             (ModuleSource::int128(), i.core("prelude/int128.wado")),
             (ModuleSource::primitive(), i.core("prelude/primitive.wado")),
+            (ModuleSource::numeric(), i.core("prelude/numeric.wado")),
             (ModuleSource::half(), i.core("prelude/half.wado")),
-            (ModuleSource::types(), i.core("prelude/types.wado")),
+            (ModuleSource::option(), i.core("prelude/option.wado")),
             (ModuleSource::traits(), i.core("prelude/traits.wado")),
-            (ModuleSource::range(), i.core("prelude/range")),
+            (ModuleSource::range(), i.core("prelude/range.wado")),
             (ModuleSource::serde(), i.core("serde")),
             (ModuleSource::wasi_cli(), i.wasi("cli")),
             (ModuleSource::wasi_clocks(), i.wasi("clocks")),

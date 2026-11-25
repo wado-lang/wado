@@ -390,13 +390,13 @@ pub enum CompilerItem {
     /// each deserializable struct, providing the static, allocation-free
     /// field-name → index `lookup` that self-describing formats invoke.
     FieldSchema,
-    /// `core:prelude/traits::Iterator` — the trait a `for-of` loop's iterator
+    /// `core:prelude/iter::Iterator` — the trait a `for-of` loop's iterator
     /// must implement.
     Iterator,
-    /// `core:prelude/traits::IntoIterator` — the trait a `for-of` loop's
+    /// `core:prelude/iter::IntoIterator` — the trait a `for-of` loop's
     /// subject must implement.
     IntoIterator,
-    /// `core:prelude/traits::ForOf` — what a `for-of` loop over a value
+    /// `core:prelude/iter::ForOf` — what a `for-of` loop over a value
     /// passes it to.
     ForOf,
     /// `core:prelude/traits::LiteralSpread` — what `..base` inside a literal
@@ -762,16 +762,16 @@ pub enum CompilerItem {
     CmLowerArrayU8,
     /// `core:rt::cm_await_blocked`.
     CmAwaitBlocked,
-    /// `core:prelude/types::CopyResult`, how a CM copy ended.
+    /// `core:prelude/async::CopyResult`, how a CM copy ended.
     CopyResult,
-    /// `core:prelude/types::FutureWriteResult`, how a future write ended.
+    /// `core:prelude/async::FutureWriteResult`, how a future write ended.
     FutureWriteResult,
-    /// `core:prelude/types::FutureWrite`, what one `FutureWritable::write` did
+    /// `core:prelude/async::FutureWrite`, what one `FutureWritable::write` did
     /// not deliver.
     FutureWrite,
-    /// `core:prelude/types::StartedRead`, a `stream.read` not yet settled.
+    /// `core:prelude/async::StartedRead`, a `stream.read` not yet settled.
     StartedRead,
-    /// `core:prelude/types::StartedWrite`, a `stream.write` not yet settled.
+    /// `core:prelude/async::StartedWrite`, a `stream.write` not yet settled.
     StartedWrite,
     /// `core:rt::cm_future_write_result`.
     CmFutureWriteResult,
@@ -2951,7 +2951,7 @@ mod tests {
                 Resolved::Trait {
                     decl: AstId::fresh(),
                     fq: None,
-                    module_source: ModuleSource::types(),
+                    module_source: ModuleSource::option(),
                     name: "Option".into(),
                     method_name: None,
                     assoc_types: Vec::new(),
@@ -2965,7 +2965,7 @@ mod tests {
     fn register_rejects_duplicate() {
         let mut reg = CompilerItems::new();
         let first = Resolved::Variant {
-            module_source: ModuleSource::types(),
+            module_source: ModuleSource::option(),
             name: "Option".into(),
             decl: AstId::fresh(),
         };
@@ -2983,7 +2983,7 @@ mod tests {
     fn register_same_value_is_noop() {
         let mut reg = CompilerItems::new();
         let resolved = Resolved::Variant {
-            module_source: ModuleSource::types(),
+            module_source: ModuleSource::option(),
             name: "Option".into(),
             decl: AstId::fresh(),
         };
@@ -3137,7 +3137,7 @@ mod tests {
         reg.register(
             CompilerItem::OptionSome,
             Resolved::VariantCase {
-                module_source: ModuleSource::types(),
+                module_source: ModuleSource::option(),
                 parent_type: "Option".to_string(),
                 name: "SomeV2".to_string(),
                 case_index: 0,
@@ -3145,7 +3145,7 @@ mod tests {
         )
         .unwrap();
         let (module, parent, name, index) = reg.require_variant_case(CompilerItem::OptionSome);
-        assert_eq!(module, &ModuleSource::types());
+        assert_eq!(module, &ModuleSource::option());
         assert_eq!(parent, "Option");
         assert_eq!(name, "SomeV2");
         assert_eq!(index, 0);
@@ -3186,7 +3186,7 @@ mod tests {
             .register(
                 CompilerItem::OptionSome,
                 Resolved::EnumCase {
-                    module_source: ModuleSource::types(),
+                    module_source: ModuleSource::option(),
                     parent_type: "Option".to_string(),
                     name: "Some".to_string(),
                     case_index: 0,

@@ -227,8 +227,8 @@ fn disabling_unused_diagnostics_keeps_the_other_lints() {
 fn opening_a_bundled_module_is_clean() {
     let cases: &[(&str, &str)] = &[
         (
-            "/work/wado-compiler/lib/core/prelude/types.wado",
-            include_str!("../../wado-compiler/lib/core/prelude/types.wado"),
+            "/work/wado-compiler/lib/core/prelude/option.wado",
+            include_str!("../../wado-compiler/lib/core/prelude/option.wado"),
         ),
         (
             "/work/wado-compiler/lib/core/prelude.wado",
