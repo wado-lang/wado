@@ -1006,6 +1006,68 @@ fn a_child_redeclaring_with_another_type_binds_under_its_interfaces_name() {
     assert!(glue.contains("web/element#set-label\""), "{glue}");
 }
 
+/// A grandchild takes a member back from every binding above it, the one its
+/// parent bound under its own name included.
+#[test]
+fn a_redeclaration_hides_every_binding_above_it() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            attribute("label", &plain("DOMString"), false),
+            operation("item", &plain("long"), &[], ""),
+        ],
+    ));
+    let index = argument("index", &plain("long"), false, "null");
+    defs.interfaces.push(partial(
+        "Node",
+        &[
+            attribute("label", &plain("long"), false),
+            operation("item", &plain("long"), &[index], ""),
+        ],
+    ));
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("label", &plain("long"), true),
+            operation("item", &plain("DOMString"), &[], ""),
+        ],
+    ));
+    let (code, _) = defs.generate();
+    let element = code
+        .split("pub resource Element")
+        .nth(1)
+        .expect("Element is bound");
+    let element = &element[..element.find("\n}").expect("the resource closes")];
+    for declaration in [
+        "#[unavailable(\"`Element` redeclares `label` as read-only\")]\n    fn set_node_label(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_item`\")]\n    fn node_item(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_item`\")]\n    fn item(&self);",
+    ] {
+        assert!(element.contains(declaration), "{declaration}\n{code}");
+    }
+    assert!(!element.contains("fn node_label(&self);"), "{code}");
+}
+
+/// A child may make writable again what its parent redeclared read-only. The
+/// parent's reservation stands between it and the setter above, so its own
+/// binds under its interface's name.
+#[test]
+fn a_setter_restored_below_a_read_only_redeclaration_binds_under_its_interfaces_name() {
+    let mut defs = chain();
+    for (interface, readonly) in [("EventTarget", false), ("Node", true), ("Element", false)] {
+        let label = attribute("label", &plain("DOMString"), readonly);
+        defs.interfaces.push(partial(interface, &[label]));
+    }
+    let (code, _) = defs.generate();
+    for declaration in [
+        "fn set_element_label(&self, value: String);",
+        "#[unavailable(\"`Element` restores the setter `Node` hides; use `set_element_label`\")]\n    fn set_label(&self);",
+    ] {
+        assert!(code.contains(declaration), "{declaration}\n{code}");
+    }
+}
+
 /// What `MediaStreamTrack.clone` is to its children: the parent's method hands
 /// back the child's object, which a type pattern narrows.
 #[test]

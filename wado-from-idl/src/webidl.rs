@@ -410,7 +410,7 @@ impl From<JsMember> for JsFunction {
 
 /// What a function does with the JavaScript object it reaches. `Get`, `Set` and
 /// `Call` act on the receiver; the interface names are `WebIDL`'s.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum JsMember {
     Get(String),
     Set(String),
@@ -761,9 +761,11 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
 /// dropped: it has the same types, or differs only in a result that is a
 /// resource extending the parent's, which a type pattern narrows. Otherwise the
 /// parent's would answer with the wrong type, and the child's binds under its
-/// interface's name (`svg_element_class_name`) while the child declares the
-/// inherited name unavailable, as it does the setter of an attribute it
-/// redeclares read-only. Statics (`new` above all) are not inherited.
+/// interface's name (`svg_element_class_name`), as does a setter restored
+/// below a read-only redeclaration. Either way the child declares unavailable
+/// every name the chain above binds that member under, and so does a child
+/// redeclaring an attribute read-only, for its setter. Statics (`new` above
+/// all) are not inherited.
 fn settle_overrides<'a>(
     merged: &IndexMap<&'a str, Merged<'_>>,
     resources: &mut IndexMap<&'a str, WadoResource>,
@@ -804,43 +806,18 @@ fn settle_overrides<'a>(
             )
         })
         .collect();
-    // An attribute is one accessor in JavaScript, so a child redeclaring it
-    // read-only hides the setter above it: the write would throw.
-    let hidden_setters: IndexMap<&str, IndexMap<String, &str>> = merged
-        .iter()
-        .map(|(name, iface)| {
-            let own = &declared[name];
-            let hidden = iface.members.iter().filter_map(|member| {
-                let Member::Attribute {
-                    name: attribute,
-                    readonly: true,
-                    special,
-                    ..
-                } = member
-                else {
-                    return None;
-                };
-                let setter = format!("set_{}", to_snake_case(attribute));
-                let sets_it = |a: &str| {
-                    declared[a].get(&setter).is_some_and(
-                        |f| matches!(&js[&f.cm_attr].member, JsMember::Set(set) if set == attribute),
-                    )
-                };
-                (special != "static" && !own.contains_key(&setter) && ancestors(name).any(sets_it))
-                    .then_some((setter, attribute.as_str()))
-            });
-            (*name, hidden.collect())
-        })
-        .collect();
-    for name in merged.keys() {
-        let resource = &mut resources[name];
-        for (setter, attribute) in &hidden_setters[name] {
-            resource.unavailable.push((
-                setter.clone(),
-                format!("`{name}` redeclares `{attribute}` as read-only"),
-            ));
-        }
-        resource.methods.retain_mut(|method| {
+    // The JavaScript members each interface takes from the bindings above it,
+    // with the reason a call of one reports.
+    let mut taken: IndexMap<&str, Vec<(JsMember, String)>> = IndexMap::new();
+    for (name, iface) in merged {
+        let taken = taken.entry(*name).or_default();
+        // An attribute is one accessor in JavaScript, so redeclared read-only
+        // it leaves no setter: the write would throw.
+        taken.extend(read_only_attributes(iface).map(|attribute| {
+            let reason = format!("`{name}` redeclares `{attribute}` as read-only");
+            (JsMember::Set(attribute.to_string()), reason)
+        }));
+        resources[name].methods.retain_mut(|method| {
             if !has_receiver(method) {
                 return true;
             }
@@ -849,9 +826,22 @@ fn settle_overrides<'a>(
             else {
                 return true;
             };
-            if !serves(method, inherited) {
+            let member = &js[&method.cm_attr].member;
+            let hides_setter = |between: &&str| {
+                matches!(member, JsMember::Set(attribute)
+                    if read_only_attributes(&merged[*between]).any(|a| a == attribute))
+            };
+            let why = if serves(method, inherited) {
+                ancestors(name)
+                    .take_while(|between| *between != parent)
+                    .find(hides_setter)
+                    .map(|between| format!("restores the setter `{between}` hides"))
+            } else {
+                Some("redeclares it with another type".to_string())
+            };
+            if let Some(why) = why {
                 let interface = to_snake_case(name);
-                let own = match js[&method.cm_attr].member {
+                let own = match member {
                     JsMember::Set(_) => {
                         method
                             .name
@@ -859,23 +849,15 @@ fn settle_overrides<'a>(
                     }
                     _ => format!("{interface}_{}", method.name),
                 };
-                let inherited = std::mem::replace(&mut method.name, own);
-                resource.unavailable.push((
-                    inherited,
-                    format!(
-                        "`{name}` redeclares it with another type; use `{}`",
-                        method.name
-                    ),
-                ));
+                assert!(
+                    !declared[name].contains_key(&own),
+                    "`{name}` must not declare `{own}` beside the `{}` it redeclares",
+                    method.name
+                );
+                taken.push((member.clone(), format!("`{name}` {why}; use `{own}`")));
+                method.name = own;
                 return true;
             }
-            assert!(
-                ancestors(name)
-                    .take_while(|between| *between != parent)
-                    .all(|between| !hidden_setters[between].contains_key(&method.name)),
-                "`{name}.{}` restores a setter an ancestor hides",
-                method.name
-            );
             js.shift_remove(&method.cm_attr)
                 .expect("every function has a JavaScript half");
             skipped.push(Skip {
@@ -889,6 +871,32 @@ fn settle_overrides<'a>(
             false
         });
     }
+    let js = &*js;
+    for (name, taken) in taken {
+        let hidden: Vec<(String, String)> = taken
+            .iter()
+            .flat_map(|(member, reason)| {
+                ancestors(name)
+                    .flat_map(|above| &resources[above].methods)
+                    .filter(move |bound| js[&bound.cm_attr].member == *member)
+                    .map(move |bound| (bound.name.clone(), reason.clone()))
+            })
+            .collect();
+        resources[name].unavailable = hidden;
+    }
+}
+
+/// The attributes an interface declares read-only on its instances.
+fn read_only_attributes<'m>(iface: &'m Merged<'_>) -> impl Iterator<Item = &'m str> {
+    iface.members.iter().filter_map(|member| match member {
+        Member::Attribute {
+            name,
+            readonly: true,
+            special,
+            ..
+        } if special != "static" => Some(name.as_str()),
+        _ => None,
+    })
 }
 
 /// Whether `child` is `parent`, or `parent` with a resource replaced by one
