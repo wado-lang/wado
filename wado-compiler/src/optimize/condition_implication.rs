@@ -448,17 +448,13 @@ fn resolve_through_opaque(engine: &Engine, binds: &Binds, op: Operand) -> Operan
     let mut cur = resolve(engine, binds, op);
     for _ in 0..MAX_BIND_CHAIN {
         let Operand::Value(v) = cur else { break };
-        let Some(&b) = opaque_local(engine, v).and_then(|i| binds.get(&i)) else {
+        let Some(&b) = operand_local(engine.body, Operand::Value(v)).and_then(|i| binds.get(&i))
+        else {
             break;
         };
         cur = resolve(engine, binds, b);
     }
     cur
-}
-
-/// The `Local idx` an `Opaque` value sources from, if any.
-pub(super) fn opaque_local(engine: &Engine, v: ValueId) -> Option<u32> {
-    operand_local(engine.body, Operand::Value(v))
 }
 
 /// The root and field path a [`BoundKey::Field`] keys on. Path-sensitive on
@@ -512,13 +508,15 @@ fn parse_resolved_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<B
             _ => None,
         },
         Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Opaque(_) => opaque_local(engine, v).map(BoundKey::Local),
+            ValueKind::Opaque(_) => {
+                operand_local(engine.body, Operand::Value(v)).map(BoundKey::Local)
+            }
             ValueKind::FieldAccess {
                 receiver,
                 field_index,
                 ..
             } => Some(BoundKey::Field(
-                opaque_local(engine, *receiver)?,
+                operand_local(engine.body, Operand::Value(*receiver))?,
                 FieldPath::ROOT.then(*field_index)?,
             )),
             _ => None,
@@ -545,7 +543,7 @@ pub(super) fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool
             } => (
                 *field_index,
                 engine.body.values.type_of(*receiver).or_else(|| {
-                    let l = opaque_local(engine, *receiver)?;
+                    let l = operand_local(engine.body, Operand::Value(*receiver))?;
                     engine.locals().get(l as usize).map(|l| l.type_id)
                 }),
             ),
@@ -635,7 +633,7 @@ fn parse_var_offset_depth(
 /// Decompose a pooled value as `Opaque(Local) + const`.
 fn parse_value_offset(engine: &Engine, v: ValueId) -> Option<(u32, i64)> {
     match engine.body.values.kind(v) {
-        ValueKind::Opaque(_) => opaque_local(engine, v).map(|i| (i, 0)),
+        ValueKind::Opaque(_) => operand_local(engine.body, Operand::Value(v)).map(|i| (i, 0)),
         ValueKind::Binary {
             op: NirBinaryOp::Add,
             lhs,
