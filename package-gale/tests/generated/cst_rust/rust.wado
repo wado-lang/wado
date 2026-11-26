@@ -1058,6 +1058,10 @@ impl<K: Hash> Interner<K> {
         return id;
     }
 
+    internal fn find(&self, item: K) -> Option<i32> {
+        return self.ids.get(item);
+    }
+
     internal fn at(&self, id: i32) -> K {
         return self.items[id];
     }
@@ -1474,9 +1478,12 @@ internal struct AtnPredictor {
     internal stack: List<i32>,
     floor: i32,
     reach: i32,
-    questions: AtnKeyLists,
-    verdict_alt: List<i32>,
-    verdict_reach: List<i32>,
+    verdicts: HashMap<List<i32>, AtnVerdict>,
+}
+
+struct AtnVerdict {
+    alt: i32,
+    reach: i32,
 }
 
 internal struct AtnFloor {
@@ -1486,14 +1493,7 @@ internal struct AtnFloor {
 
 impl AtnPredictor {
     internal fn new() -> AtnPredictor {
-        return AtnPredictor {
-            stack: [],
-            floor: 0,
-            reach: 0,
-            questions: AtnKeyLists::new(),
-            verdict_alt: [],
-            verdict_reach: [],
-        };
+        return AtnPredictor { stack: [], floor: 0, reach: 0, verdicts: HashMap::new() };
     }
 
     internal fn hide_callers(&mut self) -> AtnFloor {
@@ -1570,87 +1570,20 @@ impl AtnPredictor {
         }
     }
 
-    fn ask(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
-        let from = self.questions.keys.len();
-        self.questions.keys.push(decision);
-        self.questions.keys.push(pos);
-        self.questions.keys.push(min_prec);
+    fn question(&self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> List<i32> {
+        let mut question: List<i32> = [decision, pos, min_prec];
         for let mut i = 0; i < depth; i += 1 {
-            self.questions.keys.push(self.stack[i]);
+            question.push(self.stack[i]);
         }
-        return from;
+        return question;
     }
 
-    fn recorded_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
-        let from = self.ask(decision, pos, min_prec, depth);
-        let v = self.questions.find(from);
-        self.questions.keys.truncate(from);
-        return v;
+    fn recorded_verdict(&self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> Option<AtnVerdict> {
+        return self.verdicts.get(self.question(decision, pos, min_prec, depth));
     }
 
     internal fn record_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32, alt: i32, reach: i32) {
-        let from = self.ask(decision, pos, min_prec, depth);
-        if self.questions.find(from) >= 0 {
-            self.questions.keys.truncate(from);
-            return;
-        }
-        self.questions.add(from);
-        self.verdict_alt.push(alt);
-        self.verdict_reach.push(reach);
-    }
-}
-
-struct AtnKeyLists {
-    keys: List<i32>,
-    start: List<i32>,
-    len: List<i32>,
-    same_hash_next: List<i32>,
-    index: AtnKeyMap,
-}
-
-impl AtnKeyLists {
-    fn new() -> AtnKeyLists {
-        return AtnKeyLists { keys: [], start: [], len: [], same_hash_next: [], index: AtnKeyMap::new() };
-    }
-
-    fn hash_from(&self, from: i32) -> i64 {
-        let mut h: i64 = 1469598103934665603;
-        for let mut i = from; i < self.keys.len(); i += 1 {
-            h = (h ^ self.keys[i] as i64 + 16) * 1099511628211;
-        }
-        return h & 4611686018427387903;
-    }
-
-    fn equals_pending(&self, id: i32, from: i32) -> bool {
-        let n = self.keys.len() - from;
-        if self.len[id] != n {
-            return false;
-        }
-        let s = self.start[id];
-        for let mut i = 0; i < n; i += 1 {
-            if self.keys[s + i] != self.keys[from + i] {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    fn find(&self, from: i32) -> i32 {
-        let mut id = self.index.get(self.hash_from(from)).unwrap_or(-1);
-        while id >= 0 && !self.equals_pending(id, from) {
-            id = self.same_hash_next[id];
-        }
-        return id;
-    }
-
-    fn add(&mut self, from: i32) -> i32 {
-        let id = self.start.len();
-        let h = self.hash_from(from);
-        self.start.push(from);
-        self.len.push(self.keys.len() - from);
-        self.same_hash_next.push(self.index.get(h).unwrap_or(-1));
-        self.index[h] = id;
-        return id;
+        self.verdicts.try_insert(self.question(decision, pos, min_prec, depth), AtnVerdict { alt, reach });
     }
 }
 
@@ -2823,10 +2756,9 @@ internal fn atn_predict_once(
     min_prec: i32 = 0,
 ) -> i32 {
     let depth = atn.stack.len();
-    let v = atn.recorded_verdict(decision, pos, min_prec, depth);
-    if v >= 0 {
-        atn.read_down_to(atn.verdict_reach[v]);
-        return atn.verdict_alt[v];
+    if let Some(known) = atn.recorded_verdict(decision, pos, min_prec, depth) {
+        atn.read_down_to(known.reach);
+        return known.alt;
     }
     let [alt, reach] = atn.predict_reaching(
         sim,
@@ -3005,9 +2937,9 @@ internal struct AtnDfa {
     scratch: ClosureScratch,
     state_configs: List<List<AtnConfig>>,
     internal state_verdict: List<i32>,
-    seeds: AtnKeyLists,
+    seeds: Interner<List<i32>>,
     seed_branch: List<i32>,
-    branches: AtnKeyLists,
+    branches: Interner<List<i32>>,
     branch_asks: List<i32>,
     branch_state: List<i32>,
     edges: AtnKeyMap,
@@ -3024,9 +2956,9 @@ impl AtnDfa {
             scratch: ClosureScratch::new(),
             state_configs: [],
             state_verdict: [],
-            seeds: AtnKeyLists::new(),
+            seeds: Interner::new(),
             seed_branch: [],
-            branches: AtnKeyLists::new(),
+            branches: Interner::new(),
             branch_asks: [],
             branch_state: [],
             edges: AtnKeyMap::new(),
@@ -3051,17 +2983,13 @@ impl AtnDfa {
     }
 
     fn start_state(&mut self, sim: &AtnSim, decision: i32, caller: i32, min_prec: i32, preds: &AtnPreds) -> i32 {
-        let from = self.seeds.keys.len();
-        self.seeds.keys.push(ATN_DFA_START_KEY);
-        self.seeds.keys.push(decision);
-        self.seeds.keys.push(caller);
-        self.seeds.keys.push(min_prec);
-        self.seeds.keys.extend(&preds.met);
-        self.seeds.keys.push(ATN_DFA_START_KEY);
-        self.seeds.keys.extend(&preds.own);
-        self.seeds.keys.push(ATN_DFA_START_KEY);
-        self.seeds.keys.extend(&preds.failed);
-        let seed = self.seed(from);
+        let mut key: List<i32> = [ATN_DFA_START_KEY, decision, caller, min_prec];
+        key.extend(&preds.met);
+        key.push(ATN_DFA_START_KEY);
+        key.extend(&preds.own);
+        key.push(ATN_DFA_START_KEY);
+        key.extend(&preds.failed);
+        let seed = self.seed(key);
         let known = self.known_state(seed);
         if known >= 0 {
             return known;
@@ -3093,7 +3021,7 @@ impl AtnDfa {
         let mut taken = self.edges.get(edge).unwrap_or(-1);
         if taken < 0 {
             let moved = atn_move(sim, &self.state_configs[s], token, eof);
-            let from = self.seeds.keys.len();
+            let mut key: List<i32> = [];
             let sources_from = self.edge_sources.len();
             for let c of &moved {
                 let mut pctx = c.pctx;
@@ -3107,14 +3035,14 @@ impl AtnDfa {
                     }
                     pctx = self.arena.slot(i - sources_from);
                 }
-                self.seeds.keys.push(c.state);
-                self.seeds.keys.push(c.alt);
-                self.seeds.keys.push(c.pr);
-                self.seeds.keys.push(pctx);
-                self.seeds.keys.push(c.guard);
+                key.push(c.state);
+                key.push(c.alt);
+                key.push(c.pr);
+                key.push(pctx);
+                key.push(c.guard);
             }
             taken = self.edge_seed.len();
-            self.edge_seed.push(self.seed(from));
+            self.edge_seed.push(self.seed(key));
             self.edge_sources_from.push(sources_from);
             self.edges[edge] = taken;
         }
@@ -3136,57 +3064,53 @@ impl AtnDfa {
         return self.add_state(sim, configs, seed);
     }
 
-    fn seed(&mut self, from: i32) -> i32 {
-        let known = self.seeds.find(from);
-        if known >= 0 {
-            self.seeds.keys.truncate(from);
-            return known;
+    fn seed(&mut self, key: List<i32>) -> i32 {
+        let seed = self.seeds.intern(key);
+        if seed == self.seed_branch.len() {
+            let root = self.branch([seed]);
+            self.seed_branch.push(root);
         }
-        let root = self.branches.keys.len();
-        self.branches.keys.push(self.seeds.start.len());
-        let branch = self.open_branch(root);
-        self.seed_branch.push(branch);
-        return self.seeds.add(from);
+        return seed;
     }
 
     fn seed_configs(&self, seed: i32) -> List<AtnConfig> {
         let mut configs: List<AtnConfig> = [];
-        let from = self.seeds.start[seed];
-        for let mut i = from; i < from + self.seeds.len[seed]; i += 5 {
+        let key = self.seeds.at(seed);
+        for let mut i = 0; i < key.len(); i += 5 {
             configs.push(AtnConfig {
-                state: self.seeds.keys[i],
-                alt: self.seeds.keys[i + 1],
-                pr: self.seeds.keys[i + 2],
-                pctx: self.seeds.keys[i + 3],
-                guard: self.seeds.keys[i + 4],
+                state: key[i],
+                alt: key[i + 1],
+                pr: key[i + 2],
+                pctx: key[i + 3],
+                guard: key[i + 4],
             });
         }
         return configs;
     }
 
-    fn open_branch(&mut self, from: i32) -> i32 {
-        self.branch_asks.push(ATN_DFA_BRANCH_OPEN);
-        self.branch_state.push(-1);
-        return self.branches.add(from);
+    fn branch(&mut self, key: List<i32>) -> i32 {
+        let branch = self.branches.intern(key);
+        if branch == self.branch_asks.len() {
+            self.branch_asks.push(ATN_DFA_BRANCH_OPEN);
+            self.branch_state.push(-1);
+        }
+        return branch;
     }
 
-    fn branch_key(&mut self, branch: i32, read: i32) -> i32 {
-        let from = self.branches.keys.len();
+    fn branch_key(&mut self, branch: i32, read: i32) -> List<i32> {
         if read < 0 {
-            self.branches.keys.push(branch);
-            self.branches.keys.push(self.arena.answer(-1 - read));
-            return from;
+            return [branch, self.arena.answer(-1 - read)];
         }
         self.arena.reveal(read);
         let node = self.arena.slot_node[read];
         let s = self.arena.node_start[node];
-        self.branches.keys.push(branch);
+        let mut key: List<i32> = [branch];
         for let mut e = s; e < s + self.arena.node_len[node]; e += 1 {
-            self.branches.keys.push(self.arena.ret[e]);
-            self.branches.keys.push(self.arena.rpr[e]);
-            self.branches.keys.push(self.arena.parent[e]);
+            key.push(self.arena.ret[e]);
+            key.push(self.arena.rpr[e]);
+            key.push(self.arena.parent[e]);
         }
-        return from;
+        return key;
     }
 
     fn known_state(&mut self, seed: i32) -> i32 {
@@ -3195,9 +3119,8 @@ impl AtnDfa {
             if self.branch_asks[branch] == ATN_DFA_BRANCH_OPEN {
                 return -1;
             }
-            let from = self.branch_key(branch, self.branch_asks[branch]);
-            branch = self.branches.find(from);
-            self.branches.keys.truncate(from);
+            let key = self.branch_key(branch, self.branch_asks[branch]);
+            branch = self.branches.find(key).unwrap_or(-1);
         }
         return if branch >= 0 { self.branch_state[branch] } else { -1 };
     }
@@ -3213,12 +3136,8 @@ impl AtnDfa {
                 self.branch_asks[branch] = read;
             }
             assert self.branch_asks[branch] == read, "equal frames lead a closure to read the same frame next";
-            let from = self.branch_key(branch, read);
-            let known = self.branches.find(from);
-            if known >= 0 {
-                self.branches.keys.truncate(from);
-            }
-            branch = if known >= 0 { known } else { self.open_branch(from) };
+            let key = self.branch_key(branch, read);
+            branch = self.branch(key);
         }
         assert self.branch_asks[branch] == ATN_DFA_BRANCH_OPEN, "a state is kept once per seed and frames read";
         self.branch_asks[branch] = ATN_DFA_BRANCH_LEAF;
