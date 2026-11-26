@@ -900,35 +900,35 @@ embedding the blob as base64/`#data` rather than an `i32`-array literal — a
 source-size/compile-time lever, worth revisiting only once a _large_ grammar's
 ATN literal is a measured problem.)
 
-### `core:collections`' `HashMap` for the simulator's `AtnKeyMap` — NO-GO (2026-11)
+### `core:collections`' `HashMap` behind the simulator's `AtnKeyMap` — GO (2026-11)
 
-`AtnKeyMap` (`atn_predict.wado`) is an open-addressing map from an `i64` key to
-an `i32`. Backing it with `HashMap<i64, i32>` under a fixed seed, with the same
-`get` / `set` / `clear`, made the simulator slower:
+`AtnKeyMap` (`atn_predict.wado`) maps an `i64` key to an `i32`, with -1 for a
+miss. It is a `HashMap<i64, i32>` under a fixed seed. A hand-written
+open-addressing table in its place measures the same within the noise:
 
-| grammar    | `AtnKeyMap`, ms/iter | `HashMap`, `clear` freeing | `AtnKeyMap`, ms/iter | `HashMap`, `clear` keeping |
-| ---------- | -------------------: | -------------------------: | -------------------: | -------------------------: |
-| TypeScript |                  203 |                        419 |              171–201 |                    225–253 |
-| Rust       |                 61.6 |                       84.8 |            59.8–68.5 |                  70.4–78.5 |
-| SQLite     |                 1.14 |                       1.08 |            1.08–1.29 |                  1.10–1.32 |
+| grammar    | open addressing, ms/iter | `HashMap`, ms/iter | `HashMap`'s fuel |
+| ---------- | -----------------------: | -----------------: | ---------------: |
+| TypeScript |                  180–208 |            155–176 |            +1.6% |
+| Rust       |                59.4–68.5 |          65.8–69.1 |            +1.6% |
+| SQLite     |                1.10–1.38 |          1.15–1.35 |             0.0% |
 
-`wado run -O2 package-gale/benchmark/<grammar>/<grammar>.wado` on the dev
-build, the arms alternating in one session. Each pair of columns is one
-session: the first when `HashMap::clear` dropped its table and entry arrays,
-the second after it came to keep them.
+The times are `wado run -O2 package-gale/benchmark/<grammar>/<grammar>.wado` on
+the dev build, the arms alternating in one session. The fuel is that file's
+`input parses` test under `wado test -O2 --report-fuel`, which is one cold
+parse.
 
-Two costs made the difference:
+`HashMap` was the slower by far until three things changed in it, and a map
+that lacks one of them will lose this comparison again:
 
-- A `clear` that dropped the arrays made a map cleared at every prediction step
-  grow from nothing again. `AtnKeyMap::clear` resets only the slots it used.
-  `HashMap::clear` now keeps its arrays, which closed most of TypeScript's gap.
-- A lookup hashes with two 128-bit multiplies and reads the slot, the
-  fingerprint, the key, the liveness flag and the value from five arrays.
-  `AtnKeyMap` hashes with one multiply and reads two. This is the gap that
-  remains on TypeScript and Rust.
+- `clear` keeps the table and the entry arrays. A map cleared at every
+  prediction step otherwise grows from nothing each time, which doubled
+  TypeScript's time.
+- A key of one word is hashed with one folded multiply, not two.
+- A lookup reads the entry where it probes, not the slot again afterwards.
 
-The second is what an insertion-ordered, seeded map costs, so `AtnKeyMap` stays
-until the library offers a map without those two properties.
+What remains is what an insertion-ordered map costs: a hit reads the slot, the
+fingerprint, the key, the liveness flag and the value from five arrays, where
+the open-addressing table read two.
 
 ### Measured non-levers
 

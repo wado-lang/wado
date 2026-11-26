@@ -1,5 +1,7 @@
 #![generated(by = "src/generator.wado", sources = ["tests/antlr4-compat/grammars/SemPredEvalParser/Simple.g4"])]
 
+use { HashMap, HashSeed } from "core:collections";
+
 pub struct Span {
     pub start: i32,
     pub end: i32,
@@ -1383,66 +1385,27 @@ impl AtnKeyLists {
     }
 }
 
+global ATN_KEY_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
+
 struct AtnKeyMap {
-    keys: List<i64>,
-    vals: List<i32>,
-    used: List<i32>,
+    map: HashMap<i64, i32>,
 }
 
 impl AtnKeyMap {
     fn new() -> AtnKeyMap {
-        return AtnKeyMap::with_slots(64);
-    }
-
-    fn with_slots(slots: i32) -> AtnKeyMap
-        contract slots & slots - 1 == 0, "slot count is a power of two"
-    {
-        return AtnKeyMap {
-            keys: List::filled(slots, -1 as i64),
-            vals: List::filled(slots, -1),
-            used: [],
-        };
+        return AtnKeyMap { map: HashMap::with_seed(ATN_KEY_SEED) };
     }
 
     fn clear(&mut self) {
-        for let mut j = 0; j < self.used.len(); j += 1 {
-            let s = self.used[j];
-            self.keys[s] = -1;
-            self.vals[s] = -1;
-        }
-        self.used.clear();
-    }
-
-    fn slot_of(&self, k: i64) -> i32
-        contract k >= 0, "keys are non-negative"
-    {
-        let mask = self.keys.len() - 1;
-        let mut i = ((k ^ k >> 29) * 0x5851F42D4C957F2D >> 32) as i32 & mask;
-        while self.keys[i] >= 0 && self.keys[i] != k {
-            i = i + 1 & mask;
-        }
-        return i;
+        self.map.clear();
     }
 
     fn get(&self, k: i64) -> i32 {
-        return self.vals[self.slot_of(k)];
+        return self.map.get(k).unwrap_or(-1);
     }
 
     fn set(&mut self, k: i64, v: i32) {
-        if (self.used.len() + 1) * 2 > self.keys.len() {
-            let mut grown = AtnKeyMap::with_slots(self.keys.len() * 2);
-            for let mut j = 0; j < self.used.len(); j += 1 {
-                let s = self.used[j];
-                grown.set(self.keys[s], self.vals[s]);
-            }
-            *self = grown;
-        }
-        let i = self.slot_of(k);
-        if self.keys[i] < 0 {
-            self.keys[i] = k;
-            self.used.push(i);
-        }
-        self.vals[i] = v;
+        self.map[k] = v;
     }
 }
 
