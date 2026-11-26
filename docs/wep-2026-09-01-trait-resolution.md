@@ -758,13 +758,16 @@ it meets, from the blanket whose bounds the referent keeps
 (`register_assoc_types_for_concrete_type_and_trait`), and the type table reads
 that registration first (`assoc_type_of_reference_blanket_by_bound.wado`).
 
-A reference blanket's instance is keyed by its pointee alone
-(`ref_blanket_instance`), so a second parameter that a bound projects, `A` in
-`impl<A, T: Source<Item = A>> Tag<A> for &T`, is never bound. A call through
-such a blanket is refused at monomorphization: "type `&S` does not implement
-trait `Tag<A>`". A value blanket of the same shape works (`blanket_impl_args`).
+A call through a reference blanket is named by its pointee
+(`ref_blanket_instance`), and its instance is keyed by every parameter, as a
+value blanket's is (`blanket_impl_args`). A bound projects a parameter the
+pointee does not carry, `A` in `impl<A, T: Source<Item = A>> Tag<A> for &T`
+(`reference_blanket_parameter_projected_by_bound.wado`). The trait arguments
+the call names settle one only the trait reference holds, `A` in
+`impl<A, T: Source<A>> Tag<A> for &T`
+(`reference_blanket_parameter_set_by_trait_argument.wado`).
 
-- [ ] Key a reference blanket's instance by every parameter, as
+- [x] Key a reference blanket's instance by every parameter, as
   `blanket_impl_args` does for a value blanket.
 
 A bound's associated-type binding reaches the solver as an equality on the

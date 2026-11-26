@@ -2620,6 +2620,7 @@ impl Monomorphizer {
         let (ref_info, monomorph_info) = ref_blanket_instance(
             ref_blanket_generic(ref_kind, trait_fq, info),
             inner,
+            self.trait_args_at_instance(info, substitution, type_table),
             method_type_args,
             type_table,
         );
@@ -2639,6 +2640,7 @@ impl Monomorphizer {
         &self,
         method_func: &mut FunctionRef,
         info: &LocalMethodName,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) {
         let [pointee] = method_func
@@ -2660,6 +2662,7 @@ impl Monomorphizer {
         let (ref_info, monomorph_info) = ref_blanket_instance(
             ref_blanket_generic(ref_kind, trait_name, info),
             pointee,
+            self.trait_args_at_instance(info, substitution, type_table),
             method_type_args,
             type_table,
         );
@@ -2941,7 +2944,7 @@ impl Monomorphizer {
             return;
         }
         if self.is_universal_ref_blanket_call(method_func) {
-            self.substitute_ref_blanket_pointee(method_func, &info, type_table);
+            self.substitute_ref_blanket_pointee(method_func, &info, substitution, type_table);
             return;
         }
 

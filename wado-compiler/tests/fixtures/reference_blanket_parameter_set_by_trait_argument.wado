@@ -1,0 +1,27 @@
+// A blanket over a reference may hold a parameter only its trait reference
+// names: the arguments the call names settle it, so one referent reaches an
+// instance per argument list.
+// Regression: the call's trait arguments did not reach the instance, which
+// the referent alone keyed, so the call was refused at monomorphization.
+
+trait Source<A> with () { fn first(&self) -> A; }
+trait Tag<A> with () { fn tag(self) -> A; }
+
+impl<A, T: Source<A>> Tag<A> for &T {
+    #[allow(self_by_value)]
+    fn tag(self) -> A { return (*self).first(); }
+}
+
+struct Both { n: i32 }
+impl Source<i32> for Both { fn first(&self) -> i32 { return self.n; } }
+impl Source<String> for Both { fn first(&self) -> String { return `${self.n}`; } }
+
+fn tagged<A, X: Tag<A>>(x: X) -> A { return x.tag(); }
+
+test {
+    let b = Both { n: 7 };
+    assert Tag::<i32>::tag(&b) == 7;
+    assert Tag::<String>::tag(&b) == "7";
+    assert tagged::<i32, &Both>(&b) == 7;
+    assert tagged::<String, &Both>(&b) == "7";
+}

@@ -1275,7 +1275,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The function `site` names through a blanket over a reference
-    /// (`impl<T: Bound> Tr for &T`), which its pointee alone keys: the name
+    /// (`impl<T: Bound> Tr for &T`), which its pointee names: the name
     /// monomorphization gives the same call in a generic body.
     fn ref_blanket_function_ref(&self, site: &DispatchSite<'_>) -> Option<FunctionRef> {
         let block = site.dispatched_impl_block?;
@@ -1288,13 +1288,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             site.trait_name.clone(),
             site.method_name.to_string(),
         );
-        let (mut info, monomorph_info) = ref_blanket_instance(
+        let (info, monomorph_info) = ref_blanket_instance(
             generic,
             site.base_type_id,
+            self.apply_infer_holes_each(&site.trait_args),
             self.apply_infer_holes_each(&site.method_type_args),
             &self.tysys.type_table.borrow(),
         );
-        info.trait_type_args = self.apply_infer_holes_each(&site.trait_args);
         Some(FunctionRef {
             module_source: blanket.module.clone(),
             name: info.to_mangled_name(),

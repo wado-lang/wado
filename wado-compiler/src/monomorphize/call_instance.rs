@@ -19,6 +19,8 @@ struct CallSite<'a> {
     template: &'a TemplateId,
     monomorph: Option<&'a MonomorphInfo>,
     type_args: &'a [TypeId],
+    /// The arguments of the trait a method call dispatches through.
+    trait_args: &'a [TypeId],
     receiver: Option<TypeId>,
     args: &'a [CallArg],
 }
@@ -34,6 +36,7 @@ impl<'a> CallSite<'a> {
                 let FunctionRef {
                     template: Some(template),
                     monomorph_info,
+                    method_info,
                     ..
                 } = &**func
                 else {
@@ -45,6 +48,9 @@ impl<'a> CallSite<'a> {
                     template,
                     monomorph: monomorph_info.as_ref(),
                     type_args,
+                    trait_args: method_info
+                        .as_ref()
+                        .map_or(&[], |info| info.trait_type_args.as_slice()),
                     receiver,
                     args,
                 })
@@ -57,6 +63,7 @@ impl<'a> CallSite<'a> {
                 template,
                 monomorph: None,
                 type_args,
+                trait_args: &[],
                 receiver: None,
                 args: &[],
             }),
@@ -215,8 +222,10 @@ impl Monomorphizer {
         }
     }
 
-    /// A blanket's impl arguments: the receiver it serves, then what its bounds
-    /// project off it. A written receiver beats a recorded outer newtype link.
+    /// A blanket's impl arguments: the receiver it serves, or the pointee a
+    /// blanket over a reference records, then what its bounds project off it
+    /// and the call's trait arguments settle. A written receiver beats a
+    /// recorded outer newtype link.
     fn blanket_args_at(
         &self,
         blanket: &BlanketImpl,
@@ -226,14 +235,21 @@ impl Monomorphizer {
     ) -> Option<Vec<TypeId>> {
         match blanket.receiver {
             BlanketReceiver::Ref { .. } => {
-                recorded
-                    .map(<[TypeId]>::to_vec)
-                    .or_else(|| match type_table.get(site.receiver?) {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                            Some(vec![*inner])
-                        }
-                        _ => None,
-                    })
+                let pointee = match recorded {
+                    Some(&[pointee]) => pointee,
+                    Some(recorded) => return Some(recorded.to_vec()),
+                    None => match type_table.get(site.receiver?) {
+                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                        _ => return None,
+                    },
+                };
+                blanket_impl_args(
+                    &self.functions.trait_env,
+                    blanket,
+                    pointee,
+                    site.trait_args,
+                    type_table,
+                )
             }
             BlanketReceiver::Value => {
                 let sources = self.functions.trait_env.blanket_param_sources(blanket);

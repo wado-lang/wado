@@ -580,14 +580,16 @@ pub(crate) fn ref_blanket_call(
 ) -> (LocalMethodName, MonomorphInfo) {
     let generic =
         LocalMethodName::new_ref(ref_kind, Some(trait_name.clone()), method_name.to_string());
-    ref_blanket_instance(generic, pointee, method_type_args, tt)
+    ref_blanket_instance(generic, pointee, vec![], method_type_args, tt)
 }
 
 /// [`ref_blanket_call`] for the call `generic` names, which may be marked
-/// `unchecked`.
+/// `unchecked`, at the trait arguments it names: they settle the blanket's
+/// parameters the pointee does not (`A` in `impl<A, T: Src<A>> Tag<A> for &T`).
 pub(crate) fn ref_blanket_instance(
     generic: LocalMethodName,
     pointee: TypeId,
+    trait_type_args: Vec<TypeId>,
     method_type_args: Vec<TypeId>,
     tt: &TypeTable,
 ) -> (LocalMethodName, MonomorphInfo) {
@@ -596,7 +598,9 @@ pub(crate) fn ref_blanket_instance(
         .iter()
         .map(|&arg| tt.fq_type_name(arg))
         .collect();
-    let local_name = generic.with_type_args(&[tt.fq_type_name(pointee)], &method_type_arg_names);
+    let mut local_name =
+        generic.with_type_args(&[tt.fq_type_name(pointee)], &method_type_arg_names);
+    local_name.trait_type_args = trait_type_args;
     let monomorph_info = MonomorphInfo {
         generic_name,
         impl_type_args: vec![pointee],
