@@ -1026,6 +1026,36 @@ fn a_child_narrowing_only_the_result_keeps_the_parents() {
     );
 }
 
+/// What `SVGElement.className` does to `Element`'s setter. An attribute is one
+/// accessor, so only the attribute's own setter goes, and it goes from a
+/// resource left with nothing else to declare.
+#[test]
+fn a_read_only_redeclaration_hides_the_inherited_setter_alone() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            attribute("label", &plain("DOMString"), false),
+            operation("setPosition", &plain("undefined"), &[], ""),
+        ],
+    ));
+    assert!(defs.interfaces[1].contains(r#""name": "Node""#));
+    defs.interfaces[1] = interface(
+        "Node",
+        r#""EventTarget""#,
+        "",
+        &[attribute("label", &plain("DOMString"), true)],
+    );
+    defs.interfaces.push(partial(
+        "Element",
+        &[attribute("position", &plain("long"), true)],
+    ));
+    let (code, _) = defs.generate();
+    let node = "pub resource Node extends EventTarget {\n    #[unavailable(\"`Node` redeclares `label` as read-only\")]\n    fn set_label(&self);\n}";
+    assert!(code.contains(node), "{code}");
+    assert_eq!(code.matches("#[unavailable(").count(), 1, "{code}");
+}
+
 /// What `MouseEvent.initMouseEvent` asks for: the arguments a caller may leave
 /// out go, and the member stays.
 #[test]

@@ -227,7 +227,7 @@ impl WadoCodeGenerator {
         // An affine resource drops through its own operation, so a handler
         // installed for it sees each drop (WEP: Affine Types).
         let drops = !resource.unrestricted;
-        if resource.methods.is_empty() && !drops {
+        if resource.methods.is_empty() && resource.unavailable.is_empty() && !drops {
             self.writeln(&format!("pub resource {}{extends};", resource.name));
         } else {
             self.writeln(&format!("pub resource {}{extends} {{", resource.name));

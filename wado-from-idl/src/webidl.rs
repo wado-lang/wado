@@ -821,10 +821,13 @@ fn settle_overrides<'a>(
                     return None;
                 };
                 let setter = format!("set_{}", to_snake_case(attribute));
-                (special != "static"
-                    && !own.contains_key(&setter)
-                    && ancestors(name).any(|a| declared[a].contains_key(&setter)))
-                .then_some((setter, attribute.as_str()))
+                let sets_it = |a: &str| {
+                    declared[a].get(&setter).is_some_and(
+                        |f| matches!(&js[&f.cm_attr].member, JsMember::Set(set) if set == attribute),
+                    )
+                };
+                (special != "static" && !own.contains_key(&setter) && ancestors(name).any(sets_it))
+                    .then_some((setter, attribute.as_str()))
             });
             (*name, hidden.collect())
         })
