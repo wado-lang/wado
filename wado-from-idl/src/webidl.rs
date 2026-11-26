@@ -760,8 +760,8 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
 }
 
 /// Drop each method a child redeclares from its chain, which a resource may
-/// not: the nearest ancestor's serves the child. Statics (`new` above all) are
-/// not inherited.
+/// not: the declaration nearest the root serves each one below it. Statics
+/// (`new` above all) are not inherited.
 fn drop_overrides<'a>(
     merged: &IndexMap<&'a str, Merged<'_>>,
     resources: &mut IndexMap<&'a str, WadoResource>,
@@ -771,26 +771,22 @@ fn drop_overrides<'a>(
     let has_receiver = |m: &WadoFunction| m.params.first().is_some_and(|p| p.wit_name == "self");
     // What a caller sees past the receiver.
     let signature = |m: &WadoFunction| {
-        let params = m.params[1..].iter().map(|p| p.ty.clone()).collect();
+        let params: Vec<WadoType> = m.params[1..].iter().map(|p| p.ty.clone()).collect();
         (params, m.return_type.clone(), m.is_async)
     };
-    let declared: IndexMap<&str, IndexMap<String, (Vec<WadoType>, Option<WadoType>, bool)>> =
-        resources
-            .iter()
-            .map(|(name, r)| {
-                let receivers = r.methods.iter().filter(|m| has_receiver(m));
-                (
-                    *name,
-                    receivers.map(|m| (m.name.clone(), signature(m))).collect(),
-                )
-            })
-            .collect();
+    let declared: IndexMap<&str, IndexMap<String, _>> = resources
+        .iter()
+        .map(|(name, r)| {
+            let receivers = r.methods.iter().filter(|m| has_receiver(m));
+            let signatures = receivers.map(|m| (m.name.clone(), signature(m)));
+            (*name, signatures.collect())
+        })
+        .collect();
     for (name, iface) in merged {
         resources[name].methods.retain(|method| {
             if !has_receiver(method) {
                 return true;
             }
-            // Every redeclaration below it goes, so the topmost one serves.
             let chain = std::iter::successors(iface.inheritance.as_deref(), |parent| {
                 merged[parent].inheritance.as_deref()
             });
