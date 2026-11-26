@@ -129,10 +129,6 @@ lower is then available to each interface the slice adds.
   costs something whether a program uses it or not.
   `mise run report-webidl-coverage` writes those bindings to
   `scratchpad/webidl-all/dom.wado`.
-- Where a child redeclares a getter with another type and leaves the setter
-  out, the parent's setter is still callable on the child:
-  `set_class_name` on an `SvgElement`, where the browser ignores the write. No
-  interface of the slice has one.
 - A union collapsed to its one typable constituent in an argument is not
   reported, though the other constituents cannot be passed.
 - A program cannot recover from a DOM exception: it traps.

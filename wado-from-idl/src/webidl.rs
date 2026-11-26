@@ -762,7 +762,8 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
 /// resource extending the parent's, which a type pattern narrows. Otherwise the
 /// parent's would answer with the wrong type, and the child's binds under its
 /// interface's name (`svg_element_class_name`) while the child declares the
-/// inherited name unavailable. Statics (`new` above all) are not inherited.
+/// inherited name unavailable, as it does the setter of an attribute it
+/// redeclares read-only. Statics (`new` above all) are not inherited.
 fn settle_overrides<'a>(
     merged: &IndexMap<&'a str, Merged<'_>>,
     resources: &mut IndexMap<&'a str, WadoResource>,
@@ -803,8 +804,39 @@ fn settle_overrides<'a>(
             )
         })
         .collect();
+    // An attribute is one accessor in JavaScript, so a child redeclaring it
+    // read-only hides the setter above it: the write would throw.
+    let hidden_setters: IndexMap<&str, IndexMap<String, &str>> = merged
+        .iter()
+        .map(|(name, iface)| {
+            let own = &declared[name];
+            let hidden = iface.members.iter().filter_map(|member| {
+                let Member::Attribute {
+                    name: attribute,
+                    readonly: true,
+                    special,
+                    ..
+                } = member
+                else {
+                    return None;
+                };
+                let setter = format!("set_{}", to_snake_case(attribute));
+                (special != "static"
+                    && !own.contains_key(&setter)
+                    && ancestors(name).any(|a| declared[a].contains_key(&setter)))
+                .then_some((setter, attribute.as_str()))
+            });
+            (*name, hidden.collect())
+        })
+        .collect();
     for name in merged.keys() {
         let resource = &mut resources[name];
+        for (setter, attribute) in &hidden_setters[name] {
+            resource.unavailable.push((
+                setter.clone(),
+                format!("`{name}` redeclares `{attribute}` as read-only"),
+            ));
+        }
         resource.methods.retain_mut(|method| {
             if !has_receiver(method) {
                 return true;
@@ -834,6 +866,13 @@ fn settle_overrides<'a>(
                 ));
                 return true;
             }
+            assert!(
+                ancestors(name)
+                    .take_while(|between| *between != parent)
+                    .all(|between| !hidden_setters[between].contains_key(&method.name)),
+                "`{name}.{}` restores a setter an ancestor hides",
+                method.name
+            );
             js.shift_remove(&method.cm_attr)
                 .expect("every function has a JavaScript half");
             skipped.push(Skip {

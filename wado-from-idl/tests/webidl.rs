@@ -996,6 +996,7 @@ fn a_child_redeclaring_with_another_type_binds_under_its_interfaces_name() {
         "#[unavailable(\"`Element` redeclares it with another type; use `element_label`\")]\n    fn label(&self);",
         "#[unavailable(\"`Element` redeclares it with another type; use `set_element_label`\")]\n    fn set_label(&self);",
         "#[unavailable(\"`Element` redeclares it with another type; use `element_item`\")]\n    fn item(&self);",
+        "#[unavailable(\"`Node` redeclares `label` as read-only\")]\n    fn set_label(&self);",
     ] {
         assert!(code.contains(declaration), "{declaration}\n{code}");
     }
