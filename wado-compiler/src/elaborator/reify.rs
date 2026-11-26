@@ -7854,11 +7854,8 @@ impl<'a> Reify<'a> {
         // `resolve_call` skips them. Reify reproduces the same
         // `IntLiteral` here.
         if let ast::Expr::Ident(ident) = &call.callee
-            && let Some(pos) = ident.name.find("::")
-            && !ident.name[pos + 2..].contains("::")
+            && let Some((_, suffix)) = ident.name.rsplit_once("::")
         {
-            let suffix = &ident.name[pos + 2..];
-
             // The call's own type names the flags declaration, whatever the
             // receiver was written as: a `Self` binder names none at its site.
             let owner = self.tysys.type_table.borrow().nominal_def(recorded_type);

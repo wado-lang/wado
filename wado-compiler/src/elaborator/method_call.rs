@@ -3216,12 +3216,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|def| self.type_lookup().flags_members_of(def))
                 .cloned()
         {
-            if !args.is_empty() {
-                let _ = self.emit(TypeError::ArgumentCountMismatch {
-                    expected: 0,
-                    found: args.len(),
-                    span: static_call.span,
-                });
+            if !self.flags_constant_call_is_bare(
+                &static_call_symbol_name(static_call),
+                args.len(),
+                static_call.type_args.len(),
+                static_call.span,
+            ) {
                 return TypeTable::ERROR;
             }
             return flags_info.type_id;

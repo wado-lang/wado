@@ -1710,9 +1710,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         // `Trait::method(recv, args…)` — the trait-qualified (UFCS) call form
-        // (WEP 2026-07-31). Routed before the argument walk below because the
-        // dispatcher elaborates the non-receiver arguments itself, against the
-        // signature it selects.
+        // (WEP 2026-07-31). Routed before `resolve_args_against_signature`
+        // walks the arguments because the dispatcher elaborates the
+        // non-receiver arguments itself, against the signature it selects.
         //
         // The trait is the segment before the method, whatever leads up to it,
         // so `ns::Trait::method` names the same declaration `Trait::method`
@@ -2005,13 +2005,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receivers,
             ..
         } = site;
-        let call_receiver = &receivers.prefix_receiver;
-        let static_receiver = &receivers.static_method_receiver;
-        let rewritten_receiver = receivers.rewritten_prefix_type;
+        let CalleeReceivers {
+            prefix_receiver,
+            static_method_receiver,
+            rewritten_prefix_type,
+            ..
+        } = receivers;
         // First, determine expected parameter types to handle coercion.
         let signature = self.lookup_function_signature(
             effective_name,
-            call_receiver.as_ref(),
+            prefix_receiver.as_ref(),
             effect_op,
             callee_site,
         );
@@ -2043,7 +2046,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // own and opaque here, so a literal checked against `List<T>` reports
         // every element as heterogeneous; against `List<?0>` the check defers
         // and the elements decide what `?0` is.
-        let kind = match static_receiver {
+        let kind = match static_method_receiver {
             Some(_) => InstanceKind::Static {
                 declaring: declaring_slot_count,
             },
@@ -2068,7 +2071,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inst.links = Some(SlotLinks {
                 owners: owners.clone(),
                 names: names.clone(),
-                self_binding: call_receiver
+                self_binding: prefix_receiver
                     .as_ref()
                     .and_then(ReceiverId::ty)
                     .map(|receiver| SelfBinding::of_static(receiver, None)),
@@ -2083,7 +2086,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // A static a newtype inherits is solved at the link declaring it,
         // whichever path names the newtype.
-        let expected_at_owner = match static_receiver.as_ref().map(static_method) {
+        let expected_at_owner = match static_method_receiver.as_ref().map(static_method) {
             Some((receiver, method_name)) => {
                 let owner = self.static_owner_key(receiver.key(), method_name);
                 let newtype = (&owner != receiver.key())
@@ -2105,8 +2108,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Literal preselect on a static call's arguments (WEP 2026-07-31
         // phase 4): see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
-        if let Some((receiver, method_name)) = call_receiver.as_ref().map(static_method) {
-            let typed = receiver.at_type(rewritten_receiver);
+        if let Some((receiver, method_name)) = prefix_receiver.as_ref().map(static_method) {
+            let typed = receiver.at_type(*rewritten_prefix_type);
             let preselected = self.preselect_static_args(
                 StaticReceiver {
                     expected_return: expected_type,
@@ -2206,14 +2209,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check if this is a flags type method call: Perms::none(), Perms::all()
         // A newtype reaches its base's constants and keeps its own type:
         // `M::none()` on `type M = Perm` is `Perm::none() as M`.
-        if let Some((flags_info, named)) = receivers
-            .prefix_receiver
-            .as_ref()
-            .and_then(|receiver| receiver.key().decl())
-            .and_then(|def| self.flags_members_through_newtype(def))
-            && matches!(suffix, "none" | "all")
+        // The receiver may be `ns::Perms`, which no prefix names.
+        let (_, method_name) = effective_name
+            .rsplit_once("::")
+            .expect("a qualified callee ends in its method");
+        if matches!(method_name, "none" | "all")
+            && let Some((flags_info, named)) = receivers
+                .static_method_receiver
+                .as_ref()
+                .and_then(|receiver| receiver.key().decl())
+                .and_then(|def| self.flags_members_through_newtype(def))
         {
-            self.record_receiver_reference(ident, prefix);
+            if receivers.prefix_receiver.is_some() {
+                self.record_receiver_reference(ident, prefix);
+            }
+            if !self.flags_constant_call_is_bare(
+                effective_name,
+                resolved_args.args.len(),
+                call.type_args.len(),
+                call.span,
+            ) {
+                return ControlFlow::Break(TypeTable::ERROR);
+            }
             // Reify rebuilds the flags `none()` / `all()`
             // constant from the AST + flags info; the body walk
             // projects only the result type.
@@ -2316,6 +2333,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ControlFlow::Continue(None)
     }
 
+    /// Whether a flags type's `none()` / `all()` call is written bare, as a
+    /// constant is: reports the arguments or the turbofish it takes none of.
+    /// The call lowers to an integer literal, so anything it accepted here
+    /// would be dropped unevaluated.
+    pub(super) fn flags_constant_call_is_bare(
+        &self,
+        name: &str,
+        arg_count: usize,
+        type_arg_count: usize,
+        span: Span,
+    ) -> bool {
+        if arg_count != 0 {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
+                expected: 0,
+                found: arg_count,
+                span,
+            });
+            return false;
+        }
+        !self.reject_surplus_turbofish(name, 0, type_arg_count, span)
+    }
+
     /// [`Self::find_callee_function`] for a callee of one segment.
     fn find_callee_function_by_bare_name(
         &mut self,
@@ -2374,8 +2413,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             slot_instantiation,
             ..
         } = resolved_args;
-        let (receiver_site, rewritten_receiver) =
-            (receivers.prefix_site, receivers.rewritten_prefix_type);
         self.record_receiver_reference(ident, prefix);
         // Record the method segment (suffix) as a reference to the
         // declaration this call resolves to. The impl selection knows
@@ -2430,8 +2467,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) else {
             return TypeTable::ERROR;
         };
-        let receiver_type =
-            self.static_receiver_written(rewritten_receiver, receiver_site, prefix, call.span);
+        let receiver_type = self.static_receiver_written(
+            receivers.rewritten_prefix_type,
+            receivers.prefix_site,
+            prefix,
+            call.span,
+        );
         // Before the record, which then holds what stands in for a slot
         // deferred.
         self.defer_uninferred_static_method_type_args(
@@ -3135,11 +3176,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // WEP 2026-05-26: record the resolved callee for the
         // free / builtin / namespaced call paths so reify reproduces
         // the same FunctionRef shape (module_source, mangled name,
-        // method_info) without re-running the dispatch logic. The
-        // static-method path already records via the early-return at
-        // its own arm; this covers the remaining
-        // shapes (`println(x)`, `builtin::array_new(n)`,
-        // `ns::foo(x)` for use-namespaced imports).
+        // method_info) without re-running the dispatch logic. A static
+        // method records its own in `resolve_static_method_path_call`;
+        // this covers the remaining shapes (`println(x)`,
+        // `builtin::array_new(n)`, `ns::foo(x)` for use-namespaced imports).
         let key = call.id;
         self.sem.types.static_method_dispatch.insert(
             key,

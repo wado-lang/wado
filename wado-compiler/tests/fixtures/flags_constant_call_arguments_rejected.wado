@@ -1,0 +1,13 @@
+// `Flags::all()` and `Flags::none()` take no arguments. Accepted, an argument
+// was dropped without being evaluated.
+
+flags Perms { Read, Write }
+
+fn run() {
+    let p = Perms::all(42);
+}
+
+__DATA__
+{
+  "compile_error": ":7:13: analysis error: expected 0 arguments, found 1"
+}

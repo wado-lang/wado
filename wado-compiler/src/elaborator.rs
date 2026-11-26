@@ -3,8 +3,9 @@
 //! `TypeId` is the rule, and the resolutions it drops on the floor ran to
 //! record those facts.
 //!
-//! A method takes `&mut self` only where it writes: a signature that asks for
-//! less tells its reader the call changes nothing.
+//! A method takes `&mut self` only where it writes through it. `&self` does
+//! not say the call records nothing: the type table, the inference holes and
+//! the diagnostics sit behind a `RefCell`, and a `&self` method may fill them.
 
 #![warn(clippy::needless_pass_by_ref_mut)]
 

@@ -3555,12 +3555,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_empty()
                 .then_some(Pat::Opaque);
         }
-        let settled = util::settle_instance_pattern(
-            pattern,
-            scrutinee_type,
-            &self.tysys.type_table.borrow_mut(),
-        )
-        .ok()?;
+        let settled =
+            util::settle_instance_pattern(pattern, scrutinee_type, &self.tysys.type_table.borrow())
+                .ok()?;
         if let util::SettledPattern::Literal(TirLiteralPattern::Bool(b)) = settled {
             return Some(Pat::Bool(b));
         }
