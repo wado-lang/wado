@@ -3045,27 +3045,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-<<<<<<< HEAD
-            .call_effect_binding(&declared_param_types, &args);
-        if !self.lookup_function_type_params(&callee).is_empty() {
-            self.report_value_for_reference(&declared_param_types, call, &args);
-||||||| a7ed0baf7
-            .call_effect_binding(&declared_param_types, &args);
-        if !type_args.is_empty() {
-            self.check_function_type_arg_bounds(&callee, &type_args, &effect_rows, call.span);
-        }
-
-        if !self.lookup_function_type_params(&callee).is_empty() {
-            self.report_value_for_reference(&declared_param_types, call, &args);
-=======
             .call_effect_binding(declared_param_types, args);
-        if !type_args.is_empty() {
-            self.check_function_type_arg_bounds(callee, type_args, &effect_rows, call.span);
-        }
-
         if !self.lookup_function_type_params(callee).is_empty() {
             self.report_value_for_reference(declared_param_types, call, args);
->>>>>>> origin/main
         }
         // Before the bounds check, so a bound reading an open slot
         // (`T: Source<A>`) names its variable, which the bound may settle.
@@ -3077,7 +3059,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             call.span,
         );
         if !type_args.is_empty() {
-            self.check_function_type_arg_bounds(&callee, &type_args, &effect_rows, call.span);
+            self.check_function_type_arg_bounds(callee, type_args, &effect_rows, call.span);
         }
         // The arguments were typed by the call's own variables, which what the
         // call settled answers: a projection or a default among them included.
