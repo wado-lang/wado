@@ -237,7 +237,9 @@ impl Monomorphizer {
             BlanketReceiver::Ref { .. } => {
                 let pointee = match recorded {
                     Some(&[pointee]) => pointee,
-                    Some(recorded) => return Some(recorded.to_vec()),
+                    Some(recorded) => {
+                        unreachable!("a `&T` blanket call records its pointee, not {recorded:?}")
+                    }
                     None => match type_table.get(site.receiver?) {
                         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
                         _ => return None,
