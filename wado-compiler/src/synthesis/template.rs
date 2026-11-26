@@ -1041,6 +1041,29 @@ pub(crate) fn blanket_impl_args(
     trait_args: &[TypeId],
     tt: &mut TypeTable,
 ) -> Option<Vec<TypeId>> {
+    let slots = blanket_settled_slots(trait_env, blanket, receiver, trait_args, tt);
+    (0..)
+        .take(trait_env.blanket_param_sources(blanket).len())
+        .map(|index| {
+            let slot = TypeParamId {
+                owner: blanket.def,
+                index,
+            };
+            slots.get(&slot).copied()
+        })
+        .collect()
+}
+
+/// The slots of `blanket` that `receiver` and `trait_args` settle: the
+/// receiver's own, what the trait arguments bind, and what its bounds project
+/// off those.
+pub(crate) fn blanket_settled_slots(
+    trait_env: &TraitEnv,
+    blanket: &BlanketImpl,
+    receiver: TypeId,
+    trait_args: &[TypeId],
+    tt: &mut TypeTable,
+) -> TypeArgMap {
     // A blanket's slots are its parameters in declaration order, so a
     // source's position is its slot.
     let sources = trait_env.blanket_param_sources(blanket);
@@ -1059,10 +1082,7 @@ pub(crate) fn blanket_impl_args(
             .map(|(_, index)| (slot(index), receiver)),
     );
     tt.project_impl_slots(blanket.def, &mut slots);
-    (0..)
-        .take(sources.len())
-        .map(|index| slots.get(&slot(index)).copied())
-        .collect()
+    slots
 }
 
 /// The call through the value blanket providing `local_name` where no written

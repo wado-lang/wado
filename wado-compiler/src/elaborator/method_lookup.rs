@@ -19,6 +19,7 @@ use crate::name::{
     ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
     unalias_namespace_member,
 };
+use crate::synthesis::template::blanket_settled_slots;
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
     StructDef, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId, impl_args_in_slot_order,
@@ -1155,20 +1156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     unalias_namespace_member,
                 );
             let mut table = self.tysys.type_table.borrow_mut();
-            let mut settled: TypeArgMap = env
-                .blanket_param_sources(blanket)
-                .iter()
-                .zip(0..)
-                .filter(|(source, _)| matches!(source, BlanketParamSource::Receiver))
-                .map(|(_, index)| {
-                    let slot = TypeParamId {
-                        owner: blanket.def,
-                        index,
-                    };
-                    (slot, subject)
-                })
-                .collect();
-            table.project_impl_slots(blanket.def, &mut settled);
+            let settled = blanket_settled_slots(env, blanket, subject, &[], &mut table);
             let args: Vec<String> = table
                 .impl_trait_args(blanket.def)
                 .to_vec()
