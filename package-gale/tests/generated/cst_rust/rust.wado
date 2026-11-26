@@ -1065,6 +1065,14 @@ impl<K: Hash> Interner<K> {
     internal fn at(&self, id: i32) -> K {
         return self.items[id];
     }
+
+    internal fn at_ref(&self, id: i32) -> &K {
+        return &self.items[id];
+    }
+
+    internal fn len(&self) -> i32 {
+        return self.items.len();
+    }
 }
 
 internal global FOLLOW_MAX_DEPTH: i32 = 4;
@@ -1589,32 +1597,55 @@ impl AtnPredictor {
 
 type AtnKeyMap = HashMap<i64, i32>;
 
+type AtnEdge = i64;
+
+global ATN_EDGE_PARENT_BITS: i64 = 30;
+global ATN_EDGE_RPR_BITS: i64 = 11;
+global ATN_EDGE_RET_BIAS: i32 = 8;
+
+impl AtnEdge {
+    fn to(ret: i32, rpr: i32, parent: i32) -> AtnEdge
+        contract ret + ATN_EDGE_RET_BIAS > 0
+        contract rpr >= 0 && (rpr as i64) < 1 << ATN_EDGE_RPR_BITS
+        contract parent >= 0 && (parent as i64) < 1 << ATN_EDGE_PARENT_BITS
+    {
+        let label = (ret + ATN_EDGE_RET_BIAS) as i64 << ATN_EDGE_RPR_BITS | rpr as i64;
+        return (label << ATN_EDGE_PARENT_BITS | parent as i64) as AtnEdge;
+    }
+
+    fn label(&self) -> i64 {
+        return *self as i64 >> ATN_EDGE_PARENT_BITS;
+    }
+
+    fn ret(&self) -> i32 {
+        return (self.label() >> ATN_EDGE_RPR_BITS) as i32 - ATN_EDGE_RET_BIAS;
+    }
+
+    fn rpr(&self) -> i32 {
+        return (self.label() & (1 << ATN_EDGE_RPR_BITS) - 1) as i32;
+    }
+
+    fn parent(&self) -> i32 {
+        return (*self as i64 & (1 << ATN_EDGE_PARENT_BITS) - 1) as i32;
+    }
+
+    fn above(&self, parent: i32) -> AtnEdge {
+        return AtnEdge::to(self.ret(), self.rpr(), parent);
+    }
+}
+
 struct RealStacks {
-    start: List<i32>,
-    len: List<i32>,
-    ret: List<i32>,
-    rpr: List<i32>,
-    parent: List<i32>,
-    index: AtnKeyMap,
-    same_hash_next: List<i32>,
+    nodes: Interner<List<AtnEdge>>,
     cover_cache: AtnKeyMap,
     merge_cache: AtnKeyMap,
-    pending: List<i32>,
 }
 
 impl RealStacks {
     fn new() -> RealStacks {
         let mut real = RealStacks {
-            start: [],
-            len: [],
-            ret: [],
-            rpr: [],
-            parent: [],
-            index: AtnKeyMap::new(),
-            same_hash_next: [],
+            nodes: Interner::new(),
             cover_cache: AtnKeyMap::new(),
             merge_cache: AtnKeyMap::new(),
-            pending: [],
         };
         let empty = real.push(CTX_BOUNDARY, 0, CTX_EMPTY);
         let unknown = real.push(CTX_UNKNOWN_RETURN, 0, CTX_EMPTY);
@@ -1623,41 +1654,12 @@ impl RealStacks {
         return real;
     }
 
-    fn append_edge(&mut self, return_state: i32, restore_pr: i32, parent: i32) {
-        self.ret.push(return_state);
-        self.rpr.push(restore_pr);
-        self.parent.push(parent);
-    }
-
     fn push(&mut self, return_state: i32, restore_pr: i32, parent: i32) -> i32 {
-        let s = self.ret.len();
-        self.append_edge(return_state, restore_pr, parent);
-        return self.intern_from(s);
+        return self.nodes.intern([AtnEdge::to(return_state, restore_pr, parent)]);
     }
 
-    fn intern_from(&mut self, s: i32) -> i32 {
-        let n = self.ret.len() - s;
-        let h = atn_edges_hash(&self.ret, &self.rpr, &self.parent, s, n);
-        let head = self.index.get(h).unwrap_or(-1);
-        let mut known = head;
-        while known >= 0 {
-            if self.len[known] == n && atn_edges_eq(&self.ret, &self.rpr, &self.parent, self.start[known], s, n) {
-                self.ret.truncate(s);
-                self.rpr.truncate(s);
-                self.parent.truncate(s);
-                return known;
-            }
-            known = self.same_hash_next[known];
-        }
-        self.start.push(s);
-        self.len.push(n);
-        self.same_hash_next.push(head);
-        self.index[h] = self.start.len() - 1;
-        return self.start.len() - 1;
-    }
-
-    fn key_cmp(&self, x: i32, y: i32) -> i32 {
-        return atn_edge_key_cmp(&self.ret, &self.rpr, x, y);
+    fn edges(&self, node: i32) -> &List<AtnEdge> {
+        return self.nodes.at_ref(node);
     }
 
     fn covers(&mut self, outer: i32, inner: i32) -> bool {
@@ -1668,17 +1670,16 @@ impl RealStacks {
         if let Some(cached) = self.cover_cache.get(ck) {
             return cached == 1;
         }
-        let so = self.start[outer];
-        let no = self.len[outer];
-        let si = self.start[inner];
-        let ni = self.len[inner];
+        let has = self.edges(outer);
+        let wants = self.edges(inner);
         let mut i = 0;
         let mut covered = true;
-        for let mut j = 0; j < ni; j += 1 {
-            while i < no && self.key_cmp(so + i, si + j) < 0 {
+        for let mut j = 0; j < wants.len(); j += 1 {
+            let want = wants[j];
+            while i < has.len() && has[i].label() < want.label() {
                 i += 1;
             }
-            if i >= no || self.key_cmp(so + i, si + j) != 0 || !self.covers(self.parent[so + i], self.parent[si + j]) {
+            if i >= has.len() || has[i].label() != want.label() || !self.covers(has[i].parent(), want.parent()) {
                 covered = false;
                 break;
             }
@@ -1696,30 +1697,26 @@ impl RealStacks {
         if let Some(cached) = self.merge_cache.get(ck) {
             return cached;
         }
-        let sa = self.start[a];
-        let na = self.len[a];
-        let sb = self.start[b];
-        let nb = self.len[b];
-        let base = self.pending.len();
+        let left = self.edges(a);
+        let right = self.edges(b);
+        let mut merged: List<AtnEdge> = [];
         let mut i = 0;
         let mut j = 0;
-        while i < na && j < nb {
-            let c = self.key_cmp(sa + i, sb + j);
-            if c < 0 {
+        while i < left.len() || j < right.len() {
+            if j >= right.len() || i < left.len() && left[i].label() < right[j].label() {
+                merged.push(left[i]);
                 i += 1;
-            } else if c > 0 {
+            } else if i >= left.len() || right[j].label() < left[i].label() {
+                merged.push(right[j]);
                 j += 1;
             } else {
-                let m = self.merge(self.parent[sa + i], self.parent[sb + j]);
-                self.pending.push(m);
+                let below = self.merge(left[i].parent(), right[j].parent());
+                merged.push(left[i].above(below));
                 i += 1;
                 j += 1;
             }
         }
-        let s = self.ret.len();
-        atn_append_merged(&mut self.ret, &mut self.rpr, &mut self.parent, sa, na, sb, nb, &self.pending, base);
-        self.pending.truncate(base);
-        let id = self.intern_from(s);
+        let id = self.nodes.intern(merged);
         self.merge_cache[ck] = id;
         return id;
     }
@@ -1728,8 +1725,9 @@ impl RealStacks {
         let mut below: List<i32> = [];
         let mut n = caller;
         while n != CTX_EMPTY && n != CTX_UNKNOWN {
-            assert self.len[n] == 1, "a caller stack is a chain";
-            n = self.parent[self.start[n]];
+            let edges = self.edges(n);
+            assert edges.len() == 1, "a caller stack is a chain";
+            n = edges[0].parent();
             below.push(n);
         }
         return below;
@@ -1742,9 +1740,9 @@ impl RealStacks {
         if stack == caller || stack == CTX_EMPTY || stack == CTX_UNKNOWN || stays.contains(&stack) {
             return false;
         }
-        let s = self.start[stack];
-        for let mut e = s; e < s + self.len[stack]; e += 1 {
-            if self.ret[e] == CTX_ANY_CALLER_RETURN || self.returns_below(self.parent[e], caller, below, stays) {
+        let edges = self.edges(stack);
+        for let mut e = 0; e < edges.len(); e += 1 {
+            if edges[e].ret() == CTX_ANY_CALLER_RETURN || self.returns_below(edges[e].parent(), caller, below, stays) {
                 below.push(stack);
                 return true;
             }
@@ -1924,7 +1922,7 @@ impl CtxArena {
     }
 
     fn enter_caller_stack(&mut self, sim: &AtnSim, rstk: &List<i32>, floor: i32) -> i32 {
-        if self.real.start.len() >= ATN_REAL_NODE_CAP {
+        if self.real.nodes.len() >= ATN_REAL_NODE_CAP {
             self.real = RealStacks::new();
             self.closed_real.clear();
         }
@@ -2011,19 +2009,13 @@ impl CtxArena {
         if let Some(real) = known {
             return real;
         }
-        let from = self.pending.len();
         let s = self.node_start[node];
-        let n = self.node_len[node];
-        for let mut e = s; e < s + n; e += 1 {
+        let mut edges: List<AtnEdge> = [];
+        for let mut e = s; e < s + self.node_len[node]; e += 1 {
             let below = self.real_of(self.parent[e]);
-            self.pending.push(below);
+            edges.push(AtnEdge::to(self.ret[e], self.rpr[e], below));
         }
-        let at = self.real.ret.len();
-        for let mut i = 0; i < n; i += 1 {
-            self.real.append_edge(self.ret[s + i], self.rpr[s + i], self.pending[from + i]);
-        }
-        self.pending.truncate(from);
-        let real = self.real.intern_from(at);
+        let real = self.real.nodes.intern(edges);
         if self.node_open[node] {
             self.env_real[node as i64] = real;
         } else {
@@ -2061,11 +2053,11 @@ impl CtxArena {
             return;
         }
         let real = self.env[self.env_base + k];
-        let s = self.real.start[real];
-        let n = self.real.len[real];
+        let edges = self.real.edges(real);
+        let n = edges.len();
         let from = self.pending.len();
-        for let mut e = s; e < s + n; e += 1 {
-            let above = self.bind(self.real.parent[e]);
+        for let mut e = 0; e < n; e += 1 {
+            let above = self.bind(edges[e].parent());
             self.pending.push(above);
         }
         let slot = self.slot_node[k];
@@ -2078,8 +2070,8 @@ impl CtxArena {
         }
         let start = self.node_start[slot];
         for let mut i = 0; i < n; i += 1 {
-            self.ret[start + i] = self.real.ret[s + i];
-            self.rpr[start + i] = self.real.rpr[s + i];
+            self.ret[start + i] = edges[i].ret();
+            self.rpr[start + i] = edges[i].rpr();
             self.parent[start + i] = self.pending[from + i];
         }
         self.node_len[slot] = n;
