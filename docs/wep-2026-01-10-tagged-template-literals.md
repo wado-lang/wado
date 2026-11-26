@@ -538,7 +538,7 @@ the tag's result type:
    the `TirStruct` onto `pending_anonymous_structs` — the minting
    `resolve_anonymous_struct_literal` does, factored into one helper both call.
 3. Resolve the tag as a one-argument call whose argument type is known and has
-   no AST: `resolve_call_with_args` is `resolve_call` over arguments already
+   no AST: `resolve_call_with_pretyped_args` is `resolve_call` over arguments already
    typed, keyed by the template's `AstId`, so signature lookup, instantiation,
    the projection of `..V` from `Holes`, the bound check and the
    `StaticMethodDispatch` fact are the ones a spelled call records. A tag of
