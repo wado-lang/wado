@@ -743,18 +743,15 @@ impl TypeTable {
         self.handle_classes(*def)
     }
 
-    /// Each class the resource tree holding `def` numbers, with the resource
-    /// whose own class it is.
+    /// Each class a handle typed `def` can carry, with the resource whose own
+    /// class it is: `def` and what extends it. The rest of its tree is left
+    /// out, or every resource of a tree would list the whole tree.
     pub fn handle_class_owners(&self, def: DefId) -> impl Iterator<Item = (u16, DefId)> {
-        let root = self
-            .resource_chain(def)
-            .last()
-            .expect("a chain starts at `def`");
         self.unrestricted_resources
             .iter()
             .filter_map(move |(&member, classes)| {
                 let lo = classes.as_ref()?.lo;
-                self.is_resource_subtype(member, root)
+                self.is_resource_subtype(member, def)
                     .then_some((lo, member))
             })
     }

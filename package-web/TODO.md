@@ -119,9 +119,10 @@ lower is then available to each interface the slice adds.
 
 ## Known gaps
 
-- The bindings of the whole platform compile, but the time grows much faster
-  than their size: eleven times the functions of the slice take some eight
-  hundred times as long. `mise run report-webidl-coverage` writes them to
+- A program compiles about half again as long against the bindings of the whole
+  platform as against the slice, though it calls the same few members: each
+  declaration costs something whether a program uses it or not.
+  `mise run report-webidl-coverage` writes those bindings to
   `scratchpad/webidl-all/dom.wado`.
 - A union collapsed to its one typable constituent in an argument is not
   reported, though the other constituents cannot be passed.
