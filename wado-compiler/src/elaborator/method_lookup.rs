@@ -17,6 +17,7 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{
     ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
+    unalias_namespace_member,
 };
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
@@ -1144,16 +1145,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The call is the caller's to write: the trait by the name its
             // import gives it, at every argument the block writes.
             let trait_ref = header.trait_.as_ref()?;
+            let trait_def = trait_ref.def?;
             let trait_name = self
                 .tysys
                 .resolutions
-                .imports_admitting(self.frame_module(), trait_ref.def?)
+                .imports_admitting(self.frame_module(), trait_def)
                 .next()
-                .unwrap_or(&trait_ref.name);
-            let ast::Type::Generic(written_ref) = &trait_ref.ty else {
-                unreachable!("a trait reference writing a parameter takes arguments")
+                .map_or_else(
+                    || self.tysys.type_table.borrow().decl_name(trait_def).to_string(),
+                    unalias_namespace_member,
+                );
+            let written_args = match &trait_ref.ty {
+                ast::Type::Generic(written_ref) => &written_ref.args,
+                ast::Type::NamespacedGeneric(written_ref) => &written_ref.args,
+                other => unreachable!(
+                    "a trait reference writing a parameter takes arguments, not {other:?}"
+                ),
             };
-            let args: Vec<String> = written_ref.args.iter().map(written_type_source).collect();
+            let args: Vec<String> = written_args.iter().map(written_type_source).collect();
             let open = &open.name;
             Some(format!(
                 "'{}' declares it, and a method call does not settle '{open}': write '{trait_name}::<{}>::{method_name}(…)', naming '{open}'",
