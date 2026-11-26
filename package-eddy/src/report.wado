@@ -7,7 +7,7 @@
 
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { to_string } from "core:json";
+use { from_string, to_string } from "core:json";
 use { Process } from "core:process";
 use { from_value } from "core:value";
 use { Client } from "wasi:http";
@@ -332,16 +332,16 @@ test "git's marker of a missing final newline is not a line of the file" {
 
 test "the reporter reads what the reviewer wrote and ran, not what was refused" {
     let calls: List<Call> = [
-        Call { name: "Grep", input: shaped(&`{"pattern": "x"}`).unwrap(), is_error: false },
+        Call { name: "Grep", input: from_string(`{"pattern": "x"}`).unwrap(), is_error: false },
         Call {
             name: "Write",
-            input: shaped(&`{"file_path": "tests/t.rs", "content": "fn t() {}"}`).unwrap(),
+            input: from_string(`{"file_path": "tests/t.rs", "content": "fn t() {}"}`).unwrap(),
             is_error: false,
         },
-        Call { name: "Run", input: shaped(&`{"args": ["test", "a b"]}`).unwrap(), is_error: true },
+        Call { name: "Run", input: from_string(`{"args": ["test", "a b"]}`).unwrap(), is_error: true },
         Call {
             name: "Run",
-            input: shaped(&`{"args": ["test", "--test", "t"], "timeout": 60}`).unwrap(),
+            input: from_string(`{"args": ["test", "--test", "t"], "timeout": 60}`).unwrap(),
             is_error: false,
             output: Some("exit code 101"),
         },
