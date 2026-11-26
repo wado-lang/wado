@@ -699,7 +699,7 @@ impl Interpreter<'_> {
             self.bind_handle_copy(root, Lattice::Const(value), handle_sources);
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
-        let handle_sources = self.sources_outside(root, &path, handle_sources);
+        let twins = self.twins_of_stored(root, &path, handle_sources);
         self.frame.replace_place(root, &path);
         self.frame
             .retire_twins(|r, p| r == root && p.starts_with(&path));
@@ -712,7 +712,7 @@ impl Interpreter<'_> {
         {
             return Flow::Bail;
         }
-        self.pair_handles(root, &path, handle_sources);
+        self.frame.handle_twins.extend(twins);
         Flow::Fallthrough(Lattice::Unevaluated)
     }
 
@@ -773,42 +773,43 @@ impl Interpreter<'_> {
 
     /// Bind `index` to `lattice`, paired with the places its handles read from.
     fn bind_handle_copy(&mut self, index: u32, lattice: Lattice, sources: Vec<HandleSource>) {
-        let sources = self.sources_outside(index, &[], sources);
+        let twins = self.twins_of_stored(index, &[], sources);
         self.bind_ctfe_local(index, lattice);
-        self.pair_handles(index, &[], sources);
+        self.frame.handle_twins.extend(twins);
     }
 
-    /// `sources` as they stand once `(root, path)` is replaced: a source inside
-    /// it is about to go, so the places sharing its handle stand in for it.
-    fn sources_outside(
+    /// The twins a value stored at `(root, path)` takes part in, read off the
+    /// frame as it stands before the store. A source inside the place is about
+    /// to go, so the places sharing its handle stand in for it, and two handles
+    /// of the value read from sharers of one array pair with each other.
+    fn twins_of_stored(
         &self,
         root: u32,
         path: &[u32],
         sources: Vec<HandleSource>,
-    ) -> Vec<HandleSource> {
+    ) -> Vec<[(u32, Vec<u32>); 2]> {
         let inside = |(r, p): &(u32, Vec<u32>)| *r == root && p.starts_with(path);
-        let mut outside = Vec::new();
-        for (inner, source) in sources {
-            if !inside(&source) {
-                outside.push((inner, source));
-                continue;
-            }
-            for sharer in self.handle_sharers(&source) {
-                if !inside(&sharer) {
-                    outside.push((inner.clone(), sharer));
+        let held = |inner: &[u32]| (root, [path, inner].concat());
+        let sharers: Vec<Vec<(u32, Vec<u32>)>> = sources
+            .iter()
+            .map(|(_, source)| self.handle_sharers(source))
+            .collect();
+        let mut twins = Vec::new();
+        for (i, (inner, source)) in sources.iter().enumerate() {
+            for (other_inner, other) in &sources[..i] {
+                if other == source || sharers[i].contains(other) {
+                    twins.push([held(other_inner), held(inner)]);
                 }
             }
+            if !inside(source) {
+                twins.push([held(inner), source.clone()]);
+                continue;
+            }
+            for sharer in sharers[i].iter().filter(|sharer| !inside(sharer)) {
+                twins.push([held(inner), sharer.clone()]);
+            }
         }
-        outside
-    }
-
-    /// Pair each handle the value now at `(root, path)` carries with the place
-    /// it was read from.
-    fn pair_handles(&mut self, root: u32, path: &[u32], sources: Vec<HandleSource>) {
-        for (inner, source) in sources {
-            let held = [path, &inner].concat();
-            self.frame.handle_twins.push([(root, held), source]);
-        }
+        twins
     }
 
     /// The places holding, through any chain of twins, the array handle a place
@@ -1104,21 +1105,23 @@ impl Interpreter<'_> {
     /// copy would miss those writes; a handle named at both ends becomes a
     /// [`FrameState::handle_twins`] pair instead.
     fn binds_unnamed_written_handle(&self, body: &Body, index: u32, value: Operand) -> bool {
+        // A local standing for another's place is written under either name.
+        let roots = |op: Operand| {
+            let aliased = self.frame_place_of(body, op).map(|(root, _)| root);
+            write_root_local(body, op).into_iter().chain(aliased)
+        };
         let unnamed: Vec<u32> = self
             .array_handles(body, value)
             .into_iter()
             .filter(|(path, op)| path.is_none() || self.frame_place_of(body, *op).is_none())
-            .filter_map(|(_, op)| write_root_local(body, op))
+            .flat_map(|(_, op)| roots(op))
             .collect();
         if unnamed.is_empty() {
             return false;
         }
         write_targets_under(body, NodeRef::Block(body.root()))
             .into_iter()
-            .any(|target| {
-                write_root_local(body, target)
-                    .is_some_and(|root| root == index || unnamed.contains(&root))
-            })
+            .any(|target| roots(target).any(|root| root == index || unnamed.contains(&root)))
     }
 
     /// Resolve `index` to the place `inner` refers to, so later reads and writes
