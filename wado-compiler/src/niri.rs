@@ -953,20 +953,6 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Reset the per-function state, which the driving visitor must do before
-    /// each body: local indices are per-function, so one function's bindings
-    /// would otherwise read as the next one's. The step budget resets too, so
-    /// a long compile-time loop cannot decide whether later functions fold.
-    pub fn enter_function(&mut self) {
-        self.step_budget = DEFAULT_STEP_BUDGET;
-        self.frame = FrameState::default();
-        self.call_misses.clear();
-        debug_assert!(
-            self.call_stack.is_empty(),
-            "niri call_stack leaked across function boundary",
-        );
-    }
-
     /// Record a lattice value for a `let`-bound local: [`Lattice::Const`] for an
     /// immutable binding whose RHS reduced, [`Lattice::NonConst`] for `let mut`
     /// or an RHS that did not, and for an aggregate

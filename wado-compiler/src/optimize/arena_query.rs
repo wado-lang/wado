@@ -1304,8 +1304,7 @@ pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&T
 
 // ---------------------------------------------------------------------------
 // Mutated-root queries — the canonical "which locals may a subtree mutate"
-// facility. Consolidation target for the hand-rolled variants in
-// `const_folding` and `condition_implication`.
+// facility.
 // ---------------------------------------------------------------------------
 
 /// Flow-insensitive `&mut`-alias map: per `&mut`-typed local, the function locals
@@ -1641,8 +1640,8 @@ pub(super) fn for_each_mutated_root(
 
 /// Every mutation of a local root anywhere in the subtree at `node` — the
 /// consolidation query for pass-local "loop write" / "modifies" scans.
-// `const_folding`'s `record_loop_write` and `condition_implication`'s
-// `node_modifies` are such scans still to migrate onto it.
+// `condition_implication`'s `node_modifies` is such a scan still to migrate
+// onto it.
 pub(super) fn for_each_mutation_under(
     body: &Body,
     node: NodeRef,

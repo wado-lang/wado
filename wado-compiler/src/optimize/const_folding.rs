@@ -15,6 +15,7 @@ use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::SeqField;
 use crate::compiler_trace;
 use crate::const_eval::{Value, prim_of};
+use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::nir::{FuncCell, FuncId, FuncParts, FuncRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
@@ -29,7 +30,8 @@ use crate::niri::{
     guard_declares_locals, materializing_globals,
 };
 use crate::optimize::alias::alias_classes;
-use crate::optimize::arena_query::projected_const_field;
+use crate::optimize::arena_query::{MutRefAliases, for_each_mutation_under, projected_const_field};
+use crate::optimize::value_copy::mutation::{MutationOracle, build_param_mut};
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
@@ -86,11 +88,17 @@ fn fold_pass(
     let type_table = &*type_table;
     let maps = build_fold_maps(project, type_table, shapes, exec, frozen);
     let globals = build_global_view(project, type_table, &maps, exec);
+    let param_mut = build_param_mut(project);
+    let inputs = FoldInputs {
+        type_table,
+        maps: &maps,
+        globals: &globals,
+        param_mut: &param_mut,
+    };
     let functions = &project.functions;
     let changed = drive(&|buffers, fid| {
         let func = &functions[fid.index()];
-        let mut visitor = new_visitor(type_table, &maps, &globals);
-        let changed = fold_function(func, &mut visitor, buffers, type_table);
+        let changed = fold_function(func, &inputs, buffers);
         if changed {
             compiler_trace!("const_fold", "changed {}", func.borrow().name);
         }
@@ -141,31 +149,21 @@ pub fn fold_constants_all(project: &mut NirPackage, gate: &mut FunctionGate) -> 
     )
 }
 
-fn new_visitor<'a>(
+/// What every function's fold of one pass reads.
+struct FoldInputs<'a> {
     type_table: &'a TypeTable,
     maps: &'a FoldMaps,
     globals: &'a GlobalView,
-) -> ConstFoldVisitor<'a> {
-    let mut visitor = ConstFoldVisitor {
-        interpreter: Interpreter::new(type_table),
-    };
-    visitor.interpreter.with_callees(&maps.callees);
-    visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
-    visitor.interpreter.with_shapes(&maps.shapes);
-    visitor
-        .interpreter
-        .with_globals(&globals.values)
-        .with_global_fields(&globals.fields)
-        .with_materializing_globals(&globals.materializing);
-    visitor
+    param_mut: &'a IndexMap<FuncId, Vec<bool>>,
 }
 
-fn fold_function(
-    func_rc: &FuncCell,
-    visitor: &mut ConstFoldVisitor<'_>,
-    buffers: &mut EngineBuffers,
-    type_table: &TypeTable,
-) -> bool {
+fn fold_function(func_rc: &FuncCell, inputs: &FoldInputs<'_>, buffers: &mut EngineBuffers) -> bool {
+    let FoldInputs {
+        type_table,
+        maps,
+        globals,
+        param_mut,
+    } = *inputs;
     let mut func = func_rc.borrow_mut();
     compiler_trace!("region_seed", "folding {}", func.name);
     let FuncParts {
@@ -177,8 +175,20 @@ fn fold_function(
     let Some(body) = body else {
         return false;
     };
-    // Local indices are per-function; reset the interpreter env at each boundary.
-    visitor.interpreter.enter_function();
+    let mut visitor = ConstFoldVisitor {
+        interpreter: Interpreter::new(type_table),
+        type_table,
+        oracle: MutationOracle::new(param_mut),
+        aliases: MutRefAliases::of_body(body, locals, params.len(), type_table),
+    };
+    visitor.interpreter.with_callees(&maps.callees);
+    visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
+    visitor.interpreter.with_shapes(&maps.shapes);
+    visitor
+        .interpreter
+        .with_globals(&globals.values)
+        .with_global_fields(&globals.fields)
+        .with_materializing_globals(&globals.materializing);
     visitor.interpreter.record_ref_global_aliases(body);
     visitor.interpreter.record_aggregate_locals(body);
     visitor
@@ -645,6 +655,11 @@ impl GlobalStoreCollector<'_> {
 
 struct ConstFoldVisitor<'a> {
     interpreter: Interpreter<'a>,
+    type_table: &'a TypeTable,
+    oracle: MutationOracle<'a>,
+    /// Built before the walk: folding only drops and replaces nodes, so it
+    /// may claim more than remains, never less.
+    aliases: MutRefAliases,
 }
 
 /// The control-flow / scope expression shapes walked per-arm. Extracting them
@@ -723,14 +738,12 @@ impl ConstFoldVisitor<'_> {
 
         match &engine.body.stmts[s].kind {
             StmtKind::Loop { body: lb } => {
-                // Loop back-edge: every local the body may reassign or take
-                // `&mut` is dropped to `NonConst` before and after the body
-                // walk (`apply_loop_invalidations`), a conservative fixpoint
-                // approximation — only facts unaffected by the body hold at
-                // entry and post-loop. Struct-field heap effects across the
-                // loop are the engine `ValueGraph`'s concern, not niri's.
+                // Loop back-edge: every local the body may mutate is dropped to
+                // `NonConst` before and after the body walk, a conservative
+                // fixpoint approximation — only facts unaffected by the body
+                // hold at entry and post-loop.
                 let lb = *lb;
-                let writes = collect_write_effects(engine.body, NodeRef::Block(lb));
+                let writes = self.written_under(engine.body, NodeRef::Block(lb));
                 self.apply_loop_invalidations(&writes);
                 let changed = self.visit_block(engine, lb);
                 self.apply_loop_invalidations(&writes);
@@ -738,7 +751,7 @@ impl ConstFoldVisitor<'_> {
             }
             StmtKind::LabeledBlock { block, .. } => {
                 let block = *block;
-                let writes = collect_write_effects(engine.body, NodeRef::Stmt(s));
+                let writes = self.written_under(engine.body, NodeRef::Stmt(s));
                 self.apply_loop_invalidations(&writes);
                 let changed = self.visit_block(engine, block);
                 self.apply_loop_invalidations(&writes);
@@ -793,7 +806,7 @@ impl ConstFoldVisitor<'_> {
                 changed
             }
             ExprShape::Match(scrutinee, arms) => {
-                let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
+                let writes = self.written_under(engine.body, NodeRef::Expr(e));
                 let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
                     self.apply_loop_invalidations(&writes);
@@ -821,7 +834,7 @@ impl ConstFoldVisitor<'_> {
                 changed
             }
             ExprShape::Switch(scrutinee, arms, default) => {
-                let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
+                let writes = self.written_under(engine.body, NodeRef::Expr(e));
                 let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
                     changed |= self.visit_alternative_block(engine, &writes, *arm);
@@ -839,7 +852,7 @@ impl ConstFoldVisitor<'_> {
             // A `break L` inside means the statements after it did not run on
             // that path, so what the last one left is not what every path leaves.
             ExprShape::Labeled(block) => {
-                let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
+                let writes = self.written_under(engine.body, NodeRef::Expr(e));
                 self.apply_loop_invalidations(&writes);
                 let mut changed = self.visit_block(engine, block);
                 self.apply_loop_invalidations(&writes);
@@ -859,7 +872,7 @@ impl ConstFoldVisitor<'_> {
                         ..
                     }
                 )
-                .then(|| collect_write_effects(engine.body, NodeRef::Expr(e)));
+                .then(|| self.written_under(engine.body, NodeRef::Expr(e)));
                 if let Some(writes) = &writes {
                     self.apply_loop_invalidations(writes);
                 }
@@ -1084,7 +1097,7 @@ impl ConstFoldVisitor<'_> {
     fn visit_alternative_block(
         &mut self,
         engine: &mut Engine,
-        writes: &LoopWriteEffects,
+        writes: &IndexSet<u32>,
         block: BlockId,
     ) -> bool {
         self.apply_loop_invalidations(writes);
@@ -1111,7 +1124,7 @@ impl ConstFoldVisitor<'_> {
             }
             return changed;
         }
-        let writes = collect_write_effects(engine.body, node);
+        let writes = self.written_under(engine.body, node);
         changed |= self.visit_alternative_block(engine, &writes, then_block);
         if let Some(eb) = else_block {
             changed |= self.visit_alternative_block(engine, &writes, eb);
@@ -1120,18 +1133,29 @@ impl ConstFoldVisitor<'_> {
         changed
     }
 
-    /// Apply a [`LoopWriteEffects`] summary to the interpreter,
-    /// dropping every local the body could reassign or take `&mut` to
-    /// `NonConst`, so the pre-body and post-body local env is a sound
-    /// abstraction of any iteration count.
-    fn apply_loop_invalidations(&mut self, writes: &LoopWriteEffects) {
-        for idx in &writes.reassigned_locals {
-            self.interpreter.invalidate_local(*idx);
-        }
-        for idx in &writes.mut_referenced {
-            // A `&mut local` (or `is_mut` call arg) escapes a mutable
-            // reference the callee can store and mutate; drop the local.
-            self.interpreter.invalidate_local(*idx);
+    /// Every local the subtree at `node` may mutate, in any way
+    /// [`for_each_mutation_under`] counts.
+    fn written_under(&self, body: &Body, node: NodeRef) -> IndexSet<u32> {
+        let mut written = IndexSet::default();
+        for_each_mutation_under(
+            body,
+            node,
+            self.type_table,
+            &self.oracle,
+            &self.aliases,
+            &mut |m| {
+                written.insert(m.local());
+            },
+        );
+        written
+    }
+
+    /// Drop every local in `written` to `NonConst`, so the env before and
+    /// after a subtree [`Self::written_under`] scanned is a sound abstraction
+    /// of any path through it, and of any iteration count.
+    fn apply_loop_invalidations(&mut self, written: &IndexSet<u32>) {
+        for &idx in written {
+            self.interpreter.invalidate_local(idx);
         }
     }
 }
@@ -1151,71 +1175,5 @@ fn scalar_only(lat: Lattice) -> Lattice {
     match &lat {
         Lattice::Const(v) if v.is_scalar() => lat,
         _ => Lattice::NonConst,
-    }
-}
-
-/// Summary of every local a loop body could mutate. Used by
-/// [`ConstFoldVisitor::apply_loop_invalidations`] to drop just those
-/// `local` lattice entries before and after the body walk — facts about
-/// locals the body does not touch survive.
-#[derive(Default)]
-struct LoopWriteEffects {
-    /// `local = expr` targets — fully reassigned, so the local's lattice
-    /// must drop to unknown across the loop.
-    reassigned_locals: IndexSet<u32>,
-    /// `&mut local` or `is_mut` call argument — callee may store and
-    /// mutate through the reference, so drop the local fully.
-    mut_referenced: IndexSet<u32>,
-}
-
-/// Walk a loop body and collect every write effect that must be
-/// invalidated before and after the walk. See [`LoopWriteEffects`].
-fn collect_write_effects(body: &Body, node: NodeRef) -> LoopWriteEffects {
-    let mut effects = LoopWriteEffects::default();
-    collect_loop_writes(body, node, &mut effects);
-    effects
-}
-
-/// Record the write effects of `node`, then recurse into every child —
-/// nested blocks and loops included, so the whole subtree is scanned.
-fn collect_loop_writes(body: &Body, node: NodeRef, effects: &mut LoopWriteEffects) {
-    if let NodeRef::Expr(e) = node {
-        record_loop_write(body, e, effects);
-    }
-    body.for_each_child(node, |c| collect_loop_writes(body, c, effects));
-}
-
-fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
-    match &body.exprs[e].kind {
-        // `local = …` reassigns the local across iterations.
-        ExprKind::Assign { target, .. } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[*target].kind {
-                effects.reassigned_locals.insert(*index);
-            }
-        }
-        // `&mut local` escapes a mutable reference the callee can store and
-        // write through. (`&mut local.field` mutates only the field, not the
-        // local's binding, so it needs no local-lattice invalidation.)
-        ExprKind::Unary {
-            op: NirUnaryOp::MutRef,
-            expr: inner,
-        } => {
-            if let Some(ie) = inner.as_expr()
-                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
-            {
-                effects.mut_referenced.insert(*index);
-            }
-        }
-        ExprKind::Call { args, .. } => {
-            for (arg, reaches_storage) in args.with_storage_reach(true) {
-                if reaches_storage
-                    && let Some(ae) = arg.expr.as_expr()
-                    && let ExprKind::Local { index, .. } = &body.exprs[ae].kind
-                {
-                    effects.mut_referenced.insert(*index);
-                }
-            }
-        }
-        _ => {}
     }
 }

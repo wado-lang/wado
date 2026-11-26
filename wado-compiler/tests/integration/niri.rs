@@ -851,25 +851,6 @@ fn invalidate_local_overrides_prior_const() {
 }
 
 #[test]
-fn enter_function_clears_env() {
-    // Simulates the visitor moving from one function body to the
-    // next — local indices are unique per function, so prior bindings
-    // must not leak.
-    let table = TypeTable::new();
-    let mut interp = Interpreter::new(&table);
-    interp.bind_local(
-        3,
-        Lattice::Const(Value::Int {
-            value: 99,
-            prim: PrimitiveType::I32,
-        }),
-    );
-    interp.enter_function();
-    let e = local_expr(3, TypeTable::I32);
-    assert_eq!(reduce_lat(&mut interp, &e), Lattice::Unevaluated);
-}
-
-#[test]
 fn local_node_itself_is_not_rewritten_in_place() {
     // A Local with env = Const should be readable via reduce_to_lattice
     // but NOT mutated when seen on its own. This protects assignment
@@ -4820,8 +4801,13 @@ fn select_picks_the_arm_its_condition_names() {
     let select_id = next_test_func_id();
     let builtins = ctfe_builtin_map(select_id, CtfeBuiltin::Select);
 
-    let mut interp = Interpreter::new(&table);
-    interp.with_ctfe_builtins(&builtins);
+    // Each `pick` builds a fresh body whose arena reuses the same ids, so each
+    // takes a fresh interpreter, as the driving visitor makes one per function.
+    let interp = || {
+        let mut interp = Interpreter::new(&table);
+        interp.with_ctfe_builtins(&builtins);
+        interp
+    };
 
     let pick = |condition: bool| {
         ctfe_builtin_call(
@@ -4836,18 +4822,14 @@ fn select_picks_the_arm_its_condition_names() {
     };
 
     assert_eq!(
-        reduce_lat(&mut interp, &pick(true)),
+        reduce_lat(&mut interp(), &pick(true)),
         Lattice::Const(Value::Int {
             value: 10,
             prim: PrimitiveType::I32,
         }),
     );
-    // Each `pick` builds a fresh body whose arena reuses the same ids, so the
-    // frame — fold memo included — must reset between them, as the driving
-    // visitor resets it per function.
-    interp.enter_function();
     assert_eq!(
-        reduce_lat(&mut interp, &pick(false)),
+        reduce_lat(&mut interp(), &pick(false)),
         Lattice::Const(Value::Int {
             value: 20,
             prim: PrimitiveType::I32,
@@ -7176,21 +7158,20 @@ fn pure_call_returning_a_struct_projects_at_the_call_site() {
 fn aggregate_binding_needs_a_read_only_local() {
     // `record_aggregate_locals` decides whether a local may carry an aggregate
     // constant. Each phase below mirrors what the driving visitor does per
-    // function: `enter_function`, record, then bind.
+    // function: a fresh interpreter, record, then bind.
     let mut table = TypeTable::new();
     let point = point_type(&mut table);
-    let mut interp = Interpreter::new(&table);
     let read = field_access(local_expr(0, point), 0, "x", TypeTable::I32);
 
     // Without a recorded body, no local qualifies: the binding degrades to
     // `NonConst` — the engine tracks whole values, not the heap.
-    interp.enter_function();
+    let mut interp = Interpreter::new(&table);
     interp.bind_local(0, Lattice::Const(point_value(point)));
     assert_eq!(reduce_lat(&mut interp, &read), Lattice::NonConst);
 
     // A body whose only mention of local 0 is a field read qualifies it.
     let (body, _) = into_body(&read);
-    interp.enter_function();
+    let mut interp = Interpreter::new(&table);
     interp.record_aggregate_locals(&body);
     interp.bind_local(0, Lattice::Const(point_value(point)));
     assert_eq!(reduce_lat(&mut interp, &read), Lattice::Const(int(10)));
@@ -7202,7 +7183,7 @@ fn aggregate_binding_needs_a_read_only_local() {
         mut_ref(b)
     });
     let (body, _) = into_body(&read_then_mut_ref);
-    interp.enter_function();
+    let mut interp = Interpreter::new(&table);
     interp.record_aggregate_locals(&body);
     interp.bind_local(0, Lattice::Const(point_value(point)));
     let reread = field_access(local_expr(0, point), 0, "x", TypeTable::I32);
@@ -7248,7 +7229,6 @@ fn a_displaced_parent_still_vouches_for_its_mention() {
     ps(&mut body, StmtKind::Expr(Operand::Expr(mention)));
 
     let mut interp = Interpreter::new(&table);
-    interp.enter_function();
     interp.record_aggregate_locals(&body);
     interp.bind_local(0, Lattice::Const(point_value(point)));
     let read = field_access(local_expr(0, point), 0, "x", TypeTable::I32);
@@ -7285,7 +7265,6 @@ fn a_displaced_call_still_vouches_for_its_argument() {
 
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
-    interp.enter_function();
     interp.record_aggregate_locals(&body);
     interp.bind_local(0, Lattice::Const(point_value(point)));
     let read = field_access(local_expr(0, point), 0, "x", TypeTable::I32);
@@ -7321,7 +7300,6 @@ fn a_walk_that_performs_nothing_drops_a_container_a_call_writes() {
 
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
-    interp.enter_function();
     interp.record_aggregate_locals(&body);
     interp.bind_local(
         0,
@@ -8070,7 +8048,6 @@ fn a_ref_returning_callee_does_not_fold_through_the_lost_alias() {
     let callees = build_callee_map_test(&funcs);
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
-    interp.enter_function();
     let call = call_expr(&funcs[1], vec![]);
     let lat = reduce_lat(&mut interp, &call);
     assert_ne!(
@@ -8145,7 +8122,6 @@ fn a_stored_reference_parameter_does_not_fold_into_a_snapshot() {
     let callees = build_callee_map_test(&funcs);
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
-    interp.enter_function();
     let call = call_expr(&funcs[1], vec![]);
     assert_ne!(
         reduce_lat(&mut interp, &call),
@@ -8275,7 +8251,6 @@ fn a_run_the_engine_abandoned_is_not_paid_for_twice() {
 
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
-    interp.enter_function();
     let (mut body, e) = into_body_expr(&call_expr(&waster, vec![]));
 
     let before = interp.step_budget();
@@ -8322,7 +8297,6 @@ fn an_abandoned_run_is_remembered_per_argument_list() {
 
     let mut interp = Interpreter::new(&table);
     interp.with_callees(&callees);
-    interp.enter_function();
 
     let (mut trapping, t) = into_body_expr(&call_expr(
         &only_zero,

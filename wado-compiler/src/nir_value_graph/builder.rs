@@ -2186,8 +2186,7 @@ pub struct CallFacts<'a> {
 }
 
 /// A loop body's heap-write effects, used to invalidate exactly the fields a
-/// loop may mutate (mirrors `const_folding`'s `LoopWriteEffects`). Reassigned
-/// locals are handled separately by `walk_loop`'s `Opaque` reassignment.
+/// loop may mutate. Reassigned locals are handled separately by `walk_loop`'s `Opaque` reassignment.
 #[derive(Default)]
 struct LoopHeapEffects {
     /// `local.field = …` (bare-`Local` receiver) targets.
