@@ -1155,6 +1155,39 @@ fn namespaced_static_call_definition() {
 }
 
 #[test]
+fn namespaced_static_call_owner_definition() {
+    futures::executor::block_on(async {
+        let helper = concat!(
+            "pub struct Pair { pub x: i32 }\n",
+            "impl Pair {\n",
+            "    pub fn make() -> Pair {\n",
+            "        return Pair { x: 1 };\n",
+            "    }\n",
+            "}\n",
+            "pub flags Perms { Read, Write }\n",
+        );
+        let entry = concat!(
+            "use helper from \"./helper.wado\";\n",
+            "fn f() -> u32 {\n",
+            "    let p = helper::Pair::make();\n",
+            "    return helper::Perms::all() as u32;\n",
+            "}\n",
+        );
+        let files = [("./helper.wado", helper), ("/test.wado", entry)];
+        let pair = def_at_in(&files, "/test.wado", 2, 21)
+            .await
+            .expect("the `Pair` of helper::Pair::make");
+        assert_eq!(pair.uri, "file:///helper.wado");
+        assert_range(&pair, 0, 11, 15);
+        let perms = def_at_in(&files, "/test.wado", 3, 20)
+            .await
+            .expect("the `Perms` of helper::Perms::all");
+        assert_eq!(perms.uri, "file:///helper.wado");
+        assert_range(&perms, 6, 10, 15);
+    });
+}
+
+#[test]
 fn alias_static_method_call_definition() {
     futures::executor::block_on(async {
         // `Alias::make` resolves through the alias to `Pair`, which declares

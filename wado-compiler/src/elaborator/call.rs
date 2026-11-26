@@ -1923,6 +1923,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             expected_type,
             receivers: &receivers,
         };
+        // The `Type` of `ns::Type::method`. Every stage below records the
+        // owner's edge only for the two-segment spelling.
+        if receivers.prefix_receiver.is_none()
+            && receivers.static_method_receiver.is_some()
+            && let Some(owner) = ident.owner_segment()
+            && self.tysys.resolutions.walked(owner.id).is_some()
+        {
+            self.record_type_name_reference(owner.id);
+        }
         if pretyped_args.is_none() {
             self.resolve_call_if_callee_is_instance_method(site, ctx)?;
         }
@@ -5628,7 +5637,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )]
         let receiver = at_site.or_else(|| {
             let def = self.namespace_member(prefix, type_name)?;
-            Some(ReceiverId::of_decl(self.tysys.resolutions.defs(), def, None))
+            Some(ReceiverId::of_decl(
+                self.tysys.resolutions.defs(),
+                def,
+                None,
+            ))
         })?;
         Some(receiver.written_as(&format!("{prefix}::{type_name}")))
     }
