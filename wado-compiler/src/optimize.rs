@@ -61,6 +61,7 @@ mod tuple_projection;
 mod unsigned_range_check;
 mod value_copy;
 mod value_copy_demote;
+mod writes;
 
 #[cfg(debug_assertions)]
 use std::ops::ControlFlow;
