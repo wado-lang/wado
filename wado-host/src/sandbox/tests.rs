@@ -721,7 +721,8 @@ fn a_spawn_copies_nothing_the_host_holds() {
     // SAFETY: plain system call.
     let page = usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).unwrap();
     // SAFETY: a fresh anonymous mapping, ours alone and never unmapped. Small
-    // pages, so each page faults for itself.
+    // pages, so each page faults for itself; a kernel built without huge
+    // pages refuses the advice and has no other kind.
     let held = unsafe {
         let start = libc::mmap(
             std::ptr::null_mut(),
@@ -732,7 +733,7 @@ fn a_spawn_copies_nothing_the_host_holds() {
             0,
         );
         assert_ne!(start, libc::MAP_FAILED);
-        assert_eq!(libc::madvise(start, PAGES * page, libc::MADV_NOHUGEPAGE), 0);
+        libc::madvise(start, PAGES * page, libc::MADV_NOHUGEPAGE);
         std::slice::from_raw_parts_mut(start.cast::<u8>(), PAGES * page)
     };
     let mut write_each_page = || {

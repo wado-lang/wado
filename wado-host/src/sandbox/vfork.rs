@@ -5,7 +5,7 @@
 //! page to fault on its next write. A spawn from a host holding gigabytes then
 //! costs in proportion, and slows every thread of the host with it.
 
-use std::ffi::{CString, OsString, c_void};
+use std::ffi::{CStr, CString, OsString, c_void};
 use std::io;
 use std::os::fd::RawFd;
 use std::os::unix::ffi::OsStrExt;
@@ -15,6 +15,8 @@ use std::ptr;
 /// What the child runs on. It makes system calls alone, so a stack far below
 /// a thread's is ample.
 const STACK_SIZE: usize = 256 * 1024;
+
+const SHELL: &CStr = c"/bin/sh";
 
 /// Run `child` in a new process that shares the host's memory, on a stack of
 /// its own, and return its pid once it has called `exec` or exited. What
@@ -89,7 +91,8 @@ fn default_caught_signals() {
 /// What `exec` takes, in the form it takes it, built where allocating is safe.
 pub(super) struct Image {
     program: CString,
-    /// Each ends in a null, and points into `_strings`.
+    /// Each ends in a null, and points into `_strings`. `args` opens with the
+    /// shell and then the program, for a program the shell has to run.
     args: Vec<*const libc::c_char>,
     env: Vec<*const libc::c_char>,
     _strings: Vec<CString>,
@@ -120,7 +123,7 @@ impl Image {
                 .chain([ptr::null()])
                 .collect()
         };
-        let mut args = vec![program.as_ptr()];
+        let mut args = vec![SHELL.as_ptr(), program.as_ptr()];
         args.extend(ended(arg_strings));
         Ok(Self {
             args,
@@ -152,7 +155,12 @@ pub(super) fn exec(image: &Image, streams: [Option<RawFd>; 3]) -> io::Error {
         let mut none: libc::sigset_t = std::mem::zeroed();
         libc::sigemptyset(&raw mut none);
         libc::pthread_sigmask(libc::SIG_SETMASK, &raw const none, ptr::null_mut());
-        libc::execve(program.as_ptr(), args.as_ptr(), env.as_ptr());
+        libc::execve(program.as_ptr(), args[1..].as_ptr(), env.as_ptr());
+        // An executable file in no format the kernel knows is a script that
+        // names no interpreter, which `execvp` and a shell hand to `sh`.
+        if io::Error::last_os_error().raw_os_error() == Some(libc::ENOEXEC) {
+            libc::execve(SHELL.as_ptr(), args.as_ptr(), env.as_ptr());
+        }
     }
     io::Error::last_os_error()
 }

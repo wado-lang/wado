@@ -115,10 +115,10 @@ of a multithreaded process may make only async-signal-safe calls: no allocation,
 no lock. Each backend fits the confinement into that rule without re-executing
 `wado`, so a host embedded in another binary spawns as `wado` does.
 
-Neither backend calls `fork`. It copies the page tables of everything the host
-holds, and leaves each page to fault on the host's next write to it. A spawn
-then costs in proportion to the host's memory, and slows every thread of the
-host. `wado test` holds gigabytes while its tests spawn.
+Neither backend calls `fork`. `fork` copies the page tables of everything the
+host holds, and leaves each page to fault on the host's next write to it. A
+spawn through `fork` would cost in proportion to the host's memory, and slow
+every thread of the host. `wado test` holds gigabytes while its tests spawn.
 
 - Linux starts the child with `clone(CLONE_VM | CLONE_VFORK)`, as `posix_spawn`
   does: the child borrows the host's memory on a stack of its own, and the
@@ -128,7 +128,9 @@ host. `wado test` holds gigabytes while its tests spawn.
   starts: the ruleset, the BPF program, and an `O_PATH` descriptor for each
   rule. Every signal is blocked across the `clone`, and the child sets each
   signal the host catches back to its default before it unblocks them, so no
-  handler of the host's runs in the child.
+  handler of the host's runs in the child. An executable file in no format the
+  kernel knows, a script that names no interpreter, is handed to `/bin/sh`, as
+  `execvp` hands it.
 - macOS starts the program through `/usr/bin/sandbox-exec` with `posix_spawn`.
   `sandbox_init` compiles the profile and allocates, so it
   runs in `sandbox-exec`, a single-threaded process of its own, which then execs
@@ -591,6 +593,9 @@ the program accepts it.
 - A host whose group is orphaned in the background leaves a child that uses
   the terminal stopped, and the guest's wait does not return until the guest
   kills it. A child sharing the group would instead fail its read with `EIO`.
+- On Linux a child that inherits the terminal holds it before its `exec`. A
+  stop typed in that window (Ctrl-Z) stops the child there, and the spawn does
+  not return: the host continues a stopped child only once it waits on it.
 - On macOS a child reads the arguments of every process its user runs, through
   `sysctl(KERN_PROCARGS2)`. Of each process not built as a platform binary it
   reads the whole environment too, `wado`'s own among them, so a token in the

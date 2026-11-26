@@ -1373,11 +1373,17 @@ impl Stream {
         };
         // Where the host holds a standard stream closed, a new descriptor
         // takes its number, and the child would overwrite it while it moves
-        // another into place. A clone is numbered past them.
+        // another into place.
         let child = match child {
             Some(fd) if fd.as_raw_fd() <= libc::STDERR_FILENO => Some(fd.try_clone()?),
             child => child,
         };
+        assert!(
+            child
+                .as_ref()
+                .is_none_or(|fd| fd.as_raw_fd() > libc::STDERR_FILENO),
+            "a clone is numbered past the standard streams"
+        );
         Ok(Self { child, host })
     }
 }
