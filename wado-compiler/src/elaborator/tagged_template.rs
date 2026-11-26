@@ -45,8 +45,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: tagged.span,
         };
         let reported = self.logger.offered_error_count();
-        let result =
-            self.resolve_call_with_args(&call, ctx, expected_type, Some(vec![template_ty]));
+        let result = self.resolve_call_with_pretyped_args(
+            &call,
+            ctx,
+            expected_type,
+            Some(vec![template_ty]),
+        );
 
         // Reify rebuilds the call from the dispatch fact. A call without one
         // either reported why or was a variant case, which is silent.
