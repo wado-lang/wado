@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795729634768,
+  "lastUpdate": 1795730990310,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82557,6 +82557,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/29ebe6d4bc73acf8e3113b671e0a21a03e564054"
         },
         "date": 1795729633803,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24979,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334351,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "767dabc6afbe2574bd62476d32d28d7954318343",
+          "message": "Merge pull request #2776 from wado-lang/ccr-bf3731b8-un2927\n\nfeat!: a test's timeout is written in seconds, `#[timeout(seconds = N)]`",
+          "timestamp": "2026-11-27T06:36:06+09:00",
+          "tree_id": "053b42262b1e2c2a95ef1d125071b96e69a759e2",
+          "url": "https://github.com/wado-lang/wado/commit/767dabc6afbe2574bd62476d32d28d7954318343"
+        },
+        "date": 1795730989542,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
