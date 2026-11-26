@@ -906,11 +906,11 @@ ATN literal is a measured problem.)
 over `HashMap<i64, i32>`. A hand-written open-addressing table in its place
 measures the same within the noise:
 
-| grammar    | time, `clear` freeing |  time |   fuel |
-| ---------- | --------------------: | ----: | -----: |
-| TypeScript |                 2.06× | 0.85× | 1.016× |
-| Rust       |                 1.38× | 1.05× | 1.016× |
-| SQLite     |                 0.95× | 1.01× | 1.000× |
+| grammar    | time, `clear` freeing | time, `clear` filling | fuel, `clear` filling |   fuel |
+| ---------- | --------------------: | --------------------: | --------------------: | -----: |
+| TypeScript |                 2.06× |                 0.85× |                1.016× | 0.999× |
+| Rust       |                 1.38× |                 1.05× |                1.016× | 1.006× |
+| SQLite     |                 0.95× |                 1.01× |                1.000× | 1.000× |
 
 Each figure is `HashMap` over the open-addressing table. The times are
 `wado run -O2 package-gale/benchmark/<grammar>/<grammar>.wado` on the dev build,
@@ -918,11 +918,14 @@ the arms alternating in one session, and a run varies by a tenth either way. The
 fuel is that file's `input parses` test under `wado test -O2 --report-fuel`,
 which is one cold parse.
 
-`HashMap` was the slower by far until three things changed in it, and a map
+`HashMap` was the slower by far until four things changed in it, and a map
 that lacks one of them will lose this comparison again:
 
 - `clear` keeps the table and the entry arrays. A map cleared at every
   prediction step otherwise grows from nothing each time: the first column.
+- `clear` empties a table far wider than its entries slot by slot, not by
+  filling it. One hard prediction otherwise leaves every later step filling the
+  table it grew: the `clear` filling columns.
 - A key of one word is hashed with one folded multiply, not two.
 - A lookup reads the entry where it probes, not the slot again afterwards.
 
