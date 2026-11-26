@@ -1443,7 +1443,8 @@ global ATN_ACCEPT_EOF: i32 = -2;
 global ATN_CLOSURE_GUARD: i32 = 2000000;
 global ATN_ARENA_CAP: i32 = 400000;
 
-global ATN_NODE_PAIR_STRIDE: i64 = 1073741824;
+global ATN_NODE_BITS: i64 = 30;
+global ATN_NODE_PAIR_STRIDE: i64 = 1 << ATN_NODE_BITS;
 global ATN_DFA_NODE_CAP: i32 = 4000000;
 
 global CFG_KEY_PR_SLOT: i32 = 2048;
@@ -1599,7 +1600,6 @@ type AtnKeyMap = HashMap<i64, i32>;
 
 type AtnEdge = i64;
 
-global ATN_EDGE_PARENT_BITS: i64 = 30;
 global ATN_EDGE_RPR_BITS: i64 = 11;
 global ATN_EDGE_RET_BIAS: i32 = 8;
 
@@ -1607,14 +1607,14 @@ impl AtnEdge {
     fn to(ret: i32, rpr: i32, parent: i32) -> AtnEdge
         contract ret + ATN_EDGE_RET_BIAS > 0
         contract rpr >= 0 && (rpr as i64) < 1 << ATN_EDGE_RPR_BITS
-        contract parent >= 0 && (parent as i64) < 1 << ATN_EDGE_PARENT_BITS
+        contract parent >= 0 && (parent as i64) < ATN_NODE_PAIR_STRIDE
     {
         let label = (ret + ATN_EDGE_RET_BIAS) as i64 << ATN_EDGE_RPR_BITS | rpr as i64;
-        return (label << ATN_EDGE_PARENT_BITS | parent as i64) as AtnEdge;
+        return (label << ATN_NODE_BITS | parent as i64) as AtnEdge;
     }
 
     fn label(&self) -> i64 {
-        return *self as i64 >> ATN_EDGE_PARENT_BITS;
+        return *self as i64 >> ATN_NODE_BITS;
     }
 
     fn ret(&self) -> i32 {
@@ -1626,7 +1626,7 @@ impl AtnEdge {
     }
 
     fn parent(&self) -> i32 {
-        return (*self as i64 & (1 << ATN_EDGE_PARENT_BITS) - 1) as i32;
+        return (*self as i64 & ATN_NODE_PAIR_STRIDE - 1) as i32;
     }
 
     fn above(&self, parent: i32) -> AtnEdge {
@@ -2158,7 +2158,11 @@ impl CtxArena {
     }
 }
 
-fn atn_merge_edges(left: &List<AtnEdge>, right: &List<AtnEdge>, mut merge_below: fn mut(i32, i32) -> i32) -> List<AtnEdge> {
+fn atn_merge_edges(
+    left: &List<AtnEdge>,
+    right: &List<AtnEdge>,
+    mut merge_below: fn mut(i32, i32) -> i32,
+) -> List<AtnEdge> {
     let mut merged: List<AtnEdge> = [];
     let mut i = 0;
     let mut j = 0;
@@ -2418,7 +2422,11 @@ fn atn_collapse_into_caller_loop(
     let mut kept: List<AtnEdge> = [];
     for let mut e = 0; e < edges.len(); e += 1 {
         if atn_edge_collapses(sim, edges[e], cur) {
-            work.push(AtnConfig { ..*cur, pctx: edges[e].parent(), pr: edges[e].rpr() });
+            work.push(AtnConfig {
+                ..*cur,
+                pctx: edges[e].parent(),
+                pr: edges[e].rpr(),
+            });
         } else {
             kept.push(edges[e]);
         }
@@ -2449,7 +2457,12 @@ fn atn_pop(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut Cl
                 scratch.hidden_alts.push(settled);
             }
         } else {
-            scratch.work.push(AtnConfig { ..*cur, state: r, pctx: edges[e].parent(), pr: edges[e].rpr() });
+            scratch.work.push(AtnConfig {
+                ..*cur,
+                state: r,
+                pctx: edges[e].parent(),
+                pr: edges[e].rpr(),
+            });
         }
     }
 }
@@ -2916,7 +2929,7 @@ impl AtnDfa {
 
     fn seed_configs(&self, seed: i32) -> List<AtnConfig> {
         let mut configs: List<AtnConfig> = [];
-        let key = self.seeds.at(seed);
+        let key = self.seeds.at_ref(seed);
         for let mut i = 0; i < key.len(); i += 5 {
             configs.push(AtnConfig {
                 state: key[i],
