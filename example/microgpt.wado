@@ -382,7 +382,10 @@ fn gpt(
             let mut attn_logits: List<&mut Value> = [];
             for let mut t = 0; t < layer_keys.len(); t += 1 {
                 let kt = &mut layer_keys[t];
-                let mut terms: List<&mut Value> = (0..<HEAD_DIM).into_iter().map(|j| g.mul(q[hs + j], kt[hs + j])).collect();
+                let mut terms: List<&mut Value> = (0..<HEAD_DIM)
+                    .into_iter()
+                    .map(|j| g.mul(q[hs + j], kt[hs + j]))
+                    .collect();
                 let score = g.sum(&mut terms);
                 attn_logits.push(g.div_num(score, f64::pow(HEAD_DIM as f64, 0.5)));
             }
