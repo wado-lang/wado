@@ -17,10 +17,6 @@ resource Widget extends Target {
     fn widget_label(&self) -> i32;
 }
 
-fn through_the_parent(t: Target) -> String with Target {
-    return t.label();
-}
-
 fn through_the_child(w: Widget) -> String with Target {
     return w.label();
 }
@@ -29,6 +25,6 @@ export fn run() {}
 
 __DATA__
 {
-    "compile_error": ":25:12: error: `Widget::label` is unavailable: a `Widget` answers with a number; use `widget_label`",
+    "compile_error": ":21:12: analysis error: `Widget::label` is unavailable: a `Widget` answers with a number; use `widget_label`",
     "compile_error_count": 1
 }
