@@ -336,13 +336,6 @@ impl<K: Hash, V> HashMap<K, V> {
     /// Shrinks the capacity to match the current length.
     pub fn shrink_to_fit(&mut self) {
         let size = self.log.size;
-        if size == 0 {
-            self.log.clear();
-            self.fps = Array::new(0);
-            self.table = Array::new(0);
-            self.shift = 32;
-            return;
-        }
         self.compact_entries();
         let mut fps = Array::<i32>::new(size);
         fps.copy_from(0, &self.fps, 0, size);
@@ -727,7 +720,7 @@ test "shrink_to_fit drops the room the entries do not need" {
 
     map.clear();
     map.shrink_to_fit();
-    assert map.table.len() == 0;
+    assert map.table.len() == MIN_SLOTS;
     assert map.log.keys.len() == 0;
     map[1] = 2;
     assert map[1] == 2;

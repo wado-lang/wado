@@ -241,17 +241,18 @@ impl<K: Ord, V> TreeMap<K, V> {
     fn new_node(&mut self) -> i32 {
         let n = self.nodes;
         if n == self.lens.len() {
-            self.grow_nodes();
+            self.resize_nodes(if n == 0 { 1 } else { n * 2 });
         }
         self.lens[n] = 0;
         self.nodes = n + 1;
         return n;
     }
 
-    /// Double the node capacity. `kids` starts once there is room for a second
-    /// node, the first that can sit below another.
-    fn grow_nodes(&mut self) {
-        let cap = if self.nodes == 0 { 1 } else { self.nodes * 2 };
+    /// Room for `cap` nodes, the `nodes` there are kept. `kids` starts once
+    /// there is room for a second node, the first that can sit below another.
+    fn resize_nodes(&mut self, cap: i32)
+        contract cap >= self.nodes
+    {
         let mut lens = Array::<i32>::new(cap);
         lens.copy_from(0, &self.lens, 0, self.nodes);
         self.lens = lens;
@@ -261,11 +262,9 @@ impl<K: Ord, V> TreeMap<K, V> {
         let mut nkeys = Array::<K>::new(cap * NODE_CAP);
         builtin::array_move(&mut nkeys, 0, &self.nkeys, 0, self.nodes * NODE_CAP);
         self.nkeys = nkeys;
-        if cap > 1 {
-            let mut kids = Array::<i32>::new(cap * NODE_KIDS);
-            kids.copy_from(0, &self.kids, 0, self.kids.len());
-            self.kids = kids;
-        }
+        let mut kids = Array::<i32>::new(if cap > 1 { cap * NODE_KIDS } else { 0 });
+        kids.copy_from(0, &self.kids, 0, i32::min(self.kids.len(), kids.len()));
+        self.kids = kids;
     }
 
     /// The implementation behind `map[key] = value`; the public API is index
@@ -381,10 +380,24 @@ impl<K: Ord, V> TreeMap<K, V> {
         return self.log.entries();
     }
 
-    /// Removes all key-value pairs from the map.
+    /// Removes all key-value pairs from the map, keeping the capacity.
     pub fn clear(&mut self) {
-        self.log.clear();
-        self.clear_tree();
+        self.log.clear_keeping_capacity();
+        builtin::array_release(&mut self.nkeys, 0, self.nodes * NODE_CAP);
+        self.nodes = 0;
+        self.root = NO_NODE;
+        self.height = 0;
+    }
+
+    /// Shrinks the capacity to match the current length.
+    pub fn shrink_to_fit(&mut self) {
+        if self.root == NO_NODE {
+            self.log.clear();
+            self.clear_tree();
+            return;
+        }
+        self.compact();
+        self.resize_nodes(self.nodes);
     }
 }
 
@@ -569,9 +582,14 @@ impl<T: Ord> TreeSet<T> {
         return self.inner.remove(value);
     }
 
-    /// Removes all elements from the set.
+    /// Removes all elements from the set, keeping the capacity.
     pub fn clear(&mut self) {
         self.inner.clear();
+    }
+
+    /// Shrinks the capacity to match the current length.
+    pub fn shrink_to_fit(&mut self) {
+        self.inner.shrink_to_fit();
     }
 
     /// The elements, in insertion order.
@@ -722,4 +740,65 @@ impl<T: Ord> Default for TreeSet<T> {
     pub fn default() -> TreeSet<T> {
         return TreeSet::new();
     }
+}
+
+test "clear keeps the arrays and releases what they held" {
+    let mut map = TreeMap::<String, String>::new();
+    for let i of 0..<100 {
+        map[`k${i}`] = `v${i}`;
+    }
+    map.remove("k3");
+    let nodes = map.lens.len();
+    let kids = map.kids.len();
+    let capacity = map.log.keys.len();
+    map.clear();
+    assert map.lens.len() == nodes;
+    assert map.kids.len() == kids;
+    assert map.log.keys.len() == capacity;
+    assert !map.contains_key("k4");
+    for let i of 0..<100 {
+        map[`k${i}`] = `w${i}`;
+    }
+    assert map.len() == 100;
+    assert map["k42"] == "w42";
+    assert map.lens.len() == nodes;
+}
+
+test "shrink_to_fit drops the room the entries do not need" {
+    let mut map = TreeMap::<i32, i32>::new();
+    for let i of 0..<200 {
+        map[i] = i * 2;
+    }
+    for let i of 0..<100 {
+        map.remove(i * 2);
+    }
+    map.shrink_to_fit();
+    assert map.len() == 100;
+    assert map.log.keys.len() == 100;
+    assert map.lens.len() == map.nodes;
+    assert map.slots.len() == map.nodes * NODE_CAP;
+    assert map.nkeys.len() == map.nodes * NODE_CAP;
+    assert map.kids.len() == map.nodes * NODE_KIDS;
+    assert map.get(199) == Option::Some(398);
+    for let i of 0..<200 {
+        map[i] = i;
+    }
+    assert map.len() == 200;
+    assert map[198] == 198;
+
+    for let i of 3..<200 {
+        map.remove(i);
+    }
+    map.shrink_to_fit();
+    assert map.nodes == 1;
+    assert map.kids.len() == 0;
+    assert map[2] == 2;
+
+    map.clear();
+    map.shrink_to_fit();
+    assert map.lens.len() == 0;
+    assert map.nkeys.len() == 0;
+    assert map.log.keys.len() == 0;
+    map[1] = 2;
+    assert map[1] == 2;
 }
