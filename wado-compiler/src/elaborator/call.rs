@@ -58,6 +58,7 @@ use crate::escape::bytes_value;
 use crate::marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
+use crate::syntax::BUILTIN_NAMESPACE;
 use crate::{Span, token};
 
 /// The builtin that reads an `Array<T>` out of a byte literal.
@@ -2187,7 +2188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // prefix names the module directly rather than an import, but it
         // buys no extra reach — a declaration there is visible exactly as
         // any other module's is.
-        if prefix == "builtin" {
+        if prefix == BUILTIN_NAMESPACE {
             let builtin_source = ModuleSource::builtin();
             self.check_namespaced_visibility(&builtin_source, suffix, ident.span);
             self.check_simd_lane_immediates(suffix, &call.args);
@@ -3365,7 +3366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Builtin functions resolve through the `core:builtin` module,
             // slots and all: a generic builtin takes its type parameter from
             // the expected type, and a literal argument is re-coerced to it.
-            if prefix == "builtin"
+            if prefix == BUILTIN_NAMESPACE
                 && let Some(sig) = self
                     .decl_in_module(&ModuleSource::builtin(), suffix)
                     .and_then(|def| self.function_signature(def))

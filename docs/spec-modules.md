@@ -843,3 +843,8 @@ and `builtin::cold_path` ([Branch Hints](./spec-control-flow.md#branch-hints))
 among them. The
 prefix reaches no more than an import would: a declaration of `core:builtin`
 that is not visible to the calling module is an error to name.
+
+The prefix has that one meaning, so a module can neither declare nor import the
+name `builtin`: an item, a type parameter, an enum, variant or flags member, an
+import's alias and a namespace import are each an error under it. A local
+binding heads no path and may take the name.
