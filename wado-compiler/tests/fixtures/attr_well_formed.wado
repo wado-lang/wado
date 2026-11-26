@@ -45,6 +45,12 @@ test "attributes the schema admits" {
     assert slow_add(1, 2) == 3;
 }
 
+// The seconds are a number literal, digit separators included.
+#[timeout(seconds = 1_800)]
+test "a separated timeout" {
+    assert slow_add(1, 2) == 3;
+}
+
 export fn run() with Stdout {
     println(`${slow_add(20, 22)}`);
 }

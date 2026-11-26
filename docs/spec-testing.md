@@ -112,9 +112,9 @@ test "not yet implemented feature" {
 ### `#[timeout(seconds = N)]` Attribute
 
 The `#[timeout(seconds = N)]` attribute overrides the default test timeout of 5
-seconds for one test. `N` is an integer literal above zero. `seconds` is the
-only unit, since the runner's clock ticks once a second. A test that runs longer
-is interrupted and fails. Time spent inside `core:eval`'s `eval` does not count
+seconds for one test. `N` is an integer literal above zero, and `seconds` is the
+only key: any other argument is a compile error. A test that runs longer is
+interrupted and fails. Time spent inside `core:eval`'s `eval` does not count
 against it:
 
 <!-- {"fixture":"spec_testing_declaration.wado"} -->

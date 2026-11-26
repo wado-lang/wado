@@ -220,6 +220,7 @@
 - [Borrowed Parts — Sharing a Copy Held by an Aggregate or Handed Out by a Call](./wep-2026-11-24-borrowed-parts.md)
 - [HTTP Client (`core:http_client`)](./wep-2026-11-24-core-http-client.md)
 - [Every Package Has a Coordinate](./wep-2026-11-24-required-namespace.md)
+- [Test Timeout in Seconds](./wep-2026-11-26-test-timeout.md)
 
 ## Standard Library
 

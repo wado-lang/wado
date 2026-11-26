@@ -260,6 +260,8 @@ Module-level inner attribute. Marks every test in the module as `#[TODO]`, and t
 
 Test block attribute. Overrides the default test timeout. [`#[timeout(seconds = N)]` Attribute](./spec-testing.md#timeoutseconds--n-attribute) states the rule.
 
+Rationale: [WEP: Test Timeout in Seconds](./wep-2026-11-26-test-timeout.md).
+
 ### `#[synopsis]`
 
 Test block attribute. The test runs like any other, and `wado doc` renders its body as the module's `## Synopsis` section, a usage example that is compiled and so stays current.

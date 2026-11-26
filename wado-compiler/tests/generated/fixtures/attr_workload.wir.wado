@@ -150,9 +150,9 @@ type "functype//attr_workload.wado/$cm_binding__core:coverage/coverage-host@0.1.
 
 type "functype//attr_workload.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count" = fn(i32, i64);  // TypeId(27)
 
-type "functype//attr_workload.wado/$cm_export__$test_tm10000_0_fib_to_20" = fn();  // TypeId(28)
+type "functype//attr_workload.wado/$cm_export__$test_tm10_0_fib_to_20" = fn();  // TypeId(28)
 
-type "functype//attr_workload.wado/$test_tm10000_0_fib_to_20$cold0" = fn(i32);  // TypeId(29)
+type "functype//attr_workload.wado/$test_tm10_0_fib_to_20$cold0" = fn(i32);  // TypeId(29)
 
 type "functype//attr_workload.wado/$hole_fmt$attr_workload.wado/$tmpl$ebaa20f4a908b504$sroa[t.h0]" = fn(i32, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(30)
 
@@ -408,7 +408,7 @@ fn "attr_workload.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id,
     "wasi/$core:coverage/coverage-host@0.1.0#count"(id, runs);
 }
 
-fn "attr_workload.wado/$cm_export__$test_tm10000_0_fib_to_20"() {
+fn "attr_workload.wado/$cm_export__$test_tm10_0_fib_to_20"() {
     let $v_0: i32;
     let id: i32;
     let runs: i64;
@@ -420,7 +420,7 @@ fn "attr_workload.wado/$cm_export__$test_tm10000_0_fib_to_20"() {
     };
     if @unlikely(local.tee $v_0("attr_workload.wado/fib"(20)) != 6765) {
         cold_path;
-        "attr_workload.wado/$test_tm10000_0_fib_to_20$cold0"($v_0);
+        "attr_workload.wado/$test_tm10_0_fib_to_20$cold0"($v_0);
         unreachable;
     }
     $v_0 = builtin::array_len(global:core:rt::COVERAGE_COUNTS);
@@ -438,13 +438,13 @@ fn "attr_workload.wado/$cm_export__$test_tm10000_0_fib_to_20"() {
     "wasi/task-return"(0);
 }
 
-fn "attr_workload.wado/$test_tm10000_0_fib_to_20$cold0"($v_0) {
+fn "attr_workload.wado/$test_tm10_0_fib_to_20$cold0"($v_0) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<attr_workload.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "attr_workload.wado//$tmpl$ebaa20f4a908b504" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_tm10000_0_fib_to_20 at attr_workload.wado:14
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<attr_workload.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "attr_workload.wado//$tmpl$ebaa20f4a908b504" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_tm10_0_fib_to_20 at attr_workload.wado:14
 condition: fib(20) == 6765
-fib(20): "), used: 107 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_tm10000_0_fib_to_20 at attr_workload.wado:14
+fib(20): "), used: 104 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_tm10_0_fib_to_20 at attr_workload.wado:14
 condition: fib(20) == 6765
-fib(20): "), used: 107 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+fib(20): "), used: 104 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
     unreachable;
 }
 
@@ -1941,4 +1941,4 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$
     return struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$self$repr, start: $mv$self$start, end: $mv$self$start + end };
 }
 
-export fn "attr_workload.wado/$cm_export__$test_tm10000_0_fib_to_20" as "$test_tm10000_0_fib_to_20"
+export fn "attr_workload.wado/$cm_export__$test_tm10_0_fib_to_20" as "$test_tm10_0_fib_to_20"

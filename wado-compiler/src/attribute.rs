@@ -755,7 +755,8 @@ fn written_timeout_seconds(args: &[AttrArg]) -> Option<u64> {
     if key != "seconds" {
         return None;
     }
-    number.parse().ok().filter(|seconds| *seconds > 0)
+    let digits = number.replace('_', "");
+    digits.parse().ok().filter(|seconds| *seconds > 0)
 }
 
 /// The seconds a `#[timeout(seconds = N)]` among `attrs` grants.
