@@ -351,7 +351,8 @@ A CI "Performance Alert" on rows the diff cannot reach is the shared runner.
 Confirm it locally before treating it as a regression.
 
 While the user is iterating, the reading is 4–5 back-to-back pairs on the target
-row plus the wasm hash; the whole-suite A/B below is for the wrap-up.
+row's `(no-pgo)` build plus the wasm hash; the whole-suite A/B below, PGO rows
+included, is for the wrap-up.
 
 **A dev-build A/B is only valid where the dev build is.** The inflation §1
 describes flips A/B verdicts, not only profile weights. Dev runs the wasmtime
@@ -529,34 +530,46 @@ it from disk. `benchmark/wado.sh` falls back to the dev build whenever `WADO_BIN
 is unset, so an arm is a release `dist` binary, which carries its own stdlib
 wherever the tree stands.
 
-Build one binary per arm first, from the same compiler source with `lib/` at the
-branch's fork point and at `HEAD`, so `lib/` is all that differs. `git restore`
-removes a file the source tree lacks, so neither binary embeds a stdlib
-belonging to neither arm. It overwrites uncommitted edits under `lib/`, so
-commit them first.
+`mise run benchmark-stdlib-arms` builds one binary per arm, the branch's fork
+point as `benchmark-baseline` builds a baseline and `HEAD` in place, and prints
+the fork. It
+refuses to run over uncommitted edits under `lib/` or to the profiles. Toggling
+`lib/` under the dev build instead (`git stash`) is no A/B, even for a quick
+reading.
+
+Iterate on the build without a profile: time `wado run -O2 -f no-pgo` on each
+arm back to back, or read the `(no-pgo)` rows of a harness log. Never pass
+`-f no-pgo` through `WADO_BENCH_FLAGS`, which turns the row labelled PGO into a
+second no-pgo build. The PGO and `(no-pgo)` rows both decide, so the A/B that
+settles a change reads both, each arm under the profiles its own commit
+records. A profile keys a function by its body's hash, so a profile recorded for
+the other stdlib misses every function the change touched, and the arm it runs
+is neither build. A stdlib change read +3.1% that way on json-twitter ser,
+measured flat with each arm's own profiles, and −17% without one. So record
+`HEAD`'s profiles (`tools/dev-bin.sh wado test --pgo benchmark`), commit them,
+and restore each arm's before its round.
 
 ```sh
 set -e  # a failed build would leave an earlier A/B's binary as its arm
-rm -f scratchpad/wado-base scratchpad/wado-head
-fork=$(git merge-base origin/main HEAD)
-# however the block ends, `lib/` goes back to HEAD rather than stay reverted
-trap 'git restore --source=HEAD --worktree -- wado-compiler/lib' EXIT
-git restore --source="$fork" --worktree -- wado-compiler/lib
-cargo build --release -p wado-cli --features dist --bin wado --quiet
-cp target/release/wado scratchpad/wado-base
-git restore --source=HEAD --worktree -- wado-compiler/lib
-cargo build --release -p wado-cli --features dist --bin wado --quiet
-cp target/release/wado scratchpad/wado-head
+fork=$(mise run benchmark-stdlib-arms)
+# The task refused untracked profiles, so any `clean` removes is the fork's.
+profiles_of() {
+  git restore --source="$1" --worktree -- 'benchmark/*.pgo'
+  git clean -fq -- 'benchmark/*.pgo'
+}
+trap 'profiles_of HEAD' EXIT
 for r in 1 2 3; do
-  for arm in base head; do
-    WADO_BIN="$PWD/scratchpad/wado-$arm" mise run benchmark-json-catalog
-  done
+  profiles_of "$fork"
+  WADO_BIN="$PWD/scratchpad/wado-base" mise run benchmark-json-catalog
+  profiles_of HEAD
+  WADO_BIN="$PWD/scratchpad/wado-head" mise run benchmark-json-catalog
 done
 ```
 
-The tree's sources stop mattering once the binaries exist, so a round costs what
-the benchmark costs. Rounds are cheap enough then to run six or ten of them,
-which is what it takes to resolve a delta near 1% out of this row's spread.
+Once the binaries exist, the tree supplies only the harness and the profiles,
+so a round costs what the benchmark costs. Rounds are cheap enough then to run
+six or ten of them, which is what it takes to resolve a delta near 1% out of
+this row's spread.
 
 `WADO_SKIP_PASS=<pass>` is a third arm off the same binary, which is how a
 regression is attributed to one pass without a third build. `WADO_BENCH_FLAGS`

@@ -971,13 +971,13 @@ run = "./tools/exclusive.sh test-fuel node benchmark/fuel.ts check"
 # rebuilds rather than quietly comparing against a stale compiler. Prints the
 # binary's path, which is what `WADO_BIN` takes.
 [tasks.benchmark-baseline]
-description = "Build (once) the origin/main compiler that `benchmark/ab.ts` compares against"
+description = "Build (once) the origin/main compiler that `benchmark/ab.ts` compares against, or WADO_BASELINE_REV's"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 
 git fetch -q origin main
-want="$(git rev-parse origin/main)"
+want="$(git rev-parse "${WADO_BASELINE_REV:-origin/main}^{commit}")"
 cache="${WADO_BASELINE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/wado/baseline}"
 bin="$cache/$want/wado"
 
@@ -1000,10 +1000,39 @@ if [ ! -x "$bin" ]; then
     # The temp is in the cache dir: a rename is atomic within one filesystem.
     cp "$tmp/tree/target/release/wado" "$bin.$$"
     mv "$bin.$$" "$bin"
-    # One baseline is enough; the rest are compilers no A/B asks for again.
-    find "$cache" -mindepth 1 -maxdepth 1 -not -name "$want" -exec rm -rf {} +
+    # One baseline of main is enough; the rest are compilers no A/B asks for
+    # again. A WADO_BASELINE_REV build evicts nothing: its caller copies it out,
+    # and main's baseline may be what another A/B is running.
+    if [ -z "${WADO_BASELINE_REV:-}" ]; then
+        find "$cache" -mindepth 1 -maxdepth 1 -not -name "$want" -exec rm -rf {} +
+    fi
 fi
 echo "$bin"
+"""
+
+[tasks.benchmark-stdlib-arms]
+description = "Build the `dist` compilers of the fork point and HEAD into scratchpad/wado-{base,head} for a stdlib A/B, and print the fork"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The A/B runs each arm under the profiles its commit records, so HEAD's arm
+# must be HEAD, and restoring those profiles must not discard new ones.
+if [ -n "$(git status --porcelain -- wado-compiler/lib 'benchmark/*.pgo')" ]; then
+    echo "commit wado-compiler/lib and the benchmark profiles first" >&2
+    exit 1
+fi
+git fetch -q origin main
+fork="$(git merge-base origin/main HEAD)"
+mkdir -p scratchpad
+# The fork builds in a worktree of its own, since `stdlib.rs` names every file
+# it embeds, and this checkout stays HEAD for any `wado` run meanwhile.
+cp "$(WADO_BASELINE_REV="$fork" mise run benchmark-baseline)" scratchpad/wado-base
+# Only `dist` embeds the stdlib; any other build reads `lib/` as the tree stands
+# when it runs.
+cargo build --release -q -p wado-cli --features dist --bin wado
+cp target/release/wado scratchpad/wado-head
+echo "$fork"
 """
 
 [tasks.benchmark-microgpt]
