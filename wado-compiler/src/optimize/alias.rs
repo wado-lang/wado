@@ -359,6 +359,8 @@ pub(super) struct CallImmutability<'a> {
     /// Filled by whichever visit asks first; a verdict depends only on the
     /// type, so the order changes nothing.
     memo: Mutex<IndexMap<TypeId, bool>>,
+    /// [`Self::reaches_writable`]'s answers, kept as [`Self::memo`] is.
+    writable_memo: Mutex<IndexMap<TypeId, bool>>,
     /// Per-[`FuncId`]: the function's body provably writes through its receiver
     /// (param 0). Sharper than the receiver's type: a `&mut self` method whose
     /// body writes nothing through it leaves the receiver alone. Computed by
@@ -387,6 +389,7 @@ impl<'a> CallImmutability<'a> {
             type_table,
             struct_fields,
             memo: Mutex::default(),
+            writable_memo: Mutex::default(),
             receiver_mutating,
             has_body,
             effect_free: project.pure_builtin_callee_ids(),
@@ -426,10 +429,10 @@ impl<'a> CallImmutability<'a> {
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. } => true,
             // A callee writes nothing through `&T` itself, but may through a
-            // `&mut` it reaches. The pointee being mutated through a *different*
-            // handle is the alias-group closure's concern, not this type-shape
-            // check.
-            ResolvedType::Ref(_) => !self.type_table.reaches_mut_ref(type_id),
+            // `&mut` or cell it reaches. The pointee being mutated through a
+            // *different* handle is the alias-group closure's concern, not
+            // this type-shape check.
+            ResolvedType::Ref(_) => !self.reaches_writable(type_id),
             ResolvedType::Newtype { base_type, .. } => {
                 let base = *base_type;
                 self.walk(base, stack)
@@ -447,7 +450,65 @@ impl<'a> CallImmutability<'a> {
             _ => false,
         };
         stack.pop();
-        lock(&self.memo).insert(type_id, result);
+        // An answer reached inside a cycle leaned on the cycle's `true`, so
+        // only a whole walk's is kept.
+        if stack.is_empty() {
+            lock(&self.memo).insert(type_id, result);
+        }
+        result
+    }
+
+    /// Whether a holder of a `type_id` can write through it to storage the
+    /// caller shares: it is or holds a `&mut` or a cell. A `&` grants no write
+    /// of its own, nor does a `List` it can only read. Read off the fields
+    /// the package's structs register, which a closure's do and the type
+    /// table's do not.
+    pub(super) fn reaches_writable(&self, type_id: TypeId) -> bool {
+        self.reaches_writable_in(type_id, &mut Vec::new())
+    }
+
+    fn reaches_writable_in(&self, type_id: TypeId, stack: &mut Vec<TypeId>) -> bool {
+        if let Some(&cached) = lock(&self.writable_memo).get(&type_id) {
+            return cached;
+        }
+        // A cycle runs through a field already being walked, which answers
+        // for it.
+        if stack.contains(&type_id) {
+            return false;
+        }
+        stack.push(type_id);
+        let tt = self.type_table;
+        let result = match tt.get(type_id) {
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. } => false,
+            ResolvedType::MutRef(_) => true,
+            ResolvedType::Ref(inner) => {
+                let inner = *inner;
+                tt.cell_payload(type_id).is_some() || self.reaches_writable_in(inner, stack)
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                let base = *base_type;
+                self.reaches_writable_in(base, stack)
+            }
+            _ if let Some(elem) = tt.list_element(type_id) => self.reaches_writable_in(elem, stack),
+            _ if tt.struct_parts(type_id).is_some() => self
+                .struct_fields
+                .of_type(type_id, tt)
+                // Unknown layout (not in the registry) — conservative.
+                .is_none_or(|fields| fields.iter().any(|&f| self.reaches_writable_in(f, stack))),
+            // Raw arrays, resources, functions, variants, generics, type
+            // params and unknowns may all carry shared mutable state.
+            _ => true,
+        };
+        stack.pop();
+        // An answer reached inside a cycle leaned on the cycle's `false`, so
+        // only a whole walk's is kept.
+        if stack.is_empty() {
+            lock(&self.writable_memo).insert(type_id, result);
+        }
         result
     }
 }
@@ -509,14 +570,20 @@ pub(super) fn call_verdicts(
         }
         // A receiver is judged by the callee's declared `self` mode, which
         // stays conservative for a callee absent from `first_param_types`;
-        // `arg_safe` alone would clear an unknown one. That mode says nothing
-        // of a `&mut` the receiver holds, which the callee may write through
-        // whatever the mode, and which the receiver-write summary leaves out
-        // for a by-value `self`.
+        // `arg_safe` alone would clear an unknown one. The receiver-write
+        // summary counts writes to the receiver's own storage, not through a
+        // `&mut` or cell it holds, as a closure's call writes its captures: a
+        // receiver whose value reaches one is never cleared. A by-value `self`
+        // is an argument like any other, a `List` it holds shared with the
+        // caller.
         let (receiver, rest) = args.split();
+        let by_value_self =
+            first_param_types[*func_id].is_some_and(|tp| !type_table.is_reference(tp));
         let receiver_safe = receiver.is_none_or(|r| {
             r.expr.as_expr().is_some_and(|re| {
-                !type_table.reaches_mut_ref(body.exprs[re].type_id)
+                let receiver_type = body.exprs[re].type_id;
+                !call_immutability.reaches_writable(type_table.peel_refs(receiver_type))
+                    && (!by_value_self || arg_safe(r))
                     && !method_mutates_receiver(
                         body,
                         re,
