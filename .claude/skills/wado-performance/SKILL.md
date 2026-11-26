@@ -531,7 +531,8 @@ is unset, so an arm is a release `dist` binary, which carries its own stdlib
 wherever the tree stands.
 
 `mise run benchmark-stdlib-arms` builds one binary per arm, the branch's fork
-point in a worktree of its own and `HEAD` in place, and prints the fork. It
+point as `benchmark-baseline` builds a baseline and `HEAD` in place, and prints
+the fork. It
 refuses to run over uncommitted edits under `lib/` or to the profiles. Toggling
 `lib/` under the dev build instead (`git stash`) is no A/B, even for a quick
 reading.
@@ -549,6 +550,7 @@ measured flat with each arm's own profiles, and −17% without one. So record
 and restore each arm's before its round.
 
 ```sh
+set -e  # a failed build would leave an earlier A/B's binary as its arm
 fork=$(mise run benchmark-stdlib-arms)
 trap "git restore --source=HEAD --worktree -- 'benchmark/*.pgo'" EXIT
 for r in 1 2 3; do
@@ -560,8 +562,9 @@ done
 ```
 
 Once the binaries exist, the tree supplies only the harness and the profiles,
-so a round costs what the benchmark costs. Rounds are cheap enough then to run six or ten of them,
-which is what it takes to resolve a delta near 1% out of this row's spread.
+so a round costs what the benchmark costs. Rounds are cheap enough then to run
+six or ten of them, which is what it takes to resolve a delta near 1% out of
+this row's spread.
 
 `WADO_SKIP_PASS=<pass>` is a third arm off the same binary, which is how a
 regression is attributed to one pass without a third build. `WADO_BENCH_FLAGS`
