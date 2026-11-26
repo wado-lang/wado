@@ -2584,8 +2584,8 @@ impl Monomorphizer {
 
     /// A type-param receiver whose param resolves to a *reference*
     /// (`..F::inspect()` on a `&List<i32>` struct field), or to a newtype over
-    /// one, dispatches through the
-    /// ref/mutref blanket (`impl<T: Inspect> Inspect for &T`), named by shape.
+    /// one, dispatches through the ref/mutref blanket
+    /// (`impl<T: Inspect> Inspect for &T`), named by shape.
     /// The general path peels every ref off the auto-`&self`'d receiver, which
     /// would collapse `&List<i32>^Inspect` to `List<i32>::inspect` and drop the
     /// leading `&`. Resolve the param's own value (ref intact) and, if the order
