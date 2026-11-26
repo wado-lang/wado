@@ -40,6 +40,7 @@ use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess, OpaqueReason};
 use super::trait_env::{
     BlanketParamSource, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written,
+    written_type_source,
 };
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
@@ -1140,11 +1141,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !bounds_reachable || !self.impl_offers_method(blanket.def, method_name, None) {
                 return None;
             }
-            let trait_name = &header.trait_.as_ref()?.name;
+            // The call is the caller's to write: the trait by the name its
+            // import gives it, at every argument the block writes.
+            let trait_ref = header.trait_.as_ref()?;
+            let trait_name = self
+                .tysys
+                .resolutions
+                .imports_admitting(self.frame_module(), trait_ref.def?)
+                .next()
+                .unwrap_or(&trait_ref.name);
+            let ast::Type::Generic(written_ref) = &trait_ref.ty else {
+                unreachable!("a trait reference writing a parameter takes arguments")
+            };
+            let args: Vec<String> = written_ref.args.iter().map(written_type_source).collect();
             let open = &open.name;
             Some(format!(
-                "'{}' declares it, and a method call does not settle '{open}': write '{trait_name}::<{open}>::{method_name}(…)', naming '{open}'",
+                "'{}' declares it, and a method call does not settle '{open}': write '{trait_name}::<{}>::{method_name}(…)', naming '{open}'",
                 header_as_written(header),
+                args.join(", "),
             ))
         })
     }
