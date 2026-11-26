@@ -25,6 +25,11 @@ internal fn char_at(src: &StrSlice, pos: i32) -> char
     return src.char_at_byte(pos);
 }
 
+internal fn char_after(src: &StrSlice, pos: i32) -> char {
+    let next = src.ceil_char_boundary(pos + 1);
+    return if next < src.len() { char_at(src, next) } else { '\u{0}' };
+}
+
 internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
     contract 0 <= start <= end <= src.len()
 {
@@ -245,16 +250,20 @@ impl TokenStream {
         self.set_flag(i, TokenFlags::Skipped);
     }
 
+    fn has_flag(&self, i: i32, flag: TokenFlags) -> bool {
+        return self.flags_at(i) & flag != TokenFlags::none();
+    }
+
     pub fn is_synthetic(&self, i: i32) -> bool {
-        return self.flags_at(i) & TokenFlags::Synthetic != TokenFlags::none();
+        return self.has_flag(i, TokenFlags::Synthetic);
     }
 
     pub fn is_skipped(&self, i: i32) -> bool {
-        return self.flags_at(i) & TokenFlags::Skipped != TokenFlags::none();
+        return self.has_flag(i, TokenFlags::Skipped);
     }
 
     pub fn is_lex_error(&self, i: i32) -> bool {
-        return self.flags_at(i) & TokenFlags::LexError != TokenFlags::none();
+        return self.has_flag(i, TokenFlags::LexError);
     }
 
     pub fn kind_at(&self, i: i32) -> i32 {
