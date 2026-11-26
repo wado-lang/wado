@@ -530,24 +530,26 @@ it from disk. `benchmark/wado.sh` falls back to the dev build whenever `WADO_BIN
 is unset, so an arm is a release `dist` binary, which carries its own stdlib
 wherever the tree stands.
 
-`mise run benchmark-stdlib-arms` builds one binary per arm, from the same
-compiler source with `lib/` at the branch's fork point and at `HEAD`, so `lib/`
-is all that differs. It refuses to run over uncommitted edits under `lib/`.
-Toggling `lib/` under the dev build instead (`git stash`) is no A/B, even for a
-quick reading.
+`mise run benchmark-stdlib-arms` builds one binary per arm, the branch's fork
+point in a worktree of its own and `HEAD` in place, and prints the fork. It
+refuses to run over uncommitted edits under `lib/` or to the profiles. Toggling
+`lib/` under the dev build instead (`git stash`) is no A/B, even for a quick
+reading.
 
-Iterate on the `(no-pgo)` rows alone (`-f no-pgo`): they need no profile. The
-PGO and `(no-pgo)` rows both decide, so the A/B that settles a change reads both,
-each arm under the profiles its own commit records. A profile keys a function by
-its body's hash, so a profile recorded for the other stdlib misses every
-function the change touched, and the arm it runs is neither build. A stdlib
-change read +3.1% that way on json-twitter ser, measured flat with each arm's
-own profiles, and −17% without one. So commit `HEAD`'s profiles first
-(`mise run update-baselines`), and restore each arm's before its round.
+Iterate on the build without a profile: time `wado run -O2 -f no-pgo` on each
+arm back to back, or read the `(no-pgo)` rows of a harness log. Never pass
+`-f no-pgo` through `WADO_BENCH_FLAGS`, which turns the row labelled PGO into a
+second no-pgo build. The PGO and `(no-pgo)` rows both decide, so the A/B that
+settles a change reads both, each arm under the profiles its own commit
+records. A profile keys a function by its body's hash, so a profile recorded for
+the other stdlib misses every function the change touched, and the arm it runs
+is neither build. A stdlib change read +3.1% that way on json-twitter ser,
+measured flat with each arm's own profiles, and −17% without one. So record
+`HEAD`'s profiles (`tools/dev-bin.sh wado test --pgo benchmark`), commit them,
+and restore each arm's before its round.
 
 ```sh
-mise run benchmark-stdlib-arms
-fork=$(git merge-base origin/main HEAD)
+fork=$(mise run benchmark-stdlib-arms)
 trap "git restore --source=HEAD --worktree -- 'benchmark/*.pgo'" EXIT
 for r in 1 2 3; do
   git restore --source="$fork" --worktree -- 'benchmark/*.pgo'
@@ -557,8 +559,8 @@ for r in 1 2 3; do
 done
 ```
 
-The tree's sources stop mattering once the binaries exist, so a round costs what
-the benchmark costs. Rounds are cheap enough then to run six or ten of them,
+Once the binaries exist, the tree supplies only the harness and the profiles,
+so a round costs what the benchmark costs. Rounds are cheap enough then to run six or ten of them,
 which is what it takes to resolve a delta near 1% out of this row's spread.
 
 `WADO_SKIP_PASS=<pass>` is a third arm off the same binary, which is how a

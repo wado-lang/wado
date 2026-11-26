@@ -991,29 +991,38 @@ echo "$bin"
 """
 
 [tasks.benchmark-stdlib-arms]
-description = "Build the two `dist` compilers a stdlib A/B compares, `lib/` at the fork point and at HEAD, into scratchpad/wado-{base,head}"
+description = "Build the `dist` compilers of the fork point and HEAD into scratchpad/wado-{base,head} for a stdlib A/B, and print the fork"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! git diff --quiet HEAD -- wado-compiler/lib; then
-    echo "commit the edits under wado-compiler/lib first: building the base arm overwrites them" >&2
+# The A/B runs each arm under the profiles its commit records, so HEAD's arm
+# must be HEAD, and restoring those profiles must not discard new ones.
+if [ -n "$(git status --porcelain -- wado-compiler/lib 'benchmark/*.pgo')" ]; then
+    echo "commit wado-compiler/lib and the benchmark profiles first" >&2
     exit 1
 fi
-mkdir -p scratchpad
-rm -f scratchpad/wado-base scratchpad/wado-head
 fork="$(git merge-base origin/main HEAD)"
+mkdir -p scratchpad
+base="scratchpad/wado-base-$fork"
 # Only `dist` embeds the stdlib; any other build reads `lib/` as the tree stands
-# when it runs, so both arms would run one stdlib.
-trap 'git restore --source=HEAD --worktree -- wado-compiler/lib' EXIT
-git restore --source="$fork" --worktree -- wado-compiler/lib
-cargo build --release -q -p wado-cli --features dist --bin wado
-cp target/release/wado scratchpad/wado-base
-git restore --source=HEAD --worktree -- wado-compiler/lib
+# when it runs. The fork builds in a worktree of its own, since `stdlib.rs`
+# names every file it embeds, and this checkout stays HEAD for any `wado` run
+# meanwhile.
+if [ ! -x "$base" ]; then
+    echo "building the ${fork:0:12} base arm (once)" >&2
+    tmp="$(mktemp -d)"
+    trap 'git worktree remove --force "$tmp/tree" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+    git worktree prune
+    git worktree add -q --detach "$tmp/tree" "$fork"
+    (cd "$tmp/tree" && cargo build --release -q -p wado-cli --features dist --bin wado)
+    cp "$tmp/tree/target/release/wado" "$base"
+    find scratchpad -maxdepth 1 -name 'wado-base-*' -not -name "wado-base-$fork" -delete
+fi
+cp "$base" scratchpad/wado-base
 cargo build --release -q -p wado-cli --features dist --bin wado
 cp target/release/wado scratchpad/wado-head
-echo "$PWD/scratchpad/wado-base"
-echo "$PWD/scratchpad/wado-head"
+echo "$fork"
 """
 
 [tasks.benchmark-microgpt]
