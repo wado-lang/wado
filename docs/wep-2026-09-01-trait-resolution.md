@@ -735,10 +735,7 @@ where the referent has no method of the name
 (`trait_ref_blanket_dispatch.wado`), as
 [The Order](./spec-traits.md#the-order) says. A `&mut self` method is not
 adopted, so no call reaches it: the call hands an impl for a reference a copy
-of the reference, and a write to `*self` would land in the copy. An impl
-written for a named referent is reached and loses that write
-(`trait_ref_impl_mut_self_writes_binding.wado`), and is called through an
-immutable binding without complaint. The prelude's
+of the reference, and a write to `*self` would land in the copy. The prelude's
 `impl<T: AsStrSlice> AsStrSlice for &T` is why: its methods forward with
 `(*self).len()`, a call on a `&T`, which the blanket ranked first would send
 back to itself. `candidates` still ranks the blanket first, so the elaborator
