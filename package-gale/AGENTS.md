@@ -77,7 +77,6 @@ Every byte of these files lands in every generated parser, so:
 
 - No comments. They would be copied into hundreds of generated files. State intent through names, decomposition, and asserts.
 - Nothing test-only. String-level comparison helpers live in `tests/support/tree_compare.wado`; only a helper taking a generated type (`to_lexer_string`, over the generated `TokenStream`) has to stay.
-- A map hashes under a fixed `HashSeed` (`LATN_SEED` in `latn.wado`) rather than taking one from `new()`. A seed from the host would make every generated parser import `wasi:random/insecure-seed`.
 
 ## Tests
 

@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 
-use { HashMap, HashSeed } from "core:collections";
-
-global INTERN_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
+use { HashMap } from "core:collections";
 
 internal struct Interner<K> {
     items: List<K>,
@@ -11,7 +9,7 @@ internal struct Interner<K> {
 
 impl<K: Hash> Interner<K> {
     internal fn new() -> Interner<K> {
-        return Interner { items: [], ids: HashMap::with_seed(INTERN_SEED) };
+        return Interner { items: [], ids: HashMap::new() };
     }
 
     internal fn intern(&mut self, item: K) -> i32 {
