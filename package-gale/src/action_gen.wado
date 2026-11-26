@@ -516,6 +516,13 @@ pub fn result_type_carries_vals<S: AsStrSlice>(result_type: S) -> bool {
     return result_type != rule_result_type();
 }
 
+/// State a rule function's result type, which a unit result leaves unwritten.
+pub fn set_rule_result_type<S: AsStrSlice>(f: &mut FnSpec, result_type: S) {
+    if result_type_carries_vals(result_type) {
+        f.set_return_type(result_type);
+    }
+}
+
 /// The value-struct field a labeled rule call's token range / builder row is
 /// captured into, or null where no action reads it.
 pub fn rule_call_span_field(op: &Op, ctx: &EmitContext) -> Option<String> {
@@ -1017,7 +1024,7 @@ fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut EmitCon
     };
     w.begin("if !p.speculating");
     w.begin(`if ${negate_cond(&cond)}`);
-    w.line(`p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);`);
+    w.line(`p.no_viable("failed semantic predicate", p.peek_span(), &NO_EXPECTED);`);
     if ctx.current_rule_emits_vals() {
         w.line("return vals;");
     } else {

@@ -49,11 +49,7 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     // `name(id)`. `K_ERROR` renders as `<error>`.
     ImplSpec::new_trait("Display", "NodeKind").emit(w, |w| {
         FnSpec::new("fmt").set_receiver("&self").add_param({ name: "f", type: "&mut Formatter" }).emit(w, |w| {
-            w.begin("if *self == K_ERROR");
-            w.line("f.write_str(&\"<error>\");");
-            w.else_begin("else");
-            w.line("f.write_str(&RULE_NAMES[*self as i32]);");
-            w.end();
+            w.line("f.write_str(node_name(&RULE_NAMES, *self));");
         });
     });
     w.blank();
@@ -61,7 +57,7 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
         FnSpec::new("inspect").set_receiver("&self").add_param({ name: "f", type: "&mut Formatter" }).emit(w, |w| {
             // Reuse Display for the name, then append the numeric id.
             w.line("self.fmt(f);");
-            w.line("f.write_str(&`(${*self as i32})`);");
+            w.line("f.write_str(`(${*self as i32})`);");
         });
     });
     w.blank();
@@ -146,20 +142,10 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
         .add_param({ name: "rule", type: "S" })
         .set_return_type("String")
         .emit(w, |w| {
-            w.line("let mut _kind: i32 = -1;");
-            w.begin("for let mut i = 0; i < RULE_NAMES.len(); i += 1");
-            w.begin("if rule == RULE_NAMES[i]");
-            w.line("_kind = i;");
-            w.line("break;");
-            w.end();
-            w.end();
-            // Unknown rule name leaves `_kind` at -1, which is `K_ERROR`.
-            w.line("if _kind < 0 { return String::new(); }");
-            w.line("let _sub = result.cst.find_child(0, _kind as NodeKind);");
-            w.begin("if _sub >= 0");
-            w.line("return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);");
-            w.end();
-            w.line("return String::new();");
+            w.line("let Some(kind) = RULE_NAMES.position(|name| rule == name) else { return \"\"; };");
+            w.line("let sub = result.cst.find_child(0, kind as NodeKind);");
+            w.line("if sub < 0 { return \"\"; }");
+            w.line("return result.cst.to_string_tree(sub, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);");
         });
     w.blank();
 }

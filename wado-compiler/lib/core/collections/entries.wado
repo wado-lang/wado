@@ -95,6 +95,17 @@ impl<K, V> EntryLog<K, V> {
         return renumbered;
     }
 
+    /// Empties the log, keeping its arrays. Every key and value is released;
+    /// `alive` is left as it is, since `push` writes a slot's flag before
+    /// anything reads it.
+    internal fn clear_keeping_capacity(&mut self) {
+        builtin::array_release(&mut self.keys, 0, self.count);
+        builtin::array_release(&mut self.values, 0, self.count);
+        self.count = 0;
+        self.size = 0;
+        self.deleted_count = 0;
+    }
+
     internal fn clear(&mut self) {
         self.keys = Array::new(0);
         self.values = Array::new(0);

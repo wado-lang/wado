@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use { Interner } from "./intern.wado";
+
 internal struct LrFrame {
     internal rest: i32,
     internal min_prec: i32,
@@ -9,15 +11,15 @@ internal struct LrFrame {
 
 internal global LR_LOOP_REST: i32 = -1;
 
-global mut LR_FRAMES: List<LrFrame> = [];
+global mut LR_FRAMES: Interner<LrFrame> = Interner::<LrFrame>::new();
 
-internal fn lr_frames_enter() -> List<LrFrame> {
+internal fn lr_frames_enter() -> Interner<LrFrame> {
     let outer = LR_FRAMES;
-    LR_FRAMES = [];
+    LR_FRAMES = Interner::<LrFrame>::new();
     return outer;
 }
 
-internal fn lr_frames_leave(outer: List<LrFrame>) {
+internal fn lr_frames_leave(outer: Interner<LrFrame>) {
     LR_FRAMES = outer;
 }
 
@@ -26,16 +28,9 @@ internal fn lr_loop_frame(min_prec: i32, follow: i64, cont: i64) -> i64 {
 }
 
 internal fn lr_frame(rest: i32, min_prec: i32, follow: i64, cont: i64) -> i64 {
-    let frame = LrFrame { rest, min_prec, follow, cont };
-    for let mut i = LR_FRAMES.len() - 1; i >= 0; i -= 1 {
-        if LR_FRAMES[i] == frame {
-            return (i + 1) as i64;
-        }
-    }
-    LR_FRAMES.push(frame);
-    return LR_FRAMES.len() as i64;
+    return (LR_FRAMES.intern(LrFrame { rest, min_prec, follow, cont }) + 1) as i64;
 }
 
 internal fn lr_frame_at(cont: i64) -> LrFrame {
-    return LR_FRAMES[(cont - 1) as i32];
+    return LR_FRAMES.at((cont - 1) as i32);
 }

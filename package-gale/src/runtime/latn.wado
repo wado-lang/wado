@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use { HashMap, HashSet, HashSeed } from "core:collections";
+use { HashSet, HashSeed } from "core:collections";
+use { Interner } from "./intern.wado";
 use {
     AtnSim,
     ATN_RULE_STOP,
@@ -20,24 +21,9 @@ struct LThread {
     accept: bool,
 }
 
-struct LatnStacks {
-    parent: List<i32>,
-    ret: List<i32>,
-    ids: HashMap<i64, i32>,
-}
-
-impl LatnStacks {
-    fn push(&mut self, parent: i32, ret: i32) -> i32 {
-        let key = latn_pair_key(parent, ret);
-        if let Some(id) = self.ids.get(key) {
-            return id;
-        }
-        let id = self.parent.len();
-        self.parent.push(parent);
-        self.ret.push(ret);
-        self.ids[key] = id;
-        return id;
-    }
+struct LatnFrame {
+    parent: i32,
+    ret: i32,
 }
 
 fn latn_pair_key(hi: i32, lo: i32) -> i64
@@ -94,7 +80,7 @@ impl LatnVisited {
 
 fn latn_closure(
     sim: &AtnSim,
-    stacks: &mut LatnStacks,
+    stacks: &mut Interner<LatnFrame>,
     out: &mut List<LThread>,
     visited: &mut LatnVisited,
     state: i32,
@@ -111,7 +97,8 @@ fn latn_closure(
             return;
         }
         let returned = open.pop();
-        latn_closure(sim, stacks, out, visited, stacks.ret[stack], stacks.parent[stack], open);
+        let frame = stacks.at(stack);
+        latn_closure(sim, stacks, out, visited, frame.ret, frame.parent, open);
         if let Some(rule) = returned {
             open.push(rule);
         }
@@ -133,7 +120,7 @@ fn latn_closure(
             if target < 0 || open.contains(&target) {
                 continue;
             }
-            let pushed = stacks.push(stack, sim.tr_follow[idx]);
+            let pushed = stacks.intern(LatnFrame { parent: stack, ret: sim.tr_follow[idx] });
             open.push(target);
             latn_closure(sim, stacks, out, visited, target, pushed, open);
             let _ = open.pop();
@@ -145,7 +132,7 @@ fn latn_closure(
 
 internal fn latn_match(sim: &AtnSim, start_rule: i32, src: &StrSlice, start: i32, longest: bool) -> i32 {
     let mut best = -1;
-    let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::with_seed(LATN_SEED) };
+    let mut stacks = Interner::<LatnFrame>::new();
     let mut open: List<i32> = [];
     let visited = &mut LATN_VISITED;
     visited.cover(sim.state_kind.len());

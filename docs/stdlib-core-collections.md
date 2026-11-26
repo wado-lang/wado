@@ -167,7 +167,11 @@ The key-value pairs, in insertion order.
 
 #### `pub fn clear(&mut self)`
 
-Removes all key-value pairs from the map.
+Removes all key-value pairs from the map, keeping the capacity.
+
+#### `pub fn shrink_to_fit(&mut self)`
+
+Shrinks the capacity to match the current length.
 
 #### `pub fn get_str<S: AsStrSlice>(&self, key: S) -> Option<V>`
 
@@ -281,7 +285,11 @@ Returns true if the value was present, false otherwise.
 
 #### `pub fn clear(&mut self)`
 
-Removes all elements from the set.
+Removes all elements from the set, keeping the capacity.
+
+#### `pub fn shrink_to_fit(&mut self)`
+
+Shrinks the capacity to match the current length.
 
 #### `pub fn iter_ref(&self) -> MapKeysRefIter<T, ()>`
 
@@ -399,7 +407,12 @@ The key-value pairs, in insertion order.
 
 #### `pub fn clear(&mut self)`
 
-Removes all key-value pairs from the map. The seed stays.
+Removes all key-value pairs from the map, keeping the capacity. The seed
+stays.
+
+#### `pub fn shrink_to_fit(&mut self)`
+
+Shrinks the capacity to match the current length.
 
 #### `pub fn get_str<S: AsStrSlice>(&self, key: S) -> Option<V>`
 
@@ -507,7 +520,11 @@ Removes a value, and reports whether it was present.
 
 #### `pub fn clear(&mut self)`
 
-Removes all elements from the set.
+Removes all elements from the set, keeping the capacity.
+
+#### `pub fn shrink_to_fit(&mut self)`
+
+Shrinks the capacity to match the current length.
 
 #### `pub fn iter_ref(&self) -> MapKeysRefIter<T, ()>`
 
