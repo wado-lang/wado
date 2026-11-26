@@ -732,11 +732,12 @@ adopts it ahead of the referent for a method taking `self` by value
 [WEP: Affine Types](./wep-2026-10-17-affine-types.md#a-by-value-self-is-a-parameter-like-any-other)
 decided. For a `&self` or `&mut self` method it asks the referent first and
 adopts the blanket where the referent has no method of the name
-(`trait_ref_blanket_dispatch.wado`). Where both have one the order's verdict is
-discarded: the specification puts the reference before its pointee, and the
-referent's method answers. The prelude's `impl<T: AsStrSlice> AsStrSlice for &T`
-depends on that. Its methods forward with `(*self).len()`, a call on a `&T`,
-which the order would send back to the blanket itself.
+(`trait_ref_blanket_dispatch.wado`), as
+[The Order](./spec-traits.md#the-order) says. The prelude's
+`impl<T: AsStrSlice> AsStrSlice for &T` is why: its methods forward with
+`(*self).len()`, a call on a `&T`, which the blanket ranked first would send
+back to itself. `candidates` still ranks the blanket first, so the elaborator
+sets the solver's verdict aside for these methods.
 
 It adopts one for a receiver holding one reference only. On `&mut &mut I` the
 blanket's parameter would stand for `&mut I`, which the lookup does not hand

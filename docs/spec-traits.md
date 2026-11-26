@@ -198,6 +198,8 @@ A call's candidates come from two places:
   (`impl<T> Tag for Pair<T, i32>`), or for its head (`impl<T> Tag for Box<T>`).
 - Every value blanket (`impl<T: Bound> Tr for T`) whose bounds the receiver
   satisfies.
+- Every reference blanket (`impl<T: Bound> Tr for &T`) whose bounds the pointee
+  of a reference receiver satisfies.
 
 A target reaches a receiver when every position it pins holds the receiver's
 argument there. A type parameter stands for one type wherever the target writes
@@ -244,6 +246,13 @@ sit at the base's level.
 A reference does not interrupt the chain. A call on `&W`, where `W` is a newtype
 over `Inner`, visits `&W`, then `W`, then `&Inner`, then `Inner`. Within one
 level the reference precedes its pointee.
+
+A reference blanket's method taking `&self` or `&mut self` is the exception. The
+pointee's own method of that name answers first, and the blanket's where the
+pointee has none. Both would read the same value, and the pointee's reads it
+directly. So a reference blanket forwards to its pointee with
+`(*self).method()`. Its method taking `self` by value keeps the order: it takes
+the reference, where the pointee's would take the value out of it.
 
 A newtype over a reference continues to the pointee. A call on `H`, where
 `type H = &mut T`, visits `H`, then `&mut T`, then `T`, so `T`'s impls answer it
