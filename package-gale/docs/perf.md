@@ -906,23 +906,23 @@ ATN literal is a measured problem.)
 over `HashMap<i64, i32>`. A hand-written open-addressing table in its place
 measures the same within the noise:
 
-| grammar    | open addressing, ms/iter | `HashMap`, ms/iter | `HashMap`'s fuel |
-| ---------- | -----------------------: | -----------------: | ---------------: |
-| TypeScript |                  180–208 |            155–176 |            +1.6% |
-| Rust       |                59.4–68.5 |          65.8–69.1 |            +1.6% |
-| SQLite     |                1.10–1.38 |          1.15–1.35 |             0.0% |
+| grammar    | time, `clear` freeing |  time |   fuel |
+| ---------- | --------------------: | ----: | -----: |
+| TypeScript |                 2.06× | 0.85× | 1.016× |
+| Rust       |                 1.38× | 1.05× | 1.016× |
+| SQLite     |                 0.95× | 1.01× | 1.000× |
 
-The times are `wado run -O2 package-gale/benchmark/<grammar>/<grammar>.wado` on
-the dev build, the arms alternating in one session. The fuel is that file's
-`input parses` test under `wado test -O2 --report-fuel`, which is one cold
-parse.
+Each figure is `HashMap` over the open-addressing table. The times are
+`wado run -O2 package-gale/benchmark/<grammar>/<grammar>.wado` on the dev build,
+the arms alternating in one session, and a run varies by a tenth either way. The
+fuel is that file's `input parses` test under `wado test -O2 --report-fuel`,
+which is one cold parse.
 
 `HashMap` was the slower by far until three things changed in it, and a map
 that lacks one of them will lose this comparison again:
 
 - `clear` keeps the table and the entry arrays. A map cleared at every
-  prediction step otherwise grows from nothing each time, which doubled
-  TypeScript's time.
+  prediction step otherwise grows from nothing each time: the first column.
 - A key of one word is hashed with one folded multiply, not two.
 - A lookup reads the entry where it probes, not the slot again afterwards.
 

@@ -28,6 +28,9 @@ use {
 
 global NO_ENTRY: i32 = -1;
 global MIN_SLOTS: i32 = 8;
+/// A table this many times its entry count is emptied slot by slot: filling
+/// it would cost more than finding each entry's slot.
+global SPARSE_TABLE: i32 = 16;
 /// Odd 64-bit multipliers: the golden ratio's, and SplitMix64's first.
 global MUL: u64 = 0x9E3779B97F4A7C15;
 global FINISH: u64 = 0xBF58476D1CE4E5B9;
@@ -355,8 +358,31 @@ impl<K: Hash, V> HashMap<K, V> {
     /// Removes all key-value pairs from the map, keeping the capacity. The seed
     /// stays.
     pub fn clear(&mut self) {
+        if self.log.count * SPARSE_TABLE < self.table.len() {
+            self.empty_entry_slots();
+        } else {
+            self.table.fill(NO_ENTRY);
+        }
         self.log.clear_keeping_capacity();
-        self.table.fill(NO_ENTRY);
+    }
+
+    /// Empties the slot of every entry, which empties the table. It leaves
+    /// each `fps[e]` holding a slot rather than a fingerprint.
+    fn empty_entry_slots(&mut self) {
+        let mask = self.table.len() - 1;
+        let entries = self.log.count;
+        for let e of 0..<entries {
+            let mut s = self.home(self.fps[e]);
+            // A dead entry may have lost its slot: this stops at the empty
+            // one its probe ends on, and emptying that again is harmless.
+            while self.table[s] != e && self.table[s] != NO_ENTRY {
+                s = s + 1 & mask;
+            }
+            self.fps[e] = s;
+        }
+        for let e of 0..<entries {
+            self.table[self.fps[e]] = NO_ENTRY;
+        }
     }
 
     /// Shrinks the capacity to match the current length.
@@ -718,6 +744,27 @@ test "clear keeps the arrays" {
     assert map["k4"] == "again";
 }
 
+test "clear empties a table far wider than its entries" {
+    let mut map = HashMap::<i32, i32>::new();
+    for let i of 0..<1000 {
+        map[i] = i;
+    }
+    map.clear();
+    map[1] = 1;
+    map[2] = 2;
+    map.remove(1);
+    map[1] = 3;
+    assert map.log.count * SPARSE_TABLE < map.table.len();
+    map.clear();
+    for let s of 0..<map.table.len() {
+        assert map.table[s] == NO_ENTRY;
+    }
+    assert map.get(1) == null;
+    map[2] = 4;
+    assert map.len() == 1;
+    assert map[2] == 4;
+}
+
 test "shrink_to_fit drops the room the entries do not need" {
     let mut map = HashMap::<i32, i32>::new();
     for let i of 0..<100 {
@@ -742,7 +789,7 @@ test "shrink_to_fit drops the room the entries do not need" {
     assert map[1] == 2;
 }
 
-test "one-word keys a bit apart hash apart, whatever the seed" {
+test "one-word keys a bit apart hash apart" {
     for let seed of [
         HashSeed::fixed(1, 2),
         HashSeed::fixed(12345, 67890),
