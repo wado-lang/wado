@@ -340,6 +340,11 @@ impl<K: Hash, V> HashMap<K, V> {
         let mut fps = Array::<i32>::new(size);
         fps.copy_from(0, &self.fps, 0, size);
         self.fps = fps;
+        if size == 0 {
+            self.table = Array::new(0);
+            self.shift = 32;
+            return;
+        }
         let mut slots = MIN_SLOTS;
         while slots < size * 2 {
             slots *= 2;
@@ -684,7 +689,7 @@ impl<T: Hash + Deserialize + Inspect> Deserialize for HashSet<T> {
     }
 }
 
-test "clear keeps the arrays and releases what they held" {
+test "clear keeps the arrays" {
     let mut map = HashMap::<String, String>::new();
     for let i of 0..<20 {
         map[`k${i}`] = `v${i}`;
@@ -720,7 +725,7 @@ test "shrink_to_fit drops the room the entries do not need" {
 
     map.clear();
     map.shrink_to_fit();
-    assert map.table.len() == MIN_SLOTS;
+    assert map.table.len() == 0;
     assert map.log.keys.len() == 0;
     map[1] = 2;
     assert map[1] == 2;
