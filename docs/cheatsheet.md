@@ -305,6 +305,9 @@ type Location = Point;
 let loc: Location = { x: 0, y: 0 };  // literal coercion; or `Point { … } as Location`
 loc.distance(&loc2);  // inherits Point methods, params expect &Location
 
+type Scores = HashMap<String, i32>;
+let scores = Scores::new();  // static methods too: no `new` to define, a Scores comes back
+
 impl Location {
     fn name(&self) -> String { ... }  // newtype-specific method
 }

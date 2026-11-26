@@ -1,6 +1,6 @@
 #![generated(by = "src/generator.wado", sources = ["tests/grammars/lexer_loop_arm_longest.g4"])]
 
-use { HashMap, HashSeed, HashSet } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 
 pub struct Span {
     pub start: i32,
@@ -984,8 +984,6 @@ fn emit_lexer_token(
     out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 
-global INTERN_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
-
 internal struct Interner<K> {
     items: List<K>,
     ids: HashMap<K, i32>,
@@ -993,7 +991,7 @@ internal struct Interner<K> {
 
 impl<K: Hash> Interner<K> {
     internal fn new() -> Interner<K> {
-        return Interner { items: [], ids: HashMap::with_seed(INTERN_SEED) };
+        return Interner { items: [], ids: HashMap::new() };
     }
 
     internal fn intern(&mut self, item: K) -> i32 {
@@ -1184,8 +1182,6 @@ internal fn atn_set_contains(sim: &AtnSim, set: i32, t: i32) -> bool {
         && sim.set_bits[set * sim.set_words + t / 64] & 1 as i64 << (t % 64) as i64 != 0;
 }
 
-global LATN_SEED: HashSeed = HashSeed::fixed(0xA4093822299F31D0, 0x082EFA98EC4E6C89);
-
 struct LThread {
     state: i32,
     stack: i32,
@@ -1214,7 +1210,7 @@ global mut LATN_VISITED: LatnVisited = LatnVisited {
     step: 0,
     step_of: [],
     stack_of: [],
-    more: HashSet::with_seed(LATN_SEED),
+    more: HashSet::new(),
 };
 
 impl LatnVisited {
