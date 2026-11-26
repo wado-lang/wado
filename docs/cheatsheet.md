@@ -305,6 +305,9 @@ type Location = Point;
 let loc: Location = { x: 0, y: 0 };  // literal coercion; or `Point { … } as Location`
 loc.distance(&loc2);  // inherits Point methods, params expect &Location
 
+type Scores = HashMap<String, i32>;
+let scores = Scores::new();  // static methods too: no `new` to define, a Scores comes back
+
 impl Location {
     fn name(&self) -> String { ... }  // newtype-specific method
 }
@@ -1032,7 +1035,8 @@ The reason is required, and it is the attribute's only argument: a removal
 writes its own version into the sentence. The declaration reserves a name rather
 than a signature, so the parameters it lists are never checked against a call.
 Write `self` to reserve the instance name and leave it out to reserve the static
-one. It goes on a module function, an `impl` method, or a trait method.
+one. It goes on a module function, or on a method of an `impl`, a trait or a
+resource, where it may take back a name the resource inherits.
 
 ### Local Items
 
@@ -1773,9 +1777,9 @@ test "not yet implemented" {
     panic("TODO: implement this");
 }
 
-// Timeout override. The default is 5000ms, and a test that runs longer is
+// Timeout override. The default is 5 seconds, and a test that runs longer is
 // interrupted and fails.
-#[timeout_ms(30000)]
+#[timeout(seconds = 30)]
 test "large data processing" {
     process_large_dataset();
 }

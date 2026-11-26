@@ -1,8 +1,8 @@
 // AST definitions for Wado
 
 use crate::attribute::{
-    ALLOW, CM, CM_EXPORT, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS,
-    TIMEOUT_MS, TODO, UNAVAILABLE, WASM_MODULE, WORKLOAD,
+    ALLOW, CM, CM_EXPORT, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TODO,
+    UNAVAILABLE, WASM_MODULE, WORKLOAD, timeout_seconds,
 };
 use std::borrow::Cow;
 use std::fmt;
@@ -574,7 +574,10 @@ impl<'a> FunctionSite<'a> {
     pub fn allows_unavailable(self) -> bool {
         matches!(
             self,
-            FunctionSite::Free | FunctionSite::Impl(_) | FunctionSite::Trait(_)
+            FunctionSite::Free
+                | FunctionSite::Impl(_)
+                | FunctionSite::Trait(_)
+                | FunctionSite::Resource(_)
         )
     }
 
@@ -1689,13 +1692,13 @@ impl TodoMark {
 pub struct TestMetadata {
     pub expect_trap: bool,
     pub is_todo: bool,
-    pub timeout_ms: Option<u64>,
+    pub timeout_seconds: Option<u64>,
     pub is_synopsis: bool,
     pub is_workload: bool,
 }
 
 impl TestDecl {
-    /// Resolve this test's `#[expect_trap]` / `#[TODO]` / `#[timeout_ms(..)]` /
+    /// Resolve this test's `#[expect_trap]` / `#[TODO]` / `#[timeout(..)]` /
     /// `#[synopsis]` / `#[workload]` attributes. `module_is_todo` folds in a
     /// module-level `#[TODO]`.
     pub fn metadata(&self, module_is_todo: bool) -> TestMetadata {
@@ -1704,15 +1707,7 @@ impl TestDecl {
             is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == TODO),
             is_synopsis: self.attributes.iter().any(|a| a.name == SYNOPSIS),
             is_workload: self.attributes.iter().any(|a| a.name == WORKLOAD),
-            timeout_ms: self.attributes.iter().find_map(|a| {
-                if a.name == TIMEOUT_MS {
-                    a.args
-                        .first()
-                        .and_then(|arg| arg.as_str().parse::<u64>().ok())
-                } else {
-                    None
-                }
-            }),
+            timeout_seconds: timeout_seconds(&self.attributes),
         }
     }
 }

@@ -610,7 +610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A qualified spelling names a trait, so the receiver's own declaration
     /// is not what it asks for.
     fn link_candidates(
-        &mut self,
+        &self,
         query: &StaticQuery<'_>,
         declaring_args: &[TypeId],
     ) -> (Vec<Candidate>, Vec<Candidate>) {
@@ -1159,7 +1159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The defaults are the trait's and resolve where it wrote them, while the
     /// body is emitted for the block, which `method_ref` already names.
     fn callee_of_trait_declaration(
-        &mut self,
+        &self,
         trait_decl: DefId,
         impl_def: DefId,
         method_name: &str,
@@ -1239,7 +1239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// name has to consume this, or it builds a name with no trait segment and
     /// WIR resolves it to nothing.
     pub(super) fn report_unanswered_static(
-        &mut self,
+        &self,
         lookup: &StaticLookup,
         method_name: &str,
         span: Span,
@@ -1286,7 +1286,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// where impls they leave unseparated are reported too: nothing is left to
     /// pick one, and the call would be mangled with no trait segment.
     pub(super) fn report_unresolved_static(
-        &mut self,
+        &self,
         lookup: &StaticLookup,
         method_name: &str,
         arg_types: &[TypeId],
@@ -1662,7 +1662,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// supplies the name, which blanket the arguments select, and that anything
     /// written for the receiver itself outranks a blanket covering it.
     fn blanket_candidates(
-        &mut self,
+        &self,
         method_name: &str,
         receiver_type: Option<TypeId>,
     ) -> Vec<Candidate> {
@@ -1716,7 +1716,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The resolution for a declaration already picked: its signature, read at
     /// the receiver.
     fn callee_of_declaration(
-        &mut self,
+        &self,
         def: DefId,
         method_ref: StaticMethodRef,
         receiver_type: Option<TypeId>,

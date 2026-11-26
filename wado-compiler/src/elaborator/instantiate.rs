@@ -219,7 +219,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Rewrite a type written in a declaration's frame into `inst`'s variables.
-    pub(super) fn instantiate_type(&mut self, ty: TypeId, inst: &Instantiated) -> TypeId {
+    pub(super) fn instantiate_type(&self, ty: TypeId, inst: &Instantiated) -> TypeId {
         if inst.subst.is_empty() {
             return ty;
         }
@@ -304,7 +304,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::instantiate_type`] over a signature's parameter list.
-    pub(super) fn instantiate_types(&mut self, tys: &[TypeId], inst: &Instantiated) -> Vec<TypeId> {
+    pub(super) fn instantiate_types(&self, tys: &[TypeId], inst: &Instantiated) -> Vec<TypeId> {
         if inst.subst.is_empty() {
             return tys.to_vec();
         }

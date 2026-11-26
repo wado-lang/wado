@@ -2,6 +2,12 @@
 //! facts reify then builds the TIR from — so a walker returning only a
 //! `TypeId` is the rule, and the resolutions it drops on the floor ran to
 //! record those facts.
+//!
+//! A method takes `&mut self` only where it writes through it. `&self` does
+//! not say the call records nothing: the type table, the inference holes and
+//! the diagnostics sit behind a `RefCell`, and a `&self` method may fill them.
+
+#![warn(clippy::needless_pass_by_ref_mut)]
 
 pub(crate) mod assert;
 mod call;
@@ -580,7 +586,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Report where `def` is `#[unavailable]`. `true` says the site has its
     /// whole answer: a reserved name carries no signature left to check.
-    pub(super) fn report_unavailable(&mut self, def: DefId, span: Span) -> bool {
+    pub(super) fn report_unavailable(&self, def: DefId, span: Span) -> bool {
         let Some(message) = self.tysys.unavailable.get(&def).cloned() else {
             return false;
         };
@@ -675,7 +681,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// module's reach. A namespace path looks the module up directly, so it
     /// owes the check `use`'s member registration already applies.
     pub(super) fn check_namespaced_visibility(
-        &mut self,
+        &self,
         target: &ModuleSource,
         name: &str,
         span: Span,
@@ -1182,16 +1188,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The declaration `ns::Name` reaches from this module.
+    /// The declaration `ns::Name` reaches from the module that wrote it at
+    /// `site`. A parameter default is walked in its caller's module, which may
+    /// import another `ns`.
     ///
     /// A namespace import enters its module's declarations under `ns$Name`
     /// aliases, so this is the import tier answering the qualification the
     /// programmer wrote — the same answer the resolve walk gives `ns::Name` in
     /// type position, rather than a second lookup beside it.
     #[expect(clippy::disallowed_methods, reason = "the import tier's own entry")]
-    pub(super) fn namespace_member(&self, namespace: &str, name: &str) -> Option<DefId> {
+    pub(super) fn namespace_member(
+        &self,
+        site: AstId,
+        namespace: &str,
+        name: &str,
+    ) -> Option<DefId> {
         self.tysys.resolutions.imported_as(
-            &self.current_module_source,
+            &self.home_module(site),
             &namespace_member_alias(namespace, name),
         )
     }
@@ -1240,7 +1253,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     fn record_explicit_derive_request(
-        &mut self,
+        &self,
         trait_type: &ast::Type,
         trait_: DefId,
         on_bound: OnBoundTrait,
@@ -1594,7 +1607,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Resolve a `with` clause's effect names to TIR `EffectRef`s.
-    pub(crate) fn resolve_effects(&mut self, effects: &[ast::EffectName]) -> Vec<tir::EffectRef> {
+    pub(crate) fn resolve_effects(&self, effects: &[ast::EffectName]) -> Vec<tir::EffectRef> {
         effects
             .iter()
             .map(|effect| {
@@ -1608,7 +1621,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The effect `name` names at `site`; one naming no effect is reported.
     pub(crate) fn effect_named_at(
-        &mut self,
+        &self,
         site: Option<AstId>,
         span: Span,
         name: &str,
@@ -1998,10 +2011,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The impl header's trait, named at the target it writes.
-    pub(super) fn impl_block_trait_name(
-        &mut self,
-        impl_block: &ast::ImplBlock,
-    ) -> Option<FqTraitName> {
+    pub(super) fn impl_block_trait_name(&self, impl_block: &ast::ImplBlock) -> Option<FqTraitName> {
         let trait_type = impl_block.trait_type.as_ref()?;
         let fq = self.fq_trait_name(trait_type);
         Some(self.tysys.trait_env.fq_trait_named_by_impl(

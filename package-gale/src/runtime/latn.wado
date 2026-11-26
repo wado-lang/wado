@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use { HashSet, HashSeed } from "core:collections";
+use { HashSet } from "core:collections";
 use { Interner } from "./intern.wado";
 use {
     AtnSim,
@@ -12,8 +12,6 @@ use {
     atn_tr_consumes,
 } from "./atn.wado";
 use { char_at } from "./lex.wado";
-
-global LATN_SEED: HashSeed = HashSeed::fixed(0xA4093822299F31D0, 0x082EFA98EC4E6C89);
 
 struct LThread {
     state: i32,
@@ -43,7 +41,7 @@ global mut LATN_VISITED: LatnVisited = LatnVisited {
     step: 0,
     step_of: [],
     stack_of: [],
-    more: HashSet::with_seed(LATN_SEED),
+    more: HashSet::new(),
 };
 
 impl LatnVisited {

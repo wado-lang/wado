@@ -1756,7 +1756,7 @@ fn propagate_scalar_constants(
         if !is_dae_sroa_eligible(&func, false)
             || func.compiler_item.is_some()
             || state.is_clone(id)
-            || project.sroa_param_clones.contains(&id)
+            || project.may_gain_callers(id)
         {
             continue;
         }

@@ -6,6 +6,7 @@ use crate::ast::{
     NamePolicy, Stmt, WorldExport, walk_expr, walk_function, walk_generic_params, walk_item,
     walk_stmt,
 };
+use crate::elaborator::util::parse_u128_literal;
 use crate::token::Span;
 
 pub const ALLOC: &str = "allocator";
@@ -33,7 +34,7 @@ pub const STDLIB: &str = "stdlib";
 /// See [WEP: Builtin Storage and Side-Effect Attributes](../../docs/wep-2026-10-04-builtin-storage-side-effect.md).
 pub const STORAGE: &str = "storage";
 pub const SYNOPSIS: &str = "synopsis";
-pub const TIMEOUT_MS: &str = "timeout_ms";
+pub const TIMEOUT: &str = "timeout";
 pub const TODO: &str = "TODO";
 /// See [WEP: Declared Absence](../../docs/wep-2026-09-13-declared-absence.md).
 pub const UNAVAILABLE: &str = "unavailable";
@@ -129,8 +130,6 @@ pub enum AttrArgs {
     /// String literals, or nothing at all: `#[cm_params()]` is what a
     /// zero-parameter CM function names.
     OptionalStrings,
-    /// One numeric literal, as `#[timeout_ms(5000)]`.
-    OneNumber,
     /// One or more bare identifiers, as `#[allow(dead_code)]`. A lint name is
     /// read as an identifier alone, so a quoted one waives nothing.
     Idents,
@@ -151,7 +150,6 @@ impl AttrArgs {
             Self::OneString => "one string",
             Self::Strings => "one or more strings",
             Self::OptionalStrings => "strings, or nothing",
-            Self::OneNumber => "one number",
             Self::Idents => "one or more bare names",
             Self::Words => "one or more names, quoted or bare",
             Self::OptionalWords => "names, quoted or bare, or nothing",
@@ -170,7 +168,6 @@ impl AttrArgs {
                 !args.is_empty() && args.iter().all(|arg| matches!(arg, AttrArg::Str(_)))
             }
             Self::OptionalStrings => args.iter().all(|arg| matches!(arg, AttrArg::Str(_))),
-            Self::OneNumber => matches!(args, [AttrArg::Number(_)]),
             Self::Idents => {
                 !args.is_empty() && args.iter().all(|arg| matches!(arg, AttrArg::Ident(_)))
             }
@@ -508,9 +505,9 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         bodyless: None,
     },
     AttributeSchema {
-        name: TIMEOUT_MS,
+        name: TIMEOUT,
         targets: TEST_TARGET,
-        args: AttrArgs::OneNumber,
+        args: AttrArgs::Read("`seconds = N`, a whole number of seconds from 1 to 86400"),
         summary: "how long the test may run",
         stdlib_only: false,
         bodyless: None,
@@ -715,6 +712,16 @@ pub fn check(written: &WrittenAttribute<'_>, in_program: bool) -> Option<Attribu
     if name == COVERAGE && !matches!(args, [AttrArg::Ident(word)] if word == "off") {
         return Some(AttributeFault::Arguments { schema });
     }
+    if name == TIMEOUT {
+        if written.earlier.iter().any(|attr| attr.name == TIMEOUT) {
+            return Some(AttributeFault::Repeated {
+                key: "seconds".to_string(),
+            });
+        }
+        if written_timeout_seconds(args).is_none() {
+            return Some(AttributeFault::Arguments { schema });
+        }
+    }
     if name == WORKLOAD && written.in_todo_module {
         return Some(AttributeFault::WorkloadInTodoModule);
     }
@@ -745,6 +752,34 @@ fn traps_by_design_beside_workload(name: &str, earlier: &[Attribute]) -> Option<
 #[must_use]
 pub fn coverage_off(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| attr.name == COVERAGE)
+}
+
+/// A day: the longest a test may be given. Refusing more where it is written
+/// keeps every reader of the seconds clear of an overflow.
+const MAX_TIMEOUT_SECONDS: u64 = 86_400;
+
+/// The seconds `#[timeout(seconds = N)]` grants, which [`check`] admits in no
+/// other form. Seconds alone, since the runner's clock ticks once a second.
+fn written_timeout_seconds(args: &[AttrArg]) -> Option<u64> {
+    let [AttrArg::KeyNumber(key, number)] = args else {
+        return None;
+    };
+    if key != "seconds" {
+        return None;
+    }
+    let seconds = u64::try_from(parse_u128_literal(number).ok()?).ok()?;
+    (1..=MAX_TIMEOUT_SECONDS)
+        .contains(&seconds)
+        .then_some(seconds)
+}
+
+/// The seconds a `#[timeout(seconds = N)]` among `attrs` grants.
+#[must_use]
+pub fn timeout_seconds(attrs: &[Attribute]) -> Option<u64> {
+    attrs
+        .iter()
+        .filter(|attr| attr.name == TIMEOUT)
+        .find_map(|attr| written_timeout_seconds(&attr.args))
 }
 
 /// The string a `#[wire(key = "...")]` on the declaration writes.
@@ -1014,6 +1049,32 @@ mod tests {
         };
         assert_eq!(check(&written, true), Some(AttributeFault::StdlibOnly));
         assert_eq!(check(&written, false), None);
+    }
+
+    #[test]
+    fn a_timeout_reads_an_integer_literal_within_a_day() {
+        let seconds = |number: &str| {
+            written_timeout_seconds(&[AttrArg::KeyNumber(
+                "seconds".to_string(),
+                number.to_string(),
+            )])
+        };
+        assert_eq!(seconds("30"), Some(30));
+        assert_eq!(seconds("1_800"), Some(1800));
+        assert_eq!(seconds("0x1E"), Some(30));
+        assert_eq!(seconds("1e1"), Some(10));
+        assert_eq!(seconds("86400"), Some(MAX_TIMEOUT_SECONDS));
+        let shape = lookup(TIMEOUT).unwrap().args.describe();
+        assert!(shape.contains(&MAX_TIMEOUT_SECONDS.to_string()), "{shape}");
+        for refused in [
+            "0",
+            "86401",
+            "-5",
+            "1.5",
+            "340282366920938463463374607431768211455",
+        ] {
+            assert_eq!(seconds(refused), None, "{refused}");
+        }
     }
 
     #[test]

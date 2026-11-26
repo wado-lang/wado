@@ -1,0 +1,18 @@
+// `builtin::name` reaches the compiler's intrinsics in every module, so a
+// module-level `builtin` would give the prefix two meanings. A local binding,
+// which heads no path, may take the name.
+use builtin from "./sub/cross_module_same_name_flags_a.wado";
+use { Perms as builtin } from "./sub/cross_module_same_name_flags_a.wado";
+
+struct builtin { x: i32 }
+
+export fn run() {
+    let builtin = 1;
+}
+
+__DATA__
+{
+  "compile_error": "`builtin` cannot be declared or imported: `builtin::` reaches the compiler's intrinsics",
+  "compile_error_count": 3,
+  "compile_error_codes": ["INVALID_SYNTAX"]
+}

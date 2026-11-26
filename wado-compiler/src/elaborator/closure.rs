@@ -174,7 +174,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Reject default parameter values on closures. Parser accepts the syntax
     /// for uniform recovery, but defaults cannot survive the fn-type erasure
     /// closures undergo, so they're rejected here.
-    fn reject_closure_defaults(&mut self, closure: &ast::ClosureExpr) {
+    fn reject_closure_defaults(&self, closure: &ast::ClosureExpr) {
         for param in &closure.params {
             if let Some(default) = &param.default {
                 let _ = self.emit(TypeError::DefaultInClosure {

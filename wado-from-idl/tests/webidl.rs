@@ -960,9 +960,10 @@ fn a_child_redeclaring_an_inherited_method_keeps_the_parents() {
 }
 
 /// What `SVGElement.className` is, an `SVGAnimatedString` over the `DOMString`
-/// of `Element.className`: the parent's method answers with the wrong type.
+/// of `Element.className`: the parent's method would answer with the wrong
+/// type, so the child's binds under its interface's name.
 #[test]
-fn a_child_redeclaring_with_another_type_is_counted_apart() {
+fn a_child_redeclaring_with_another_type_binds_under_its_interfaces_name() {
     let mut defs = chain();
     defs.interfaces.push(partial(
         "EventTarget",
@@ -983,29 +984,138 @@ fn a_child_redeclaring_with_another_type_is_counted_apart() {
             operation("item", &plain("long"), &[index], ""),
         ],
     ));
-    let (_, skipped) = defs.transform();
-    let reported: Vec<(String, Cause)> = skipped
-        .iter()
-        .map(|s| (s.to_string(), s.reason.cause.clone()))
-        .collect();
-    let retyped = |member: &str| {
-        (
-            format!(
-                "Element.{member}: redeclares a method inherited from `EventTarget` with another type"
-            ),
-            Cause::RetypedOverride,
-        )
-    };
-    let expected = [
-        (
-            "Node.label: redeclares a method inherited from `EventTarget`".to_string(),
-            Cause::Override,
-        ),
-        retyped("label"),
-        retyped("set_label"),
-        retyped("item"),
-    ];
-    assert_eq!(reported, expected);
+    let (code, skipped) = defs.generate();
+    assert_eq!(
+        skipped,
+        ["Node.label: redeclares a method inherited from `EventTarget`"]
+    );
+    for declaration in [
+        "fn element_label(&self) -> i32;",
+        "fn set_element_label(&self, value: i32);",
+        "fn element_item(&self, index: i32) -> i32;",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_label`\")]\n    fn label(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `set_element_label`\")]\n    fn set_label(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_item`\")]\n    fn item(&self);",
+        "#[unavailable(\"`Node` redeclares `label` as read-only\")]\n    fn set_label(&self);",
+    ] {
+        assert!(code.contains(declaration), "{declaration}\n{code}");
+    }
+    let glue = generate(&defs.build(), "idl/dom.webidl.json")
+        .expect("the slice should generate")
+        .glue;
+    assert!(glue.contains("web/element#set-label\""), "{glue}");
+}
+
+/// A grandchild takes a member back from every binding above it, the one its
+/// parent bound under its own name included.
+#[test]
+fn a_redeclaration_hides_every_binding_above_it() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            attribute("label", &plain("DOMString"), false),
+            operation("item", &plain("long"), &[], ""),
+        ],
+    ));
+    let index = argument("index", &plain("long"), false, "null");
+    defs.interfaces.push(partial(
+        "Node",
+        &[
+            attribute("label", &plain("long"), false),
+            operation("item", &plain("long"), &[index], ""),
+        ],
+    ));
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("label", &plain("long"), true),
+            operation("item", &plain("DOMString"), &[], ""),
+        ],
+    ));
+    let (code, _) = defs.generate();
+    let element = code
+        .split("pub resource Element")
+        .nth(1)
+        .expect("Element is bound");
+    let element = &element[..element.find("\n}").expect("the resource closes")];
+    for declaration in [
+        "#[unavailable(\"`Element` redeclares `label` as read-only\")]\n    fn set_node_label(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_item`\")]\n    fn node_item(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_item`\")]\n    fn item(&self);",
+    ] {
+        assert!(element.contains(declaration), "{declaration}\n{code}");
+    }
+    assert!(!element.contains("fn node_label(&self);"), "{code}");
+}
+
+/// A child may make writable again what its parent redeclared read-only. The
+/// parent's reservation stands between it and the setter above, so its own
+/// binds under its interface's name.
+#[test]
+fn a_setter_restored_below_a_read_only_redeclaration_binds_under_its_interfaces_name() {
+    let mut defs = chain();
+    for (interface, readonly) in [("EventTarget", false), ("Node", true), ("Element", false)] {
+        let label = attribute("label", &plain("DOMString"), readonly);
+        defs.interfaces.push(partial(interface, &[label]));
+    }
+    let (code, _) = defs.generate();
+    for declaration in [
+        "fn set_element_label(&self, value: String);",
+        "#[unavailable(\"`Element` restores the setter `Node` hides; use `set_element_label`\")]\n    fn set_label(&self);",
+    ] {
+        assert!(code.contains(declaration), "{declaration}\n{code}");
+    }
+}
+
+/// What `MediaStreamTrack.clone` is to its children: the parent's method hands
+/// back the child's object, which a type pattern narrows.
+#[test]
+fn a_child_narrowing_only_the_result_keeps_the_parents() {
+    let mut defs = chain();
+    for interface in ["EventTarget", "Node", "Element"] {
+        let twin = operation("twin", &nullable(interface), &[], "");
+        defs.interfaces.push(partial(interface, &[twin]));
+    }
+    let (code, skipped) = defs.generate();
+    assert_eq!(code.matches("fn twin(&self)").count(), 1, "{code}");
+    assert_eq!(
+        skipped,
+        [
+            "Node.twin: redeclares a method inherited from `EventTarget`",
+            "Element.twin: redeclares a method inherited from `Node`",
+        ]
+    );
+}
+
+/// What `SVGElement.className` does to `Element`'s setter. An attribute is one
+/// accessor, so only the attribute's own setter goes, and it goes from a
+/// resource left with nothing else to declare.
+#[test]
+fn a_read_only_redeclaration_hides_the_inherited_setter_alone() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            attribute("label", &plain("DOMString"), false),
+            operation("setPosition", &plain("undefined"), &[], ""),
+        ],
+    ));
+    assert!(defs.interfaces[1].contains(r#""name": "Node""#));
+    defs.interfaces[1] = interface(
+        "Node",
+        r#""EventTarget""#,
+        "",
+        &[attribute("label", &plain("DOMString"), true)],
+    );
+    defs.interfaces.push(partial(
+        "Element",
+        &[attribute("position", &plain("long"), true)],
+    ));
+    let (code, _) = defs.generate();
+    let node = "pub resource Node extends EventTarget {\n    #[unavailable(\"`Node` redeclares `label` as read-only\")]\n    fn set_label(&self);\n}";
+    assert!(code.contains(node), "{code}");
+    assert_eq!(code.matches("#[unavailable(").count(), 1, "{code}");
 }
 
 /// What `MouseEvent.initMouseEvent` asks for: the arguments a caller may leave

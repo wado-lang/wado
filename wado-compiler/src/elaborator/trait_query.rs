@@ -765,7 +765,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the result to a caller typed against the operation, and an async
     /// operation's caller waits on the `AsyncCall<T>` that carries it.
     fn enforce_handler_method_signatures(
-        &mut self,
+        &self,
         impl_block: &ast::ImplBlock,
         handled: DefId,
         handled_args: &[TypeId],
@@ -834,7 +834,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report each position where `method` writes a type other than the one
     /// `owner` declares.
     fn report_signature_mismatches(
-        &mut self,
+        &self,
         owner: &str,
         method: &ast::Function,
         positions: impl IntoIterator<Item = (SigPosition, TypeId, TypeId)>,
@@ -3504,7 +3504,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report that type parameter `param` carries no bound supplying the
     /// operator trait `item`, which is how an operator reaches one.
     pub(super) fn report_operator_bound_missing(
-        &mut self,
+        &self,
         param: &str,
         item: CompilerItem,
         span: Span,
@@ -3732,7 +3732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the unqualified rule answers where it declared the name but a
     /// supertrait's impl registered it. A receiver that is this frame's
     /// parameter declares it through its bounds.
-    fn self_declares(&mut self, binding: SelfBinding, assoc: &str) -> bool {
+    fn self_declares(&self, binding: SelfBinding, assoc: &str) -> bool {
         let mut table = self.tysys.type_table.borrow_mut();
         let registered = binding.declaring_trait.is_some_and(|trait_| {
             table
@@ -4183,7 +4183,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `Self`. Primitives are excluded, comparing via Wasm instructions. The
     /// method ↔ trait table is [`TypeSystem::auto_derive_by_method`].
     pub(super) fn try_auto_derived_method_match(
-        &mut self,
+        &self,
         method_name: &str,
         receiver_type_id: TypeId,
         at: DerivedAt,

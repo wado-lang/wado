@@ -3352,7 +3352,7 @@ test {
 
 #[test]
 fn a_run_that_spends_its_budget_is_told_apart() {
-    let source = "#[timeout_ms(100)]\ntest {\n    while builtin::black_box(true) {}\n}\n";
+    let source = "#[timeout(seconds = 1)]\ntest {\n    while builtin::black_box(true) {}\n}\n";
     let spec = Root::Fixtures.default_spec();
     let excluded = baseline(Path::new("never_ends.wado"), source, &spec, OptLevel::O0)
         .err()

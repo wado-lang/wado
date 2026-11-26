@@ -432,7 +432,7 @@ test "a claim counts where the lexer finds it" {
 test "a trap expectation is a claim the run checks" {
     assert states_a_claim(&"#[expect_trap]\ntest {\n    unreachable();\n}\n");
     assert states_a_claim(&"#[TODO]\ntest \"later\" {\n    panic(\"todo\");\n}\n");
-    assert !states_a_claim(&"#[timeout_ms(10)]\ntest {\n    f();\n}\n");
+    assert !states_a_claim(&"#[timeout(seconds = 10)]\ntest {\n    f();\n}\n");
     assert !states_a_claim(&"// #[expect_trap]\nlet s = \"#[TODO]\";\n");
 }
 

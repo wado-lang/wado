@@ -92,7 +92,7 @@ Rules:
   the example, not a case among many, so the string adds noise. The unnamed
   form already exists in the grammar and finds its primary use here.
 - `#[synopsis]` may be combined with `#[expect_trap]`, `#[TODO]`, and
-  `#[timeout_ms]`. `#[expect_trap]` is the natural way to show an intended
+  `#[timeout]`. `#[expect_trap]` is the natural way to show an intended
   panic; `#[TODO]` lets a draft synopsis live in the source without breaking
   CI.
 
@@ -168,7 +168,7 @@ build.
 
 ### Why attribute, not new syntax
 
-`test`, `#[expect_trap]`, `#[TODO]`, and `#[timeout_ms]` already form a
+`test`, `#[expect_trap]`, `#[TODO]`, and `#[timeout]` already form a
 coherent vocabulary: the `test` block is the unit, attributes change its
 reporting and pass/fail interpretation. `#[synopsis]` extends the same axis
 (it changes the rendering destination, not the structure). Adding a parallel
