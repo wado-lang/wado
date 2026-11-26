@@ -1,0 +1,10 @@
+// A flags type's own `all()` is called through a namespace as it is by the
+// two-segment spelling: the constant answers only where no method does.
+
+use a from "./sub/flags_declared_all.wado";
+
+test "the declared method answers" {
+    assert a::own_all() == 1;
+    assert a::Perms::all() as u32 == 1;
+    assert a::Perms::none() as u32 == 0;
+}

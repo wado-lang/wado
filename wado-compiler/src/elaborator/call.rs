@@ -2215,10 +2215,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .rsplit_once("::")
             .expect("a qualified callee ends in its method");
         if matches!(method_name, "none" | "all")
-            && let Some((flags_info, named)) = receivers
-                .static_method_receiver
-                .as_ref()
-                .and_then(|receiver| receiver.key().decl())
+            && let Some(receiver) = &receivers.static_method_receiver
+            && !self.is_static_method_at(receiver, method_name)
+            && let Some((flags_info, named)) = receiver
+                .key()
+                .decl()
                 .and_then(|def| self.flags_members_through_newtype(def))
         {
             if receivers.prefix_receiver.is_some() {
@@ -5614,24 +5615,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_name: &str,
         ident: &ast::IdentExpr,
     ) -> Option<ReceiverId> {
-        // The importing module never names `Type` on its own, so a bare-name
-        // search reaches no impl on it: the callee then loses its trait
-        // segment and names a body nothing declares, which WIR build reports
-        // as an unresolved call.
+        // The segment's own site first: it answers in the module that wrote
+        // the path. For a parameter default that is not the module the walk
+        // stands in, which may import another `ns`.
+        let at_site = ident.owner_segment().and_then(|seg| self.receiver_at(seg));
+        // An interface has no receiver at its site. The importing module
+        // never names `Type` on its own, so the import's `ns$Type` alias is
+        // what reaches it.
         #[expect(
             clippy::disallowed_methods,
             reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
         )]
-        let ns_member = self.namespace_member(prefix, type_name);
-        let receiver = match ns_member {
-            Some(def) => Some(ReceiverId::of_decl(
-                self.tysys.resolutions.defs(),
-                def,
-                None,
-            )),
-            None => ident.owner_segment().and_then(|seg| self.receiver_at(seg)),
-        };
-        receiver.map(|receiver| receiver.written_as(&format!("{prefix}::{type_name}")))
+        let receiver = at_site.or_else(|| {
+            let def = self.namespace_member(prefix, type_name)?;
+            Some(ReceiverId::of_decl(self.tysys.resolutions.defs(), def, None))
+        })?;
+        Some(receiver.written_as(&format!("{prefix}::{type_name}")))
     }
 
     /// Enforce the visibility ladder on a qualified `Type::method(...)` call.

@@ -1,0 +1,16 @@
+// A parameter default is walked at the call, in the caller's module. Its
+// `ns::Type` is the one the declaring module imported, whatever the caller
+// imports under the same alias.
+
+use ns from "./sub/namespaced_receiver_one.wado";
+use { mask, made } from "./sub/namespaced_receiver_defaults.wado";
+
+test "a flags constant in a default" {
+    assert ns::Perms::all() as u32 == 1;
+    assert mask() == 3;
+}
+
+test "a static method in a default" {
+    assert ns::Maker::make() == 1;
+    assert made() == 2;
+}
