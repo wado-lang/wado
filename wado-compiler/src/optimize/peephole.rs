@@ -113,22 +113,16 @@ pub(super) fn run_peephole(
         // Per function, as its CTFE budget and remembered misses are: what one
         // body spends must not decide whether the next one folds.
         let const_fold_rule = ConstFoldRule::new(type_table, &callees, &ctfe_builtins);
-        // Both analyse the pristine body, before any rule of the session edits
-        // it; the escape set (`address_taken`) is read off the function before
-        // its body is borrowed.
-        let ref_elim_rule = heap_effects.as_ref().and_then(|effects| {
+        let Some(pristine) = func.body.as_ref() else {
+            return false;
+        };
+        // Both analyse the body before any rule of the session edits it.
+        let ref_elim_rule = heap_effects.as_ref().map(|effects| {
             let params = func.params.iter().map(|p| p.local_index).collect();
-            func.body
-                .as_ref()
-                .map(|b| build_ref_elim(b, LazyHeapFrame::new(effects, params), type_table))
+            build_ref_elim(pristine, LazyHeapFrame::new(effects, params), type_table)
         });
         let elide_box_rule = (side == InlineSide::Post)
-            .then(|| {
-                func.body
-                    .as_ref()
-                    .map(|b| build_elide_box_local(b, &func.address_taken_locals))
-            })
-            .flatten();
+            .then(|| build_elide_box_local(pristine, &func.address_taken_locals));
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
         let FuncParts {
@@ -137,36 +131,40 @@ pub(super) fn run_peephole(
             params,
             ..
         } = func.parts();
-        let Some(body) = body else {
-            return false;
-        };
+        let body = body.expect("checked above");
         let mut rules: Vec<&dyn Rule> = Vec::with_capacity(enabled.len());
         for &rule in &enabled {
-            let instance: Option<&dyn Rule> = match rule {
-                PeepholeRule::IfChainToMatch => Some(&IfChainToMatchRule),
-                PeepholeRule::MatchToBitset => Some(&bitset_rule),
-                PeepholeRule::MatchToSwitch => Some(&match_rule),
-                PeepholeRule::RefElim => ref_elim_rule.as_ref().map(|r| r as &dyn Rule),
-                PeepholeRule::ElideBoxLocal => elide_box_rule.as_ref().map(|r| r as &dyn Rule),
-                PeepholeRule::LabeledBlockFusion => Some(&LabeledBlockFusionRule),
-                PeepholeRule::SlotTempSroa => Some(&SlotTempSroaRule),
-                PeepholeRule::DropValue => Some(&DropValueRule),
-                PeepholeRule::ClosureDevirt => Some(&closure_devirt_rule),
-                PeepholeRule::KnownCase => Some(&known_case_rule),
-                PeepholeRule::IdentityCast => Some(&IdentityCastRule),
-                PeepholeRule::IdentityDeref => Some(&IdentityDerefRule),
-                PeepholeRule::FieldThroughRef => Some(&FieldThroughRefRule),
-                PeepholeRule::AggregateForward => Some(&AggregateForwardRule),
-                PeepholeRule::Elide => Some(&elide_rule),
-                PeepholeRule::ConstFold => Some(&const_fold_rule),
-                PeepholeRule::BranchPrune => Some(&branch_prune_rule),
-                PeepholeRule::TupleProjection => Some(&TupleProjectionRule),
-                PeepholeRule::ConstAsciiPush => {
-                    const_ascii_push_rule.as_ref().map(|r| r as &dyn Rule)
-                }
-                PeepholeRule::AppendFuse => append_fuse_rule.as_ref().map(|r| r as &dyn Rule),
+            let instance: &dyn Rule = match rule {
+                PeepholeRule::IfChainToMatch => &IfChainToMatchRule,
+                PeepholeRule::MatchToBitset => &bitset_rule,
+                PeepholeRule::MatchToSwitch => &match_rule,
+                PeepholeRule::RefElim => ref_elim_rule.as_ref().expect("built post-inline"),
+                PeepholeRule::ElideBoxLocal => elide_box_rule.as_ref().expect("built post-inline"),
+                PeepholeRule::LabeledBlockFusion => &LabeledBlockFusionRule,
+                PeepholeRule::SlotTempSroa => &SlotTempSroaRule,
+                PeepholeRule::DropValue => &DropValueRule,
+                PeepholeRule::ClosureDevirt => &closure_devirt_rule,
+                PeepholeRule::KnownCase => &known_case_rule,
+                PeepholeRule::IdentityCast => &IdentityCastRule,
+                PeepholeRule::IdentityDeref => &IdentityDerefRule,
+                PeepholeRule::FieldThroughRef => &FieldThroughRefRule,
+                PeepholeRule::AggregateForward => &AggregateForwardRule,
+                PeepholeRule::Elide => &elide_rule,
+                PeepholeRule::ConstFold => &const_fold_rule,
+                PeepholeRule::BranchPrune => &branch_prune_rule,
+                PeepholeRule::TupleProjection => &TupleProjectionRule,
+                // Absent where the package holds none of the `String` methods
+                // they retarget to.
+                PeepholeRule::ConstAsciiPush => match &const_ascii_push_rule {
+                    Some(r) => r,
+                    None => continue,
+                },
+                PeepholeRule::AppendFuse => match &append_fuse_rule {
+                    Some(r) => r,
+                    None => continue,
+                },
             };
-            rules.extend(instance);
+            rules.push(instance);
         }
         let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.set_pure_builtin_callees(&pure_builtin_callees);

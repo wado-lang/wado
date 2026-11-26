@@ -780,7 +780,8 @@ pub mod pass_dump {
 }
 
 /// Run the NIR passes to a fixed point, exiting early once an iteration changes
-/// nothing. Each pass's position is justified in the comment beside its call.
+/// nothing, then [`settle_after_loop`]. Each pass's position is justified in the
+/// comment beside its call.
 fn run_optimization_passes(
     project: &mut NirPackage,
     config: &OptConfig,
