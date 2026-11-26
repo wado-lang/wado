@@ -114,7 +114,7 @@ impl Monomorphizer {
             && let TirExprKind::Call { args, .. } = &expr.kind
             && let Some(template) = key.template.as_ref().and_then(|t| templates.get(t))
             && let Some((param, arg)) =
-                mut_leaked_through_shared(&template.borrow(), &key, args, type_table)
+                mut_leaked_through_shared(&template.borrow(), &key, args, expr.type_id, type_table)
         {
             self.shared_mut_leaks.borrow_mut().push(SharedMutLeak {
                 module_source: module_source.clone(),
@@ -177,6 +177,7 @@ fn mut_leaked_through_shared(
     template: &TirFunction,
     key: &InstantiationKey,
     args: &[CallArg],
+    returns: TypeId,
     tt: &TypeTable,
 ) -> Option<(String, TypeId)> {
     let head = |ty: TypeId| tt.get(tt.representation_head(ty));
@@ -196,7 +197,11 @@ fn mut_leaked_through_shared(
                     && mentions(p.type_id, param.id)
                     && reaches_through_shared(&a.expr, tt)
             });
-            let handed_back = mentions(template.return_type, param.id)
+            // A subscript the elaborator read through a `&` already reads its
+            // element, the template's bare `T`, as the `&` it is.
+            let narrowed = matches!(tt.get(template.return_type), ResolvedType::TypeParam { id, .. } if *id == param.id)
+                && matches!(head(returns), ResolvedType::Ref(_));
+            let handed_back = (mentions(template.return_type, param.id) && !narrowed)
                 || template.params.iter().any(|p| {
                     matches!(
                         head(p.type_id),
