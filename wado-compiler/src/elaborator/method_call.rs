@@ -597,6 +597,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // no trait is named, which a qualified call would have to keep to.
         let mut waits_for_selection = false;
         let can_wait = call_id.is_some() && required_trait.is_none();
+        // A reference blanket's `&self` or `&mut self` method, which answers
+        // where the referent has no method of the name: both would read the
+        // same value, and the referent's is the direct one.
+        let mut behind_referent = None;
         if let Some(ref_kind) = subject_ref_kind
             && trait_answers_nearer(self, Some(ref_kind == RefKind::Mut))
         {
@@ -629,21 +633,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Err(result) => result,
             };
             reported |= matches!(result, TraitLookup::Reported);
-            if let Some(trait_match) = result.found()
-                && trait_match
-                    .answers_reference_receiver(self.tysys.type_table.borrow().ref_depth(subject))
-            {
-                let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
-                matched_impl_decl = trait_match.impl_struct_fq.head().def();
-                trait_impl_struct_name = Some(trait_match.impl_struct_fq);
-                matched_ref_kind = Some(ref_kind);
-                trait_name = Some(trait_match.trait_name);
-                let mut info = trait_match.method_info;
-                info.is_ref_impl = true;
-                info.owner = owner;
-                method_info = Some(info);
-                trait_impl_module_source = Some(trait_match.impl_module_source);
-                blanket_binder = trait_match.blanket_binder;
+            if let Some(trait_match) = result.found() {
+                let ref_depth = self.tysys.type_table.borrow().ref_depth(subject);
+                if trait_match.answers_reference_receiver(ref_depth) {
+                    let adopted = self.adopt_ref_match(trait_match, base_type_id);
+                    matched_impl_decl = adopted.matched_impl_decl;
+                    trait_impl_struct_name = adopted.trait_impl_struct_name;
+                    matched_ref_kind = Some(ref_kind);
+                    trait_name = Some(adopted.trait_name);
+                    method_info = Some(adopted.info);
+                    trait_impl_module_source = adopted.trait_impl_module_source;
+                    blanket_binder = adopted.blanket_binder;
+                } else if ref_depth == 1 {
+                    behind_referent = Some((ref_kind, trait_match));
+                }
             }
         }
 
@@ -747,6 +750,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
             }
+        }
+
+        if method_info.is_none()
+            && !reported
+            && let Some((ref_kind, trait_match)) = behind_referent
+        {
+            let adopted = self.adopt_ref_match(trait_match, base_type_id);
+            matched_impl_decl = adopted.matched_impl_decl;
+            trait_impl_struct_name = adopted.trait_impl_struct_name;
+            matched_ref_kind = Some(ref_kind);
+            trait_name = Some(adopted.trait_name);
+            method_info = Some(adopted.info);
+            trait_impl_module_source = adopted.trait_impl_module_source;
+            blanket_binder = adopted.blanket_binder;
         }
 
         // Selection is over; the classes come out of the probe so the arguments

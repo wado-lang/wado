@@ -1,6 +1,6 @@
-// A call settles an impl parameter only the trait reference names as it
-// settles a generic function's: by the type expected of the result, or by a
-// later use of it.
+// A call settles an impl parameter only the trait reference names: by the one
+// impl the bound's subject has, or by the type expected of the result where
+// it has several.
 // Regression: the call reported no method at all, as if no impl offered one.
 
 trait Source<A> with () { fn first(&self) -> A; }
@@ -39,6 +39,11 @@ fn through_a_bound<T: Source<i32>>(t: &T) -> i32 {
     return t.tag();
 }
 
+fn named_through_a_bound<T: Source<i32>>(t: &T) -> String {
+    let v = t.tag();
+    return `${v}`;
+}
+
 test "the expected type settles it" {
     let two = Two { n: 7 };
     let n: i32 = two.tag();
@@ -46,12 +51,17 @@ test "the expected type settles it" {
     assert n == 7 && s == "7";
 }
 
-test "a later use settles it" {
+test "the bound's one impl settles it" {
     let one = One { n: 7 };
     let v = one.tag();
-    let w: i32 = v;
-    assert w == 7;
-    assert one.wide() == 7;
+    let hole = Tag::<_>::tag(&one);
+    let boxed = Bx { inner: One { n: 7 } }.unbox();
+    assert `${v}` == "7" && `${hole}` == "7" && `${boxed}` == "7";
+    assert `${one.wide()}` == "7";
+}
+
+test "the bound in force settles it" {
+    assert named_through_a_bound(&Two { n: 7 }) == "7";
 }
 
 test "through a reference" {

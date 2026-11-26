@@ -193,6 +193,27 @@ pub(crate) struct SelectedDispatch {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// What `trait_match`, found among the impls for a reference to
+    /// `base_type_id`, dispatches a call with.
+    pub(super) fn adopt_ref_match(
+        &self,
+        trait_match: TraitMethodMatch,
+        base_type_id: TypeId,
+    ) -> AdoptedMatch {
+        let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
+        let mut info = trait_match.method_info;
+        info.is_ref_impl = true;
+        info.owner = owner;
+        AdoptedMatch {
+            info,
+            trait_name: trait_match.trait_name,
+            matched_impl_decl: trait_match.impl_struct_fq.head().def(),
+            trait_impl_struct_name: Some(trait_match.impl_struct_fq),
+            trait_impl_module_source: Some(trait_match.impl_module_source),
+            blanket_binder: trait_match.blanket_binder,
+        }
+    }
+
     /// What `trait_match` dispatches a call on `base_type_id` with.
     pub(super) fn adopt_trait_match(
         &self,

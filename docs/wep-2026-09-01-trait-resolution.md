@@ -722,19 +722,21 @@ there, so that parameter stays as the impl restates it
 (`trait_method_bound_projects_trait_param.wado`). A default the trait gave it
 does not reach a call through the impl.
 
-### A ref blanket dispatches a by-value `self` only
+### A ref blanket's `&self` method yields to the referent's
 
 The order ranks `impl<T: Bound> Tr for &T` as the third candidate list, and
 `candidates` names one for a reference receiver. The compiler's collection
-adopts it for a method taking `self` by value
+adopts it ahead of the referent for a method taking `self` by value
 (`TraitMethodMatch::answers_reference_receiver`,
 `iterator_through_mut_reference.wado`), which is what
 [WEP: Affine Types](./wep-2026-10-17-affine-types.md#a-by-value-self-is-a-parameter-like-any-other)
-decided. For a `&self` or `&mut self` method the reference step still adopts
-only concrete `&T` impls, so the order's verdict is discarded: the referent's
-impl answers, and where it has none the call reports no method
-(`trait_ref_blanket_dispatch.wado`). The prelude's `Inspect for &T` works
-because the compiler answers that bound itself.
+decided. For a `&self` or `&mut self` method it asks the referent first and
+adopts the blanket where the referent has no method of the name
+(`trait_ref_blanket_dispatch.wado`). Where both have one the order's verdict is
+discarded: the specification puts the reference before its pointee, and the
+referent's method answers. The prelude's `impl<T: AsStrSlice> AsStrSlice for &T`
+depends on that. Its methods forward with `(*self).len()`, a call on a `&T`,
+which the order would send back to the blanket itself.
 
 It adopts one for a receiver holding one reference only. On `&mut &mut I` the
 blanket's parameter would stand for `&mut I`, which the lookup does not hand
@@ -771,17 +773,18 @@ the call names settle one only the trait reference holds, `A` in
   `blanket_impl_args` does for a value blanket.
 
 A call that names no trait arguments leaves such a parameter to its own
-inference, as [Qualified Calls](./spec-traits.md#qualified-calls) says of every
-variable a call holds. The solver asks a bound that reads the parameter at a
-variable, so the block stays a candidate, and the call owes the bound once the
-expected type or a later use settles the parameter
-(`method_call_settles_blanket_parameter.wado`). The impl a call resolves to
-settles none of its variables, so `one.tag()` with nothing else to settle `A` is
-an error even where `One` implements `Source<i32>` alone
-(`method_call_blanket_parameter_unsettled.wado`).
+inference. The solver asks a bound that reads the parameter at a variable, so
+the block stays a candidate, and the call owes the bound once the parameter
+settles (`method_call_settles_blanket_parameter.wado`). The bound itself
+settles it where its subject has one impl of the trait, or one bound in force
+(`Elaborator::settle_bound_args_by_sole_impl`,
+`bound_one_impl_settles_its_arguments.wado`), and the expected type or a later
+use does where it has several. A generic function's bound is owed and settled
+the same way.
 
-- [x] Settle a parameter only the trait reference names from the expected type
-  or a later use, at a method call and a static one alike.
+- [x] Settle a parameter only the trait reference names, at a method call and a
+  static one alike.
+- [x] Settle a bound's open arguments from its subject's one impl.
 
 A bound's associated-type binding reaches the solver as an equality on the
 parameter (`Env::param_assoc`). A solver projection names no trait arguments,

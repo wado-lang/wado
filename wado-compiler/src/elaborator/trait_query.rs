@@ -19,7 +19,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::callee::CalleeRef;
-use super::infer_hole::{BoundRows, Obligation, ProjectionLink};
+use super::infer_hole::{BoundRows, DeclaredBound, Obligation, ProjectionLink};
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
     BinderInScope, BoundSelf, BoundsOf, ElaboratedBound, FamilySite, ParamRef, Scope, ScopedBound,
@@ -261,6 +261,28 @@ fn asked_at(
         _ => false,
     };
     (!asked.args().iter().any(|arg| arg.mentions(&undecided))).then_some(asked)
+}
+
+/// Whether the one thing keeping `trait_` from being asked at the site
+/// ([`asked_at`]) is a variable the site wrote for one of its slots.
+fn reads_open_slot(
+    trait_: &FqTraitName,
+    at_call: &[(FqTypeName, FqTypeName)],
+    frame_binders: &[FqTypeName],
+) -> bool {
+    let asked = spelled_at(trait_, at_call);
+    let mentions = |pred: &dyn Fn(&TypeHead) -> bool| {
+        asked
+            .args()
+            .iter()
+            .any(|arg| arg.mentions(&|head| pred(head)))
+    };
+    mentions(&|head| matches!(head, TypeHead::Infer { .. }))
+        && !mentions(&|head| match head {
+            TypeHead::Unresolved(_) => true,
+            TypeHead::Binder { .. } => !frame_binders.iter().any(|binder| binder.head() == head),
+            _ => false,
+        })
 }
 
 /// `trait_` with each binder `at` settles replaced by what it settles it to.
@@ -3164,7 +3186,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for bound in &param.real_bounds() {
                 // `Self` where no receiver binds one was rejected where the
                 // bound was written, as `reject_self_in_bounds` reports.
-                let written = (self_binding.is_some() || !bound.writes_self())
+                let declared = (self_binding.is_some() || !bound.writes_self())
                     .then(|| self.tysys.bound_written(bound))
                     .flatten()
                     .map(|trait_| {
@@ -3176,8 +3198,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self_binding,
                         );
                         TypeTable::trait_at_rows(&at_args, effect_rows)
-                    })
-                    .and_then(|trait_| asked_at(trait_, &at_call, &frame_binders));
+                    });
+                // A bound reading a slot still open (`T: Source<A>`) waits for
+                // that slot's variable, and may be what settles it.
+                if let Some(trait_) = &declared
+                    && reads_open_slot(trait_, &at_call, &frame_binders)
+                {
+                    let owed = DeclaredBound {
+                        trait_: spelled_at(trait_, &at_call),
+                        written: bound.name.clone(),
+                        each_element: param.is_pack,
+                    };
+                    self.defer_declared_bounds(param, type_arg, vec![owed], span);
+                    continue;
+                }
+                let written =
+                    declared.and_then(|trait_| asked_at(trait_, &at_call, &frame_binders));
                 for &subject in &subjects {
                     self.enforce_single_bound_args(
                         subject,

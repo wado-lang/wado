@@ -1438,6 +1438,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             } => {
                 let Some(bound) = self.settled_bound(var, &bound) else {
+                    self.settle_bound_args_by_sole_impl(var, &bound);
                     return Some(Obligation::Bound {
                         var,
                         param,
@@ -1551,6 +1552,71 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             written: bound.written.clone(),
             each_element: bound.each_element,
         })
+    }
+
+    /// Settle the variables `bound`'s own arguments hold from the one impl of
+    /// its trait that `var`'s answer has: with `impl Source<i32> for One`
+    /// alone, `One: Source<?A>` says `?A` is `i32`, as `one.first()` says.
+    /// Several impls leave them to the rest of the body.
+    fn settle_bound_args_by_sole_impl(&mut self, var: TypeId, bound: &DeclaredBound) {
+        let subject = self.apply_infer_holes(var);
+        if bound.each_element || !self.is_settled(subject) {
+            return;
+        }
+        // A parameter has what its bounds in force say, and no block.
+        let in_force: Vec<_> = self
+            .carried_bounds(subject)
+            .into_iter()
+            .filter(|carried| self.trait_decl_of(carried) == bound.trait_.canonical())
+            .collect();
+        let offered: Vec<TypeId> = if let [carried] = &in_force[..] {
+            self.bound_args_where_written(carried, &ParamSpace::new())
+        } else if let [block] = self.tysys.solver().bound_impls(
+            &self.tysys,
+            &self.annotate_ctx,
+            subject,
+            &bound.trait_.head_only(),
+        )[..]
+        {
+            let mut table = self.tysys.type_table.borrow_mut();
+            let slots = table.impl_receiver_slots(block, subject);
+            table
+                .impl_trait_args(block)
+                .to_vec()
+                .into_iter()
+                .map(|arg| table.substitute_type_params(arg, &slots))
+                .collect()
+        } else {
+            return;
+        };
+        for (asked, offered) in bound.trait_.args().iter().zip(offered) {
+            self.equate_open_parts(asked, offered);
+        }
+    }
+
+    /// Equate each variable `asked` writes with the part of `offered` at its
+    /// position, where the two agree on every head above it.
+    fn equate_open_parts(&mut self, asked: &FqTypeName, offered: TypeId) {
+        if let TypeHead::Infer { var, .. } = asked.head() {
+            // What the block leaves to its own parameters says nothing.
+            if !self.tysys.type_table.borrow().contains_type_param(offered) {
+                let hole = self.tysys.type_table.borrow_mut().make_infer_var(*var);
+                self.equate(offered, hole);
+            }
+            return;
+        }
+        let (name, parts) = {
+            let table = self.tysys.type_table.borrow();
+            (
+                table.fq_type_name(offered),
+                table.nominal_type_args(offered).unwrap_or_default(),
+            )
+        };
+        if name.head() == asked.head() && parts.len() == asked.args().len() {
+            for (asked, part) in asked.args().iter().zip(parts) {
+                self.equate_open_parts(asked, part);
+            }
+        }
     }
 
     /// Whether `link` is decided: its owner answered, and the link settled

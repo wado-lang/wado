@@ -409,10 +409,12 @@ type's arguments to say. Where several impls are left and the call must be
 resolved before inference settles them, it asks for a turbofish or an
 annotation; where none is, the method does not exist at any instance.
 
-The impl a call resolves to settles none of its variables. A variable nothing
-else settles is reported as one that cannot be inferred, even where only one
-impl could apply: inferring it from that impl would let an impl written
-elsewhere later make the call fail.
+The impl a call resolves to settles none of the variables its receiver's type
+holds. A variable nothing else settles is reported as one that cannot be
+inferred, even where only one impl could apply: inferring it from that impl
+would let an impl written for another type later make the call fail. A bound on
+a settled subject is another question, which only that subject's own impls
+answer ([Bounds on Generic Traits](#bounds-on-generic-traits)).
 
 A numeric literal's variable is the exception. Where one impl alone could
 answer a method on a receiver holding it, that impl settles it:
@@ -753,7 +755,7 @@ test {
 
 The bound's subject is not itself determined this way: `A: Eq` says what `A` must satisfy, not what `A` is.
 
-A call that names no trait arguments leaves a parameter only the trait reference names to inference, as it leaves a generic function's. The expected type or a later use settles it, and a bound that reads it is checked at the type it settles to. Where nothing settles it the call is an error, even where only one type would meet the bound ([Qualified Calls](#qualified-calls)).
+A call that names no trait arguments leaves a parameter only the trait reference names to inference, as it leaves a generic function's. A bound that reads it settles it where it can ([Bounds on Generic Traits](#bounds-on-generic-traits)), and the expected type or a later use does otherwise. The bound is checked at the type the parameter settles to, and a parameter nothing settles is an error.
 
 <!-- {"fixture":"spec_traits_impl_param_by_call.wado"} -->
 
@@ -768,6 +770,10 @@ test {
     let s: String = Tag::tag(&two);  // `A` is `String`
     assert n == 7 && s == "7";
     assert Tag::<i32>::tag(&two) == 7;
+
+    let one = One { n: 7 };
+    let v = one.tag();               // `One` has `Source<i32>` alone
+    assert `${v}` == "7";
 }
 ```
 
@@ -955,6 +961,27 @@ name is settled at each instantiation. `T: Make<U>` reaches
 projection nested inside an argument is answered the same way:
 `Make<List<T::Base>>` reaches `impl Make<List<String>>`. A call through the
 bound reaches the impl that satisfied the bound.
+
+A bound settles what its arguments leave open where its subject is settled and
+has one impl of the trait: the arguments are that impl's, as a call of the
+trait's method on the subject would read them. A subject that is a type
+parameter has the one bound in force on it instead. Where the subject has
+several, the bound settles nothing and the expected type or a later use
+chooses, as among the members of an overload set.
+
+<!-- {"fixture":"spec_traits_bound_settles_argument.wado"} -->
+
+```wado
+fn first_of<A, T: Source<A>>(t: &T) -> A {
+    return t.first();
+}
+
+test {
+    let v = first_of(&One { n: 7 });           // `One` has `Source<i32>` alone
+    let s: String = first_of(&Two { n: 7 });   // `Two` has two: the annotation chooses
+    assert `${v}` == "7" && s == "7";
+}
+```
 
 A bound may pin an associated type (`T: Mul<Output = T>`). The impl that answers
 it must bind that type as the pin says.

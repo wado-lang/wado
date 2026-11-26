@@ -1,0 +1,50 @@
+// A bound whose subject is settled and has one impl of the bound's trait
+// settles the variables the bound's arguments hold, as a call of the trait's
+// own method on that subject would. Several impls leave them to the expected
+// type.
+
+trait Source<A> with () { fn first(&self) -> A; }
+trait Items<L> with () { fn items(&self) -> L; }
+
+struct One { n: i32 }
+impl Source<i32> for One { fn first(&self) -> i32 { return self.n; } }
+impl Items<List<i32>> for One { fn items(&self) -> List<i32> { return [self.n]; } }
+
+struct Two { n: i32 }
+impl Source<i32> for Two { fn first(&self) -> i32 { return self.n; } }
+impl Source<String> for Two { fn first(&self) -> String { return `${self.n}`; } }
+
+fn first_of<A, T: Source<A>>(t: &T) -> A {
+    return t.first();
+}
+
+fn head_of<A, T: Items<List<A>>>(t: &T) -> A {
+    return t.items()[0];
+}
+
+fn forwarded<T: Source<i32>>(t: &T) -> String {
+    let v = first_of(t);
+    return `${v}`;
+}
+
+test "a generic function's parameter" {
+    let one = One { n: 7 };
+    let v = first_of(&one);
+    assert `${v}` == "7";
+}
+
+test "nested in the bound's argument" {
+    let one = One { n: 7 };
+    let v = head_of(&one);
+    assert `${v}` == "7";
+}
+
+test "from the bound in force" {
+    assert forwarded(&Two { n: 7 }) == "7";
+}
+
+test "several impls wait for the expected type" {
+    let two = Two { n: 7 };
+    let s: String = first_of(&two);
+    assert s == "7";
+}

@@ -1,10 +1,8 @@
-#![TODO]
-// A blanket over a reference (`impl<T: Bound> Tr for &T`) is a third candidate
-// list, ranked under a concrete `&T` impl and over the base type's. Today it
-// reaches no call: the reference step adopts only concrete `&T` impls and the
-// blanket collection takes only value blankets; the prelude's `Inspect for &T`
-// works because the compiler answers that bound itself (WEP 2026-09-01, "A ref
-// blanket never dispatches").
+// A blanket over a reference (`impl<T: Bound> Tr for &T`) answers a call on a
+// reference whatever receiver its method takes. Its `&self` or `&mut self`
+// method answers where the referent has no method of the name.
+// Regression: only a by-value `self` reached it, and a `&self` or `&mut self`
+// method reported no method on the referent.
 
 trait Limit with () {
     fn limit() -> i32;
@@ -12,6 +10,8 @@ trait Limit with () {
 
 trait Describe with () {
     fn describe(&self) -> String;
+    fn describe_mut(&mut self) -> String;
+    fn describe_value(self) -> String;
 }
 
 struct Point {
@@ -26,12 +26,72 @@ impl Limit for Point {
 
 impl<T: Limit> Describe for &T {
     fn describe(&self) -> String {
+        return `ref blanket ${T::limit()}`;
+    }
+    fn describe_mut(&mut self) -> String {
+        return "ref blanket, mut";
+    }
+    fn describe_value(self) -> String {
+        return "ref blanket, value";
+    }
+}
+
+struct Both {
+    x: i32,
+}
+
+impl Limit for Both {
+    fn limit() -> i32 {
+        return 1;
+    }
+}
+
+trait Named with () {
+    fn name(&self) -> String;
+}
+
+impl Named for Both {
+    fn name(&self) -> String {
+        return "base";
+    }
+}
+
+impl<T: Limit> Named for &T {
+    fn name(&self) -> String {
         return "ref blanket";
+    }
+}
+
+impl Named for &Point {
+    fn name(&self) -> String {
+        return "concrete";
     }
 }
 
 test "a blanket over a reference dispatches" {
     let p = Point { x: 1 };
     let r = &p;
-    assert r.describe() == "ref blanket";
+    assert r.describe() == "ref blanket 7";
+    assert (&p).describe() == "ref blanket 7";
+    assert r.describe_value() == "ref blanket, value";
+}
+
+test "through `&mut self`" {
+    let p = Point { x: 1 };
+    let mut r = &p;
+    assert r.describe_mut() == "ref blanket, mut";
+}
+
+test "a qualified call" {
+    let p = Point { x: 1 };
+    let r = &p;
+    assert Describe::describe(r) == "ref blanket 7";
+}
+
+test "the referent's own `&self` method answers first" {
+    let b = Both { x: 1 };
+    assert (&b).name() == "base";
+    assert b.name() == "base";
+    let p = Point { x: 1 };
+    assert (&p).name() == "concrete";
 }
