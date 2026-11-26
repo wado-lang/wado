@@ -3914,15 +3914,18 @@ fn test_roundtrip_ast_all_stdlib() {
 
 #[test]
 fn test_format_attribute_numeric_arg_preserved() {
-    // Numeric attribute arguments must not be quoted: #[timeout(seconds = 120)] stays as-is
-    let source = "#[timeout(seconds = 120)]\ntest \"bench\" {\n    assert 1 == 1;\n}\n";
-    let formatted = wado_compiler::format(source).expect("format failed");
-    assert!(
-        formatted.contains("#[timeout(seconds = 120)]"),
-        "numeric attribute argument must not be quoted: {formatted}"
-    );
-    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
-    assert_eq!(formatted, formatted2, "format should be idempotent");
+    // A numeric attribute argument must not be quoted, keyed or bare. No
+    // attribute takes a bare one, but the formatter runs before any is checked.
+    for attribute in ["#[timeout(seconds = 120)]", "#[unchecked_name(120000)]"] {
+        let source = format!("{attribute}\ntest \"bench\" {{\n    assert 1 == 1;\n}}\n");
+        let formatted = wado_compiler::format(&source).expect("format failed");
+        assert!(
+            formatted.contains(attribute),
+            "numeric attribute argument must not be quoted: {formatted}"
+        );
+        let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+        assert_eq!(formatted, formatted2, "format should be idempotent");
+    }
 }
 
 #[test]

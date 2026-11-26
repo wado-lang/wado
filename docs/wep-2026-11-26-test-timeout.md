@@ -16,9 +16,14 @@ one attribute taking a bare number.
 
 ### `#[timeout(seconds = N)]` replaces `#[timeout_ms(N)]`
 
-The unit moves from the attribute's name into its key. `N` is a whole number
-above zero. A test given no time cannot pass, so zero is an error rather than a
-test that always fails.
+The unit moves from the attribute's name into its key. `N` is an integer
+literal from 1 to 86400. A test given no time cannot pass, so zero is an error
+rather than a test that always fails. A day is the ceiling: no test is meant to
+run longer, and one bound where the value is written keeps every reader of it
+clear of an overflow.
+
+A test takes one `#[timeout]`. A second is an error, rather than a limit that
+silently loses to the first.
 
 `timeout_ms` is removed outright, with no period in which both are accepted. It
 is now an unknown attribute.

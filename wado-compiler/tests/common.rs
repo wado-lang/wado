@@ -1460,7 +1460,7 @@ pub fn run_test_world(
             // Parse the per-test budget from the export name
             // (e.g., "test-tm20-0-slow") and meter the guest with it.
             let timeout_ms = parse_test_timeout_seconds(test_name)
-                .map_or(DEFAULT_TIMEOUT_MS, |seconds| seconds.saturating_mul(1000));
+                .map_or(DEFAULT_TIMEOUT_MS, |seconds| seconds * 1000);
             limit_store(&mut store, timeout_ms);
 
             let instance = linker.instantiate_async(&mut store, &component).await?;

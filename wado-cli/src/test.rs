@@ -2726,11 +2726,11 @@ mod tests {
         assert_eq!(parse("test-0-simple").display, "simple");
         assert_eq!(parse("test-trap-0-panics").display, "panics");
         assert_eq!(parse("test-todo-0-not-yet").display, "not_yet");
-        assert_eq!(parse("test-tm2000-0-slow").display, "slow");
-        assert_eq!(parse("test-trap-tm500-0-panics").display, "panics");
+        assert_eq!(parse("test-tm20-0-slow").display, "slow");
+        assert_eq!(parse("test-trap-tm5-0-panics").display, "panics");
         assert_eq!(parse("test-1").display, "<test 1>");
         assert_eq!(parse("test-trap-3").display, "<test 3>");
-        assert_eq!(parse("test-todo-tm3000-1").display, "<test 1>");
+        assert_eq!(parse("test-todo-tm30-1").display, "<test 1>");
     }
 
     #[test]
@@ -2754,7 +2754,7 @@ mod tests {
         // string — fall back to the bare-index form.
         assert_eq!(parse("test-0-").display, "<test 0>");
         assert_eq!(parse("test-trap-3-").display, "<test 3>");
-        assert_eq!(parse("test-tm2000-0-").display, "<test 0>");
+        assert_eq!(parse("test-tm20-0-").display, "<test 0>");
     }
 
     fn discovered_names(dir: &Path) -> std::collections::BTreeSet<String> {

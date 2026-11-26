@@ -6,6 +6,7 @@ use crate::ast::{
     NamePolicy, Stmt, WorldExport, walk_expr, walk_function, walk_generic_params, walk_item,
     walk_stmt,
 };
+use crate::elaborator::util::parse_u128_literal;
 use crate::token::Span;
 
 pub const ALLOC: &str = "allocator";
@@ -506,7 +507,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: TIMEOUT,
         targets: TEST_TARGET,
-        args: AttrArgs::Read("`seconds = N`, a whole number of seconds above zero"),
+        args: AttrArgs::Read("`seconds = N`, a whole number of seconds from 1 to 86400"),
         summary: "how long the test may run",
         stdlib_only: false,
         bodyless: None,
@@ -711,8 +712,15 @@ pub fn check(written: &WrittenAttribute<'_>, in_program: bool) -> Option<Attribu
     if name == COVERAGE && !matches!(args, [AttrArg::Ident(word)] if word == "off") {
         return Some(AttributeFault::Arguments { schema });
     }
-    if name == TIMEOUT && written_timeout_seconds(args).is_none() {
-        return Some(AttributeFault::Arguments { schema });
+    if name == TIMEOUT {
+        if written.earlier.iter().any(|attr| attr.name == TIMEOUT) {
+            return Some(AttributeFault::Repeated {
+                key: "seconds".to_string(),
+            });
+        }
+        if written_timeout_seconds(args).is_none() {
+            return Some(AttributeFault::Arguments { schema });
+        }
     }
     if name == WORKLOAD && written.in_todo_module {
         return Some(AttributeFault::WorkloadInTodoModule);
@@ -746,6 +754,10 @@ pub fn coverage_off(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| attr.name == COVERAGE)
 }
 
+/// A day: the longest a test may be given. Refusing more where it is written
+/// keeps every reader of the seconds clear of an overflow.
+const MAX_TIMEOUT_SECONDS: u64 = 86_400;
+
 /// The seconds `#[timeout(seconds = N)]` grants, which [`check`] admits in no
 /// other form. Seconds alone, since the runner's clock ticks once a second.
 fn written_timeout_seconds(args: &[AttrArg]) -> Option<u64> {
@@ -755,8 +767,10 @@ fn written_timeout_seconds(args: &[AttrArg]) -> Option<u64> {
     if key != "seconds" {
         return None;
     }
-    let digits = number.replace('_', "");
-    digits.parse().ok().filter(|seconds| *seconds > 0)
+    let seconds = u64::try_from(parse_u128_literal(number).ok()?).ok()?;
+    (1..=MAX_TIMEOUT_SECONDS)
+        .contains(&seconds)
+        .then_some(seconds)
 }
 
 /// The seconds a `#[timeout(seconds = N)]` among `attrs` grants.
@@ -1035,6 +1049,26 @@ mod tests {
         };
         assert_eq!(check(&written, true), Some(AttributeFault::StdlibOnly));
         assert_eq!(check(&written, false), None);
+    }
+
+    #[test]
+    fn a_timeout_reads_an_integer_literal_within_a_day() {
+        let seconds = |number: &str| {
+            written_timeout_seconds(&[AttrArg::KeyNumber(
+                "seconds".to_string(),
+                number.to_string(),
+            )])
+        };
+        assert_eq!(seconds("30"), Some(30));
+        assert_eq!(seconds("1_800"), Some(1800));
+        assert_eq!(seconds("0x1E"), Some(30));
+        assert_eq!(seconds("1e1"), Some(10));
+        assert_eq!(seconds("86400"), Some(MAX_TIMEOUT_SECONDS));
+        let shape = lookup(TIMEOUT).unwrap().args.describe();
+        assert!(shape.contains(&MAX_TIMEOUT_SECONDS.to_string()), "{shape}");
+        for refused in ["0", "86401", "-5", "1.5", "340282366920938463463374607431768211455"] {
+            assert_eq!(seconds(refused), None, "{refused}");
+        }
     }
 
     #[test]
