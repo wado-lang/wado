@@ -2448,11 +2448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         element: TypeId,
         span: Span,
     ) {
-        let in_place = {
-            let tt = self.tysys.type_table.borrow();
-            tt.is_in_place_aggregate(tt.representation_head(element))
-        };
-        if !in_place && !stores_back {
+        if !self.mutates_in_place(element) && !stores_back {
             let _ = self.emit(TypeError::CannotMutate {
                 message: format!(
                     "cannot take &mut of an element of read-only '{}': it has no IndexAssign to store the element back",

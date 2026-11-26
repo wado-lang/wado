@@ -2398,10 +2398,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether the value `id` evaluates to is mutated in place through a
     /// reference to it.
     fn mutated_in_place(&self, id: ast::AstId) -> bool {
-        self.sem.types.expression_types.get(&id).is_some_and(|&ty| {
-            let tt = self.tysys.type_table.borrow();
-            tt.is_in_place_aggregate(tt.representation_head(ty))
-        })
+        self.sem
+            .types
+            .expression_types
+            .get(&id)
+            .is_some_and(|&ty| self.mutates_in_place(ty))
+    }
+
+    /// Whether a value of type `ty` is mutated in place through a reference
+    /// to it, rather than replaced on assignment.
+    pub(super) fn mutates_in_place(&self, ty: TypeId) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        tt.is_in_place_aggregate(tt.representation_head(ty))
     }
 
     /// Point `name` at another type, keeping the bounds it carries. A name

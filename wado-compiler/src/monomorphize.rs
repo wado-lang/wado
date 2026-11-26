@@ -363,11 +363,9 @@ impl Monomorphization {
         Some((template.module_source.clone(), error.into()))
     }
 
-    /// The error refusing the first call whose outranking impl gives it other
-    /// types than the blanket its generic body was checked against, with the
-    /// module holding the call. Read once every instance exists.
     /// The error refusing the first call that hands its callee a `&mut`, as a
-    /// type argument, behind a `&` it could hand back writable.
+    /// type argument, behind a `&` it could hand back writable, with the
+    /// module holding the call. Read once every instance exists.
     pub fn shared_mut_leak(&self, flat: &FlatPackage) -> Option<(ModuleSource, Diagnostic)> {
         let leaks = self.monomorphizer.shared_mut_leaks.borrow();
         let leak = leaks.first()?;
@@ -384,6 +382,9 @@ impl Monomorphization {
         Some((leak.module_source.clone(), error.into()))
     }
 
+    /// The error refusing the first call whose outranking impl gives it other
+    /// types than the blanket its generic body was checked against, with the
+    /// module holding the call. Read once every instance exists.
     pub fn outranked_disagreement(&self, flat: &FlatPackage) -> Option<(ModuleSource, Diagnostic)> {
         let tt = flat.type_table.borrow();
         let signature = |params: &[TypeId], returns: TypeId| {

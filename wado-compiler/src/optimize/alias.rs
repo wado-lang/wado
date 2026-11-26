@@ -447,9 +447,8 @@ impl<'a> CallImmutability<'a> {
     /// caller shares: it is or holds a `&mut`, which a closure's `fn mut` call
     /// writes its captures through. A `&` grants no write of its own, but a
     /// `&mut` copied out from behind one still writes. Nor does a `List` it can
-    /// only read grant a write. Read off the fields
-    /// the package's structs register, which a closure's do and the type
-    /// table's do not.
+    /// only read grant a write. Read off the fields the package's structs
+    /// register, which a closure's do and the type table's do not.
     ///
     /// A reachability question, so one query visits each type once. A `false`
     /// covers every type the query reached, all of whose types it reached too.
