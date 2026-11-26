@@ -295,6 +295,12 @@ impl<K: Hash, V> HashMap<K, V> {
     /// Drop the dead entries and rebuild the table over the rest, hashing no
     /// key.
     fn compact(&mut self) {
+        self.compact_entries();
+        self.rebuild_table(self.table.len());
+    }
+
+    /// Drop the dead entries, leaving the table stale.
+    fn compact_entries(&mut self) {
         let renumbered = self.log.compact();
         for let e of 0..<renumbered.len() {
             let to = renumbered[e];
@@ -302,7 +308,6 @@ impl<K: Hash, V> HashMap<K, V> {
                 self.fps[to] = self.fps[e];
             }
         }
-        self.rebuild_table(self.table.len());
     }
 
     /// The keys, in insertion order.
@@ -321,12 +326,32 @@ impl<K: Hash, V> HashMap<K, V> {
         return self.log.entries();
     }
 
-    /// Removes all key-value pairs from the map. The seed stays.
+    /// Removes all key-value pairs from the map, keeping the capacity. The seed
+    /// stays.
     pub fn clear(&mut self) {
-        self.log.clear();
-        self.fps = Array::new(0);
-        self.table = Array::new(0);
-        self.shift = 32;
+        self.log.clear_keeping_capacity();
+        self.table.fill(NO_ENTRY);
+    }
+
+    /// Shrinks the capacity to match the current length.
+    pub fn shrink_to_fit(&mut self) {
+        let size = self.log.size;
+        if size == 0 {
+            self.log.clear();
+            self.fps = Array::new(0);
+            self.table = Array::new(0);
+            self.shift = 32;
+            return;
+        }
+        self.compact_entries();
+        let mut fps = Array::<i32>::new(size);
+        fps.copy_from(0, &self.fps, 0, size);
+        self.fps = fps;
+        let mut slots = MIN_SLOTS;
+        while slots < size * 2 {
+            slots *= 2;
+        }
+        self.rebuild_table(slots);
     }
 }
 
@@ -503,9 +528,14 @@ impl<T: Hash> HashSet<T> {
         return self.inner.remove(value);
     }
 
-    /// Removes all elements from the set.
+    /// Removes all elements from the set, keeping the capacity.
     pub fn clear(&mut self) {
         self.inner.clear();
+    }
+
+    /// Shrinks the capacity to match the current length.
+    pub fn shrink_to_fit(&mut self) {
+        self.inner.shrink_to_fit();
     }
 
     /// The elements, in insertion order.
@@ -659,6 +689,48 @@ impl<T: Hash + Deserialize + Inspect> Deserialize for HashSet<T> {
         seq.end()?;
         return Result::Ok(result);
     }
+}
+
+test "clear keeps the arrays and releases what they held" {
+    let mut map = HashMap::<String, String>::new();
+    for let i of 0..<20 {
+        map[`k${i}`] = `v${i}`;
+    }
+    map.remove("k3");
+    let slots = map.table.len();
+    let capacity = map.log.keys.len();
+    map.clear();
+    assert map.table.len() == slots;
+    assert map.log.keys.len() == capacity;
+    assert map.log.deleted_count == 0;
+    assert !map.contains_key("k4");
+    map["k4"] = "again";
+    assert map.len() == 1;
+    assert map["k4"] == "again";
+}
+
+test "shrink_to_fit drops the room the entries do not need" {
+    let mut map = HashMap::<i32, i32>::new();
+    for let i of 0..<100 {
+        map[i] = i * 2;
+    }
+    for let i of 0..<97 {
+        map.remove(i);
+    }
+    map.shrink_to_fit();
+    assert map.log.keys.len() == 3;
+    assert map.fps.len() == 3;
+    assert map.table.len() == MIN_SLOTS;
+    assert map.get(98) == Option::Some(196);
+    map[5] = 10;
+    assert map.len() == 4;
+
+    map.clear();
+    map.shrink_to_fit();
+    assert map.table.len() == 0;
+    assert map.log.keys.len() == 0;
+    map[1] = 2;
+    assert map[1] == 2;
 }
 
 test "a difference in one word survives the next, whatever the seed" {
