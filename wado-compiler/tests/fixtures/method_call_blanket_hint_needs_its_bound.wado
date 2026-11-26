@@ -1,0 +1,16 @@
+// A receiver that keeps none of a blanket's bounds is not pointed at it: naming
+// the blanket's parameter would not make the call compile.
+
+trait Source<A> with () { fn first(&self) -> A; }
+trait Tag<A> with () { fn tag(&self) -> A; }
+impl<A, T: Source<A>> Tag<A> for T {
+    fn tag(&self) -> A { return self.first(); }
+}
+struct Two { n: i32 }
+export fn run() {
+    let two = Two { n: 7 };
+    let _: i32 = two.tag();
+}
+
+__DATA__
+{"compile_error": ":12:18: analysis error: no method 'tag' found on type 'Two'", "compile_errors_not_contains": ["declares it"]}
