@@ -5581,8 +5581,7 @@ fn gen_second_char_dispatch(
     gen_group_calls(w, calls, &leading, needs_extras, has_actions, has_members);
     // Past the end, only a call that can end after one char matches, and the
     // NUL a missing char reads as runs every such call whichever arm it lands in.
-    w.line("let second_at = lexer.src.ceil_char_boundary(start + 1);");
-    w.line("let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\\u{0}' };");
+    w.line("let second_char = char_after(&lexer.src, start);");
     w.begin("match second_char");
     for let arm of &arms {
         let middle: List<i32> = arm.calls

@@ -10,9 +10,10 @@ use {
     line_starts,
     line_col_at,
     with_expected,
-    kind_set_has,
+    KindSet,
 } from "../src/runtime/lex.wado";
 use { kind_bitset_words } from "../src/kind_set_gen.wado";
+use { Interner } from "../src/runtime/intern.wado";
 use { to_lexer_string } from "../src/runtime/tools.wado";
 use {
     HighlightMapping,
@@ -203,16 +204,34 @@ test "to_lexer_string reports char indices over a byte-offset stream" {
     assert to_lexer_string(&ts, 2) == expected;
 }
 
-test "kind_set_has reads the bitset words the generator emits" {
+test "KindSet reads the bitset words the generator emits" {
     assert kind_bitset_words(&[0, 5, 31, 32, 70]) == ["-2147483615", "1", "64"];
     assert kind_bitset_words(&[31]) == ["i32::MIN"];
-    let set: List<i32> = [-2147483615, 1, 64];
+    let set: KindSet = [-2147483615, 1, 64];
     for let k of [0, 5, 31, 32, 70] {
-        assert kind_set_has(&set, k);
+        assert set.has(k);
     }
     for let k of [1, 30, 33, 69, 71, 200] {
-        assert !kind_set_has(&set, k);
+        assert !set.has(k);
     }
+}
+
+test "Interner numbers each distinct item once, in first-seen order" {
+    let mut names = Interner::<String>::new();
+    assert names.intern("a") == 0;
+    assert names.intern("b") == 1;
+    assert names.intern("a") == 0;
+    assert names.at(1) == "b";
+}
+
+test "KindSet::union_with widens to the longer set" {
+    let mut set: KindSet = [1];
+    set.union_with(&([4, 0, 64] as KindSet));
+    for let k of [0, 2, 70] {
+        assert set.has(k);
+    }
+    assert !set.has(1);
+    assert !set.has(32);
 }
 
 test "Span::len returns length" {

@@ -100,6 +100,20 @@ test "clear empties the set" {
     assert !s.contains(1);
 }
 
+test "shrink_to_fit keeps the elements" {
+    let mut s: TreeSet<i32> = TreeSet::new();
+    for let i of 0..<50 {
+        s.insert(i);
+    }
+    for let i of 0..<48 {
+        s.remove(i);
+    }
+    s.shrink_to_fit();
+    assert s.len() == 2;
+    assert s.contains(49);
+    assert s.insert(0);
+}
+
 test "insert after clear" {
     let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(1);

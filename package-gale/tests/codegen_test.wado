@@ -2262,7 +2262,7 @@ WS : (' '|'\\n') -> skip ;
 
 test "a sync set is tested as bits, and listed only where a diagnostic names it" {
     let output = gen_source("grammar T;\ns : A B C EOF ;\nA : 'a' ;\nB : 'b' ;\nC : 'c' ;\n");
-    assert output.contains("global SYNC_0: List<i32> = [2];");
+    assert output.contains("global SYNC_0: KindSet = [2];");
     assert !output.contains("global EXPECTED_");
     assert !output.contains("fn in_set(");
 }
@@ -2992,8 +2992,8 @@ test "a rule entry claims its call site's return state before returning early" {
     // Claimed after, a recovering entry would leave the stamp to the next
     // call from a site that stamps none.
     let output = gen_source(AT_END_CONFLICT_G4);
-    let body = extract_fn_body(&output, "fn _parse_x(");
-    assert body.find("p.atn_ret_pending = -1;").unwrap() < body.find("if p.recovering").unwrap();
+    let body = extract_fn_body(&output, "fn enter_rule(");
+    assert body.find("self.atn_ret_pending = -1;").unwrap() < body.find("if self.recovering").unwrap();
 }
 
 test "non-LR ATN grammar carries prediction without the LR tables" {
@@ -3023,7 +3023,7 @@ test "a lexer-ATN-only grammar carries the decoder and no parser simulator" {
 
 test "runtime standard-library imports sit at the top of the file" {
     let output = gen_source(LATN_ONLY_G4);
-    let std_use = output.find("use { HashMap, HashSet, HashSeed } from \"core:collections\";").unwrap();
+    let std_use = output.find("use { HashMap, HashSeed, HashSet } from \"core:collections\";").unwrap();
     assert std_use < output.find("pub struct Span").unwrap();
 }
 
