@@ -146,10 +146,16 @@ fn probe_listener() -> io::Result<bool> {
             i32::from(!listens)
         })
     }?;
+    let status = reap(pid)?;
+    Ok(libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0)
+}
+
+/// The status the child `pid` ended with, once it has.
+fn reap(pid: libc::pid_t) -> io::Result<libc::c_int> {
     let mut status = 0;
     // SAFETY: `status` outlives the call.
     retried(|| unsafe { libc::waitpid(pid, &raw mut status, 0) })?;
-    Ok(libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0)
+    Ok(status)
 }
 
 pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Result<Spawned> {
@@ -226,9 +232,7 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Resul
     drop(listener_tx);
     let pid = pid?;
     if let Some(failure) = failure {
-        let mut status = 0;
-        // SAFETY: `status` outlives the call.
-        retried(|| unsafe { libc::waitpid(pid, &raw mut status, 0) })?;
+        reap(pid)?;
         return Err(failure);
     }
     Ok(Spawned {
