@@ -959,6 +959,88 @@ fn a_child_redeclaring_an_inherited_method_keeps_the_parents() {
     assert!(!glue.contains("web/element#id\""), "{glue}");
 }
 
+/// What `SVGElement.className` is, an `SVGAnimatedString` over the `DOMString`
+/// of `Element.className`: the parent's method answers with the wrong type.
+#[test]
+fn a_child_redeclaring_with_another_type_is_counted_apart() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            attribute("label", &plain("DOMString"), false),
+            operation("item", &plain("long"), &[], ""),
+        ],
+    ));
+    defs.interfaces.push(partial(
+        "Node",
+        &[attribute("label", &plain("DOMString"), true)],
+    ));
+    let index = argument("index", &plain("long"), false, "null");
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("label", &plain("long"), false),
+            operation("item", &plain("long"), &[index], ""),
+        ],
+    ));
+    let (_, skipped) = defs.transform();
+    let reported: Vec<(String, Cause)> = skipped
+        .iter()
+        .map(|s| (s.to_string(), s.reason.cause.clone()))
+        .collect();
+    let retyped = |member: &str| {
+        (
+            format!(
+                "Element.{member}: redeclares a method inherited from `EventTarget` with another type"
+            ),
+            Cause::RetypedOverride,
+        )
+    };
+    let expected = [
+        (
+            "Node.label: redeclares a method inherited from `EventTarget`".to_string(),
+            Cause::Override,
+        ),
+        retyped("label"),
+        retyped("set_label"),
+        retyped("item"),
+    ];
+    assert_eq!(reported, expected);
+}
+
+/// What `MouseEvent.initMouseEvent` asks for: the arguments a caller may leave
+/// out go, and the member stays.
+#[test]
+fn trailing_optionals_go_until_the_parameters_cross_as_core_values() {
+    let required = [
+        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o",
+    ]
+    .map(|name| argument(name, &plain("long"), false, "null"));
+    let optional = ["p", "q"].map(|name| argument(name, &plain("long"), true, "null"));
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Node",
+        &[operation(
+            "draw",
+            &plain("undefined"),
+            &[&required[..], &optional[..]].concat(),
+            "",
+        )],
+    ));
+    let (code, skipped) = defs.transform();
+    assert!(code.contains("o: i32);"), "{code}");
+    let reported: Vec<(String, Lost, Cause)> = skipped
+        .iter()
+        .map(|s| (s.to_string(), s.lost, s.reason.cause.clone()))
+        .collect();
+    let expected = [(
+        "Node.draw: optional `p` dropped: parameters passed through memory".to_string(),
+        Lost::Argument,
+        Cause::ParamsInMemory,
+    )];
+    assert_eq!(reported, expected);
+}
+
 #[test]
 fn every_member_kind_parses_and_one_without_a_binding_is_reported() {
     let members = [

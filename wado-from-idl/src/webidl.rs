@@ -256,6 +256,9 @@ pub enum Cause {
     HtmlConstructor,
     /// A child redeclaring a method of its chain, which a resource may not.
     Override,
+    /// The same, where the parent's method answers with another type than the
+    /// child declares.
+    RetypedOverride,
 }
 
 impl std::fmt::Display for Cause {
@@ -283,6 +286,7 @@ impl std::fmt::Display for Cause {
             Self::StaticAttribute => "a static attribute",
             Self::HtmlConstructor => "`[HTMLConstructor]`",
             Self::Override => "a redeclared inherited method",
+            Self::RetypedOverride => "an inherited method redeclared with another type",
         };
         f.write_str(label)
     }
@@ -765,36 +769,54 @@ fn drop_overrides<'a>(
     skipped: &mut Vec<Skip>,
 ) {
     let has_receiver = |m: &WadoFunction| m.params.first().is_some_and(|p| p.wit_name == "self");
-    let declared: IndexMap<&str, IndexSet<String>> = resources
-        .iter()
-        .map(|(name, r)| {
-            let receivers = r.methods.iter().filter(|m| has_receiver(m));
-            (*name, receivers.map(|m| m.name.clone()).collect())
-        })
-        .collect();
+    // What a caller sees past the receiver.
+    let signature = |m: &WadoFunction| {
+        let params = m.params[1..].iter().map(|p| p.ty.clone()).collect();
+        (params, m.return_type.clone(), m.is_async)
+    };
+    let declared: IndexMap<&str, IndexMap<String, (Vec<WadoType>, Option<WadoType>, bool)>> =
+        resources
+            .iter()
+            .map(|(name, r)| {
+                let receivers = r.methods.iter().filter(|m| has_receiver(m));
+                (
+                    *name,
+                    receivers.map(|m| (m.name.clone(), signature(m))).collect(),
+                )
+            })
+            .collect();
     for (name, iface) in merged {
         resources[name].methods.retain(|method| {
             if !has_receiver(method) {
                 return true;
             }
-            let mut ancestor = iface.inheritance.as_deref();
-            while let Some(parent) = ancestor {
-                if declared[parent].contains(&method.name) {
-                    js.shift_remove(&method.cm_attr)
-                        .expect("every function has a JavaScript half");
-                    skipped.push(Skip {
-                        item: format!("{name}.{}", method.name),
-                        lost: Lost::Member,
-                        reason: Reason::new(
-                            Cause::Override,
-                            format!("redeclares a method inherited from `{parent}`"),
-                        ),
-                    });
-                    return false;
-                }
-                ancestor = merged[parent].inheritance.as_deref();
-            }
-            true
+            // Every redeclaration below it goes, so the topmost one serves.
+            let chain = std::iter::successors(iface.inheritance.as_deref(), |parent| {
+                merged[parent].inheritance.as_deref()
+            });
+            let Some((parent, serving)) = chain
+                .filter_map(|parent| Some((parent, declared[parent].get(&method.name)?)))
+                .last()
+            else {
+                return true;
+            };
+            js.shift_remove(&method.cm_attr)
+                .expect("every function has a JavaScript half");
+            let inherited = format!("redeclares a method inherited from `{parent}`");
+            let reason = if *serving == signature(method) {
+                Reason::new(Cause::Override, inherited)
+            } else {
+                Reason::new(
+                    Cause::RetypedOverride,
+                    format!("{inherited} with another type"),
+                )
+            };
+            skipped.push(Skip {
+                item: format!("{name}.{}", method.name),
+                lost: Lost::Member,
+                reason,
+            });
+            false
         });
     }
 }
@@ -1058,6 +1080,7 @@ impl Lowering<'_> {
             answered
         };
         let mut params: Vec<WadoParam> = receiver.into_iter().collect();
+        let receivers = params.len();
         let mut variadic = false;
         let mut dropped = None;
         for arg in arguments {
@@ -1095,13 +1118,22 @@ impl Lowering<'_> {
                 param.default = None;
             }
         }
+        // No shim reads parameters from memory, so trailing optionals are
+        // left to their WebIDL defaults until the rest cross as core values.
+        while !glue::reads_params(&params) {
+            if params.pop().is_none_or(|last| last.default.is_none()) {
+                return skip(Reason::of(Cause::ParamsInMemory));
+            }
+            let left_out = &arguments[params.len() - receivers].name;
+            dropped = Some(
+                Reason::of(Cause::ParamsInMemory)
+                    .reworded(|r| format!("optional `{left_out}` dropped: {r}")),
+            );
+        }
         let function = WadoFunction {
             is_async,
             ..function(wado_name, cm_attr, params, return_type)
         };
-        if !glue::reads_params(&function) {
-            return Err((function.name, Reason::of(Cause::ParamsInMemory)));
-        }
         Ok(Bound {
             function,
             js: JsFunction { member, variadic },

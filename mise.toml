@@ -868,7 +868,7 @@ node tools/webidl/snapshot.mjs "$OUT/dom.webidl.json" --all
 cargo run -q -p wado-from-idl -- \
     --webidl "$OUT/dom.webidl.json" \
     --output-dir "$OUT" \
-    --glue-dir "$OUT" 2> "$OUT/skipped.txt"
+    --glue-dir "$OUT" 2> "$OUT/skipped.txt" || { tail -n 20 "$OUT/skipped.txt" >&2; exit 1; }
 echo "Each skip is in $OUT/skipped.txt"
 """
 
