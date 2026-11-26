@@ -641,6 +641,173 @@ fn a_sequence_is_a_list_either_way() {
     );
 }
 
+fn string_enum(name: &str, values: &[&str]) -> String {
+    let values: Vec<String> = values
+        .iter()
+        .map(|value| format!(r#"{{"type": "enum-value", "value": "{value}"}}"#))
+        .collect();
+    format!(
+        r#"{{"type": "enum", "name": "{name}", "values": [{}], "extAttrs": []}}"#,
+        values.join(", ")
+    )
+}
+
+#[test]
+fn an_enum_is_a_wado_enum_crossing_as_its_cases_index() {
+    let mut defs = chain();
+    defs.enums = vec![
+        string_enum("RequestMode", &["cors", "no-cors", "same_origin", "flipY"]),
+        // Only an enum a bound member names is declared.
+        string_enum("Unnamed", &["one"]),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("mode", &plain("RequestMode"), false),
+            attribute("fallback", &nullable("RequestMode"), true),
+            operation(
+                "modes",
+                &sequence("sequence", &plain("RequestMode")),
+                &[],
+                "",
+            ),
+            operation(
+                "request",
+                &plain("undefined"),
+                &[
+                    argument(
+                        "allowed",
+                        &sequence("sequence", &plain("RequestMode")),
+                        false,
+                        "null",
+                    ),
+                    argument(
+                        "mode",
+                        &plain("RequestMode"),
+                        true,
+                        r#"{"type": "string", "value": "no-cors"}"#,
+                    ),
+                    argument("other", &plain("RequestMode"), true, "null"),
+                ],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "#[cm(\"wado-lang:web/types#request-mode\")]\n\
+             pub enum RequestMode {\n    Cors,\n    NoCors,\n    SameOrigin,\n    FlipY,\n}\n"
+        ),
+        "{code}"
+    );
+    assert!(!code.contains("Unnamed"), "{code}");
+    assert!(code.contains("fn mode(&self) -> RequestMode;"), "{code}");
+    assert!(
+        code.contains("fn set_mode(&self, value: RequestMode);"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn fallback(&self) -> Option<RequestMode>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn modes(&self) -> List<RequestMode>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains(
+            "fn request(&self, allowed: List<RequestMode>, \
+             mode: RequestMode = RequestMode::NoCors, other: Option<RequestMode> = null);"
+        ),
+        "{code}"
+    );
+    assert_eq!(skipped, [] as [&str; 0]);
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(
+        glue.contains(
+            "const $ENUMS = {\n  \
+             RequestMode: [\"cors\", \"no-cors\", \"same_origin\", \"flipY\"],\n};\n"
+        ),
+        "{glue}"
+    );
+    // A case crosses as its index, and is one byte in memory.
+    assert!(
+        glue.contains("return $case($ENUMS.RequestMode, p0.mode);"),
+        "{glue}"
+    );
+    assert!(glue.contains("p0.mode = $ENUMS.RequestMode[p1];"), "{glue}");
+    assert!(
+        glue.contains("$view().setUint8($ret + 1, $case($ENUMS.RequestMode, $value));"),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "$putList($ret, $value, 1, 1, (at, item) => {\n          \
+             $view().setUint8(at, $case($ENUMS.RequestMode, item));\n        });"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "p0.request($list(p1, p2, 1, (at) => $ENUMS.RequestMode[$view().getUint8(at)]), \
+             $ENUMS.RequestMode[p3], (p4 === 0 ? undefined : $ENUMS.RequestMode[p5]));"
+        ),
+        "{glue}"
+    );
+}
+
+/// A value Wado cannot spell as a case leaves its enum, and each member
+/// naming it, without a binding.
+#[test]
+fn an_enum_whose_values_name_no_cases_is_skipped() {
+    let mut defs = chain();
+    defs.enums = vec![
+        string_enum("Dimension", &["2d", "3d"]),
+        string_enum("Blocker", &["", "frame"]),
+        string_enum("Flip", &["flip-y", "flipY"]),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("dimension", &plain("Dimension"), true),
+            attribute("blocker", &plain("Blocker"), true),
+            attribute("flip", &plain("Flip"), true),
+        ],
+    ));
+    let (code, skipped) = defs.transform();
+    assert!(!code.contains("pub enum"), "{code}");
+    let reported: Vec<(String, Lost, Cause)> = skipped
+        .iter()
+        .map(|s| (s.to_string(), s.lost, s.reason.cause.clone()))
+        .collect();
+    let expected = [
+        ("Dimension: the value `2d` names no case", Lost::Definition),
+        ("Blocker: the value `` names no case", Lost::Definition),
+        (
+            "Flip: the values `flip-y` and `flipY` both name the case `FlipY`",
+            Lost::Definition,
+        ),
+        (
+            "Element.dimension: `Dimension` is an enum without a binding",
+            Lost::Member,
+        ),
+        (
+            "Element.blocker: `Blocker` is an enum without a binding",
+            Lost::Member,
+        ),
+        (
+            "Element.flip: `Flip` is an enum without a binding",
+            Lost::Member,
+        ),
+    ]
+    .map(|(line, lost)| (line.to_string(), lost, Cause::Enum));
+    assert_eq!(reported, expected);
+}
+
 #[test]
 fn a_promise_is_an_async_call_settling_to_a_result() {
     let mut defs = chain();
@@ -1228,8 +1395,7 @@ fn a_type_without_a_binding_names_what_it_is() {
         dictionary("EventInit", false),
         dictionary("EventInit", true),
     ];
-    defs.enums =
-        vec![r#"{"type": "enum", "name": "Mode", "values": [], "extAttrs": []}"#.to_string()];
+    defs.enums = vec![string_enum("Mode", &["2d"])];
     defs.namespaces = vec![namespace(
         "console",
         &[
@@ -1248,7 +1414,11 @@ fn a_type_without_a_binding_names_what_it_is() {
             Lost::Definition,
             Cause::Dictionary,
         ),
-        ("Mode: an enum", Lost::Definition, Cause::Enum),
+        (
+            "Mode: the value `2d` names no case",
+            Lost::Definition,
+            Cause::Enum,
+        ),
         (
             "console.log: a namespace member",
             Lost::Member,
@@ -1264,7 +1434,11 @@ fn a_type_without_a_binding_names_what_it_is() {
             Lost::Member,
             Cause::Dictionary,
         ),
-        ("Element.mode: `Mode` is an enum", Lost::Member, Cause::Enum),
+        (
+            "Element.mode: `Mode` is an enum without a binding",
+            Lost::Member,
+            Cause::Enum,
+        ),
         ("Element.any: `any`", Lost::Member, Cause::Any),
         ("Element.object: `object`", Lost::Member, Cause::Object),
         (

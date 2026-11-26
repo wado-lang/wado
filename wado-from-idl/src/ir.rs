@@ -1,5 +1,6 @@
 //! Intermediate representation for Wado code generation
 
+use indexmap::IndexSet;
 use wado_compiler::ast::HandleClasses;
 use wado_compiler::name::CALLBACK_HANDLE_WORD;
 
@@ -299,6 +300,9 @@ pub enum WadoType {
 
     // Named types
     Named(String),
+    /// A `WebIDL` enum by its Wado name: a string to the host, and its case's
+    /// index across the boundary.
+    StringEnum(String),
 
     // References
     Borrow(Box<WadoType>),
@@ -311,6 +315,50 @@ pub enum WadoType {
 }
 
 impl WadoType {
+    /// Adds to `names` each `WebIDL` enum this type names.
+    pub fn string_enums<'a>(&'a self, names: &mut IndexSet<&'a str>) {
+        match self {
+            Self::StringEnum(name) => {
+                names.insert(name);
+            }
+            Self::Option(inner)
+            | Self::List(inner)
+            | Self::Stream(inner)
+            | Self::Future(inner)
+            | Self::Borrow(inner) => inner.string_enums(names),
+            Self::HashMap(key, value) => {
+                key.string_enums(names);
+                value.string_enums(names);
+            }
+            Self::Result { ok, err } => {
+                for side in [ok, err].into_iter().flatten() {
+                    side.string_enums(names);
+                }
+            }
+            Self::Tuple(types) | Self::Callback { params: types, .. } => {
+                for ty in types {
+                    ty.string_enums(names);
+                }
+            }
+            Self::Bool
+            | Self::Char
+            | Self::I8
+            | Self::I16
+            | Self::I32
+            | Self::I64
+            | Self::I128
+            | Self::U8
+            | Self::U16
+            | Self::U32
+            | Self::U64
+            | Self::U128
+            | Self::F32
+            | Self::F64
+            | Self::String
+            | Self::Named(_) => {}
+        }
+    }
+
     /// What a callback export's name calls an argument of this type; `None`
     /// where the host cannot call a closure back with one.
     pub fn callback_argument_word(&self) -> Option<&'static str> {

@@ -51,6 +51,15 @@ export function $glue() {
     view.setUint32(at + 4, list.length, true);
   };
 
+  // The index of the host's `value` among an enum's `values`.
+  const $case = (values, value) => {
+    const index = values.indexOf(value);
+    if (index < 0) {
+      throw new TypeError(`"${value}" is a value this package declares no case for`);
+    }
+    return index;
+  };
+
   // Each declared interface's prototype, to its class.
   let $classes;
   // The class of the nearest ancestor of `object`'s interface that is declared.
@@ -137,9 +146,14 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
             writeln!(out, "  [{interface:?}, {}],", classes.lo).unwrap();
         }
     }
+    // Each enum's values, at the index its case crosses as.
+    out.push_str("];\nconst $ENUMS = {\n");
+    for (name, values) in &output.enums {
+        writeln!(out, "  {name}: {values:?},").unwrap();
+    }
     writeln!(
         out,
-        "];\nconst $SLOT_GET = {:?};\nconst $SLOT_PUT = {:?};",
+        "}};\nconst $SLOT_GET = {:?};\nconst $SLOT_PUT = {:?};",
         ExternSlotAccess::Get.export_name(),
         ExternSlotAccess::Put.export_name()
     )
@@ -172,7 +186,7 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
 #[must_use]
 pub fn list_carries(ty: &WadoType) -> bool {
     match Shape::of(ty) {
-        Shape::Scalar(_) | Shape::String => true,
+        Shape::Scalar(_) | Shape::Enum(_) | Shape::String => true,
         Shape::List(_) | Shape::Option(_) | Shape::Callback(_) => false,
     }
 }
@@ -290,6 +304,8 @@ enum Scalar {
 /// How a type the `WebIDL` frontend lowers to crosses.
 enum Shape<'a> {
     Scalar(Scalar),
+    /// An enum of `$ENUMS`, by its name there: the index of its case.
+    Enum(&'a str),
     String,
     List(&'a WadoType),
     Option(&'a WadoType),
@@ -312,6 +328,7 @@ impl<'a> Shape<'a> {
             WadoType::F32 => Self::Scalar(Scalar::F32),
             WadoType::F64 => Self::Scalar(Scalar::F64),
             WadoType::Named(_) => Self::Scalar(Scalar::Handle),
+            WadoType::StringEnum(name) => Self::Enum(name),
             WadoType::String => Self::String,
             WadoType::List(elem) => Self::List(elem),
             WadoType::Option(inner) => Self::Option(inner),
@@ -341,8 +358,18 @@ fn flat_count(ty: &WadoType) -> usize {
         Shape::Option(inner) if is_handle(inner) => 1,
         Shape::Option(inner) => 1 + flat_count(inner),
         Shape::String | Shape::List(_) => 2,
-        Shape::Scalar(_) | Shape::Callback(_) => 1,
+        Shape::Scalar(_) | Shape::Enum(_) | Shape::Callback(_) => 1,
     }
+}
+
+/// The host's value of the enum `name` whose case has the index `index`.
+fn enum_value(name: &str, index: &str) -> String {
+    format!("$ENUMS.{name}[{index}]")
+}
+
+/// The index of the case the host's `value` of the enum `name` is.
+fn enum_index(name: &str, value: &str) -> String {
+    format!("$case($ENUMS.{name}, {value})")
 }
 
 /// The DOM value of a parameter of type `ty`, read from the core parameters it
@@ -367,6 +394,7 @@ fn lift(ty: &WadoType, flat: &mut FlatParams) -> String {
         }
         Shape::Callback(params) => callback(params, &flat.next()),
         Shape::Scalar(scalar) => scalar.read_core(&flat.next()),
+        Shape::Enum(name) => enum_value(name, &flat.next()),
     }
 }
 
@@ -376,6 +404,7 @@ fn lower(ty: &WadoType, value: &str) -> String {
         // An `undefined` would cross as a reference that is not null.
         Shape::Option(inner) if is_handle(inner) => format!("({value} ?? null)"),
         Shape::Scalar(scalar) => scalar.to_core(value),
+        Shape::Enum(name) => enum_index(name, value),
         Shape::Option(_) | Shape::String | Shape::List(_) | Shape::Callback(_) => {
             unreachable!("{ty:?} is no single core value")
         }
@@ -411,6 +440,7 @@ fn layout(ty: &WadoType) -> (u32, u32) {
             let size = scalar.size();
             (size, size)
         }
+        Shape::Enum(_) => (1, 1),
         Shape::String | Shape::List(_) => (8, 4),
         Shape::Option(inner) => {
             let (size, align) = layout(inner);
@@ -431,6 +461,7 @@ fn load(ty: &WadoType, at: &str) -> String {
             format!("$string($view().getUint32({at}, true), $view().getUint32({at} + 4, true))")
         }
         Shape::Scalar(scalar) => scalar.read_memory(at),
+        Shape::Enum(name) => enum_value(name, &Scalar::U8.read_memory(at)),
         Shape::List(_) | Shape::Option(_) | Shape::Callback(_) => {
             unreachable!("the WebIDL frontend lowers to no list of {ty:?}")
         }
@@ -458,6 +489,7 @@ fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<St
             lines.push("}".to_string());
         }
         Shape::Scalar(scalar) => lines.push(scalar.to_memory(&at, value)),
+        Shape::Enum(name) => lines.push(Scalar::U8.to_memory(&at, &enum_index(name, value))),
         Shape::List(elem) => {
             let (size, align) = layout(elem);
             lines.push(format!(

@@ -1,5 +1,7 @@
 use {
     Document,
+    DocumentReadyState,
+    DocumentVisibilityState,
     Dom,
     Element,
     Event,
@@ -22,6 +24,15 @@ test "a fresh document has a body" {
         assert html.tag_name() == "HTML";
         assert body.parent_element() == Option::Some(html);
         assert Dom::window().document() == doc;
+    };
+}
+
+test "a document nothing loads or shows is complete and hidden" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        assert doc.ready_state() == DocumentReadyState::Complete;
+        assert doc.visibility_state() == DocumentVisibilityState::Hidden;
     };
 }
 

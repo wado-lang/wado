@@ -13,6 +13,11 @@ const $CLASSES = [
   ["Document", 7],
   ["Window", 8],
 ];
+const $ENUMS = {
+  DocumentReadyState: ["loading", "interactive", "complete"],
+  DocumentVisibilityState: ["visible", "hidden"],
+  SpatialNavigationDirection: ["up", "down", "left", "right"],
+};
 const $SLOT_GET = "$cm_extern_slot_get";
 const $SLOT_PUT = "$cm_extern_slot_put";
 
@@ -45,6 +50,15 @@ export function $glue() {
     const view = $view();
     view.setUint32(at, ptr, true);
     view.setUint32(at + 4, list.length, true);
+  };
+
+  // The index of the host's `value` among an enum's `values`.
+  const $case = (values, value) => {
+    const index = values.indexOf(value);
+    if (index < 0) {
+      throw new TypeError(`"${value}" is a value this package declares no case for`);
+    }
+    return index;
   };
 
   // Each declared interface's prototype, to its class.
@@ -365,6 +379,9 @@ export function $glue() {
         $putList($ret, $value, 4, 4, (at, item) => {
           $view().setUint32(at, $core.exports[$SLOT_PUT](item), true);
         });
+      },
+      "$wado-lang:web/element#spatial-navigation-search": (p0, p1) => {
+        return (p0.spatialNavigationSearch($ENUMS.SpatialNavigationDirection[p1]) ?? null);
       },
       "$wado-lang:web/element#check-visibility": (p0) => {
         return (p0.checkVisibility() ? 1 : 0);
@@ -1863,6 +1880,9 @@ export function $glue() {
         const $value = p0.lastModified;
         $putString($ret, $value);
       },
+      "$wado-lang:web/document#ready-state": (p0) => {
+        return $case($ENUMS.DocumentReadyState, p0.readyState);
+      },
       "$wado-lang:web/document#title": (p0, $ret) => {
         const $value = p0.title;
         $putString($ret, $value);
@@ -1926,6 +1946,9 @@ export function $glue() {
       },
       "$wado-lang:web/document#hidden": (p0) => {
         return (p0.hidden ? 1 : 0);
+      },
+      "$wado-lang:web/document#visibility-state": (p0) => {
+        return $case($ENUMS.DocumentVisibilityState, p0.visibilityState);
       },
       "$wado-lang:web/document#fg-color": (p0, $ret) => {
         const $value = p0.fgColor;
@@ -2052,6 +2075,9 @@ export function $glue() {
       },
       "$wado-lang:web/window#orientation": (p0) => {
         return p0.orientation;
+      },
+      "$wado-lang:web/window#navigate": (p0, p1) => {
+        p0.navigate($ENUMS.SpatialNavigationDirection[p1]);
       },
       "$wado-lang:web/window#request-resize": (p0) => {
         p0.requestResize();

@@ -1,5 +1,26 @@
 #![generated(by = "wado-from-idl", sources = ["package-web/idl/dom.webidl.json"])]
 
+#[cm("wado-lang:web/types#document-ready-state")]
+pub enum DocumentReadyState {
+    Loading,
+    Interactive,
+    Complete,
+}
+
+#[cm("wado-lang:web/types#document-visibility-state")]
+pub enum DocumentVisibilityState {
+    Visible,
+    Hidden,
+}
+
+#[cm("wado-lang:web/types#spatial-navigation-direction")]
+pub enum SpatialNavigationDirection {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
 #[cm("wado-lang:web/event-target", linearity = "unrestricted", repr = "externref", classes = "0..=8")]
 pub resource EventTarget {
     #[cm("wado-lang:web/event-target#new")]
@@ -234,6 +255,9 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#focusable-areas")]
     #[cm_params("self")]
     fn focusable_areas(&self) -> List<Node>;
+    #[cm("wado-lang:web/element#spatial-navigation-search")]
+    #[cm_params("self", "dir")]
+    fn spatial_navigation_search(&self, dir: SpatialNavigationDirection) -> Option<Node>;
     #[cm("wado-lang:web/element#check-visibility")]
     #[cm_params("self")]
     fn check_visibility(&self) -> bool;
@@ -1307,6 +1331,9 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#last-modified")]
     #[cm_params("self")]
     fn last_modified(&self) -> String;
+    #[cm("wado-lang:web/document#ready-state")]
+    #[cm_params("self")]
+    fn ready_state(&self) -> DocumentReadyState;
     #[cm("wado-lang:web/document#title")]
     #[cm_params("self")]
     fn title(&self) -> String;
@@ -1367,6 +1394,9 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#hidden")]
     #[cm_params("self")]
     fn hidden(&self) -> bool;
+    #[cm("wado-lang:web/document#visibility-state")]
+    #[cm_params("self")]
+    fn visibility_state(&self) -> DocumentVisibilityState;
     #[cm("wado-lang:web/document#fg-color")]
     #[cm_params("self")]
     fn fg_color(&self) -> String;
@@ -1482,6 +1512,9 @@ pub resource Window extends EventTarget {
     #[cm("wado-lang:web/window#orientation")]
     #[cm_params("self")]
     fn orientation(&self) -> i16;
+    #[cm("wado-lang:web/window#navigate")]
+    #[cm_params("self", "dir")]
+    fn navigate(&self, dir: SpatialNavigationDirection);
     #[cm("wado-lang:web/window#request-resize")]
     #[cm_params("self")]
     fn request_resize(&self);

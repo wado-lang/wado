@@ -5,6 +5,8 @@ use { HashMap } from "core:collections";
 use {
     CharacterData,
     Document,
+    DocumentReadyState,
+    DocumentVisibilityState,
     Dom,
     Element,
     Event,
@@ -720,6 +722,18 @@ impl Document for SurfaceDom {
             self.replace_all_text(title, value);
         }
         resume ();
+    }
+
+    // Nothing loads the document: it is whole from the start.
+    fn ready_state(&mut self, this: &Document) -> DocumentReadyState {
+        self.own(*this);
+        resume DocumentReadyState::Complete;
+    }
+
+    // Nothing shows it either.
+    fn visibility_state(&mut self, this: &Document) -> DocumentVisibilityState {
+        self.own(*this);
+        resume DocumentVisibilityState::Hidden;
     }
 
     fn exit_fullscreen(&mut self, this: &Document) -> Result<(), Rejection> {

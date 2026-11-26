@@ -21,23 +21,23 @@ left before the slice can be everything:
 
 | Cause                                           | Definitions | Members | Overloads | Arguments |
 | ----------------------------------------------- | ----------- | ------- | --------- | --------- |
-| a dictionary                                    | 776         | 261     | 7         | 396       |
+| a dictionary                                    | 776         | 265     | 6         | 411       |
 | a constant                                      | 0           | 1261    | 0         | 0         |
 | a callback in a result                          | 0           | 932     | 0         | 0         |
-| an enum                                         | 357         | 283     | 1         | 6         |
 | a type outside the slice                        | 0           | 263     | 1         | 2         |
-| a union                                         | 0           | 196     | 7         | 16        |
+| a union                                         | 0           | 197     | 7         | 16        |
 | `any`                                           | 0           | 128     | 0         | 32        |
-| a buffer                                        | 0           | 126     | 20        | 2         |
+| a buffer                                        | 0           | 129     | 20        | 4         |
 | a namespace member                              | 0           | 133     | 0         | 0         |
 | a special operation                             | 0           | 81      | 0         | 0         |
 | `[HTMLConstructor]`                             | 0           | 76      | 0         | 0         |
-| a redeclared inherited method                   | 0           | 55      | 0         | 0         |
 | `object`                                        | 0           | 54      | 1         | 6         |
-| overloads                                       | 0           | 44      | 0         | 0         |
+| a redeclared inherited method                   | 0           | 55      | 0         | 0         |
+| overloads                                       | 0           | 46      | 0         | 0         |
 | an iteration declaration                        | 0           | 41      | 0         | 0         |
+| an enum                                         | 18          | 15      | 0         | 0         |
 | `Promise<…>`                                    | 0           | 29      | 0         | 1         |
-| a callback the glue cannot call                 | 0           | 19      | 0         | 8         |
+| a callback the glue cannot call                 | 0           | 19      | 0         | 9         |
 | a static attribute                              | 0           | 7       | 0         | 0         |
 | `record<…>`                                     | 0           | 6       | 0         | 0         |
 | a list of a list, a nullable type or a callback | 0           | 3       | 0         | 1         |
@@ -45,7 +45,7 @@ left before the slice can be everything:
 | parameters passed through memory                | 0           | 1       | 0         | 2         |
 | `bigint`                                        | 0           | 1       | 0         | 0         |
 | `async_sequence<…>`                             | 0           | 1       | 0         | 0         |
-| Total                                           | 1133        | 4005    | 37        | 472       |
+| Total                                           | 794         | 3747    | 35        | 484       |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
@@ -62,6 +62,8 @@ read the table:
 - A type outside the slice is a name no snapshot definition declares. Over the
   whole platform those are `CSSOMString`, `WindowProxy`, the legacy aliases
   `SVGPoint`, `SVGRect` and `SVGMatrix`, and an interface only a worker reaches.
+- An enum is one with a value Wado cannot spell as a case: the empty string, as
+  in `ReferrerPolicy`, or one starting with a digit, as in `"2d"`.
 - A redeclared inherited method is not lost: the parent's method serves the
   child, since it has the same types or differs only in a result that is a
   resource extending the parent's. One redeclared with any other type binds
@@ -108,7 +110,15 @@ lower is then available to each interface the slice adds.
   `exit_fullscreen`
 - [ ] `fetch` and `Response` join the slice, with an effect of their own
 
-### 5. A wider slice
+### 5. Enums, dictionaries and constants
+
+- [x] Lower an `enum` to a Wado `enum`, in the bindings and in the glue
+- [x] `SurfaceDom` answers `ready_state` and `visibility_state`
+- [ ] Name a case for the empty string and for a value starting with a digit
+- [ ] Lower a `dictionary` to a `struct`
+- [ ] Bind a constant
+
+### 6. A wider slice
 
 - [x] Tree: `Text` and `CharacterData`; `SurfaceDom` answers `create_text_node`,
   `data` and `insert_before`
@@ -132,6 +142,8 @@ lower is then available to each interface the slice adds.
 - A union collapsed to its one typable constituent in an argument is not
   reported, though the other constituents cannot be passed.
 - A program cannot recover from a DOM exception: it traps.
+- A host answering an enum value the snapshot does not declare traps the
+  program: jsdom's `document.visibilityState` is `"prerender"`.
 - CI runs the glue on jsdom only, never in a browser.
 - jco 1.30.0 fails an export that a listener reenters during
   `dispatch_event`.

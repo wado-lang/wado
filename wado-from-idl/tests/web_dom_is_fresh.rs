@@ -44,9 +44,9 @@ fn package_web_lib_re_exports_every_generated_name() {
     let missing: Vec<&str> = generated
         .lines()
         .filter_map(|line| {
-            let rest = line
-                .strip_prefix("pub resource ")
-                .or_else(|| line.strip_prefix("pub interface "))?;
+            let rest = ["pub resource ", "pub interface ", "pub enum "]
+                .iter()
+                .find_map(|declaration| line.strip_prefix(declaration))?;
             rest.split([' ', '{']).next()
         })
         .filter(|name| !re_exported.contains(name))

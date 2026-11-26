@@ -8,7 +8,10 @@ use wado_compiler::ast::HandleClasses;
 
 use crate::WadoCodeGenerator;
 use crate::glue;
-use crate::ir::{WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoType};
+use crate::ir::{
+    WadoEnum, WadoEnumVariant, WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource,
+    WadoType, WadoTypeDef,
+};
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
 /// The interface of the functions handing out the first handle.
@@ -17,6 +20,9 @@ const GLOBAL_INTERFACE: &str = "global";
 /// The resource a rejected promise's reason is, which is no `WebIDL` interface:
 /// a reason is any value.
 const REJECTION: &str = "Rejection";
+
+/// The CM interface the module's enums are declared in.
+const TYPES_INTERFACE: &str = "types";
 
 /// The file `snapshot.mjs` writes: the slice's definitions, in webidl2's shape.
 #[derive(Deserialize)]
@@ -40,7 +46,7 @@ pub struct Snapshot {
     /// Every `dictionary` (and partial) a member of the slice names.
     pub dictionaries: Vec<Named>,
     /// Every `enum` a member of the slice names.
-    pub enums: Vec<Named>,
+    pub enums: Vec<Enum>,
     /// Every `namespace` (and partial) the snapshot was asked for.
     pub namespaces: Vec<Interface>,
 }
@@ -49,10 +55,50 @@ pub struct Snapshot {
 #[derive(Deserialize)]
 pub struct Named {
     pub name: String,
-    /// An `enum` has no partials, and no such field.
-    #[serde(default)]
     pub partial: bool,
 }
+
+#[derive(Deserialize)]
+pub struct Enum {
+    pub name: String,
+    pub values: Vec<EnumValue>,
+}
+
+#[derive(Deserialize)]
+pub struct EnumValue {
+    pub value: String,
+}
+
+impl Enum {
+    /// The Wado case each value names, in order, or why the enum has none.
+    fn cases(&self) -> std::result::Result<Vec<String>, Reason> {
+        assert!(
+            self.values.len() <= MAX_ENUM_CASES,
+            "`{}` has more cases than one byte tells apart",
+            self.name
+        );
+        let mut cases: IndexMap<String, &str> = IndexMap::new();
+        for EnumValue { value } in &self.values {
+            let case = to_upper_camel_case(value);
+            if !case.starts_with(|first: char| first.is_ascii_uppercase()) {
+                return Err(Reason::new(
+                    Cause::Enum,
+                    format!("the value `{value}` names no case"),
+                ));
+            }
+            if let Some(first) = cases.insert(case.clone(), value) {
+                return Err(Reason::new(
+                    Cause::Enum,
+                    format!("the values `{first}` and `{value}` both name the case `{case}`"),
+                ));
+            }
+        }
+        Ok(cases.into_keys().collect())
+    }
+}
+
+/// What the glue reads and writes an enum in memory as: one byte.
+const MAX_ENUM_CASES: usize = 1 << 8;
 
 #[derive(Deserialize)]
 pub struct Interface {
@@ -212,6 +258,9 @@ pub struct WebIdlOutput {
     pub js: IndexMap<String, JsFunction>,
     /// Each resource's `WebIDL` interface name, keyed by its Wado name.
     pub interfaces: IndexMap<String, String>,
+    /// Each enum's values as the host spells them, in case order, keyed by its
+    /// Wado name.
+    pub enums: IndexMap<String, Vec<String>>,
     /// Everything the snapshot holds that the module does not bind.
     pub skipped: Vec<Skip>,
 }
@@ -532,7 +581,11 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         package: &snapshot.package,
         slice: merged.keys().copied().collect(),
         dictionaries: names(&snapshot.dictionaries),
-        enums: names(&snapshot.enums),
+        enums: snapshot
+            .enums
+            .iter()
+            .map(|e| (e.name.as_str(), e.cases()))
+            .collect(),
         typedefs: snapshot
             .typedefs
             .iter()
@@ -546,7 +599,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     };
 
     let classes = number_classes(&merged)?;
-    let mut skipped = unbound_definitions(snapshot);
+    let mut skipped = unbound_definitions(snapshot, &lowering.enums);
     let mut js = IndexMap::new();
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
@@ -598,30 +651,35 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         }
         module.resources.push(lowering.rejection(&mut js));
     }
+    let enums = lowering.declare_enums(snapshot, &mut module);
     Ok(WebIdlOutput {
         module,
         js,
         interfaces,
+        enums,
         skipped,
     })
 }
 
-/// The definitions no resource stands for: each dictionary and enum, and each
-/// member of a namespace.
-fn unbound_definitions(snapshot: &Snapshot) -> Vec<Skip> {
-    let definitions = |named: &'_ [Named], cause: Cause| {
-        named
-            .iter()
-            .filter(|definition| !definition.partial)
-            .map(move |definition| Skip {
-                item: definition.name.clone(),
-                lost: Lost::Definition,
-                reason: Reason::of(cause.clone()),
-            })
-            .collect::<Vec<_>>()
+/// The definitions nothing stands for: each dictionary, each enum with `enums`
+/// naming why, and each member of a namespace.
+fn unbound_definitions(snapshot: &Snapshot, enums: &Enums<'_>) -> Vec<Skip> {
+    let definition = |name: &str, reason: Reason| Skip {
+        item: name.to_string(),
+        lost: Lost::Definition,
+        reason,
     };
-    let mut skipped = definitions(&snapshot.dictionaries, Cause::Dictionary);
-    skipped.extend(definitions(&snapshot.enums, Cause::Enum));
+    let mut skipped: Vec<Skip> = snapshot
+        .dictionaries
+        .iter()
+        .filter(|dictionary| !dictionary.partial)
+        .map(|dictionary| definition(&dictionary.name, Reason::of(Cause::Dictionary)))
+        .collect();
+    for (name, cases) in enums {
+        if let Err(reason) = cases {
+            skipped.push(definition(name, reason.clone()));
+        }
+    }
     for namespace in &snapshot.namespaces {
         skipped.extend(namespace.members.iter().map(|member| Skip {
             item: format!("{}.{}", namespace.name, member.label()),
@@ -911,11 +969,14 @@ fn narrows(child: &WadoType, parent: &WadoType, extends: impl Fn(&str, &str) -> 
     }
 }
 
+/// Each enum's Wado cases, or why it has none, by its `WebIDL` name.
+type Enums<'a> = IndexMap<&'a str, std::result::Result<Vec<String>, Reason>>;
+
 struct Lowering<'a> {
     package: &'a str,
     slice: IndexSet<&'a str>,
     dictionaries: IndexSet<&'a str>,
-    enums: IndexSet<&'a str>,
+    enums: Enums<'a>,
     typedefs: IndexMap<&'a str, &'a IdlType>,
     callbacks: IndexMap<&'a str, Signature<'a>>,
     /// The interface handing out the first handle, which a callback's body may
@@ -926,6 +987,56 @@ struct Lowering<'a> {
 impl Lowering<'_> {
     fn interface_path(&self, name: &str) -> String {
         format!("{}/{}", self.package, to_kebab_case(name))
+    }
+
+    /// Declares in `module` each enum a function of it names, and answers their
+    /// values as the host spells them, in case order, by Wado name.
+    fn declare_enums(
+        &self,
+        snapshot: &Snapshot,
+        module: &mut WadoModule,
+    ) -> IndexMap<String, Vec<String>> {
+        let mut named = IndexSet::new();
+        let methods = module.resources.iter().flat_map(|r| &r.methods);
+        let functions = module.interfaces.iter().flat_map(|i| &i.functions);
+        for function in methods.chain(functions) {
+            let params = function.params.iter().map(|p| &p.ty);
+            for ty in params.chain(&function.return_type) {
+                ty.string_enums(&mut named);
+            }
+        }
+        let mut values = IndexMap::new();
+        for declared in &snapshot.enums {
+            let name = to_upper_camel_case(&declared.name);
+            if !named.contains(name.as_str()) {
+                continue;
+            }
+            let cases = self.enums[declared.name.as_str()]
+                .as_ref()
+                .expect("a function names only an enum that has cases");
+            module.types.push(WadoTypeDef::Enum(WadoEnum {
+                name: name.clone(),
+                doc_comment: None,
+                cm_attr: Some(format!(
+                    "{}/{TYPES_INTERFACE}#{}",
+                    self.package,
+                    to_kebab_case(&declared.name)
+                )),
+                variants: cases
+                    .iter()
+                    .map(|case| WadoEnumVariant {
+                        name: case.clone(),
+                        doc_comment: None,
+                        cm_attr: None,
+                    })
+                    .collect(),
+            }));
+            values.insert(
+                name,
+                declared.values.iter().map(|v| v.value.clone()).collect(),
+            );
+        }
+        values
     }
 
     /// The resource a rejected promise's reason is. It carries no class: a
@@ -1339,8 +1450,13 @@ impl Lowering<'_> {
             _ if self.dictionaries.contains(name) => {
                 return is_a(Cause::Dictionary, "a dictionary");
             }
-            _ if self.enums.contains(name) => return is_a(Cause::Enum, "an enum"),
             _ => {
+                if let Some(cases) = self.enums.get(name) {
+                    return match cases {
+                        Ok(_) => Ok(WadoType::StringEnum(to_upper_camel_case(name))),
+                        Err(_) => is_a(Cause::Enum, "an enum without a binding"),
+                    };
+                }
                 if let Some(target) = self.typedefs.get(name) {
                     return self.lower_type(target, flow);
                 }
@@ -1516,6 +1632,9 @@ fn optional_argument(ty: WadoType, default: Option<&DefaultValue>) -> (WadoType,
             | WadoType::U128,
         ) => Some(integer_value(value).to_string()),
         (Some(DefaultValue::String { value }), WadoType::String) => Some(string_literal(value)),
+        (Some(DefaultValue::String { value }), WadoType::StringEnum(name)) => {
+            Some(format!("{name}::{}", to_upper_camel_case(value)))
+        }
         _ => None,
     };
     match (written, ty) {
