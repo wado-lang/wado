@@ -16,9 +16,9 @@ use crate::trait_solver::{
     ArgDefault, AssocEquality, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef,
     ImplId, ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program,
     RefRule, Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, Verdict,
-    answering_link, bound_candidates, candidates, cmp_giving_eq, comparison_row, derive,
-    derive_alongside, holds_with_args, instance_candidates, mark_rejected, owed, pair_comparisons,
-    rank, rank_open, sourced, written_comparison, written_over,
+    answering_link, bound_candidates, bound_candidates_at_any_args, candidates, cmp_giving_eq,
+    comparison_row, derive, derive_alongside, holds_with_args, instance_candidates, mark_rejected,
+    owed, pair_comparisons, rank, rank_open, sourced, written_comparison, written_over,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -2549,6 +2549,31 @@ impl SolverBridge {
         .into_iter()
         .flatten()
         .collect()
+    }
+
+    /// The one block that answers a bound on `type_id` naming `trait_` at
+    /// whatever arguments: `None` where several argument lists answer, where
+    /// none does, or where the answer names no block.
+    pub(super) fn sole_bound_impl(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        type_id: TypeId,
+        trait_: &FqTraitName,
+    ) -> Option<DefId> {
+        let q = self
+            .question(tysys, ctx, type_id, &trait_.head_only(), Variables::Refused)
+            .ok()?;
+        let found = bound_candidates_at_any_args(&self.program, &q.env, &q.ty, q.trait_);
+        match rank(&found) {
+            Selection::One(index) => self.impl_def_of(found[index].impl_),
+            Selection::None
+            | Selection::Duplicated(_)
+            | Selection::AmbiguousTraits(_)
+            | Selection::AmbiguousBlankets(_)
+            | Selection::Overloaded(_) => None,
+            Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
+        }
     }
 
     /// The blocks of the candidates `pick` keeps from the order's selection

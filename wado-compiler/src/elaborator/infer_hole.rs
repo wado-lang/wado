@@ -1571,13 +1571,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         let offered: Vec<TypeId> = if let [carried] = &in_force[..] {
             self.bound_args_where_written(carried, &ParamSpace::new())
-        } else if let [block] = self.tysys.solver().bound_impls(
+        } else if let Some(block) = self.tysys.solver().sole_bound_impl(
             &self.tysys,
             &self.annotate_ctx,
             subject,
-            &bound.trait_.head_only(),
-        )[..]
-        {
+            &bound.trait_,
+        ) {
             let mut table = self.tysys.type_table.borrow_mut();
             let slots = table.impl_receiver_slots(block, subject);
             table
@@ -1598,9 +1597,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// position, where the two agree on every head above it.
     fn equate_open_parts(&mut self, asked: &FqTypeName, offered: TypeId) {
         if let TypeHead::Infer { var, .. } = asked.head() {
-            // What the block leaves to its own parameters says nothing.
-            if !self.tysys.type_table.borrow().contains_type_param(offered) {
-                let hole = self.tysys.type_table.borrow_mut().make_infer_var(*var);
+            let hole = self.tysys.type_table.borrow_mut().make_infer_var(*var);
+            // What the block leaves to its own parameters says nothing, and a
+            // variable a literal waits at is the literal's to settle: the
+            // bound is then asked at the type the literal took.
+            if !self.tysys.type_table.borrow().contains_type_param(offered)
+                && !self.annotate_ctx.literals_wait_at(hole)
+            {
                 self.equate(offered, hole);
             }
             return;
