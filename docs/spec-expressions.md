@@ -116,6 +116,47 @@ fn target(h: &Holder) -> &mut S {
 }
 ```
 
+A newtype over a `&mut T` reads as the `&T` it wraps:
+
+<!-- {"fixture":"error_newtype_mut_read_through_shared_ref.wado"} -->
+
+```wado
+fn poke(holder: &Holder) {
+    let x = holder.h;
+    x.f = 2;   // Error: `holder.h` is a `&S` here
+}
+```
+
+A generic body is checked before its type parameter is known, so it cannot read
+a `T` as a `&`. A call that instantiates `T` to a `&mut`, reads it through a `&`
+the caller holds, and can hand it back writable, through the return, a `&mut`
+parameter or a function parameter, is an error:
+
+<!-- {"fixture":"error_generic_call_hands_back_mut_through_shared.wado"} -->
+
+```wado
+fn first<T>(xs: &List<T>) -> T {
+    return xs[0];
+}
+
+fn poke(xs: &List<&mut S>) {
+    first(xs).f = 2;   // Error: `T = &mut S` behind a `&`
+}
+```
+
+A container that indexes by `IndexRef` and has no `IndexAssign`, such as a
+`Slice<T>`, is a read-only view: `&mut` on an element is an error, since nothing
+stores the element back.
+
+<!-- {"fixture":"error_mut_subscript_of_read_only_view.wado"} -->
+
+```wado
+fn poke(xs: &List<Element>) {
+    let mut s = xs.slice(0, 1);
+    rename(&mut s[0]);   // Error: `Slice<Element>` is read-only
+}
+```
+
 What a `&` refuses is the path. A value copied out from behind it is a value of
 its own, and a `&mut` it holds writes as any other does:
 
