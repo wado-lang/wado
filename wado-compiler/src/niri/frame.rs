@@ -699,6 +699,7 @@ impl Interpreter<'_> {
             self.bind_handle_copy(root, Lattice::Const(value), handle_sources);
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
+        let handle_sources = self.sources_outside(root, &path, handle_sources);
         self.frame.replace_place(root, &path);
         self.frame
             .retire_twins(|r, p| r == root && p.starts_with(&path));
@@ -717,31 +718,44 @@ impl Interpreter<'_> {
 
     /// The array handles `value` carries, each with where it sits inside the
     /// value: `value` itself, or a field of the literal it spells, at any
-    /// depth. A literal built around a handle shares the array as a bare
-    /// binding of it does.
-    fn array_handles(&self, body: &Body, value: Operand) -> Vec<(Vec<u32>, Operand)> {
+    /// depth and through a cast. A literal built around a handle shares the
+    /// array as a bare binding of it does. A handle under a variant payload or
+    /// an array element sits where no field path reaches, and has none.
+    fn array_handles(&self, body: &Body, value: Operand) -> Vec<(Option<Vec<u32>>, Operand)> {
         let mut handles = Vec::new();
-        let mut pending = vec![(Vec::new(), value)];
+        let mut pending = vec![(Some(Vec::new()), value)];
         while let Some((path, op)) = pending.pop() {
-            if self.names_array(body, op) {
-                handles.push((path, op));
-                continue;
-            }
-            let Some(e) = op.as_expr() else { continue };
-            let fields: Vec<(u32, Operand)> = match &body.exprs[e].kind {
-                ExprKind::StructLiteral { fields, .. } => {
-                    fields.iter().map(|f| (f.field_index, f.value)).collect()
-                }
-                ExprKind::TupleLiteral { elements } => elements
-                    .iter()
-                    .enumerate()
-                    .map(|(i, op)| (u32::try_from(i).expect("tuple arity fits u32"), *op))
-                    .collect(),
-                _ => continue,
-            };
+            let fields: Vec<(Option<u32>, Operand)> =
+                match op.as_expr().map(|e| &body.exprs[e].kind) {
+                    Some(ExprKind::StructLiteral { fields, .. }) => fields
+                        .iter()
+                        .map(|f| (Some(f.field_index), f.value))
+                        .collect(),
+                    Some(ExprKind::TupleLiteral { elements }) => elements
+                        .iter()
+                        .enumerate()
+                        .map(|(i, op)| (Some(u32::try_from(i).expect("tuple arity fits u32")), *op))
+                        .collect(),
+                    Some(ExprKind::Cast { expr, .. }) => {
+                        pending.push((path, *expr));
+                        continue;
+                    }
+                    Some(ExprKind::VariantConstruct { payload, .. }) => vec![(None, *payload)],
+                    Some(ExprKind::ArrayLiteral { elements }) => {
+                        elements.iter().map(|op| (None, *op)).collect()
+                    }
+                    _ => {
+                        if self.names_array(body, op) {
+                            handles.push((path, op));
+                        }
+                        continue;
+                    }
+                };
             for (field, op) in fields {
-                let mut at = path.clone();
-                at.push(field);
+                let at = path.clone().zip(field).map(|(mut at, field)| {
+                    at.push(field);
+                    at
+                });
                 pending.push((at, op));
             }
         }
@@ -753,14 +767,39 @@ impl Interpreter<'_> {
     fn array_handle_sources(&self, body: &Body, value: Operand) -> Vec<HandleSource> {
         self.array_handles(body, value)
             .into_iter()
-            .filter_map(|(path, op)| Some((path, self.frame_place_of(body, op)?)))
+            .filter_map(|(path, op)| Some((path?, self.frame_place_of(body, op)?)))
             .collect()
     }
 
     /// Bind `index` to `lattice`, paired with the places its handles read from.
     fn bind_handle_copy(&mut self, index: u32, lattice: Lattice, sources: Vec<HandleSource>) {
+        let sources = self.sources_outside(index, &[], sources);
         self.bind_ctfe_local(index, lattice);
         self.pair_handles(index, &[], sources);
+    }
+
+    /// `sources` as they stand once `(root, path)` is replaced: a source inside
+    /// it is about to go, so the places sharing its handle stand in for it.
+    fn sources_outside(
+        &self,
+        root: u32,
+        path: &[u32],
+        sources: Vec<HandleSource>,
+    ) -> Vec<HandleSource> {
+        let inside = |(r, p): &(u32, Vec<u32>)| *r == root && p.starts_with(path);
+        let mut outside = Vec::new();
+        for (inner, source) in sources {
+            if !inside(&source) {
+                outside.push((inner, source));
+                continue;
+            }
+            for sharer in self.handle_sharers(&source) {
+                if !inside(&sharer) {
+                    outside.push((inner.clone(), sharer));
+                }
+            }
+        }
+        outside
     }
 
     /// Pair each handle the value now at `(root, path)` carries with the place
@@ -770,6 +809,27 @@ impl Interpreter<'_> {
             let held = [path, &inner].concat();
             self.frame.handle_twins.push([(root, held), source]);
         }
+    }
+
+    /// The places holding, through any chain of twins, the array handle a place
+    /// overlapping `from` holds. `from` itself is not among them.
+    fn handle_sharers(&self, from: &(u32, Vec<u32>)) -> Vec<(u32, Vec<u32>)> {
+        let mut reached: Vec<(u32, Vec<u32>)> = vec![from.clone()];
+        let mut next = 0;
+        while let Some((at_root, at_path)) = reached.get(next).cloned() {
+            next += 1;
+            for [a, b] in &self.frame.handle_twins {
+                for (held, other) in [(a, b), (b, a)] {
+                    if places_overlap((held.0, &held.1), (at_root, &at_path))
+                        && !reached.contains(other)
+                    {
+                        reached.push(other.clone());
+                    }
+                }
+            }
+        }
+        reached.remove(0);
+        reached
     }
 
     /// Update the frame's value for `root` in place, applying `update` at `path`.
@@ -803,32 +863,35 @@ impl Interpreter<'_> {
 
     /// The locals a write at `(root, path)` leaves stale: each holding, through
     /// any chain of twins, the array handle a place the write overlaps holds.
-    /// `None` when one lives in `root` itself, which unbinding would take the
-    /// write down with, or in a seeded local.
+    /// `None` when one lives in a seeded local, or in `root` itself where the
+    /// write does not reach it, which unbinding would take the write down
+    /// with. `None` too when the write covers two places sharing one handle:
+    /// the value written was built knowing neither shares.
     fn stale_twins(&self, root: u32, path: &[u32]) -> Option<Vec<u32>> {
-        let mut reached: Vec<(u32, Vec<u32>)> = vec![(root, path.to_vec())];
+        let overlap =
+            |a: &(u32, Vec<u32>), b: &(u32, Vec<u32>)| places_overlap((a.0, &a.1), (b.0, &b.1));
+        let written = (root, path.to_vec());
         let mut stale: Vec<u32> = Vec::new();
-        let mut next = 0;
-        while let Some((at_root, at_path)) = reached.get(next).cloned() {
-            next += 1;
-            for [a, b] in &self.frame.handle_twins {
-                for (written, other) in [(a, b), (b, a)] {
-                    let overlaps =
-                        |(r, p): &(u32, Vec<u32>), at: (u32, &[u32])| places_overlap((*r, p), at);
-                    if !overlaps(written, (at_root, &at_path))
-                        || reached.iter().any(|seen| overlaps(other, (seen.0, &seen.1)))
-                    {
-                        continue;
-                    }
-                    if other.0 == root || self.frame.seeded.contains(&other.0) {
-                        return None;
-                    }
-                    stale.push(other.0);
-                    reached.push(other.clone());
+        let mut covered: Vec<(u32, Vec<u32>)> = Vec::new();
+        for sharer in self.handle_sharers(&written) {
+            if sharer.0 != root {
+                if self.frame.seeded.contains(&sharer.0) {
+                    return None;
                 }
+                stale.push(sharer.0);
+            } else if overlap(&sharer, &written) {
+                covered.push(sharer);
+            } else {
+                return None;
             }
         }
-        Some(stale)
+        let shared_twice = covered.iter().enumerate().any(|(i, a)| {
+            let sharers = self.handle_sharers(a);
+            covered[i + 1..]
+                .iter()
+                .any(|b| !overlap(a, b) && sharers.contains(b))
+        });
+        (!shared_twice).then_some(stale)
     }
 
     fn names_array(&self, body: &Body, op: Operand) -> bool {
@@ -1035,15 +1098,16 @@ impl Interpreter<'_> {
     }
 
     /// Whether binding `index` to `value` leaves a second handle to an array
-    /// whose source place the frame cannot name, and that the body writes
-    /// through either handle. An array is one object every handle shares, and
-    /// the frame holds it by value, so the copy would miss those writes; a
-    /// source it can name becomes a [`FrameState::handle_twins`] pair instead.
+    /// the frame cannot pair, its source place or its place in `value` having
+    /// no name, and that the body writes through either handle. An array is
+    /// one object every handle shares, and the frame holds it by value, so the
+    /// copy would miss those writes; a handle named at both ends becomes a
+    /// [`FrameState::handle_twins`] pair instead.
     fn binds_unnamed_written_handle(&self, body: &Body, index: u32, value: Operand) -> bool {
         let unnamed: Vec<u32> = self
             .array_handles(body, value)
             .into_iter()
-            .filter(|(_, op)| self.frame_place_of(body, *op).is_none())
+            .filter(|(path, op)| path.is_none() || self.frame_place_of(body, *op).is_none())
             .filter_map(|(_, op)| write_root_local(body, op))
             .collect();
         if unnamed.is_empty() {
@@ -1104,6 +1168,10 @@ impl Interpreter<'_> {
             }
             places.push((field, place));
         }
+        if self.binds_unnamed_written_handle(body, index, value) {
+            return Some(Flow::Bail);
+        }
+        let handle_sources = self.array_handle_sources(body, value);
         let mut values = Vec::with_capacity(fields.len());
         for (field, op) in fields {
             if places.iter().any(|(placed, _)| *placed == field) {
@@ -1116,7 +1184,6 @@ impl Interpreter<'_> {
             values.push((field, v));
         }
         let type_id = body.exprs[e].type_id;
-        let handle_sources = self.array_handle_sources(body, value);
         self.bind_handle_copy(
             index,
             Lattice::Const(Value::aggregate(type_id, values)),
