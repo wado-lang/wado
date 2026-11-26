@@ -1247,7 +1247,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Enforce the bounds of the impl block a static call selected at the
     /// receiver arguments it names, which no lookup filtered the block by:
     /// now where they are decided, and once settled where they are open.
-    pub(super) fn enforce_static_block_bounds(
+    fn enforce_static_block_bounds(
         &mut self,
         block: Option<DefId>,
         receiver_args: &[TypeId],

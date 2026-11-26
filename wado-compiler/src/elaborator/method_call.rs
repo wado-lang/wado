@@ -3701,7 +3701,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `ns::Type::method(…)`. A parameter still carrying a type param the
     /// caller does not declare belongs to a blanket's pack, which the call
     /// site cannot pin: it counts toward arity but its type is not compared.
-    pub(super) fn check_static_call_args(
+    fn check_static_call_args(
         &mut self,
         param_types: &[TypeId],
         args: &[TypeId],
@@ -3967,7 +3967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The name that keys the impl indices for the newtype chain's link
     /// `link`, and the head its statics are hosted under.
-    pub(super) fn link_receiver_names(&self, link: TypeId) -> (String, FqTypeName) {
+    fn link_receiver_names(&self, link: TypeId) -> (String, FqTypeName) {
         if self.is_declaring_link(link) {
             let link_name = self.tysys.type_table.borrow().name(link);
             let link_fq = self.qualified_receiver_name(&link_name, link);
@@ -4651,14 +4651,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A signature answers for the method's own slots; a spelling no index
         // has one for — a trait's default body, reached on a type whose `impl`
         // restates nothing — binds no name, and the walk still has to happen.
-        let receiver = match &newtype_dispatch {
-            Some((_, base, _)) => *base,
-            None => receiver_type,
-        };
         let declaring_trait = callee_sig
             .as_ref()
             .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
-        let self_binding = self.tysys.base_self_binding(receiver, declaring_trait);
+        // A newtype inheriting the static is `Self` in its defaults: the
+        // parameters are retyped to it, so a `Self::make()` default has to
+        // answer in it too.
+        let self_binding = match &newtype_dispatch {
+            Some((newtype, _, _)) => SelfBinding::of_static(*newtype, declaring_trait),
+            None => self.tysys.base_self_binding(receiver_type, declaring_trait),
+        };
         let type_bindings = match &callee_sig {
             Some(sig) => {
                 let own_ids = sig.own_type_param_ids();
@@ -4789,10 +4791,7 @@ impl TypeSystem {
 
     /// The head a concrete block over a generic target wrote, arguments
     /// included: `Cell<i32>` for `impl … for Cell<i32>`.
-    pub(super) fn concrete_impl_head_of(
-        &self,
-        selected: Option<&StaticMethodRef>,
-    ) -> Option<FqTypeName> {
+    fn concrete_impl_head_of(&self, selected: Option<&StaticMethodRef>) -> Option<FqTypeName> {
         let impl_def = self.concrete_impl_of(selected)?;
         let table = self.type_table.borrow();
         let written = table.impl_target_args(impl_def);
