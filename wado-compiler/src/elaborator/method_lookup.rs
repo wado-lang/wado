@@ -38,7 +38,9 @@ use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess, OpaqueReason};
-use super::trait_env::{ImplHeader, ImplMethodHeader, TraitEnv, header_as_written};
+use super::trait_env::{
+    BlanketParamSource, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written,
+};
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
     MethodInfo, MethodOwner, TypeError, TypeLookup,
@@ -1094,6 +1096,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .resolutions
                 .decl_in_scope(self.frame_module(), trait_)
+    }
+
+    /// Why no blanket answers a call of `method_name` though one declares it:
+    /// the block holds a parameter only its trait reference names (`A` in
+    /// `impl<A, T: Source<A>> Tag<A> for T`), which no method call settles.
+    pub(super) fn blanket_left_open_hint(&self, method_name: &str) -> Option<String> {
+        let env = &self.tysys.trait_env;
+        env.blanket_impls.values().flatten().find_map(|blanket| {
+            let header = &env.impl_headers[&blanket.def];
+            let open = header
+                .type_params
+                .iter()
+                .filter(|param| param.is_real_type_param())
+                .zip(env.blanket_param_sources(blanket))
+                .find(|(_, source)| matches!(source, BlanketParamSource::Unresolved))?
+                .0;
+            if !self.impl_offers_method(blanket.def, method_name, None) {
+                return None;
+            }
+            let trait_name = &header.trait_.as_ref()?.name;
+            let open = &open.name;
+            Some(format!(
+                "'{}' declares it, and a method call does not settle '{open}': write '{trait_name}::<{open}>::{method_name}(…)', naming '{open}'",
+                header_as_written(header),
+            ))
+        })
     }
 
     /// Report the bound that keeps the impls `offers` picks from answering

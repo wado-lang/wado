@@ -770,6 +770,15 @@ the call names settle one only the trait reference holds, `A` in
 - [x] Key a reference blanket's instance by every parameter, as
   `blanket_impl_args` does for a value blanket.
 
+A method call names no trait arguments, so it settles no parameter that only
+the trait reference holds. `one.tag()` is refused even where `One` implements
+`Source<i32>` alone, and where the expected type would pick among several. The
+refusal names the block and the call that settles the parameter,
+`Tag::<A>::tag(…)` (`method_call_leaves_blanket_parameter_open.wado`).
+
+- [ ] Decide whether a method call settles such a parameter from the bound's
+  one impl, or from the expected type.
+
 A bound's associated-type binding reaches the solver as an equality on the
 parameter (`Env::param_assoc`). A solver projection names no trait arguments,
 so two bounds on one trait that bind the name differently state nothing

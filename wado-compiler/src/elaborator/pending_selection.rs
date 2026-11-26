@@ -611,7 +611,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let _ = self.emit(TypeError::MethodNotFound {
                         type_name,
                         method_name: call.method_name.clone(),
-                        hint: String::new(),
+                        hint: self
+                            .blanket_left_open_hint(&call.method_name)
+                            .unwrap_or_default(),
                         span: call.span,
                     });
                 }
