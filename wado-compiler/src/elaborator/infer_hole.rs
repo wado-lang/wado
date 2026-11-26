@@ -1569,14 +1569,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(|carried| self.trait_decl_of(carried) == bound.trait_.canonical())
             .collect();
-        if let [carried] = &in_force[..] {
-            let offered = self.bound_args_where_written(carried, &ParamSpace::new());
-            for (asked, offered) in bound.trait_.args().iter().zip(offered) {
-                self.equate_open_parts(asked, offered);
-            }
-            return;
-        }
-        let offered: Vec<TypeId> = if let Some(block) = self.tysys.solver().sole_bound_impl(
+        let offered: Vec<Option<TypeId>> = if let [carried] = &in_force[..] {
+            self.bound_args_where_written(carried, &ParamSpace::new())
+                .into_iter()
+                .map(Some)
+                .collect()
+        } else if let Some(block) = self.tysys.solver().sole_bound_impl(
             &self.tysys,
             &self.annotate_ctx,
             subject,
@@ -1588,14 +1586,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .impl_trait_args(block)
                 .to_vec()
                 .into_iter()
-                .map(|arg| table.substitute_type_params(arg, &slots))
+                .map(|arg| {
+                    let arg = table.substitute_type_params(arg, &slots);
+                    // What the block leaves to its own parameters says nothing.
+                    (!table.contains_type_param(arg)).then_some(arg)
+                })
                 .collect()
         } else {
             return;
         };
         for (asked, offered) in bound.trait_.args().iter().zip(offered) {
-            // What the block leaves to its own parameters says nothing.
-            if !self.tysys.type_table.borrow().contains_type_param(offered) {
+            if let Some(offered) = offered {
                 self.equate_open_parts(asked, offered);
             }
         }
