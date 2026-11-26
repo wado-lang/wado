@@ -126,6 +126,14 @@ fn poke(h: &Holder) {
     let copy = *h;
     copy.r.f = 9;   // OK: `copy` is the body's own `Holder`
 }
+
+test {
+    let mut s = S { f: 1 };
+    let h = Holder { r: &mut s };
+    s.f = 2;
+    poke(&h);
+    assert s.f == 9;
+}
 ```
 
 ## Deferred Initialization

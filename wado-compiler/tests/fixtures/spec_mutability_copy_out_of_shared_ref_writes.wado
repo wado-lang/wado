@@ -1,8 +1,6 @@
 // A value copied out from behind a `&` is the body's own, and a `&mut` it holds
 // writes: the `2` stored before the call is not forwarded past it.
 
-use { println, Stdout } from "core:cli";
-
 struct S {
     f: i32,
 }
@@ -17,13 +15,10 @@ fn poke(h: &Holder) {
     copy.r.f = 9;   // OK: `copy` is the body's own `Holder`
 }
 
-export fn run() with Stdout {
+test {
     let mut s = S { f: 1 };
     let h = Holder { r: &mut s };
     s.f = 2;
     poke(&h);
-    println(`${s.f}`);
+    assert s.f == 9;
 }
-
-__DATA__
-{"stdout": "9\n"}
