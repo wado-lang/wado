@@ -855,6 +855,22 @@ description = "Re-snapshot the WebIDL slice from @webref/idl into package-web/id
 depends = ["webidl-deps"]
 run = "node tools/webidl/snapshot.mjs package-web/idl/dom.webidl.json"
 
+[tasks.report-webidl-coverage]
+description = "Count what wado-from-idl leaves unbound, by cause, over every interface a page reaches"
+depends = ["webidl-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+OUT=scratchpad/webidl-all
+mkdir -p "$OUT"
+node tools/webidl/snapshot.mjs "$OUT/dom.webidl.json" --all
+cargo run -q -p wado-from-idl -- \
+    --webidl "$OUT/dom.webidl.json" \
+    --output-dir "$OUT" \
+    --glue-dir "$OUT" 2> "$OUT/skipped.txt" || { tail -n 20 "$OUT/skipped.txt" >&2; exit 1; }
+echo "Each skip is in $OUT/skipped.txt"
+"""
+
 [tasks.update-package-web]
 description = "Regenerate package-web's DOM bindings and glue from the vendored WebIDL snapshot"
 run = """

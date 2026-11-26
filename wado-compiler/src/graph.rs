@@ -58,6 +58,64 @@ pub fn strongly_connected_components(successors: &[Vec<usize>]) -> Vec<Vec<usize
     out
 }
 
+/// What each node of a graph reaches through one edge or more. A component's
+/// nodes reach the same set, so it is held once per component: a set per node
+/// is quadratic in a graph that is one large cycle.
+pub struct Reachability {
+    component_of: Vec<usize>,
+    /// A row of `words` words per component, bit `n` set where it reaches node `n`.
+    rows: Vec<u64>,
+    words: usize,
+}
+
+impl Reachability {
+    pub fn new(successors: &[Vec<usize>]) -> Self {
+        let words = successors.len().div_ceil(64);
+        let components = strongly_connected_components(successors);
+        let mut component_of = vec![usize::MAX; successors.len()];
+        let mut rows = vec![0u64; components.len() * words];
+        for (component, nodes) in components.iter().enumerate() {
+            for &node in nodes {
+                component_of[node] = component;
+            }
+            // A successor's component comes first, so its row is complete,
+            // unless it is this one, whose nodes the loop is adding.
+            let (done, row) = rows.split_at_mut(component * words);
+            let row = &mut row[..words];
+            for &node in nodes {
+                for &successor in &successors[node] {
+                    row[successor / 64] |= 1 << (successor % 64);
+                    let reached = component_of[successor];
+                    if reached != component {
+                        let reached = &done[reached * words..][..words];
+                        for (word, reached) in row.iter_mut().zip(reached) {
+                            *word |= reached;
+                        }
+                    }
+                }
+            }
+        }
+        Self {
+            component_of,
+            rows,
+            words,
+        }
+    }
+
+    /// The nodes `from` reaches, in ascending order. `from` is among them only
+    /// where a cycle leads back to it.
+    pub fn reached_from(&self, from: usize) -> impl Iterator<Item = usize> + '_ {
+        let row = &self.rows[self.component_of[from] * self.words..][..self.words];
+        row.iter().enumerate().flat_map(|(index, &word)| {
+            std::iter::successors((word != 0).then_some(word), |&rest| {
+                let rest = rest & (rest - 1);
+                (rest != 0).then_some(rest)
+            })
+            .map(move |rest| index * 64 + rest.trailing_zeros() as usize)
+        })
+    }
+}
+
 /// A least fixpoint over the components of a graph, solved in sweeps: each
 /// sweep visits the stale nodes rank by rank, so a change reaches every
 /// predecessor ranked above it in the same sweep, and only one along a dropped
@@ -239,8 +297,52 @@ impl DisjointSets {
 #[cfg(test)]
 mod tests {
     use super::{
-        DisjointSets, RankedSweep, ranks_within_components, strongly_connected_components,
+        DisjointSets, RankedSweep, Reachability, ranks_within_components,
+        strongly_connected_components,
     };
+
+    #[test]
+    fn a_node_reaches_what_one_edge_or_more_leads_to() {
+        // 0 -> 1 <-> 2 -> 3, 3 loops on itself, 4 -> 0, and 5 stands alone.
+        let graph = vec![vec![1], vec![2], vec![1, 3], vec![3], vec![0], vec![]];
+        let reach = Reachability::new(&graph);
+        let reached: Vec<Vec<usize>> = (0..graph.len())
+            .map(|node| reach.reached_from(node).collect())
+            .collect();
+        assert_eq!(
+            reached,
+            [
+                vec![1, 2, 3],
+                vec![1, 2, 3],
+                vec![1, 2, 3],
+                vec![3],
+                vec![0, 1, 2, 3],
+                vec![],
+            ]
+        );
+    }
+
+    /// A row is as many words as the nodes need, so a node past the first word
+    /// is reached like any other.
+    #[test]
+    fn a_chain_longer_than_a_word_reaches_its_end() {
+        let len = 200;
+        let graph: Vec<Vec<usize>> = (0..len)
+            .map(|node| {
+                if node + 1 < len {
+                    vec![node + 1]
+                } else {
+                    vec![]
+                }
+            })
+            .collect();
+        let reach = Reachability::new(&graph);
+        assert_eq!(
+            reach.reached_from(0).collect::<Vec<_>>(),
+            (1..len).collect::<Vec<_>>()
+        );
+        assert_eq!(reach.reached_from(len - 1).count(), 0);
+    }
 
     #[test]
     fn sets_merge_and_flatten() {

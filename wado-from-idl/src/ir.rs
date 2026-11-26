@@ -262,7 +262,7 @@ pub struct WadoWorldExportFn {
 }
 
 /// Wado type representation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WadoType {
     // Primitives
     Bool,

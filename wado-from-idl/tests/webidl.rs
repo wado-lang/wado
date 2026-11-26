@@ -1,7 +1,9 @@
 //! The `WebIDL` frontend, over a hand-written webidl2 snapshot.
 
 use wado_from_idl::WadoCodeGenerator;
-use wado_from_idl::webidl::{Snapshot, WebIdlOutput, generate, transform};
+use wado_from_idl::webidl::{
+    Cause, Lost, Skip, Snapshot, WebIdlOutput, generate, skip_table, transform,
+};
 
 /// The definitions of a snapshot, as the JSON text `snapshot.mjs` writes.
 #[derive(Default)]
@@ -10,6 +12,9 @@ struct Definitions {
     mixins: Vec<String>,
     includes: Vec<String>,
     callbacks: Vec<String>,
+    dictionaries: Vec<String>,
+    enums: Vec<String>,
+    namespaces: Vec<String>,
 }
 
 impl Definitions {
@@ -24,23 +29,57 @@ impl Definitions {
   "mixins": [{}],
   "includes": [{}],
   "typedefs": [{}],
-  "callbacks": [{}]
+  "callbacks": [{}],
+  "dictionaries": [{}],
+  "enums": [{}],
+  "namespaces": [{}]
 }}"#,
             self.interfaces.join(", "),
             self.mixins.join(", "),
             self.includes.join(", "),
             typedef("Timestamp", &plain("double")),
             self.callbacks.join(", "),
+            self.dictionaries.join(", "),
+            self.enums.join(", "),
+            self.namespaces.join(", "),
         );
         serde_json::from_str(&json).expect("the test snapshot should parse")
     }
 
-    fn generate(&self) -> (String, Vec<String>) {
+    fn transform(&self) -> (String, Vec<Skip>) {
         let WebIdlOutput {
             module, skipped, ..
         } = transform(&self.build()).expect("the slice should transform");
         (WadoCodeGenerator::new().generate(&module), skipped)
     }
+
+    fn generate(&self) -> (String, Vec<String>) {
+        let (code, skipped) = self.transform();
+        (code, skipped.iter().map(Skip::to_string).collect())
+    }
+}
+
+fn dictionary(name: &str, partial: bool) -> String {
+    definition("dictionary", name, "null", "", partial, &[])
+}
+
+fn namespace(name: &str, members: &[String]) -> String {
+    definition("namespace", name, "null", "", false, members)
+}
+
+fn const_member(name: &str) -> String {
+    format!(
+        r#"{{"type": "const", "name": "{name}", "idlType": {}, "extAttrs": [], "value": {{"type": "number", "value": "1"}}}}"#,
+        plain("unsigned short")
+    )
+}
+
+/// An `iterable`, `maplike`, `setlike` or `async_iterable` declaration.
+fn iteration(kind: &str) -> String {
+    format!(
+        r#"{{"type": "{kind}", "idlType": [{}], "arguments": [], "extAttrs": [], "readonly": false, "async": false}}"#,
+        plain("DOMString")
+    )
 }
 
 fn named(name: &str, nullable: bool) -> String {
@@ -143,7 +182,6 @@ fn chain() -> Definitions {
                 )],
                 "",
             ),
-            r#"{"type": "const", "name": "ELEMENT_NODE", "idlType": {"type": "const-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "unsigned short"}, "extAttrs": [], "value": {"type": "number", "value": "1"}}"#.to_string(),
         ],
     );
     let element = interface(
@@ -379,7 +417,7 @@ fn an_optional_argument_takes_its_webidl_default_or_null() {
 }
 
 #[test]
-fn a_keyword_is_escaped_a_typedef_resolves_and_a_const_is_not_a_member() {
+fn a_keyword_is_escaped_and_a_typedef_resolves() {
     let (code, _) = chain().generate();
     assert!(code.contains("fn self_(&self) -> Window;"), "{code}");
     // `type` is a keyword the parser takes as a name.
@@ -389,7 +427,6 @@ fn a_keyword_is_escaped_a_typedef_resolves_and_a_const_is_not_a_member() {
         "{code}"
     );
     assert!(code.contains("fn started(&self) -> f64;"), "{code}");
-    assert!(!code.contains("ELEMENT_NODE"), "{code}");
 }
 
 #[test]
@@ -461,6 +498,7 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
         [
             "Element.attributes: `NamedNodeMap` is outside the slice",
             "Element.append: `nodes`: union of 2 expressible types",
+            "Element.create_element: optional `options` dropped: union of 2 expressible types",
             "Element.prepend: `nodes`: `NodeList` is outside the slice",
             "Element.alert: 2 overloads",
             "Element.(getter): getter operation",
@@ -887,18 +925,297 @@ fn a_second_global_is_rejected() {
     );
 }
 
+/// A resource may not override, so the parent's method serves the child: what
+/// `DOMPoint.x` asks for over `DOMPointReadOnly.x`, whose setter is its own.
 #[test]
-fn a_child_redeclaring_an_inherited_method_is_rejected() {
+fn a_child_redeclaring_an_inherited_method_keeps_the_parents() {
     let mut defs = chain();
     defs.interfaces.push(partial(
         "Element",
-        &[attribute("nodeType", &plain("unsigned short"), true)],
+        &[attribute("textContent", &nullable("DOMString"), false)],
     ));
-    let err = transform(&defs.build()).expect_err("an override is an error");
-    assert!(
-        err.to_string()
-            .contains("`Element.node_type` redeclares a method inherited from `Node`"),
-        "{err}"
+    defs.interfaces.push(partial(
+        "Node",
+        &[attribute("id", &plain("DOMString"), true)],
+    ));
+    let (code, skipped) = defs.transform();
+    assert_eq!(code.matches("fn text_content(&self)").count(), 1, "{code}");
+    assert_eq!(code.matches("fn id(&self)").count(), 1, "{code}");
+    assert_eq!(code.matches("fn set_id(&self").count(), 1, "{code}");
+    let lines: Vec<String> = skipped.iter().map(Skip::to_string).collect();
+    assert_eq!(
+        lines,
+        [
+            "Element.id: redeclares a method inherited from `Node`",
+            "Element.text_content: redeclares a method inherited from `Node`",
+            "Element.set_text_content: redeclares a method inherited from `Node`",
+        ]
+    );
+    assert!(skipped.iter().all(|s| s.reason.cause == Cause::Override));
+    let glue = generate(&defs.build(), "idl/dom.webidl.json")
+        .expect("the slice should generate")
+        .glue;
+    assert!(glue.contains("web/node#id\""), "{glue}");
+    assert!(!glue.contains("web/element#id\""), "{glue}");
+}
+
+/// What `SVGElement.className` is, an `SVGAnimatedString` over the `DOMString`
+/// of `Element.className`: the parent's method answers with the wrong type.
+#[test]
+fn a_child_redeclaring_with_another_type_is_counted_apart() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            attribute("label", &plain("DOMString"), false),
+            operation("item", &plain("long"), &[], ""),
+        ],
+    ));
+    defs.interfaces.push(partial(
+        "Node",
+        &[attribute("label", &plain("DOMString"), true)],
+    ));
+    let index = argument("index", &plain("long"), false, "null");
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("label", &plain("long"), false),
+            operation("item", &plain("long"), &[index], ""),
+        ],
+    ));
+    let (_, skipped) = defs.transform();
+    let reported: Vec<(String, Cause)> = skipped
+        .iter()
+        .map(|s| (s.to_string(), s.reason.cause.clone()))
+        .collect();
+    let retyped = |member: &str| {
+        (
+            format!(
+                "Element.{member}: redeclares a method inherited from `EventTarget` with another type"
+            ),
+            Cause::RetypedOverride,
+        )
+    };
+    let expected = [
+        (
+            "Node.label: redeclares a method inherited from `EventTarget`".to_string(),
+            Cause::Override,
+        ),
+        retyped("label"),
+        retyped("set_label"),
+        retyped("item"),
+    ];
+    assert_eq!(reported, expected);
+}
+
+/// What `MouseEvent.initMouseEvent` asks for: the arguments a caller may leave
+/// out go, and the member stays.
+#[test]
+fn trailing_optionals_go_until_the_parameters_cross_as_core_values() {
+    let required = [
+        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o",
+    ]
+    .map(|name| argument(name, &plain("long"), false, "null"));
+    let optional = ["p", "q"].map(|name| argument(name, &plain("long"), true, "null"));
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Node",
+        &[operation(
+            "draw",
+            &plain("undefined"),
+            &[&required[..], &optional[..]].concat(),
+            "",
+        )],
+    ));
+    let (code, skipped) = defs.transform();
+    assert!(code.contains("o: i32);"), "{code}");
+    let reported: Vec<(String, Lost, Cause)> = skipped
+        .iter()
+        .map(|s| (s.to_string(), s.lost, s.reason.cause.clone()))
+        .collect();
+    let expected = [(
+        "Node.draw: optional `p` dropped: parameters passed through memory".to_string(),
+        Lost::Argument,
+        Cause::ParamsInMemory,
+    )];
+    assert_eq!(reported, expected);
+}
+
+#[test]
+fn every_member_kind_parses_and_one_without_a_binding_is_reported() {
+    let members = [
+        const_member("ELEMENT_NODE"),
+        iteration("iterable"),
+        iteration("maplike"),
+        iteration("setlike"),
+        iteration("async_iterable"),
+        // A bare `stringifier;` has no return type.
+        r#"{"type": "operation", "name": "", "arguments": [], "extAttrs": [], "special": "stringifier"}"#.to_string(),
+        attribute("origin", &plain("DOMString"), true)
+            .replace(r#""special": """#, r#""special": "static""#),
+        // The receiver and sixteen numbers are one more than cross as core values.
+        operation(
+            "draw",
+            &plain("undefined"),
+            &["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p"]
+                .map(|name| argument(name, &plain("long"), false, "null")),
+            "",
+        ),
+    ];
+    let mut defs = chain();
+    defs.interfaces.push(partial("Node", &members));
+    let (code, skipped) = defs.transform();
+    assert!(!code.contains("ELEMENT_NODE"), "{code}");
+    let reported: Vec<(String, Cause)> = skipped
+        .iter()
+        .map(|s| {
+            assert_eq!(s.lost, Lost::Member);
+            (s.to_string(), s.reason.cause.clone())
+        })
+        .collect();
+    let expected = [
+        ("Node.ELEMENT_NODE: a constant", Cause::Constant),
+        (
+            "Node.(iterable): an iteration declaration",
+            Cause::Iteration,
+        ),
+        ("Node.(maplike): an iteration declaration", Cause::Iteration),
+        ("Node.(setlike): an iteration declaration", Cause::Iteration),
+        (
+            "Node.(async_iterable): an iteration declaration",
+            Cause::Iteration,
+        ),
+        (
+            "Node.(stringifier): stringifier operation",
+            Cause::SpecialOperation,
+        ),
+        ("Node.origin: static attribute", Cause::StaticAttribute),
+        (
+            "Node.draw: parameters passed through memory",
+            Cause::ParamsInMemory,
+        ),
+    ]
+    .map(|(line, cause)| (line.to_string(), cause));
+    assert_eq!(reported, expected);
+}
+
+#[test]
+fn a_type_without_a_binding_names_what_it_is() {
+    let typed = |ty: &str| attribute(&ty.to_lowercase(), &plain(ty), true);
+    let members = [
+        typed("EventInit"),
+        typed("Mode"),
+        typed("any"),
+        typed("object"),
+        typed("Uint8Array"),
+        typed("bigint"),
+        typed("WorkerOnly"),
+        attribute("names", &sequence("record", &plain("DOMString")), true),
+    ];
+    let mut defs = chain();
+    defs.interfaces.push(partial("Element", &members));
+    defs.dictionaries = vec![
+        dictionary("EventInit", false),
+        dictionary("EventInit", true),
+    ];
+    defs.enums =
+        vec![r#"{"type": "enum", "name": "Mode", "values": [], "extAttrs": []}"#.to_string()];
+    defs.namespaces = vec![namespace(
+        "console",
+        &[
+            operation("log", &plain("undefined"), &[], ""),
+            const_member("LEVEL"),
+        ],
+    )];
+    let (_, skipped) = defs.transform();
+    let reported: Vec<(String, Lost, Cause)> = skipped
+        .iter()
+        .map(|s| (s.to_string(), s.lost, s.reason.cause.clone()))
+        .collect();
+    let expected = [
+        (
+            "EventInit: a dictionary",
+            Lost::Definition,
+            Cause::Dictionary,
+        ),
+        ("Mode: an enum", Lost::Definition, Cause::Enum),
+        (
+            "console.log: a namespace member",
+            Lost::Member,
+            Cause::Namespace,
+        ),
+        (
+            "console.LEVEL: a namespace member",
+            Lost::Member,
+            Cause::Namespace,
+        ),
+        (
+            "Element.eventinit: `EventInit` is a dictionary",
+            Lost::Member,
+            Cause::Dictionary,
+        ),
+        ("Element.mode: `Mode` is an enum", Lost::Member, Cause::Enum),
+        ("Element.any: `any`", Lost::Member, Cause::Any),
+        ("Element.object: `object`", Lost::Member, Cause::Object),
+        (
+            "Element.uint8array: `Uint8Array` is a buffer",
+            Lost::Member,
+            Cause::Buffer,
+        ),
+        ("Element.bigint: `bigint`", Lost::Member, Cause::BigInt),
+        (
+            "Element.workeronly: `WorkerOnly` is outside the slice",
+            Lost::Member,
+            Cause::OutsideSlice,
+        ),
+        (
+            "Element.names: `record<…>`",
+            Lost::Member,
+            Cause::Generic("record".to_string()),
+        ),
+    ]
+    .map(|(line, lost, cause)| (line.to_string(), lost, cause));
+    assert_eq!(reported, expected);
+}
+
+/// A wrapper rewords a reason and keeps its cause, so the table counts what
+/// would have to lower for the member to.
+#[test]
+fn the_skip_table_counts_each_cause_by_what_was_lost() {
+    let mut defs = chain();
+    defs.dictionaries = vec![dictionary("EventInit", false)];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "init",
+                &plain("undefined"),
+                &[argument(
+                    "a",
+                    &sequence("sequence", &plain("EventInit")),
+                    false,
+                    "null",
+                )],
+                "",
+            ),
+            operation(
+                "fire",
+                &plain("undefined"),
+                &[argument("init", &plain("EventInit"), true, "null")],
+                "",
+            ),
+            attribute("state", &plain("any"), true),
+        ],
+    ));
+    let (_, skipped) = defs.transform();
+    assert_eq!(
+        skip_table(&skipped),
+        "\
+Cause         Definitions  Members  Overloads  Arguments
+a dictionary            1        1          0          1
+`any`                   0        1          0          0
+Total                   1        2          0          1
+"
     );
 }
 

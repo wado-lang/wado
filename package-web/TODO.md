@@ -11,24 +11,63 @@ The pipeline works end to end: WebIDL snapshot, generated bindings and glue,
 covers ten interfaces: `EventTarget`, `Event`, `Node`, `CharacterData`, `Text`,
 `Element`, `HTMLElement`, `HTMLInputElement`, `Document` and `Window`.
 
-`wado-from-idl` skips every member it cannot lower and names it on stderr.
-`mise run update-package-web` prints each one the current snapshot skips:
+`wado-from-idl` reads every definition and member kind webidl2 writes. It names
+each thing it does not bind on stderr, and counts them by cause.
+`mise run update-package-web` prints the count for the slice.
 
-| Reason                        | Members | Examples                                               |
-| ----------------------------- | ------- | ------------------------------------------------------ |
-| An event handler attribute    | 353     | `onclick`, `oninput`                                   |
-| A type outside the slice      | 164     | `NodeList`, `HTMLCollection`, `sequence<Range>`, `any` |
-| A union                       | 16      | `append`, `prepend`, `before`, the `inner_html` getter |
-| More than one overload lowers | 8       | `Window.alert`, `scroll_to`                            |
-| `ObservableArray<T>`          | 1       | `adopted_style_sheets`                                 |
-| `[HTMLConstructor]`, a getter | 4       | `HTMLElement.new`, `Document`'s named getter           |
-| Total                         | 546     |                                                        |
+`mise run report-webidl-coverage` prints it for the whole platform: every
+interface a page can reach, and every namespace. That is the measure of what is
+left before the slice can be everything:
 
-A member returning `Promise<T>` lowers where `T` does, so one whose `T` is
-outside the slice is counted there.
+| Cause                                            | Definitions | Members | Overloads | Arguments |
+| ------------------------------------------------ | ----------- | ------- | --------- | --------- |
+| a dictionary                                     | 776         | 261     | 7         | 396       |
+| a constant                                       | 0           | 1261    | 0         | 0         |
+| a callback in a result                           | 0           | 932     | 0         | 0         |
+| an enum                                          | 357         | 283     | 1         | 6         |
+| a type outside the slice                         | 0           | 263     | 1         | 2         |
+| a union                                          | 0           | 196     | 7         | 16        |
+| `any`                                            | 0           | 128     | 0         | 32        |
+| a buffer                                         | 0           | 126     | 20        | 2         |
+| a namespace member                               | 0           | 133     | 0         | 0         |
+| a special operation                              | 0           | 81      | 0         | 0         |
+| `[HTMLConstructor]`                              | 0           | 76      | 0         | 0         |
+| `object`                                         | 0           | 54      | 1         | 6         |
+| a redeclared inherited method                    | 0           | 52      | 0         | 0         |
+| overloads                                        | 0           | 44      | 0         | 0         |
+| an iteration declaration                         | 0           | 41      | 0         | 0         |
+| `Promise<…>`                                     | 0           | 29      | 0         | 1         |
+| a callback the glue cannot call                  | 0           | 19      | 0         | 8         |
+| an inherited method redeclared with another type | 0           | 10      | 0         | 0         |
+| a static attribute                               | 0           | 7       | 0         | 0         |
+| `record<…>`                                      | 0           | 6       | 0         | 0         |
+| a list of a list, a nullable type or a callback  | 0           | 3       | 0         | 1         |
+| `ObservableArray<…>`                             | 0           | 4       | 0         | 0         |
+| parameters passed through memory                 | 0           | 1       | 0         | 2         |
+| `bigint`                                         | 0           | 1       | 0         | 0         |
+| `async_sequence<…>`                              | 0           | 1       | 0         | 0         |
+| Total                                            | 1133        | 4012    | 37        | 472       |
 
-A variadic argument lowers, but `append` and its siblings take
-`(Node or DOMString)`, so they wait on the union.
+The command prints the number of functions that do bind above the table. How to
+read the table:
+
+- A cause is what would have to lower for the item to. A list of dictionaries
+  counts under the dictionary.
+- A member is counted once, by the first thing that stops it. Lowering that
+  cause may move it to another row rather than bind it.
+- An overload is one overload of a member another overload binds. An argument
+  is a trailing optional argument a bound member leaves out, with each one
+  after it.
+- A callback in a result is nearly always an event handler attribute
+  (`onclick`).
+- A type outside the slice is a name no snapshot definition declares. Over the
+  whole platform those are `CSSOMString`, `WindowProxy`, the legacy aliases
+  `SVGPoint`, `SVGRect` and `SVGMatrix`, and an interface only a worker reaches.
+- A redeclared inherited method is not lost: the parent's method serves the
+  child. One redeclared with another type is lost, as `SVGElement.className` is:
+  an `SVGAnimatedString`, where `Element.className` is a string.
+
+The report leaves out the interfaces only a worker or a worklet reaches.
 
 ## Order
 
@@ -82,6 +121,16 @@ lower is then available to each interface the slice adds.
 
 ## Known gaps
 
+- A program compiles longer against the bindings of the whole platform than
+  against the slice, though it calls the same few members: each declaration
+  costs something whether a program uses it or not.
+  `mise run report-webidl-coverage` writes those bindings to
+  `scratchpad/webidl-all/dom.wado`.
+- Where a child redeclares an inherited method with another type, the parent's
+  method is the one a call on the child reaches, and it answers with the
+  parent's type. No interface of the slice does.
+- A union collapsed to its one typable constituent in an argument is not
+  reported, though the other constituents cannot be passed.
 - A program cannot recover from a DOM exception: it traps.
 - CI runs the glue on jsdom only, never in a browser.
 - jco 1.30.0 fails an export that a listener reenters during

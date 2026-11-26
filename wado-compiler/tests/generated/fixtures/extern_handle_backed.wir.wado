@@ -4614,14 +4614,9 @@ fn "extern_handle_backed.wado/extern_handle_backed.wado/Node^core:prelude/traits
 }
 
 fn "extern_handle_backed.wado/extern_handle_backed.wado/Element^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
-    let $class: i32;
     let name: ref "core:prelude/string.wado//String";
-    name = (if local.tee $class("core:rt/handle_class"(self)) == 2 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(84, 101, 120, 116), used: 4 };
-    } else if $class == 1 -> ref "core:prelude/string.wado//String" {
+    name = (if "core:rt/handle_class"(self) == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Element"), used: 7 };
-    } else if $class == 0 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 111, 100, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Element"), used: 7 };
     });

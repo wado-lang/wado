@@ -14,7 +14,7 @@ use wado_compiler::name::{
     ExternHostQuery, ExternSlotAccess, callback_export_name, cm_callback_func_name, cm_import_alias,
 };
 
-use crate::ir::{WadoFunction, WadoType};
+use crate::ir::{WadoFunction, WadoParam, WadoType};
 use crate::webidl::{JsFunction, JsMember, WebIdlOutput};
 
 /// What every glue instance holds besides its imports. The `$` prefix keeps
@@ -177,10 +177,16 @@ pub fn list_carries(ty: &WadoType) -> bool {
     }
 }
 
+/// Whether a shim can read `params`: each as core values, none through memory.
+#[must_use]
+pub fn reads_params(params: &[WadoParam]) -> bool {
+    let flat_params: usize = params.iter().map(|p| flat_count(&p.ty)).sum();
+    !flat_params_in_buffer(flat_params, false)
+}
+
 fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
-    let flat_params: usize = function.params.iter().map(|p| flat_count(&p.ty)).sum();
     assert!(
-        !flat_params_in_buffer(flat_params, false),
+        reads_params(&function.params),
         "`{}` passes its parameters through memory, which no shim reads",
         function.cm_attr
     );
