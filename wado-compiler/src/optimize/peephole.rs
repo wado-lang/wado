@@ -1,8 +1,7 @@
 //! Unified peephole engine pass (WEP 2026-06-05): every position-flexible local
 //! rewrite rule interleaved over one engine session per function rather than a
-//! session apiece, invoked twice per fixed-point iteration so `string_push` can
-//! still see a `push_str` before `inline`.
-//! Only the env-free half of constant folding runs here.
+//! session apiece, invoked on each side of `inline` per fixed-point iteration.
+//! [`PeepholeRule`] declares each rule's order and the sides it runs on.
 
 use std::sync::Arc;
 
@@ -38,17 +37,30 @@ use crate::optimize::mod_ref::SummaryCache;
 use crate::optimize::pass_dump;
 use crate::optimize::select_lowering::intern_select;
 
-/// Run the unified peephole rule set over every function body. Returns whether
+/// Which side of `nir/inline` a peephole run sits on. The two apply different
+/// rule sets, so each keeps a gate column of its own: a function quiescent for
+/// one must still be revisited by the other.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum InlineSide {
+    Pre,
+    Post,
+}
+
+impl InlineSide {
+    fn gated_pass(self) -> GatedPass {
+        match self {
+            Self::Pre => GatedPass::PeepholePre,
+            Self::Post => GatedPass::PeepholePost,
+        }
+    }
+}
+
+/// Run the peephole rules of `side` over every function body. Returns whether
 /// any rule fired. Gated: skips functions unchanged since this pass last ran.
-///
-/// `pre_inline` adds `MatchToSwitchRule` (lower every reachable `Match` to
-/// `Switch` before `inline` copies bodies; the post-inline run would only
-/// re-scan already-`Switch` bodies). A `Match` a later rewrite plants is caught
-/// by the next iteration's pre-inline run.
 pub(super) fn run_peephole(
     project: &mut NirPackage,
     gate: &mut FunctionGate,
-    pre_inline: bool,
+    side: InlineSide,
     heap: &mut HeapEffectsCache,
     mod_ref: &mut SummaryCache,
 ) -> bool {
@@ -59,22 +71,9 @@ pub(super) fn run_peephole(
     // Whole-package contexts, resolved once before the mutable body walk.
     let push_ctx = resolve_ctx(project);
     let const_ascii_push_rule = push_ctx.as_ref().and_then(ConstAsciiPushRule::new);
-    // Ordered after the rule above within one session: the run it fuses holds
-    // the `push_ascii_byte` calls that one retargets.
     let append_fuse_rule = push_ctx.as_ref().and_then(AppendFuseRule::new);
-    // Environment-free constant folding shares the session. It needs the
-    // program-wide CTFE callee map and the type table; the per-function `env`
-    // stays empty so only literal arithmetic and pure CTFE fold here, leaving
-    // the flow-sensitive folds to the standalone `const_folding` walker.
     let len = project.functions.len();
-    // The pre- and post-inline runs apply different rule sets, so they keep
-    // separate watermark columns: a function quiescent for one must still be
-    // revisited by the other.
-    let gated_pass = if pre_inline {
-        GatedPass::PeepholePre
-    } else {
-        GatedPass::PeepholePost
-    };
+    let gated_pass = side.gated_pass();
     let type_table = project.type_table.borrow();
     let pending: IndexSet<FuncId> = gate.pending(gated_pass, len).into_iter().collect();
     let callees = build_callee_map(project, gate.exec(), |id| pending.contains(&id));
@@ -82,18 +81,12 @@ pub(super) fn run_peephole(
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let markers = MarkerBuiltins::of(project);
     let branch_prune_rule = BranchPruneRule { markers };
-    let aggregate_forward_rule = AggregateForwardRule;
     let bitset_rule = MatchToBitsetRule::new(select_id);
     let match_rule = MatchToSwitchRule::new(cold_path_id, unreachable_id);
-    let if_chain_rule = IfChainToMatchRule;
-    let tuple_projection_rule = TupleProjectionRule;
     let known_case_rule = KnownCaseRule { markers };
-    // The closure-bearing field read it resolves through is what `inline`
-    // exposes when an iterator adaptor's `next` is copied in. The pre-inline run
-    // takes the reads the passes after `inline` resolved, so that round's
-    // `inline` splices the `$call`.
     let closure_devirt_rule = build_closure_devirt(project);
-    let heap_effects = (!pre_inline).then(|| heap.effects(project, &type_table, gate.exec()));
+    let heap_effects =
+        (side == InlineSide::Post).then(|| heap.effects(project, &type_table, gate.exec()));
 
     debug_assert!(
         gate.any_pending(gated_pass, len),
@@ -103,8 +96,11 @@ pub(super) fn run_peephole(
     // Decided here: the rules run on worker threads, which a skip scope does
     // not reach.
     let enabled: Vec<PeepholeRule> = PeepholeRule::ALL
-        .into_iter()
-        .filter(|rule| pass_dump::decides(&format!("nir/peephole/{}", rule.name())))
+        .iter()
+        .copied()
+        .filter(|rule| {
+            rule.runs_on(side) && pass_dump::decides(&format!("nir/peephole/{}", rule.name()))
+        })
         .collect();
     // Once for the run.
     let summaries = mod_ref.summaries(project, gate.exec());
@@ -117,41 +113,22 @@ pub(super) fn run_peephole(
         // Per function, as its CTFE budget and remembered misses are: what one
         // body spends must not decide whether the next one folds.
         let const_fold_rule = ConstFoldRule::new(type_table, &callees, &ctfe_builtins);
-        // Reference elimination runs post-inline only (it cleans up the ref
-        // bindings inlining exposes). Its maps are built from the pristine
-        // post-inline body.
+        // Both analyse the pristine body, before any rule of the session edits
+        // it; the escape set (`address_taken`) is read off the function before
+        // its body is borrowed.
         let ref_elim_rule = heap_effects.as_ref().and_then(|effects| {
             let params = func.params.iter().map(|p| p.local_index).collect();
             func.body
                 .as_ref()
                 .map(|b| build_ref_elim(b, LazyHeapFrame::new(effects, params), type_table))
         });
-        // Adjacent-use box-local elision runs post-inline only (it collapses the
-        // cells `sroa_param` / `inline` expose). Its stats come from
-        // the pristine post-inline body; the escape set (`address_taken`) is read
-        // off the function before its body is borrowed.
-        let elide_box_rule = (!pre_inline)
+        let elide_box_rule = (side == InlineSide::Post)
             .then(|| {
                 func.body
                     .as_ref()
                     .map(|b| build_elide_box_local(b, &func.address_taken_locals))
             })
             .flatten();
-        // Labeled-block fusion runs post-inline only: the `let temp = LB { ...;
-        // break L: Some(v); }; if VariantTest(temp, …)` shape it folds is what
-        // `inline` exposes when an `Option`/`Result`-returning helper is copied
-        // into an if-let caller. The rule allocates fresh `$fused_payload_N`
-        // locals via the engine, so it sits next to the other block-level
-        // rules.
-        // One rule, two entry points: `apply_block` fuses the value-discarding
-        // if-let shape, `apply_expr` threads the value-producing `match LB`
-        // (`?`) shape. Both only exist post-inline.
-        let labeled_block_fusion_rule = (!pre_inline).then_some(LabeledBlockFusionRule);
-        // Scalarizes the `[tag, slots…]` temp fusion leaves behind — the
-        // value-producing `let x = f()?` consumer it cannot relocate. Ordered
-        // after fusion, which produces the better code where it applies and
-        // whose shape this rule would otherwise consume.
-        let slot_temp_sroa_rule = (!pre_inline).then_some(SlotTempSroaRule);
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
         let FuncParts {
@@ -163,60 +140,34 @@ pub(super) fn run_peephole(
         let Some(body) = body else {
             return false;
         };
-        let mut rules: Vec<(PeepholeRule, &dyn Rule)> = Vec::with_capacity(20);
-        if pre_inline {
-            // Ordered before `match_rule`, which lowers the `Match` it plants;
-            // `bitset_rule` before it too, taking the boolean sets `match_rule`
-            // would otherwise make a `br_table` of.
-            rules.push((PeepholeRule::IfChainToMatch, &if_chain_rule));
-            rules.push((PeepholeRule::MatchToBitset, &bitset_rule));
-            rules.push((PeepholeRule::MatchToSwitch, &match_rule));
+        let mut rules: Vec<&dyn Rule> = Vec::with_capacity(enabled.len());
+        for &rule in &enabled {
+            let instance: Option<&dyn Rule> = match rule {
+                PeepholeRule::IfChainToMatch => Some(&IfChainToMatchRule),
+                PeepholeRule::MatchToBitset => Some(&bitset_rule),
+                PeepholeRule::MatchToSwitch => Some(&match_rule),
+                PeepholeRule::RefElim => ref_elim_rule.as_ref().map(|r| r as &dyn Rule),
+                PeepholeRule::ElideBoxLocal => elide_box_rule.as_ref().map(|r| r as &dyn Rule),
+                PeepholeRule::LabeledBlockFusion => Some(&LabeledBlockFusionRule),
+                PeepholeRule::SlotTempSroa => Some(&SlotTempSroaRule),
+                PeepholeRule::DropValue => Some(&DropValueRule),
+                PeepholeRule::ClosureDevirt => Some(&closure_devirt_rule),
+                PeepholeRule::KnownCase => Some(&known_case_rule),
+                PeepholeRule::IdentityCast => Some(&IdentityCastRule),
+                PeepholeRule::IdentityDeref => Some(&IdentityDerefRule),
+                PeepholeRule::FieldThroughRef => Some(&FieldThroughRefRule),
+                PeepholeRule::AggregateForward => Some(&AggregateForwardRule),
+                PeepholeRule::Elide => Some(&elide_rule),
+                PeepholeRule::ConstFold => Some(&const_fold_rule),
+                PeepholeRule::BranchPrune => Some(&branch_prune_rule),
+                PeepholeRule::TupleProjection => Some(&TupleProjectionRule),
+                PeepholeRule::ConstAsciiPush => {
+                    const_ascii_push_rule.as_ref().map(|r| r as &dyn Rule)
+                }
+                PeepholeRule::AppendFuse => append_fuse_rule.as_ref().map(|r| r as &dyn Rule),
+            };
+            rules.extend(instance);
         }
-        if let Some(ref_elim_rule) = ref_elim_rule.as_ref() {
-            rules.push((PeepholeRule::RefElim, ref_elim_rule));
-        }
-        if let Some(elide_box_rule) = elide_box_rule.as_ref() {
-            rules.push((PeepholeRule::ElideBoxLocal, elide_box_rule));
-        }
-        if let Some(labeled_block_fusion_rule) = labeled_block_fusion_rule.as_ref() {
-            rules.push((PeepholeRule::LabeledBlockFusion, labeled_block_fusion_rule));
-        }
-        if let Some(slot_temp_sroa_rule) = slot_temp_sroa_rule.as_ref() {
-            rules.push((PeepholeRule::SlotTempSroa, slot_temp_sroa_rule));
-        }
-        // Post-inline only: a value-producing labeled block in statement position
-        // is what `inline` leaves where a caller discarded the result. After
-        // fusion, whose shapes it would otherwise flatten, and before
-        // `elide_rule`, which reclaims what it strips.
-        if !pre_inline {
-            rules.push((PeepholeRule::DropValue, &DropValueRule));
-        }
-        rules.push((PeepholeRule::ClosureDevirt, &closure_devirt_rule));
-        rules.extend([
-            // Ahead of the folding rules: the arms it drops are what leaves a
-            // constant condition and a dead branch for them to reclaim.
-            (PeepholeRule::KnownCase, &known_case_rule as &dyn Rule),
-            // Ahead of every rule matching on the shape of a value: a cast that
-            // changes no representation is what hides that shape.
-            (PeepholeRule::IdentityCast, &IdentityCastRule),
-            (PeepholeRule::IdentityDeref, &IdentityDerefRule),
-            (PeepholeRule::FieldThroughRef, &FieldThroughRefRule),
-            (PeepholeRule::AggregateForward, &aggregate_forward_rule),
-            (PeepholeRule::Elide, &elide_rule),
-            (PeepholeRule::ConstFold, &const_fold_rule),
-            (PeepholeRule::BranchPrune, &branch_prune_rule),
-            (PeepholeRule::TupleProjection, &tuple_projection_rule),
-        ]);
-        if let Some(const_ascii_push_rule) = const_ascii_push_rule.as_ref() {
-            rules.push((PeepholeRule::ConstAsciiPush, const_ascii_push_rule));
-        }
-        if let Some(append_fuse_rule) = append_fuse_rule.as_ref() {
-            rules.push((PeepholeRule::AppendFuse, append_fuse_rule));
-        }
-        let rules: Vec<&dyn Rule> = rules
-            .into_iter()
-            .filter_map(|(name, rule)| enabled.contains(&name).then_some(rule))
-            .collect();
         let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
         let changed = engine.run(&rules);
@@ -235,78 +186,92 @@ pub(super) fn run_peephole(
     changed
 }
 
-/// A rule of the peephole session, named `nir/peephole/<name>` where a skip
-/// list names it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum PeepholeRule {
-    IfChainToMatch,
-    MatchToBitset,
-    MatchToSwitch,
-    RefElim,
-    ElideBoxLocal,
-    LabeledBlockFusion,
-    SlotTempSroa,
-    DropValue,
-    ClosureDevirt,
-    KnownCase,
-    IdentityCast,
-    IdentityDeref,
-    FieldThroughRef,
-    AggregateForward,
-    Elide,
-    ConstFold,
-    BranchPrune,
-    TupleProjection,
-    ConstAsciiPush,
-    AppendFuse,
+/// The runs a rule takes part in.
+#[derive(Clone, Copy)]
+enum Sides {
+    Pre,
+    Post,
+    Both,
 }
 
-impl PeepholeRule {
-    const ALL: [Self; 20] = [
-        Self::IfChainToMatch,
-        Self::MatchToBitset,
-        Self::MatchToSwitch,
-        Self::RefElim,
-        Self::ElideBoxLocal,
-        Self::LabeledBlockFusion,
-        Self::SlotTempSroa,
-        Self::DropValue,
-        Self::ClosureDevirt,
-        Self::KnownCase,
-        Self::IdentityCast,
-        Self::IdentityDeref,
-        Self::FieldThroughRef,
-        Self::AggregateForward,
-        Self::Elide,
-        Self::ConstFold,
-        Self::BranchPrune,
-        Self::TupleProjection,
-        Self::ConstAsciiPush,
-        Self::AppendFuse,
-    ];
-
-    fn name(self) -> &'static str {
-        match self {
-            Self::IfChainToMatch => "if_chain_to_match",
-            Self::MatchToBitset => "match_to_bitset",
-            Self::MatchToSwitch => "match_to_switch",
-            Self::RefElim => "ref_elim",
-            Self::ElideBoxLocal => "elide_box_local",
-            Self::LabeledBlockFusion => "labeled_block_fusion",
-            Self::SlotTempSroa => "slot_temp_sroa",
-            Self::DropValue => "drop_value",
-            Self::ClosureDevirt => "closure_devirt",
-            Self::KnownCase => "known_case",
-            Self::IdentityCast => "identity_cast",
-            Self::IdentityDeref => "identity_deref",
-            Self::FieldThroughRef => "field_through_ref",
-            Self::AggregateForward => "aggregate_forward",
-            Self::Elide => "elide",
-            Self::ConstFold => "const_fold",
-            Self::BranchPrune => "branch_prune",
-            Self::TupleProjection => "tuple_projection",
-            Self::ConstAsciiPush => "const_ascii_push",
-            Self::AppendFuse => "append_fuse",
+macro_rules! peephole_rules {
+    ($($(#[$doc:meta])* $variant:ident = $name:literal on $sides:ident,)*) => {
+        /// A rule of the peephole session, named `nir/peephole/<name>` where a
+        /// skip list names it. Declared in the order a session applies them.
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum PeepholeRule {
+            $($(#[$doc])* $variant,)*
         }
-    }
+
+        impl PeepholeRule {
+            const ALL: &[Self] = &[$(Self::$variant),*];
+
+            fn name(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $name,)*
+                }
+            }
+
+            fn runs_on(self, side: InlineSide) -> bool {
+                let sides = match self {
+                    $(Self::$variant => Sides::$sides,)*
+                };
+                matches!(
+                    (sides, side),
+                    (Sides::Both, _) | (Sides::Pre, InlineSide::Pre) | (Sides::Post, InlineSide::Post)
+                )
+            }
+        }
+    };
+}
+
+peephole_rules! {
+    /// Ahead of `MatchToSwitch`, which lowers the `Match` it plants.
+    IfChainToMatch = "if_chain_to_match" on Pre,
+    /// Ahead of `MatchToSwitch`, taking the boolean sets it would otherwise
+    /// make a `br_table` of.
+    MatchToBitset = "match_to_bitset" on Pre,
+    /// Before `inline`, so it copies `Switch`-shaped bodies. A `Match` a later
+    /// rewrite plants is caught by the next round's pre-inline run.
+    MatchToSwitch = "match_to_switch" on Pre,
+    /// Drops the ref bindings inlining exposes.
+    RefElim = "ref_elim" on Post,
+    /// Collapses the cells `sroa_param` and `inline` expose.
+    ElideBoxLocal = "elide_box_local" on Post,
+    /// The `Option` / `Result` an inlined helper builds for its if-let or `?`
+    /// consumer.
+    LabeledBlockFusion = "labeled_block_fusion" on Post,
+    /// Scalarizes the `[tag, slots…]` temp of a `let x = f()?` fusion cannot
+    /// relocate. After fusion, which produces the better code where it applies
+    /// and whose shape this would otherwise consume.
+    SlotTempSroa = "slot_temp_sroa" on Post,
+    /// A value-producing labeled block `inline` leaves where a caller discarded
+    /// the result. After fusion, whose shapes it would otherwise flatten, and
+    /// before `Elide`, which reclaims what it strips.
+    DropValue = "drop_value" on Post,
+    /// The closure-bearing field read it resolves through is what `inline`
+    /// exposes when an iterator adaptor's `next` is copied in. The pre-inline
+    /// run takes the reads the passes after `inline` resolved, so that round's
+    /// `inline` splices the `$call`.
+    ClosureDevirt = "closure_devirt" on Both,
+    /// Ahead of the folding rules: the arms it drops are what leaves a constant
+    /// condition and a dead branch for them to reclaim.
+    KnownCase = "known_case" on Both,
+    /// Ahead of every rule matching on the shape of a value: a cast that
+    /// changes no representation is what hides that shape.
+    IdentityCast = "identity_cast" on Both,
+    IdentityDeref = "identity_deref" on Both,
+    FieldThroughRef = "field_through_ref" on Both,
+    AggregateForward = "aggregate_forward" on Both,
+    Elide = "elide" on Both,
+    /// The environment-free half: literal arithmetic and pure CTFE. The
+    /// flow-sensitive folds are `nir/const_fold`'s.
+    ConstFold = "const_fold" on Both,
+    BranchPrune = "branch_prune" on Both,
+    TupleProjection = "tuple_projection" on Both,
+    /// Matches a `push` call, which only the pre-inline run still sees whole.
+    ConstAsciiPush = "const_ascii_push" on Both,
+    /// After `ConstAsciiPush`: the run it fuses holds the `push_ascii_byte`
+    /// calls that one retargets.
+    AppendFuse = "append_fuse" on Both,
 }

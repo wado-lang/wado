@@ -107,6 +107,7 @@ use value_copy_demote::demote_value_copies;
 
 use gate::{FunctionGate, GatedPass};
 use heap_effect::HeapEffectsCache;
+use peephole::InlineSide;
 
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::nir_package::NirPackage;
@@ -962,7 +963,13 @@ fn run_optimization_passes(
             // Hosts `MatchToSwitchRule` (`include_match = true`), so `inline` copies
             // `Switch`-shaped bodies, and `const_branch_prune`.
             gated!("nir/peephole", GatedPass::PeepholePre, |p, g| {
-                peephole::run_peephole(p, g, true, &mut heap_effects, &mut mod_ref_summaries)
+                peephole::run_peephole(
+                    p,
+                    g,
+                    InlineSide::Pre,
+                    &mut heap_effects,
+                    &mut mod_ref_summaries,
+                )
             });
             // `nir/inline` keeps every value copy a call until the loop first
             // converges, so each round judges a copy in the body the last round's
@@ -1018,10 +1025,14 @@ fn run_optimization_passes(
             // inline's freshly dead bindings. No `MatchToSwitchRule` — the
             // pre-inline run lowered every reachable `Match` already.
             gated!("nir/peephole", GatedPass::PeepholePost, |p, g| {
-                peephole::run_peephole(p, g, false, &mut heap_effects, &mut mod_ref_summaries)
+                peephole::run_peephole(
+                    p,
+                    g,
+                    InlineSide::Post,
+                    &mut heap_effects,
+                    &mut mod_ref_summaries,
+                )
             });
-            // `labeled_block_fusion` moved into the post-inline `nir/peephole`
-            // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
             gated!(
                 "nir/let_block_flatten",
                 GatedPass::LetBlockFlatten,
