@@ -1010,14 +1010,28 @@ impl FunctionTranslator<'_, '_> {
             // `&*r` / `&mut *r` through a cell is the cell: a fresh one would
             // hold a copy, so a write through it would be lost (`|| n.bump()`
             // on a mut-captured `i32`), and an affine variant's slot would be
-            // detached.
+            // detached. A `&mut` taken where the elaborator reaches the slot
+            // through `IndexRef`'s `&` stays a `&mut`, so nothing downstream
+            // reads its write as one through a `&`.
             (
                 PlaceRef::Storage,
                 TirExprKind::Unary {
                     op: TirUnaryOp::Deref,
                     expr: reference,
                 },
-            ) => Some(self.convert_expr(reference)),
+            ) => {
+                let tt = self.base.type_table.borrow();
+                let mints_mut = matches!(tt.get(ref_type), ResolvedType::MutRef(_))
+                    && matches!(tt.get(reference.type_id), ResolvedType::Ref(_));
+                drop(tt);
+                if mints_mut {
+                    let mut reference = (**reference).clone();
+                    reference.type_id = ref_type;
+                    Some(self.convert_expr(&reference))
+                } else {
+                    Some(self.convert_expr(reference))
+                }
+            }
             (PlaceRef::Storage, _) => unreachable!("storage is a local or a dereference"),
             // A slot holding an affine variant holds it in a cell, which is the
             // place: `&s.f` is the cell the field holds, read by a builtin

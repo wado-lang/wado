@@ -1071,7 +1071,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if unary.op == UnaryOp::MutRef {
             self.record_mut_ref(&unary.expr, ctx);
-            if let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx) {
+            if self.place_roots_at_immutable_ref(&unary.expr) {
+                let _ = self.emit(TypeError::CannotMutate {
+                    message: "cannot take &mut through immutable reference".to_string(),
+                    span: unary.span,
+                });
+            } else if let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx) {
                 let _ = self.emit(TypeError::CannotMutate {
                     message: format!("cannot take &mut of immutable variable '{binding}'"),
                     span: unary.span,
@@ -1119,16 +1124,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let outer = self.tysys.type_table.borrow().get(expr_type).clone();
                 match outer {
                     ResolvedType::MutRef(inner) => inner,
-                    ResolvedType::Ref(inner) => {
-                        // Dereffing a shared reference: &(&mut T) yields &T, not &mut T.
-                        // Mutability cannot propagate outward through a shared reference.
-                        let inner_resolved = self.tysys.type_table.borrow().get(inner).clone();
-                        if let ResolvedType::MutRef(u) = inner_resolved {
-                            self.tysys.type_table.borrow_mut().make_ref(u)
-                        } else {
-                            inner
-                        }
-                    }
+                    ResolvedType::Ref(inner) => self.tysys.shared_view(inner),
                     _ => {
                         let _ = self.emit(TypeError::TypeMismatch {
                             expected: "reference type".to_string(),
@@ -1620,11 +1616,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !dispatch.needs_deref {
             return Some("cannot assign through a by-value index; the container hands out a copy");
         }
-        matches!(
-            self.tysys.type_table.borrow().get(dispatch.return_type),
-            ResolvedType::Ref(_)
-        )
-        .then_some("cannot assign through immutable reference")
+        self.subscript_shares(index_id)
+            .then_some("cannot assign through immutable reference")
+    }
+
+    /// Whether the subscript `index_id` reaches its element through the `&`
+    /// `IndexRef` hands out.
+    pub(super) fn subscript_shares(&self, index_id: AstId) -> bool {
+        self.sem
+            .types
+            .operator_dispatch
+            .get(&index_id)
+            .is_some_and(|dispatch| {
+                dispatch.needs_deref
+                    && matches!(
+                        self.tysys.type_table.borrow().get(dispatch.return_type),
+                        ResolvedType::Ref(_)
+                    )
+            })
     }
 
     /// What an `Index` target reaching `check_write`'s general path is: a tuple

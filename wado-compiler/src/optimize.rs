@@ -513,6 +513,62 @@ fn audit_nir(project: &NirPackage, pass: &str) {
     audit_promoted_opaques(project, pass);
     audit_promoted_reads(project, pass);
     audit_assign_types(project, pass);
+    audit_writes_through_shared(project, pass);
+}
+
+/// No store or `&mut` reaches its place through a `&`, which grants reading
+/// alone, a cell's included. The nearest reference on the path is what grants
+/// the write: a `&mut` read out from behind a `&` writes the place it names,
+/// not the `&`'s referent. A call handed a `&` writes nothing through it unless
+/// it holds a `&mut`, and the call verdicts lean on that.
+#[cfg(debug_assertions)]
+fn audit_writes_through_shared(project: &NirPackage, pass: &str) {
+    use crate::nir::NirUnaryOp;
+    use crate::tir::ResolvedType;
+    let tt = project.type_table.borrow();
+    for func in &project.functions {
+        let func = func.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let through_shared = |mut place: crate::nir_arena::ExprId| loop {
+            let (ExprKind::FieldAccess { expr: base, .. }
+            | ExprKind::Index { expr: base, .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                expr: base,
+            }) = &body.exprs[place].kind
+            else {
+                return false;
+            };
+            let Some(base) = base.as_expr() else {
+                return false;
+            };
+            match tt.get(body.exprs[base].type_id) {
+                ResolvedType::Ref(_) => return true,
+                ResolvedType::MutRef(_) => return false,
+                _ => place = base,
+            }
+        };
+        body.for_each_reachable_node(|node| {
+            let crate::nir_arena::NodeRef::Expr(e) = node else {
+                return;
+            };
+            let written = match &body.exprs[e].kind {
+                ExprKind::Assign { target, .. } => Some(*target),
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr,
+                } => expr.as_expr(),
+                _ => None,
+            };
+            assert!(
+                !written.is_some_and(through_shared),
+                "[NIR] {pass}: {e:?} of `{}` writes a place reached through a `&`",
+                func.name
+            );
+        });
+    }
 }
 
 /// Every opaque leaf of a promoted operand reads a local. Extraction re-emits

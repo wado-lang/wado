@@ -1394,9 +1394,9 @@ fn "core:json/core:json/JsonDeserializer::read_hex4$sroa[return]"(self) {
 }
 
 fn "core:json/core:json/JsonDeserializer::read_unicode_escape$sroa[return]"(self) {
+    let $load_2: i32;
     let $load_3: ref "core:prelude/slice.wado//Slice<u8>";
     let $qm_e_3: ref "core:serde//DeserializeError";
-    let $av_29: i32;
     self.pos = self.pos + 1;
     let $mv$$vr_16$0: i32;
     let $mv$$vr_16$1: u32;
@@ -1418,23 +1418,23 @@ fn "core:json/core:json/JsonDeserializer::read_unicode_escape$sroa[return]"(self
     }
     if (55296 <=u $mv$$vr_16$0) & ($mv$$vr_16$0 <=u 56319) {
         $mv$$vr_16$1 = 0;
-        if @unlikely((if (if (if (local.tee $av_29(self.pos) + 2) <= (local.tee $load_3(self.input).end - $load_3.start) -> i32 {
+        if @unlikely((if (if (if (local.tee $load_2(self.pos) + 2) <= (local.tee $load_3(self.input).end - $load_3.start) -> i32 {
             block -> u8 {
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"($load_3.repr, $load_3.start, $av_29);
+                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"($load_3.repr, $load_3.start, $load_2);
             } == 92;
         } else {
             0;
         }) -> i32 {
             block -> u8 {
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"($load_3.repr, $load_3.start, $av_29 + 1);
+                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"($load_3.repr, $load_3.start, $load_2 + 1);
             } == 117;
         } else {
             0;
         }) -> bool {
-            self.pos = $av_29 + 2;
-            multivalue_bind [$mv$$vr_16$1, $av_29, $mv$$vr_16$2] = "core:json/core:json/JsonDeserializer::read_hex4$sroa[return]"(self);
+            self.pos = $load_2 + 2;
+            multivalue_bind [$mv$$vr_16$1, $load_2, $mv$$vr_16$2] = "core:json/core:json/JsonDeserializer::read_hex4$sroa[return]"(self);
             $mv$$vr_16$1 = (if @likely($mv$$vr_16$1 == 0) -> u32 {
-                $av_29;
+                $load_2;
             } else if @likely($mv$$vr_16$1 == 1) -> u32 {
                 cold_path;
                 $qm_e_3 = ref.as_non_null($mv$$vr_16$2);

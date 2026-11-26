@@ -618,7 +618,20 @@ impl ClosureLowerer {
             // candidate map. `LocalMethodName` stays unqualified so codegen
             // re-mangles it consistently with other methods.
             let qualified_method_name = closure_call_name(&self.module_source, collected.id);
-            let self_ref_type = type_table.make_ref(struct_type_id);
+            // A `fn mut` writes its functor; a `fn` may still write through a
+            // `&mut` the functor holds. A `&` grants neither.
+            let writes_captures = matches!(
+                type_table.get(collected.func_type_id),
+                ResolvedType::Function { is_mut: true, .. }
+            ) || collected
+                .captures
+                .iter()
+                .any(|cap| type_table.reaches_mut_ref(cap.type_id));
+            let self_ref_type = if writes_captures {
+                type_table.make_mut_ref(struct_type_id)
+            } else {
+                type_table.make_ref(struct_type_id)
+            };
 
             let call_params: Vec<TirLocal> = collected
                 .params

@@ -575,7 +575,9 @@ fn scalarize_loop(
         candidates.push(ScalarizeCandidate {
             local_index: local_idx,
             local_name: info.local_name.clone(),
-            local_type_id: info.local_type_id,
+            // The declared type, not a read's: an inlined `&self` read of a
+            // `&mut` local is typed `&`, and the write-back must not be.
+            local_type_id: locals[local_idx as usize].type_id,
             field_index: field_idx,
             field_name: info.field_name.clone(),
             type_id: info.field_type_id,

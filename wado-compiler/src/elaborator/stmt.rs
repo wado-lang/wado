@@ -2938,18 +2938,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let label = minted_name("for_of", unique_id);
 
         let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
-        // An `IntoIterator` written for the reference itself says what a walk
-        // of it is, and answers first as a reference's own impl always does.
-        // A newtype inherits its base's, a link at a time.
-        let reference_states_its_walk = {
+        // An `IntoIterator` or `ForOf` written for the reference itself says
+        // what a walk of it is, and answers first as a reference's own impl
+        // always does. A newtype inherits its base's, a link at a time.
+        let reference_states = |item: CompilerItem| {
             let tt = self.tysys.type_table.borrow();
-            let into_iterator = self
+            let walk_trait = self
                 .tysys
-                .compiler_trait(CompilerItem::IntoIterator)
+                .compiler_trait(item)
                 .and_then(|fq| fq.canonical());
             tt.ref_kind(into_iter_receiver_type)
                 .zip(tt.ref_pointee(into_iter_receiver_type))
-                .zip(into_iterator)
+                .zip(walk_trait)
                 .is_some_and(|((kind, referent), trait_)| {
                     std::iter::successors(Some(referent), |&link| match tt.get(link) {
                         ResolvedType::Newtype { base_type, .. } => Some(*base_type),
@@ -2968,6 +2968,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     })
                 })
         };
+        let reference_starts_its_walk = reference_states(CompilerItem::ForOf);
+        let reference_states_its_walk =
+            reference_starts_its_walk || reference_states(CompilerItem::IntoIterator);
         // An iterator that is a reference advances what it points to, so the
         // loop walks it as it stands: `into_iter` and `start` reach the
         // referent, and would walk a copy of it or move it out. An iterator
@@ -2991,21 +2994,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // loop owns what it walks. A copyable one walks its `IntoIterator`,
         // whose iterator shares the operand's storage where a moved one would
         // cost a copy of a list read after the loop (WEP: Affine Types).
-        let walks_value = !walks_operand
-            && self.tysys.is_affine(
-                into_iter_receiver_type,
-                &self.annotate_ctx.trait_ctx.affine_params(),
-            )
-            && self
-                .tysys
-                .compiler_trait(CompilerItem::ForOf)
-                .is_some_and(|trait_| {
-                    self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        into_iter_receiver_type,
-                        &trait_,
-                    )
-                });
+        let walks_value = reference_starts_its_walk
+            || !walks_operand
+                && self.tysys.is_affine(
+                    into_iter_receiver_type,
+                    &self.annotate_ctx.trait_ctx.affine_params(),
+                )
+                && self
+                    .tysys
+                    .compiler_trait(CompilerItem::ForOf)
+                    .is_some_and(|trait_| {
+                        self.tysys.type_implements_trait(
+                            &self.annotate_ctx,
+                            into_iter_receiver_type,
+                            &trait_,
+                        )
+                    });
         let (start_name, start_trait) = if walks_value {
             (
                 "start",

@@ -85,6 +85,49 @@ xs[0] = 9;       // Error: the store roots at an immutable binding
 A write through a `&mut T` is what that reference grants, so the binding
 holding one needs no `mut` of its own.
 
+A `&T` grants reading alone, to every place reached through it. A store, a
+`&mut`, or a `&mut self` call on a place reached through a `&` is an error, even
+where the path goes on through a `&mut` stored behind the `&`:
+
+<!-- {"fixture":"spec_mutability_store_through_shared_ref.wado"} -->
+
+```wado
+fn touch(h: &Holder) {
+    h.r.f = 2;   // Error: `h.r` is reached through `&Holder`
+}
+```
+
+<!-- {"fixture":"spec_mutability_mut_ref_through_shared_ref.wado"} -->
+
+```wado
+fn inner(p: &Pair) -> &mut Inner {
+    return &mut p.inner;   // Error: `p.inner` is reached through `&Pair`
+}
+```
+
+For the same reason, a `&mut T` read through a `&` is a `&T`, as `*` on a
+`&&mut T` is:
+
+<!-- {"fixture":"spec_mutability_mut_read_through_shared_ref.wado"} -->
+
+```wado
+fn target(h: &Holder) -> &mut S {
+    return h.r;   // Error: `h.r` is a `&S` here
+}
+```
+
+What a `&` refuses is the path. A value copied out from behind it is a value of
+its own, and a `&mut` it holds writes as any other does:
+
+<!-- {"fixture":"spec_mutability_copy_out_of_shared_ref_writes.wado"} -->
+
+```wado
+fn poke(h: &Holder) {
+    let copy = *h;
+    copy.r.f = 9;   // OK: `copy` is the body's own `Holder`
+}
+```
+
 ## Deferred Initialization
 
 `let x: T;` declares one name without an initializer, and the type is required.

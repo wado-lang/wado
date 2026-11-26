@@ -1,0 +1,31 @@
+// A closure handed to a callee by value keeps each element it is given in a
+// list the caller owns, so `arms` escapes the search and the caller's copy must
+// not share its elements with the references `kept` holds.
+
+use { println, Stdout } from "core:cli";
+
+struct Arm {
+    keys: List<i32>,
+}
+
+#[inline(never)]
+fn arms_with(key: i32, kept: &mut List<&Arm>) -> List<Arm> {
+    let mut arms: List<Arm> = [Arm { keys: [1] }];
+    if let Some(i) = arms.iter_ref().position(|a| {
+        kept.push(a);
+        return a.keys.len() == 1;
+    }) {
+        arms[i].keys.push(key);
+    }
+    return arms;
+}
+
+export fn run() with Stdout {
+    let mut kept: List<&Arm> = [];
+    let mut arms = arms_with(builtin::black_box(2), &mut kept);
+    arms[0].keys.push(3);
+    println(`${arms[0].keys.len()} ${kept[0].keys.len()}`);
+}
+
+__DATA__
+{"stdout": "3 2\n"}

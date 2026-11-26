@@ -1956,7 +1956,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_access.span,
         );
 
-        field_type
+        let through_shared = self.reference_mutability(expr_type) == Some(false)
+            || self.place_roots_at_immutable_ref(&field_access.expr);
+        if through_shared {
+            self.tysys.shared_view(field_type)
+        } else {
+            field_type
+        }
     }
 
     /// Record a use→def reference for a struct field access.
