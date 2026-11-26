@@ -223,9 +223,9 @@ impl Monomorphizer {
     }
 
     /// A blanket's impl arguments: the receiver it serves, or the pointee a
-    /// blanket over a reference records, then what its bounds project off it
-    /// and the call's trait arguments settle. A written receiver beats a
-    /// recorded outer newtype link.
+    /// call through a blanket over a reference records, then what its bounds
+    /// project off it and the call's trait arguments settle. A written
+    /// receiver beats a recorded outer newtype link.
     fn blanket_args_at(
         &self,
         blanket: &BlanketImpl,

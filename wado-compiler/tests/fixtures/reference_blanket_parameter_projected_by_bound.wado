@@ -53,3 +53,33 @@ test "and so does a call through a bound" {
     assert tagged::<String, &Words>(&words) == "seven";
     assert through_bound(&ints) == 8;
 }
+
+trait Pick<A> with () {
+    fn pick<B>(self, b: B) -> [A, B];
+}
+
+impl<A, T: Source<Item = A>> Pick<A> for &mut T {
+    #[allow(self_by_value)]
+    fn pick<B>(self, b: B) -> [A, B] { return [(*self).first(), b]; }
+}
+
+fn picked<S: Source<Item = i32>>(s: &mut S) -> [i32, bool] {
+    return s.pick(true);
+}
+
+test "a blanket over `&mut` whose method takes a parameter of its own" {
+    let mut ints = Ints { n: 7 };
+    let [n, s] = (&mut ints).pick("x");
+    assert n == 7 && s == "x";
+    let [m, t] = picked(&mut ints);
+    assert m == 7 && t;
+}
+
+type IntsRef = &Ints;
+
+// Regression: the bound's dispatch took the enclosing function's arguments
+// for the blanket's, so `T` was the newtype and `A` whatever came first.
+test "a newtype over the reference reaches the blanket through its base" {
+    let ints = Ints { n: 7 };
+    assert tagged::<i32, IntsRef>(&ints as IntsRef) == 7;
+}

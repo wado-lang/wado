@@ -568,8 +568,8 @@ fn method_call_info_for_type(
     }
 }
 
-/// The name and instance of a call through the universal `&T` blanket, keyed
-/// by its pointee.
+/// The name and record of a call through the universal `&T` blanket: both
+/// name its pointee, from which monomorphization fills the instance's slots.
 pub(crate) fn ref_blanket_call(
     ref_kind: RefKind,
     trait_name: &FqTraitName,
@@ -888,18 +888,16 @@ fn value_blanket_link<'a>(
         .filter(|(blanket, _)| blanket.receiver == BlanketReceiver::Value)
 }
 
-/// The `&T` blanket the order selects for the reference `receiver` itself.
+/// The `&T` blanket the order selects for `receiver`, with the reference it
+/// answers: `receiver` itself, or the one a newtype over a reference names.
 pub(crate) fn ranked_ref_blanket<'a>(
     trait_env: &'a TraitEnv,
     trait_name: &FqTraitName,
     receiver: TypeId,
     tt: &TypeTable,
-) -> Option<&'a BlanketImpl> {
+) -> Option<(&'a BlanketImpl, TypeId)> {
     ranked_blanket(trait_env, trait_name, receiver, tt)
-        .filter(|(blanket, link)| {
-            matches!(blanket.receiver, BlanketReceiver::Ref { .. }) && *link == receiver
-        })
-        .map(|(blanket, _)| blanket)
+        .filter(|(blanket, _)| matches!(blanket.receiver, BlanketReceiver::Ref { .. }))
 }
 
 /// The blanket the order selects for `receiver`, with the link of its chain

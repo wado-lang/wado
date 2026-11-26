@@ -25,3 +25,19 @@ test {
     assert tagged::<i32, &Both>(&b) == 7;
     assert tagged::<String, &Both>(&b) == "7";
 }
+
+fn in_body<A, S: Source<A>>(s: &S) -> A { return s.tag(); }
+
+test "a generic body names the argument" {
+    let b = Both { n: 7 };
+    assert in_body::<i32, Both>(&b) == 7;
+    assert in_body::<String, Both>(&b) == "7";
+}
+
+type BothRef = &Both;
+
+test "a newtype over the reference reaches the blanket through its base" {
+    let b = Both { n: 7 };
+    assert tagged::<i32, BothRef>(&b as BothRef) == 7;
+    assert tagged::<String, BothRef>(&b as BothRef) == "7";
+}
