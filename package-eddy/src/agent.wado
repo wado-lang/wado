@@ -5,7 +5,7 @@ use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { Value } from "core:value";
-use { converse, message, Credential, Message, Usage } from "./anthropic.wado";
+use { converse, message, Credential, Format, Message, Usage } from "./anthropic.wado";
 use { Workspace } from "./tools.wado";
 
 /// What an agent did. A run that failed keeps what it spent before the error.
@@ -55,7 +55,8 @@ struct Blocks {
 }
 
 /// The answer `model` gives to `task` after reading `ws` with the tools, in at
-/// most `max_turns` turns, at `effort`. The last turn takes no tool call.
+/// most `max_turns` turns, at `effort`, held to `format`. The last turn takes
+/// no tool call.
 pub fn run_agent(
     credential: &mut Credential,
     model: String,
@@ -65,6 +66,7 @@ pub fn run_agent(
     max_turns: i32,
     max_tokens: i32,
     effort: String,
+    format: Format,
 ) -> AgentRun with (Client, Preopens, Process, MonotonicClock) {
     assert max_turns >= 1;
     let declared = ws.tools();
@@ -76,7 +78,17 @@ pub fn run_agent(
         turns += 1;
         let last = turns == max_turns;
         let started = (MonotonicClock::now() - first) as f64 / 1e9;
-        let turn = match converse(credential, model, system, &declared, !last, &messages, max_tokens, effort) {
+        let turn = match converse(
+            credential,
+            model,
+            system,
+            &declared,
+            !last,
+            &messages,
+            max_tokens,
+            effort,
+            &format,
+        ) {
             Ok(turn) => turn,
             Err(e) => {
                 return AgentRun { answer: Err(e), turns, calls, usage, requests };
