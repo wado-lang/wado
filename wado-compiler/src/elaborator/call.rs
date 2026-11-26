@@ -732,12 +732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the place is mutable through the reference even though the
     /// binding itself cannot be reassigned (matches Rust's rule for
     /// `&mut self`).
-    fn check_fn_mut_root_mutability(
-        &mut self,
-        callee: &Expr,
-        ctx: &FunctionContext,
-        fn_is_mut: bool,
-    ) {
+    fn check_fn_mut_root_mutability(&self, callee: &Expr, ctx: &FunctionContext, fn_is_mut: bool) {
         if !fn_is_mut {
             return;
         }
@@ -851,7 +846,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether a parameter type still holds an unanswered variable.
-    fn param_still_open(&mut self, param_type: Option<TypeId>) -> bool {
+    fn param_still_open(&self, param_type: Option<TypeId>) -> bool {
         let Some(param_type) = param_type else {
             return false;
         };
@@ -1323,7 +1318,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Check the lane immediates of a SIMD builtin call. Wasm encodes each as
     /// an instruction immediate, so only a literal naming a lane that exists
     /// can be lowered — anything else reaches codegen as an invalid module.
-    fn check_simd_lane_immediates(&mut self, builtin: &str, args: &[Expr]) {
+    fn check_simd_lane_immediates(&self, builtin: &str, args: &[Expr]) {
         let Some(SimdLaneShape {
             immediates,
             arity,
@@ -1354,7 +1349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Check a `builtin::array_new_data` call. Its bytes become a constant read
     /// as whole elements, so they must be known at compile time.
-    fn check_array_new_data(&mut self, args: &[Expr], result: TypeId, span: Span) {
+    fn check_array_new_data(&self, args: &[Expr], result: TypeId, span: Span) {
         let width = self
             .tysys
             .type_table
@@ -3230,7 +3225,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn lookup_function_return_type(
-        &mut self,
+        &self,
         callee: &CalleeRef,
         effect_op: Option<&EffectOperation>,
     ) -> TypeId {
@@ -3257,7 +3252,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Get the String struct type (from core:prelude/string.wado)
-    pub(super) fn get_string_struct_type(&mut self) -> TypeId {
+    pub(super) fn get_string_struct_type(&self) -> TypeId {
         self.tysys
             .type_table
             .borrow_mut()
@@ -3875,7 +3870,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// functions. Used to synthesize missing trailing arguments at the call
     /// site.
     pub(super) fn lookup_function_param_defaults(
-        &mut self,
+        &self,
         callee: &Expr,
         ctx: &FunctionContext,
     ) -> (Vec<(String, Option<Expr>)>, Option<ModuleSource>) {
@@ -3906,7 +3901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Look up whether each parameter of a free function is `mut`.
     /// Returns empty vec for unknown/builtin functions (conservative: always copy).
-    pub(super) fn lookup_function_param_is_mut(&mut self, callee: &Expr) -> Vec<bool> {
+    pub(super) fn lookup_function_param_is_mut(&self, callee: &Expr) -> Vec<bool> {
         let Expr::Ident(ident) = callee else {
             return Vec::new();
         };
@@ -4148,7 +4143,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// generics) are excluded. A slot it reports is the error type from then
     /// on.
     fn report_uninferred_fn_type_args(
-        &mut self,
+        &self,
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
         span: token::Span,
@@ -4431,7 +4426,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// read off `param_types` as declared: the argument check accepts it
     /// against the slot, unbound or the error type. Whether it reported any.
     fn report_value_for_reference(
-        &mut self,
+        &self,
         param_types: &[TypeId],
         call: &ast::CallExpr,
         args: &[TypeId],
@@ -4712,7 +4707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// variadic pack: `ids::<i32, bool>()` fills `..T` with `[i32, bool]`.
     /// Returns whether it reported instead.
     pub(super) fn group_variadic_type_args_of(
-        &mut self,
+        &self,
         callee_name: &str,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
@@ -4750,11 +4745,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::group_variadic_type_args_of`] fits them, reporting nothing: a
     /// slot past what the turbofish names is absent, and where more than one
     /// pack leaves the grouping open, the args stay where they were written.
-    pub(super) fn turbofish_per_slot(
-        &mut self,
-        slots: &[TypeId],
-        type_args: &[TypeId],
-    ) -> Vec<TypeId> {
+    pub(super) fn turbofish_per_slot(&self, slots: &[TypeId], type_args: &[TypeId]) -> Vec<TypeId> {
         let mut fitted = type_args.to_vec();
         let mut table = self.tysys.type_table.borrow_mut();
         let packs: Vec<usize> = slots
@@ -4773,7 +4764,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// returning whether they were. Surplus arguments are an arity error here,
     /// where with one pack they are what the pack absorbs.
     fn reject_unspelled_pack_args(
-        &mut self,
+        &self,
         callee_name: &str,
         real: &[&ast::GenericParam],
         type_args: &[TypeId],
@@ -4801,7 +4792,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report a turbofish naming `found` type arguments where `expected` slots
     /// take them, returning whether it did.
     pub(super) fn reject_surplus_turbofish(
-        &mut self,
+        &self,
         callee_name: &str,
         expected: usize,
         found: usize,
@@ -5995,7 +5986,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether the case takes `arg_count` arguments and the turbofish the
     /// variant's parameters.
-    fn check_case_site(&mut self, case: &CaseSite<'_>, arg_count: usize) -> bool {
+    fn check_case_site(&self, case: &CaseSite<'_>, arg_count: usize) -> bool {
         self.check_case_arity(case.case, arg_count, case.span)
             && self.check_case_turbofish_arity(
                 case.written.len(),

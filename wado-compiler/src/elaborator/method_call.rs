@@ -1178,7 +1178,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             matched_ref_kind,
             trait_impl_struct_name,
             trait_impl_module_source,
-            inherent_impl_module: inherent_impl_module.clone(),
+            inherent_impl_module,
             struct_module,
             blanket_binder,
             dispatched_method_def,
@@ -1986,7 +1986,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// a call of a value blanket's static `method_name` means. The expected
     /// type or an argument says, where the blanket's signature places `Self`.
     pub(super) fn unapplied_static_instance(
-        &mut self,
+        &self,
         receiver: &ReceiverId,
         method_name: &str,
         args: &[TypeId],
@@ -2310,7 +2310,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// and silently drops the change. A `&mut` receiver still answers a
     /// `&self` method — the one reference coercion the language has.
     fn check_trait_qualified_receiver_mode(
-        &mut self,
+        &self,
         trait_name: &str,
         method: &str,
         self_kind: ast::SelfKind,
@@ -3744,7 +3744,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The value blanket impl `blanket` the resolution picked for a static
     /// `method_name`, as it is instantiated at `receiver_type_id`.
     fn find_blanket_static_method(
-        &mut self,
+        &self,
         receiver_type_id: TypeId,
         method_name: &str,
         blanket: DefId,
@@ -3761,7 +3761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// only: which of several answers is
     /// [`Elaborator::resolve_static_callee`]'s to decide.
     pub(super) fn applicable_blanket_statics(
-        &mut self,
+        &self,
         receiver_type_id: TypeId,
         method_name: &str,
         peel: NewtypePeel,
@@ -4185,7 +4185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         args: &[ast::Expr],
         span: Span,
-        ctx: &mut FunctionContext,
+        ctx: &FunctionContext,
     ) -> PreselectedArg {
         if args.is_empty() || self.has_inherent_static_method(recv.receiver.key(), method_name) {
             return PreselectedArg::Undecided;
@@ -4249,7 +4249,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// comes from the selected impl. Admissibility is [`Elaborator::class_admits`]
     /// over each impl's *resolved* parameter type, since spelling under-admits.
     pub(super) fn static_arg_preselect(
-        &mut self,
+        &self,
         recv: StaticReceiver<'_>,
         method_name: &str,
         classes: &[ArgClass],
@@ -4319,7 +4319,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// It walks the impls directly rather than reading the resolution, because
     /// its consumers need every candidate and the resolution keeps one.
     pub(super) fn static_arg_survey(
-        &mut self,
+        &self,
         recv: StaticReceiver<'_>,
         method_name: &str,
     ) -> StaticArgSurvey {

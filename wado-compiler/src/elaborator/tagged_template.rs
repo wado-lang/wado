@@ -105,7 +105,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `ty` can be a hole of a shape: decided. One mentioning the
     /// enclosing item's type parameters or packs makes the shape open.
-    fn hole_type_admissible(&mut self, ty: TypeId, span: Span) -> bool {
+    fn hole_type_admissible(&self, ty: TypeId, span: Span) -> bool {
         if ty == TypeTable::ERROR || ty == TypeTable::UNKNOWN {
             return false;
         }

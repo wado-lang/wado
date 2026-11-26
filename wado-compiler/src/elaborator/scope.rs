@@ -1342,7 +1342,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// What `param` declares, pinned to the `Self` this frame binds — what the
     /// bounds' written types mean, whatever frame later reads them.
-    pub(super) fn scoped_bounds(&mut self, param: &ast::GenericParam) -> Vec<ScopedBound> {
+    pub(super) fn scoped_bounds(&self, param: &ast::GenericParam) -> Vec<ScopedBound> {
         let self_binding = self.self_binding();
         if self_binding.is_none() {
             // Every bound the parameter declares, not the trait-named ones
@@ -1354,7 +1354,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The parameters of `owning_trait`'s associated type `assoc`, as the
     /// `ResolvedType::AssocParam`s a binding is written over.
-    pub(super) fn family_params(&mut self, owning_trait: DefId, assoc: &str) -> Vec<TypeId> {
+    pub(super) fn family_params(&self, owning_trait: DefId, assoc: &str) -> Vec<TypeId> {
         let names: Vec<String> = self
             .tysys
             .trait_env
@@ -1578,7 +1578,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Reject a bound writing `Self` where the frame binds none. `Self::Assoc`
     /// on a free function's parameter would go unchecked rather than mean what
     /// the parameter's own name already says.
-    fn reject_self_in_bounds(&mut self, param: &str, bounds: &[ast::TraitBound]) {
+    fn reject_self_in_bounds(&self, param: &str, bounds: &[ast::TraitBound]) {
         let written: Vec<Span> = bounds
             .iter()
             .filter(|bound| bound.writes_self())

@@ -1896,7 +1896,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         place: &WritePlace,
         value_type: TypeId,
         value_span: Span,
-        ctx: &mut FunctionContext,
+        ctx: &FunctionContext,
     ) -> TypeId {
         // Reject &T assigned where non-ref T expected
         self.typecheck(value_type, place.value_type(), value_span);
@@ -2159,7 +2159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// was typed to return at the bound that answered, `typed`, which reads
     /// that bound's own `Output` (`T: Mul<Output = T>`) at its arguments.
     fn operator_output_type(
-        &mut self,
+        &self,
         operand_type_id: TypeId,
         found_trait: &FqTraitName,
         typed: TypeId,

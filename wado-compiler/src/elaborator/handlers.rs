@@ -185,7 +185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn report_handler_not_implemented(
-        &mut self,
+        &self,
         handler_type: TypeId,
         interface_name: &str,
         binding: &ast::EffectHandlerBinding,
