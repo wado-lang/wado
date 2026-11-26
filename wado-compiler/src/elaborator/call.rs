@@ -1678,7 +1678,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .self_type
                 .is_some_and(|ty| self.tysys.binder_name(ty).is_none())
         {
-            return ControlFlow::Break(self.resolve_static_method_call_of_trait(
+            return ControlFlow::Break(self.resolve_static_method_call_restricted_to_trait(
                 &static_call_on_head(call, head, method),
                 (Some(required), &[]),
                 ctx,
@@ -1694,7 +1694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.type_table.borrow().is_reference(receiver)
             && let [head, method] = ident.segments.as_slice()
         {
-            return ControlFlow::Break(self.resolve_static_method_call_of_trait(
+            return ControlFlow::Break(self.resolve_static_method_call_restricted_to_trait(
                 &static_call_on_head(call, head, method),
                 (None, &[]),
                 ctx,

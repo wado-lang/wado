@@ -39,7 +39,7 @@ use super::trait_query::{NewtypePeel, OnBoundTrait, SelfBinding};
 use super::typecheck::Settles;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TraitLookup, TypeError};
 use super::tysys::TypeSystem;
-use super::{AbstractSelection, Elaborator, util};
+use super::{AbstractSelection, Elaborator, WrittenHead, util};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
 use crate::elaborator::call::slot_type_bindings;
@@ -2458,12 +2458,192 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        self.resolve_static_method_call_of_trait(static_call, (None, &[]), ctx, expected_type)
+        self.resolve_static_method_call_restricted_to_trait(
+            static_call,
+            (None, &[]),
+            ctx,
+            expected_type,
+        )
+    }
+
+    /// `ReflectStruct::<T>::members()`: a call on a reflection trait, which
+    /// reaches `T`'s synthesized `T^Trait::method`.
+    fn resolve_reflection_trait_call(
+        &mut self,
+        head: &WrittenHead<'_>,
+        dispatch: ReflectDispatch,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let [self_ty_ast] = head.args else {
+            let _ = self.emit(TypeError::TypeArgumentCount {
+                name: head.name.clone(),
+                expected: 1,
+                found: head.args.len(),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        };
+        let self_ty = self.resolve_type(self_ty_ast);
+        match dispatch {
+            ReflectDispatch::Root => {
+                self.resolve_reflect_root_static_call(self_ty, static_call, ctx)
+            }
+            ReflectDispatch::Struct => self.resolve_reflect_static_call(self_ty, static_call, ctx),
+            ReflectDispatch::Variant => {
+                self.resolve_reflect_variant_static_call(self_ty, static_call, ctx)
+            }
+            ReflectDispatch::Template => {
+                self.resolve_reflect_template_static_call(self_ty, static_call, ctx)
+            }
+            ReflectDispatch::Scalar(spec) => {
+                self.resolve_reflect_scalar_static_call(spec, self_ty, static_call, ctx)
+            }
+        }
+    }
+
+    /// A call whose head names a trait, not a type: `Take::<A>::take(recv, …)`
+    /// or `Tagged::<Self = V>::tag(…)`.
+    fn resolve_trait_headed_call(
+        &mut self,
+        head: &WrittenHead<'_>,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
+        // (WEP 2026-07-31): the turbofish pins one argument list by the
+        // *types* its arguments resolve to, so an aliased spelling still
+        // names the impl written under the original name; the head
+        // resolves past any `use … as` alias to its declaration. Gated on
+        // the turbofish matching the trait's declared arity: on a
+        // zero-parameter trait the turbofish cannot be trait arguments
+        // (`Shape::<Sq>::area` writes the receiver — a pre-existing
+        // misuse), so that shape keeps its unknown-function error.
+        let trait_params = self
+            .decl_key_at(Some(head.site))
+            .and_then(|key| self.tysys.trait_decl_type_params_of(&key))
+            .unwrap_or_default();
+        let trait_arity = ast::written_params(&trait_params).count();
+        // The turbofish is the trait's argument list, all of it or none;
+        // `Self = T` beside it binds the receiver.
+        let writes_trait_args = trait_arity != 0 && trait_arity == head.args.len();
+        let takes_receiver = self.is_trait_instance_method_at(head.site, &static_call.method);
+        let self_type = static_call.self_type.as_ref();
+        if self_type.is_some() && !head.args.is_empty() && !writes_trait_args {
+            let _ = self.emit(TypeError::TypeArgumentCount {
+                name: self.declared_trait_name(Some(head.site), &head.name),
+                expected: trait_arity,
+                found: head.args.len(),
+                span: static_call.span,
+            });
+            return self.resolve_args_without_callee(&static_call.args, ctx);
+        }
+        // A binding naming no type was reported where it is written.
+        if self_type.is_some_and(|ty| {
+            matches!(self.resolve_type(ty), TypeTable::UNKNOWN | TypeTable::ERROR)
+        }) {
+            return self.resolve_args_without_callee(&static_call.args, ctx);
+        }
+        if takes_receiver && (writes_trait_args || self_type.is_some()) {
+            let declared_head = self.declared_trait_name(Some(head.site), &head.name);
+            // A `_` for every argument writes none of them, and the
+            // receiver selects the impl as an unqualified call's does.
+            let writes_trait_args = writes_trait_args
+                && !head
+                    .args
+                    .iter()
+                    .all(|arg| matches!(arg, ast::Type::Infer(_)));
+            let trait_args = if writes_trait_args {
+                self.resolve_trait_turbofish(
+                    head.args,
+                    &trait_params,
+                    &declared_head,
+                    &static_call.method,
+                    static_call.span,
+                )
+            } else {
+                Vec::new()
+            };
+            let args_spelled: Vec<String> = head
+                .args
+                .iter()
+                .map(|a| self.get_type_name_full(a))
+                .collect();
+            let required = RequiredTrait {
+                decl: self.tysys.resolutions.get(head.site),
+                args: writes_trait_args.then_some(trait_args),
+                display: display_generic_name(&declared_head, &args_spelled),
+            };
+            let bound = self_type.map(|ty| {
+                let self_ty = self.resolve_type(ty);
+                self.receiver_of(self_ty)
+            });
+            let method_type_args: Vec<TypeId> = self.resolve_turbofish_args(&static_call.type_args);
+            return self.resolve_qualified_call_parts(
+                Qualifier::Trait(required, bound.as_ref()),
+                &static_call.method.clone(),
+                &static_call.args,
+                method_type_args,
+                static_call.id,
+                Some(static_call.method_id),
+                static_call.span,
+                None,
+                ctx,
+            );
+        }
+        // `Tagged::<Self = V>::tag(…)` — the static counterpart. A
+        // receiver-less declaration has no receiver argument to pin
+        // `Self`, so the binding supplies it and the call reads as
+        // `V::tag(…)`.
+        if let Some(self_ty_ast) = self_type
+            && self.is_trait_static_method_at(head.site, &static_call.method)
+        {
+            let declared_head = self.declared_trait_name(Some(head.site), &head.name);
+            let trait_args = self.resolve_trait_turbofish(
+                head.args,
+                &trait_params,
+                &declared_head,
+                &static_call.method,
+                static_call.span,
+            );
+            let mut on_self = static_call.clone();
+            on_self.target_type = self_ty_ast.clone();
+            on_self.self_type = None;
+            // Restricted to the named trait: the rewritten spelling reads
+            // as `V::tag(…)`, and without it a case or an inherent static
+            // `V` declares of that name answers in the trait's place.
+            let required = self.tysys.resolutions.declared(head.site);
+            return self.resolve_static_method_call_restricted_to_trait(
+                &on_self,
+                (required, &trait_args),
+                ctx,
+                expected_type,
+            );
+        }
+        // A receiver-less declaration named with no binding: the turbofish
+        // is the trait's, so say that rather than let the call read as an
+        // unknown function.
+        if self.is_trait_static_method_at(head.site, &static_call.method)
+            && static_call.self_type.is_none()
+        {
+            let _ = self.emit(TypeError::StaticNeedsWrittenReceiver {
+                trait_name: self.declared_trait_name(Some(head.site), &head.name),
+                method: static_call.method.clone(),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
+        let _ = self.emit(TypeError::UnknownFunction {
+            name: static_call_symbol_name(static_call),
+            span: static_call.span,
+        });
+        TypeTable::ERROR
     }
 
     /// [`Self::resolve_static_method_call`] restricted to one trait's impls,
     /// which is what a `Trait::<T>::method(…)` spelling names.
-    pub(super) fn resolve_static_method_call_of_trait(
+    pub(super) fn resolve_static_method_call_restricted_to_trait(
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
         // The trait a qualified spelling names, and the arguments it writes
@@ -2473,40 +2653,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         // A reflection trait is a trait, not a type, so `target_type` would not
-        // resolve: intercept and route to `T`'s synthesized `T^Trait::method`.
-        // It is the only spelling — a bare `T::members()` never resolves, so
-        // type namespaces stay the author's.
+        // resolve. It is the only spelling — a bare `T::members()` never
+        // resolves, so type namespaces stay the author's.
         let head = self.written_head(&static_call.target_type);
         if let Some(head) = &head
             && let Some(dispatch) = self.reflect_dispatch_of(head.site, &static_call.method)
         {
-            let [self_ty_ast] = head.args else {
-                let _ = self.emit(TypeError::TypeArgumentCount {
-                    name: head.name.clone(),
-                    expected: 1,
-                    found: head.args.len(),
-                    span: static_call.span,
-                });
-                return TypeTable::ERROR;
-            };
-            let self_ty = self.resolve_type(self_ty_ast);
-            return match dispatch {
-                ReflectDispatch::Root => {
-                    self.resolve_reflect_root_static_call(self_ty, static_call, ctx)
-                }
-                ReflectDispatch::Struct => {
-                    self.resolve_reflect_static_call(self_ty, static_call, ctx)
-                }
-                ReflectDispatch::Variant => {
-                    self.resolve_reflect_variant_static_call(self_ty, static_call, ctx)
-                }
-                ReflectDispatch::Template => {
-                    self.resolve_reflect_template_static_call(self_ty, static_call, ctx)
-                }
-                ReflectDispatch::Scalar(spec) => {
-                    self.resolve_reflect_scalar_static_call(spec, self_ty, static_call, ctx)
-                }
-            };
+            return self.resolve_reflection_trait_call(head, dispatch, static_call, ctx);
         }
 
         // Resolve the target type first to get struct name for parameter type
@@ -2525,135 +2678,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .decl_key_at(Some(head.site))
                 .is_some_and(|key| self.tysys.trait_env.declares_trait(&key))
         {
-            // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
-            // (WEP 2026-07-31): the turbofish pins one argument list by the
-            // *types* its arguments resolve to, so an aliased spelling still
-            // names the impl written under the original name; the head
-            // resolves past any `use … as` alias to its declaration. Gated on
-            // the turbofish matching the trait's declared arity: on a
-            // zero-parameter trait the turbofish cannot be trait arguments
-            // (`Shape::<Sq>::area` writes the receiver — a pre-existing
-            // misuse), so that shape keeps its unknown-function error.
-            let trait_params = self
-                .decl_key_at(Some(head.site))
-                .and_then(|key| self.tysys.trait_decl_type_params_of(&key))
-                .unwrap_or_default();
-            let trait_arity = ast::written_params(&trait_params).count();
-            // The turbofish is the trait's argument list, all of it or none;
-            // `Self = T` beside it binds the receiver.
-            let writes_trait_args = trait_arity != 0 && trait_arity == head.args.len();
-            let takes_receiver = self.is_trait_instance_method_at(head.site, &static_call.method);
-            let self_type = static_call.self_type.as_ref();
-            if self_type.is_some() && !head.args.is_empty() && !writes_trait_args {
-                let _ = self.emit(TypeError::TypeArgumentCount {
-                    name: self.declared_trait_name(Some(head.site), &head.name),
-                    expected: trait_arity,
-                    found: head.args.len(),
-                    span: static_call.span,
-                });
-                return self.resolve_args_without_callee(&static_call.args, ctx);
-            }
-            // A binding naming no type was reported where it is written.
-            if self_type.is_some_and(|ty| {
-                matches!(self.resolve_type(ty), TypeTable::UNKNOWN | TypeTable::ERROR)
-            }) {
-                return self.resolve_args_without_callee(&static_call.args, ctx);
-            }
-            if takes_receiver && (writes_trait_args || self_type.is_some()) {
-                let declared_head = self.declared_trait_name(Some(head.site), &head.name);
-                // A `_` for every argument writes none of them, and the
-                // receiver selects the impl as an unqualified call's does.
-                let writes_trait_args = writes_trait_args
-                    && !head
-                        .args
-                        .iter()
-                        .all(|arg| matches!(arg, ast::Type::Infer(_)));
-                let trait_args = if writes_trait_args {
-                    self.resolve_trait_turbofish(
-                        head.args,
-                        &trait_params,
-                        &declared_head,
-                        &static_call.method,
-                        static_call.span,
-                    )
-                } else {
-                    Vec::new()
-                };
-                let args_spelled: Vec<String> = head
-                    .args
-                    .iter()
-                    .map(|a| self.get_type_name_full(a))
-                    .collect();
-                let required = RequiredTrait {
-                    decl: self.tysys.resolutions.get(head.site),
-                    args: writes_trait_args.then_some(trait_args),
-                    display: display_generic_name(&declared_head, &args_spelled),
-                };
-                let bound = self_type.map(|ty| {
-                    let self_ty = self.resolve_type(ty);
-                    self.receiver_of(self_ty)
-                });
-                let method_type_args: Vec<TypeId> =
-                    self.resolve_turbofish_args(&static_call.type_args);
-                return self.resolve_qualified_call_parts(
-                    Qualifier::Trait(required, bound.as_ref()),
-                    &static_call.method.clone(),
-                    &static_call.args,
-                    method_type_args,
-                    static_call.id,
-                    Some(static_call.method_id),
-                    static_call.span,
-                    None,
-                    ctx,
-                );
-            }
-            // `Tagged::<Self = V>::tag(…)` — the static counterpart. A
-            // receiver-less declaration has no receiver argument to pin
-            // `Self`, so the binding supplies it and the call reads as
-            // `V::tag(…)`.
-            if let Some(self_ty_ast) = self_type
-                && self.is_trait_static_method_at(head.site, &static_call.method)
-            {
-                let declared_head = self.declared_trait_name(Some(head.site), &head.name);
-                let trait_args = self.resolve_trait_turbofish(
-                    head.args,
-                    &trait_params,
-                    &declared_head,
-                    &static_call.method,
-                    static_call.span,
-                );
-                let mut on_self = static_call.clone();
-                on_self.target_type = self_ty_ast.clone();
-                on_self.self_type = None;
-                // Restricted to the named trait: the rewritten spelling reads
-                // as `V::tag(…)`, and without it a case or an inherent static
-                // `V` declares of that name answers in the trait's place.
-                let required = self.tysys.resolutions.declared(head.site);
-                return self.resolve_static_method_call_of_trait(
-                    &on_self,
-                    (required, &trait_args),
-                    ctx,
-                    expected_type,
-                );
-            }
-            // A receiver-less declaration named with no binding: the turbofish
-            // is the trait's, so say that rather than let the call read as an
-            // unknown function.
-            if self.is_trait_static_method_at(head.site, &static_call.method)
-                && static_call.self_type.is_none()
-            {
-                let _ = self.emit(TypeError::StaticNeedsWrittenReceiver {
-                    trait_name: self.declared_trait_name(Some(head.site), &head.name),
-                    method: static_call.method.clone(),
-                    span: static_call.span,
-                });
-                return TypeTable::ERROR;
-            }
-            let _ = self.emit(TypeError::UnknownFunction {
-                name: static_call_symbol_name(static_call),
-                span: static_call.span,
-            });
-            return TypeTable::ERROR;
+            return self.resolve_trait_headed_call(head, static_call, ctx, expected_type);
         }
 
         if static_call.self_type.is_some() {
@@ -3178,44 +3203,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // them — the same rule the resolution applies to its candidates.
         let builds_own_case = required_trait.is_none();
 
-        // Handle flags type static methods: none() and all()
-        if builds_own_case {
-            // The receiver's own declaration, not its head resolved again.
-            // Only a `flags` declaration has members, so this guards the kind.
-            if let Some(flags_info) = self
+        // A flags type's `none()` and `all()`. The receiver's own declaration,
+        // not its head resolved again. Only a `flags` declaration has members,
+        // so this guards the kind.
+        if builds_own_case
+            && matches!(static_call.method.as_str(), "none" | "all")
+            && let Some(flags_info) = self
                 .tysys
                 .type_table
                 .borrow()
                 .nominal_def(target_type_id)
                 .and_then(|def| self.type_lookup().flags_members_of(def))
                 .cloned()
-            {
-                match static_call.method.as_str() {
-                    "none" => {
-                        if !args.is_empty() {
-                            let _ = self.emit(TypeError::ArgumentCountMismatch {
-                                expected: 0,
-                                found: args.len(),
-                                span: static_call.span,
-                            });
-                            return TypeTable::ERROR;
-                        }
-                        return flags_info.type_id;
-                    }
-                    "all" => {
-                        if !args.is_empty() {
-                            let _ = self.emit(TypeError::ArgumentCountMismatch {
-                                expected: 0,
-                                found: args.len(),
-                                span: static_call.span,
-                            });
-                            return TypeTable::ERROR;
-                        }
-                        return flags_info.type_id;
-                    }
-                    _ => {}
-                }
+        {
+            if !args.is_empty() {
+                let _ = self.emit(TypeError::ArgumentCountMismatch {
+                    expected: 0,
+                    found: args.len(),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
             }
+            return flags_info.type_id;
         }
 
         if static_call.method == "from"
