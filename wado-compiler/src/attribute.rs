@@ -1066,7 +1066,13 @@ mod tests {
         assert_eq!(seconds("86400"), Some(MAX_TIMEOUT_SECONDS));
         let shape = lookup(TIMEOUT).unwrap().args.describe();
         assert!(shape.contains(&MAX_TIMEOUT_SECONDS.to_string()), "{shape}");
-        for refused in ["0", "86401", "-5", "1.5", "340282366920938463463374607431768211455"] {
+        for refused in [
+            "0",
+            "86401",
+            "-5",
+            "1.5",
+            "340282366920938463463374607431768211455",
+        ] {
             assert_eq!(seconds(refused), None, "{refused}");
         }
     }
