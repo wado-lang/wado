@@ -25,8 +25,8 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::writes::{
-    Stored, Summaries, Summary, Write, for_each_write, is_panic_call, node_quiet,
-    modifies_any_root, reachable_elsewhere, read_kinds,
+    Stored, Summaries, Summary, Write, for_each_write, is_panic_call, modifies_any_root,
+    node_quiet, reachable_elsewhere, read_kinds,
 };
 use crate::tir::{BuiltinDeclaration, TypeId};
 use crate::type_table::TypeTable;
@@ -1128,10 +1128,12 @@ fn guard_roots(var: u32, bound: BoundKey) -> impl Iterator<Item = u32> {
     [Some(var), bound_root(bound)].into_iter().flatten()
 }
 
-/// Whether `summary`'s subtree may change `var` or what `bound` reads, as
-/// [`node_modifies`] answers.
-fn modifies_guard(summary: &Summary, engine: &Engine, var: u32, bound: BoundKey) -> bool {
-    guard_roots(var, bound).any(|root| summary.modifies(engine, root))
+impl Summary {
+    /// Whether the subtree may change `var` or what `bound` reads, as
+    /// [`node_modifies`] answers.
+    fn modifies_guard(&self, engine: &Engine, var: u32, bound: BoundKey) -> bool {
+        guard_roots(var, bound).any(|root| self.modifies(engine, root))
+    }
 }
 
 /// Structural loop-guard BCE. Recognises the loop guard `if !(var < bound) { break }` at
@@ -1224,7 +1226,7 @@ fn structural_loop_guard(
     let mut changed = false;
     for &s in stmts.iter().skip(guard_idx + 1) {
         let summary = Summaries::default().of(engine, NodeRef::Stmt(s));
-        guarded.retain(|&v| !modifies_guard(&summary, engine, v, bound));
+        guarded.retain(|&v| !summary.modifies_guard(engine, v, bound));
         if guarded.is_empty() {
             break;
         }
@@ -1750,7 +1752,7 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
         if carried {
             let before = Summaries::default().of(engine, node);
             for &(var, k, bound) in &seguards {
-                if !modifies_guard(&before, engine, var, bound) {
+                if !before.modifies_guard(engine, var, bound) {
                     changed |= eliminate_checks_in_node(engine, node, var, k, bound, binds, None);
                 }
             }
@@ -1764,7 +1766,7 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
         changed |= process_stmt(engine, block, s, binds);
         if carried {
             let after = Summaries::default().of(engine, node);
-            seguards.retain(|&(var, _, bound)| !modifies_guard(&after, engine, var, bound));
+            seguards.retain(|&(var, _, bound)| !after.modifies_guard(engine, var, bound));
             capped.retain(|((root, _), _)| !after.modifies(engine, *root));
         }
         // As at a loop guard, a `let c = var` carries what is proven of `var`.

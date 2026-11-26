@@ -48,15 +48,15 @@ use super::bounds;
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, FieldPath, InductionStep, VAR_OFFSET_MAX_DEPTH, break_guard_cmp,
     build_copy_bindings, capture_block_binding, check_conjuncts, eliminate_condition,
-    induction_entry, induction_step, is_seq_length, negated_operand,
-    panic_guard_check, parse_bound, parse_break_guard_head, parse_const_i64, parse_var_offset,
-    peel_capture_block, resolve, resolve_panic_ids, stmt_modifies,
+    induction_entry, induction_step, is_seq_length, negated_operand, panic_guard_check,
+    parse_bound, parse_break_guard_head, parse_const_i64, parse_var_offset, peel_capture_block,
+    resolve, resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::BranchPruneRule;
-use super::writes::modifies_any_root;
 use super::dce::{DescriptorCache, callee_descriptor};
 use super::elide_local::ElideRule;
 use super::heap_effect::{HeapEffectsCache, LazyHeapFrame};
+use super::writes::modifies_any_root;
 use crate::module_source::ModuleSource;
 use crate::nir::FuncId;
 use crate::nir_arena;

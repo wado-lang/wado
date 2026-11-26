@@ -35,7 +35,10 @@ pub(super) enum Write {
 pub(super) enum Stored {
     /// A field or element of a `container`, and, where `value` is of an
     /// in-place type, the leaves of the object the slot held.
-    Slot { container: TypeId, value: TypeId },
+    Slot {
+        container: TypeId,
+        value: TypeId,
+    },
     /// Anything a value of this type reaches: a whole-value store, or a callee
     /// handed it.
     Reaching(TypeId),
