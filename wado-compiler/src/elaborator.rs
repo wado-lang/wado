@@ -1188,16 +1188,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The declaration `ns::Name` reaches from this module.
+    /// The declaration `ns::Name` reaches from the module that wrote it at
+    /// `site`. A parameter default is walked in its caller's module, which may
+    /// import another `ns`.
     ///
     /// A namespace import enters its module's declarations under `ns$Name`
     /// aliases, so this is the import tier answering the qualification the
     /// programmer wrote — the same answer the resolve walk gives `ns::Name` in
     /// type position, rather than a second lookup beside it.
     #[expect(clippy::disallowed_methods, reason = "the import tier's own entry")]
-    pub(super) fn namespace_member(&self, namespace: &str, name: &str) -> Option<DefId> {
+    pub(super) fn namespace_member(
+        &self,
+        site: AstId,
+        namespace: &str,
+        name: &str,
+    ) -> Option<DefId> {
         self.tysys.resolutions.imported_as(
-            &self.current_module_source,
+            &self.home_module(site),
             &namespace_member_alias(namespace, name),
         )
     }

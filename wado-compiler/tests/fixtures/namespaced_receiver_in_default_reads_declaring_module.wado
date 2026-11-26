@@ -3,7 +3,7 @@
 // imports under the same alias.
 
 use ns from "./sub/namespaced_receiver_one.wado";
-use { mask, made } from "./sub/namespaced_receiver_defaults.wado";
+use { mask, made, applied } from "./sub/namespaced_receiver_defaults.wado";
 
 test "a flags constant in a default" {
     assert ns::Perms::all() as u32 == 1;
@@ -13,4 +13,9 @@ test "a flags constant in a default" {
 test "a static method in a default" {
     assert ns::Maker::make() == 1;
     assert made() == 2;
+}
+
+test "a closure argument in a default takes the declaring module's signature" {
+    assert ns::Applier::apply(|s| s.len()) == 3;
+    assert applied() == 21;
 }

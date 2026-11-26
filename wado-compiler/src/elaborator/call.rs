@@ -3399,7 +3399,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The signature read above declines the `ns::Type::method`
                 // shape, so the receiver resolves through the namespace instead.
                 if let Some((type_name, method_name)) = suffix.split_once("::")
-                    && let Some(def) = self.namespace_member(prefix, type_name)
+                    && let Some(site) = callee_site
+                    && let Some(def) = self.namespace_member(site, prefix, type_name)
                 {
                     let ns_key =
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
@@ -5636,7 +5637,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
         )]
         let receiver = at_site.or_else(|| {
-            let def = self.namespace_member(prefix, type_name)?;
+            let def = self.namespace_member(ident.id, prefix, type_name)?;
             Some(ReceiverId::of_decl(
                 self.tysys.resolutions.defs(),
                 def,
