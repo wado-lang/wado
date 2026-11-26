@@ -110,20 +110,6 @@ impl Monomorphizer {
         let Some(key) = self.call_instance(expr, templates, type_table) else {
             return;
         };
-        if let Some(module_source) = judged
-            && let TirExprKind::Call { args, .. } = &expr.kind
-            && let Some(template) = key.template.as_ref().and_then(|t| templates.get(t))
-            && let Some((param, arg)) =
-                mut_leaked_through_shared(&template.borrow(), &key, args, expr.type_id, type_table)
-        {
-            self.shared_mut_leaks.borrow_mut().push(SharedMutLeak {
-                module_source: module_source.clone(),
-                span: expr.span,
-                callee: template.borrow().name.clone(),
-                param,
-                arg,
-            });
-        }
         let Some(mangled) = self.lookup_function_instantiation(&key).cloned() else {
             return;
         };
@@ -153,6 +139,20 @@ impl Monomorphizer {
         {
             expr.type_id = concrete;
         }
+        if let Some(module_source) = judged
+            && let TirExprKind::Call { args, .. } = &expr.kind
+            && let Some(template) = key.template.as_ref().and_then(|t| templates.get(t))
+            && let Some((param, arg)) =
+                mut_leaked_through_shared(&template.borrow(), &key, args, expr.type_id, type_table)
+        {
+            self.shared_mut_leaks.borrow_mut().push(SharedMutLeak {
+                module_source: module_source.clone(),
+                span: expr.span,
+                callee: template.borrow().name.clone(),
+                param,
+                arg,
+            });
+        }
     }
 }
 
@@ -170,9 +170,14 @@ fn instance_arg(
     key.method_type_args.get(at).copied()
 }
 
-/// The type parameter of `template`, and the `&mut` `key` instantiates it to,
-/// that a `&` parameter reads where the caller holds that argument shared, and
-/// that a return, a `&mut` parameter or a function parameter can hand back.
+/// The type parameter of `template`, and what `key` instantiates it to, that a
+/// `&` parameter mentions where the caller lends that argument shared and the
+/// instance reaches a `&mut` there, when the call has a generic slot holding a
+/// `&mut` to hand it back through: its result, the pointee of a `&mut`
+/// parameter, or a parameter of a function parameter. Judged on instantiated
+/// types, since a parameter may reach another through a bound alone. A
+/// subscript the elaborator read through a `&` types its result as the `&` it
+/// reads, so `returns` holds no `&mut` there.
 fn mut_leaked_through_shared(
     template: &TirFunction,
     key: &InstantiationKey,
@@ -181,34 +186,39 @@ fn mut_leaked_through_shared(
     tt: &TypeTable,
 ) -> Option<(String, TypeId)> {
     let head = |ty: TypeId| tt.get(tt.representation_head(ty));
-    let mentions = |ty: TypeId, param: TypeParamId| tt.type_params_in(ty).contains(&param);
+    let generic = |ty: TypeId| !tt.type_params_in(ty).is_empty();
+    let slot_holds_mut = |arg: TypeId| match head(arg) {
+        ResolvedType::MutRef(pointee) => tt.reaches_mut_ref(*pointee),
+        ResolvedType::Function { params, .. } => params.iter().any(|&p| tt.reaches_mut_ref(p)),
+        _ => false,
+    };
+    let hands_back = (generic(template.return_type) && tt.reaches_mut_ref(returns))
+        || template
+            .params
+            .iter()
+            .zip(args)
+            .any(|(p, a)| generic(p.type_id) && slot_holds_mut(a.expr.type_id));
+    if !hands_back {
+        return None;
+    }
+    let type_params = || {
+        template
+            .impl_type_params
+            .iter()
+            .chain(&template.type_params)
+    };
     template
-        .impl_type_params
+        .params
         .iter()
-        .chain(&template.type_params)
-        .filter(|param| !param.is_pack)
-        .find_map(|param| {
-            let arg = instance_arg(template, key, param.id)?;
-            if !matches!(head(arg), ResolvedType::MutRef(_)) {
-                return None;
-            }
-            let read_shared = template.params.iter().zip(args).any(|(p, a)| {
-                matches!(head(p.type_id), ResolvedType::Ref(_))
-                    && mentions(p.type_id, param.id)
-                    && reaches_through_shared(&a.expr, tt)
-            });
-            // A subscript the elaborator read through a `&` already reads its
-            // element, the template's bare `T`, as the `&` it is.
-            let narrowed = matches!(tt.get(template.return_type), ResolvedType::TypeParam { id, .. } if *id == param.id)
-                && matches!(head(returns), ResolvedType::Ref(_));
-            let handed_back = (mentions(template.return_type, param.id) && !narrowed)
-                || template.params.iter().any(|p| {
-                    matches!(
-                        head(p.type_id),
-                        ResolvedType::MutRef(_) | ResolvedType::Function { .. }
-                    ) && mentions(p.type_id, param.id)
-                });
-            (read_shared && handed_back).then(|| (param.name.clone(), arg))
+        .zip(args)
+        .filter(|(p, a)| {
+            matches!(head(p.type_id), ResolvedType::Ref(_)) && reaches_through_shared(&a.expr, tt)
+        })
+        .flat_map(|(p, _)| tt.type_params_in(p.type_id))
+        .find_map(|id| {
+            let arg = instance_arg(template, key, id)?;
+            let param = type_params().find(|p| p.id == id)?;
+            tt.reaches_mut_ref(arg).then(|| (param.name.clone(), arg))
         })
 }
 
