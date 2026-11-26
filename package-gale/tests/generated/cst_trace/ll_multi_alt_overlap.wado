@@ -2,7 +2,7 @@
 
 use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from "core:log";
 
-use { HashMap, HashSeed } from "core:collections";
+use { HashMap } from "core:collections";
 
 pub struct Span {
     pub start: i32,
@@ -986,8 +986,6 @@ fn emit_lexer_token(
     out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 
-global INTERN_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
-
 internal struct Interner<K> {
     items: List<K>,
     ids: HashMap<K, i32>,
@@ -995,7 +993,7 @@ internal struct Interner<K> {
 
 impl<K: Hash> Interner<K> {
     internal fn new() -> Interner<K> {
-        return Interner { items: [], ids: HashMap::with_seed(INTERN_SEED) };
+        return Interner { items: [], ids: HashMap::new() };
     }
 
     internal fn intern(&mut self, item: K) -> i32 {
@@ -1530,7 +1528,7 @@ impl AtnKeyLists {
     }
 
     fn find(&self, from: i32) -> i32 {
-        let mut id = self.index.get(self.hash_from(from));
+        let mut id = self.index.get(self.hash_from(from)).unwrap_or(-1);
         while id >= 0 && !self.equals_pending(id, from) {
             id = self.same_hash_next[id];
         }
@@ -1542,35 +1540,13 @@ impl AtnKeyLists {
         let h = self.hash_from(from);
         self.start.push(from);
         self.len.push(self.keys.len() - from);
-        self.same_hash_next.push(self.index.get(h));
-        self.index.set(h, id);
+        self.same_hash_next.push(self.index.get(h).unwrap_or(-1));
+        self.index[h] = id;
         return id;
     }
 }
 
-global ATN_KEY_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
-
-struct AtnKeyMap {
-    map: HashMap<i64, i32>,
-}
-
-impl AtnKeyMap {
-    fn new() -> AtnKeyMap {
-        return AtnKeyMap { map: HashMap::with_seed(ATN_KEY_SEED) };
-    }
-
-    fn clear(&mut self) {
-        self.map.clear();
-    }
-
-    fn get(&self, k: i64) -> i32 {
-        return self.map.get(k).unwrap_or(-1);
-    }
-
-    fn set(&mut self, k: i64, v: i32) {
-        self.map[k] = v;
-    }
-}
+type AtnKeyMap = HashMap<i64, i32>;
 
 struct RealStacks {
     start: List<i32>,
@@ -1621,7 +1597,7 @@ impl RealStacks {
     fn intern_from(&mut self, s: i32) -> i32 {
         let n = self.ret.len() - s;
         let h = atn_edges_hash(&self.ret, &self.rpr, &self.parent, s, n);
-        let head = self.index.get(h);
+        let head = self.index.get(h).unwrap_or(-1);
         let mut known = head;
         while known >= 0 {
             if self.len[known] == n && atn_edges_eq(&self.ret, &self.rpr, &self.parent, self.start[known], s, n) {
@@ -1635,7 +1611,7 @@ impl RealStacks {
         self.start.push(s);
         self.len.push(n);
         self.same_hash_next.push(head);
-        self.index.set(h, self.start.len() - 1);
+        self.index[h] = self.start.len() - 1;
         return self.start.len() - 1;
     }
 
@@ -1648,8 +1624,7 @@ impl RealStacks {
             return true;
         }
         let ck = atn_node_pair_key(outer, inner);
-        let cached = self.cover_cache.get(ck);
-        if cached >= 0 {
+        if let Some(cached) = self.cover_cache.get(ck) {
             return cached == 1;
         }
         let so = self.start[outer];
@@ -1668,7 +1643,7 @@ impl RealStacks {
             }
             i += 1;
         }
-        self.cover_cache.set(ck, if covered { 1 } else { 0 });
+        self.cover_cache[ck] = if covered { 1 } else { 0 };
         return covered;
     }
 
@@ -1677,8 +1652,7 @@ impl RealStacks {
             return a;
         }
         let ck = if a < b { atn_node_pair_key(a, b) } else { atn_node_pair_key(b, a) };
-        let cached = self.merge_cache.get(ck);
-        if cached >= 0 {
+        if let Some(cached) = self.merge_cache.get(ck) {
             return cached;
         }
         let sa = self.start[a];
@@ -1705,7 +1679,7 @@ impl RealStacks {
         atn_append_merged(&mut self.ret, &mut self.rpr, &mut self.parent, sa, na, sb, nb, &self.pending, base);
         self.pending.truncate(base);
         let id = self.intern_from(s);
-        self.merge_cache.set(ck, id);
+        self.merge_cache[ck] = id;
         return id;
     }
 
@@ -1863,15 +1837,14 @@ impl CtxArena {
             return guard;
         }
         let k = atn_node_pair_key(guard, label);
-        let known = self.guard_index.get(k);
-        if known >= 0 {
+        if let Some(known) = self.guard_index.get(k) {
             return known;
         }
         let g = self.guard_label.len();
         assert g < CFG_KEY_GUARD_SLOT, "one prediction's guards fit the config key";
         self.guard_label.push(label);
         self.guard_rest.push(guard);
-        self.guard_index.set(k, g);
+        self.guard_index[k] = g;
         return g;
     }
 
@@ -1994,8 +1967,8 @@ impl CtxArena {
         } else {
             self.closed_real.get(node as i64);
         };
-        if known >= 0 {
-            return known;
+        if let Some(real) = known {
+            return real;
         }
         let from = self.pending.len();
         let s = self.node_start[node];
@@ -2011,9 +1984,9 @@ impl CtxArena {
         self.pending.truncate(from);
         let real = self.real.intern_from(at);
         if self.node_open[node] {
-            self.env_real.set(node as i64, real);
+            self.env_real[node as i64] = real;
         } else {
-            self.closed_real.set(node as i64, real);
+            self.closed_real[node as i64] = real;
         }
         return real;
     }
@@ -2116,14 +2089,14 @@ impl CtxArena {
 
     fn ask(&mut self, kind: i32, first: i32, second: i32) -> i32 {
         let ck = atn_node_pair_key(first, second) * ATN_ASK_KINDS + kind as i64;
-        let mut question = self.question_index.get(ck);
+        let mut question = self.question_index.get(ck).unwrap_or(-1);
         if question < 0 {
             question = self.question_first.len();
             self.question_kind.push(kind);
             self.question_first.push(first);
             self.question_second.push(second);
             self.question_asked_in.push(0);
-            self.question_index.set(ck, question);
+            self.question_index[ck] = question;
         }
         if self.question_asked_in[question] != self.reading {
             self.question_asked_in[question] = self.reading;
@@ -2154,7 +2127,7 @@ impl CtxArena {
         let n = self.ret.len() - s;
         assert n > 0, "a context has at least one edge";
         let h = atn_edges_hash(&self.ret, &self.rpr, &self.parent, s, n);
-        let head = self.intern_head.get(h);
+        let head = self.intern_head.get(h).unwrap_or(-1);
         let mut cand = head;
         while cand >= 0 {
             if self.node_len[cand] == n
@@ -2177,7 +2150,7 @@ impl CtxArena {
         self.node_slot.push(-1);
         self.node_open.push(open);
         self.intern_next.push(head);
-        self.intern_head.set(h, id);
+        self.intern_head[h] = id;
         return id;
     }
 
@@ -2196,16 +2169,14 @@ impl CtxArena {
             return a;
         }
         let ck = if a < b { atn_node_pair_key(a, b) } else { atn_node_pair_key(b, a) };
-        let cached = self.merge_cache.get(ck);
-        if cached >= 0 {
+        if let Some(cached) = self.merge_cache.get(ck) {
             return cached;
         }
         if self.node_slot[a] >= 0 || self.node_slot[b] >= 0 {
             self.slot_merges += 1;
             return self.ask(ATN_ASK_MERGE, i32::min(a, b), i32::max(a, b));
         }
-        let cached_for_walk = self.walk_merge_cache.get(ck);
-        if cached_for_walk >= 0 {
+        if let Some(cached_for_walk) = self.walk_merge_cache.get(ck) {
             self.slot_merges += 1;
             return cached_for_walk;
         }
@@ -2235,9 +2206,9 @@ impl CtxArena {
         self.pending.truncate(base);
         let id = self.intern_from(s);
         if self.slot_merges == slot_merges_before {
-            self.merge_cache.set(ck, id);
+            self.merge_cache[ck] = id;
         } else {
-            self.walk_merge_cache.set(ck, id);
+            self.walk_merge_cache[ck] = id;
         }
         return id;
     }
@@ -2383,8 +2354,7 @@ impl CfgSet {
         contract alt + 1 < CFG_KEY_ALT_SLOT
     {
         let k = (atn_state_pr_key(state, pr) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64) * CFG_KEY_GUARD_SLOT as i64 + guard as i64;
-        let found = self.index.get(k);
-        if found >= 0 {
+        if let Some(found) = self.index.get(k) {
             let merged = arena.merge(self.pctx[found], pctx);
             let changed = merged != self.pctx[found];
             self.pctx[found] = merged;
@@ -2396,7 +2366,7 @@ impl CfgSet {
         self.pr.push(pr);
         self.pctx.push(pctx);
         self.guard.push(guard);
-        self.index.set(k, i);
+        self.index[k] = i;
         return [i, true];
     }
 
@@ -2707,13 +2677,15 @@ fn atn_min_alt_covers_rest(arena: &mut CtxArena, configs: &List<AtnConfig>, min_
     let mut min_ctx = AtnKeyMap::new();
     for let c of configs {
         if c.alt == min_alt {
-            min_ctx.set(atn_state_pr_key(c.state, c.pr), c.pctx);
+            min_ctx[atn_state_pr_key(c.state, c.pr)] = c.pctx;
         }
     }
     for let c of configs {
         if c.alt != min_alt {
-            let e = min_ctx.get(atn_state_pr_key(c.state, c.pr));
-            if e < 0 || !arena.covers(e, c.pctx) {
+            let Some(e) = min_ctx.get(atn_state_pr_key(c.state, c.pr)) else {
+                return false;
+            };
+            if !arena.covers(e, c.pctx) {
                 return false;
             }
         }
@@ -3010,7 +2982,7 @@ impl AtnDfa {
         contract token >= 0 && (token as i64) < ATN_DFA_TOKEN_SLOT
     {
         let edge = s as i64 * ATN_DFA_TOKEN_SLOT + token as i64;
-        let mut taken = self.edges.get(edge);
+        let mut taken = self.edges.get(edge).unwrap_or(-1);
         if taken < 0 {
             let moved = atn_move(sim, &self.state_configs[s], token, eof);
             let from = self.seeds.keys.len();
@@ -3036,7 +3008,7 @@ impl AtnDfa {
             taken = self.edge_seed.len();
             self.edge_seed.push(self.seed(from));
             self.edge_sources_from.push(sources_from);
-            self.edges.set(edge, taken);
+            self.edges[edge] = taken;
         }
         let sources_from = self.edge_sources_from[taken];
         let sources_end = if taken + 1 < self.edge_seed.len() {

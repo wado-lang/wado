@@ -902,9 +902,9 @@ ATN literal is a measured problem.)
 
 ### `core:collections`' `HashMap` behind the simulator's `AtnKeyMap` — GO (2026-11)
 
-`AtnKeyMap` (`atn_predict.wado`) maps an `i64` key to an `i32`, with -1 for a
-miss. It is a `HashMap<i64, i32>` under a fixed seed. A hand-written
-open-addressing table in its place measures the same within the noise:
+`AtnKeyMap` (`atn_predict.wado`) maps an `i64` key to an `i32`. It is a newtype
+over `HashMap<i64, i32>`. A hand-written open-addressing table in its place
+measures the same within the noise:
 
 | grammar    | open addressing, ms/iter | `HashMap`, ms/iter | `HashMap`'s fuel |
 | ---------- | -----------------------: | -----------------: | ---------------: |
