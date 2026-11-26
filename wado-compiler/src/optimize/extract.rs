@@ -26,11 +26,10 @@ use crate::nir_engine::Rule;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValuePool, value_kind_to_const};
 use crate::nir_visitor::reachable_exprs;
-use crate::optimize::alias::{
-    CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
-};
+use crate::optimize::alias::call_verdicts;
 use crate::optimize::arena_query::local_available_at;
 use crate::optimize::heap_effect::HeapEffectsCache;
+use crate::optimize::writes::EngineFacts;
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
 use crate::tir;
@@ -237,9 +236,7 @@ pub(super) fn freeze_pure_arith(
 ) -> bool {
     let types = project.type_table.borrow();
     let type_table: &TypeTable = &types;
-    let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, type_table, exec);
-    let pure_builtin_callees = project.pure_builtin_callee_ids();
+    let facts = EngineFacts::new(project, type_table, exec);
     let effects = fields.map(|heap| heap.effects(project, type_table, exec));
     let include_fields = effects.is_some();
     let outcomes = exec.map_init(
@@ -263,26 +260,21 @@ pub(super) fn freeze_pure_arith(
             // Address-taken locals (`&x` / `&mut x`): excluded as `FieldAccess`
             // receivers by the receiver-stability gate. Cloned before `Engine::new`.
             let address_taken: hashmap::IndexSet<u32> = address_taken_locals.clone();
-            let alias = builder_alias_sets(
-                body,
-                locals,
-                address_taken_locals,
-                type_table,
-                &first_param_types,
-                &call_immutability,
-            );
             let local_count = locals.len();
-            let verdicts = call_verdicts(body, type_table, &first_param_types, &call_immutability);
+            let verdicts = call_verdicts(
+                body,
+                type_table,
+                &facts.first_param_types,
+                &facts.call_immutability,
+            );
             let call_writes = effects
                 .as_ref()
                 .map(|e| e.body_call_writes(body))
                 .unwrap_or_default();
-            let mut engine = Engine::new(body, buffers, locals, params, type_table);
-            engine.set_alias_sets(alias);
+            let mut engine = facts.engine(body, buffers, locals, params, address_taken_locals);
             engine.seed_params();
             engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
             engine.set_call_writes(call_writes);
-            engine.set_pure_builtin_callees(&pure_builtin_callees);
 
             // Locals a frozen value may not name, from the same predicate that
             // decides whether a `Local` read resolves at all.

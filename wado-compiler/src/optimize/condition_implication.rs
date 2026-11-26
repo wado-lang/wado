@@ -11,24 +11,23 @@ use cranelift_entity::EntityRef;
 use super::arena_query::local_written_by;
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
-use crate::nir::{FuncId, FuncParts, FunctionKind, NirBinaryOp, NirUnaryOp};
+use crate::nir::{FuncParts, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+    BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::{
     Place, binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
     operand_read_locals, place_path,
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::writes::{
-    Stored, Summaries, Summary, Write, for_each_write, is_panic_call, modifies_any_root,
-    node_quiet, reachable_elsewhere, read_kinds,
+    EngineFacts, Stored, Summaries, Summary, Write, for_each_write, is_panic_call,
+    modifies_any_root, reachable_elsewhere, read_kinds, subtree_quiet,
 };
-use crate::tir::{BuiltinDeclaration, TypeId};
+use crate::tir::TypeId;
 use crate::type_table::TypeTable;
 use crate::{hashmap, nir_arena};
 
@@ -63,76 +62,6 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     changed
 }
 
-/// The [`FuncId`](crate::nir::FuncId)s of every function that cannot return.
-/// Resolved once per pass run so the panic-block matcher identifies a diverging
-/// callee by id. The driver hands the result to the engine via
-/// [`Engine::set_panic_callee_ids`].
-pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncId> {
-    let type_table = project.type_table.borrow();
-    project
-        .functions
-        .iter()
-        .filter_map(|f| {
-            let f = f.borrow();
-            // A `-> !` return type, not a name: the matcher needs the arm to be
-            // unable to continue, which is what the type says. A name list would
-            // miss `unwrap_failed` and the helper `cold_outline` moves a panic
-            // guard into, and would claim a `panic_free_parse` that merely reads
-            // like one. `dce` retires the type slots only a dead function names,
-            // and a dead function is uncallable, so skipping one loses nothing.
-            f.id.filter(|_| !f.is_dead && type_table.is_never(f.return_type))
-        })
-        .collect()
-}
-
-/// The callees that do nothing a trap would hide: an unobservable builtin, such
-/// as `builtin::unreachable` (all a contract check calls under
-/// `-f bare-asserts`), a value copy, or a trap that reports nothing but a
-/// failed contract: a contract report, or a function doing nothing else but call
-/// a quiet one, as `cold_outline` leaves. The driver hands the result to the
-/// engine via [`Engine::set_quiet_callee_ids`].
-pub(super) fn resolve_quiet_callee_ids(
-    project: &NirPackage,
-    panic_ids: &hashmap::IndexSet<FuncId>,
-) -> hashmap::IndexSet<FuncId> {
-    let mut quiet: hashmap::IndexSet<FuncId> = project
-        .functions
-        .iter()
-        .filter_map(|f| {
-            let f = f.borrow();
-            let id = f.id?;
-            (f.is_value_copy()
-                || project
-                    .builtin_declarations
-                    .get(&*f)
-                    .is_some_and(BuiltinDeclaration::is_unobservable))
-            .then_some(id)
-        })
-        .collect();
-    loop {
-        let grown: Vec<FuncId> = project
-            .functions
-            .iter()
-            .filter_map(|f| {
-                let f = f.borrow();
-                let id =
-                    f.id.filter(|id| panic_ids.contains(id) && !quiet.contains(id))?;
-                let reports_nothing_else = matches!(f.kind, FunctionKind::ContractReport)
-                    || f.body.as_ref().is_some_and(|body| {
-                        subtree_quiet(body, NodeRef::Block(body.root()), |callee| {
-                            quiet.contains(&callee)
-                        })
-                    });
-                reports_nothing_else.then_some(id)
-            })
-            .collect();
-        if grown.is_empty() {
-            return quiet;
-        }
-        quiet.extend(grown);
-    }
-}
-
 /// Standalone post-`promote_fields` run of the structural matcher.
 /// `promote_fields` freezes an invariant field read such as `arr.used` into an
 /// `Operand::Value`, but runs *after* the optimization loop, so the in-loop pass
@@ -144,12 +73,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
         return false;
     }
     let type_table = project.type_table.borrow();
-    let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
-    let panic_ids = resolve_panic_ids(project);
-    let quiet_callee_ids = resolve_quiet_callee_ids(project, &panic_ids);
-    let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let type_table = &*type_table;
+    let facts = EngineFacts::new(project, &type_table, gate.exec());
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::CondImplPostPromote, len, |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
@@ -164,19 +88,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             ..
         } = func.parts();
         let body = body.expect("checked above");
-        let alias = builder_alias_sets(
-            body,
-            locals,
-            address_taken_locals,
-            type_table,
-            &first_param_types,
-            &call_immutability,
-        );
-        let mut engine = Engine::new(body, buffers, locals, params, type_table);
-        engine.set_alias_sets(alias);
-        engine.set_panic_callee_ids(&panic_ids);
-        engine.set_quiet_callee_ids(&quiet_callee_ids);
-        engine.set_pure_builtin_callees(&pure_builtin_callees);
+        let mut engine = facts.engine(body, buffers, locals, params, address_taken_locals);
         eliminate_at_root(&mut engine)
     })
 }
@@ -2372,13 +2284,6 @@ fn widen_site(engine: &mut Engine, facts: &mut Vec<Fact>, index: Index, bound: B
 /// where the program would have trapped anyway.
 fn is_quiet(engine: &Engine, node: NodeRef) -> bool {
     subtree_quiet(engine.body, node, |id| engine.is_quiet_callee(id))
-}
-
-/// [`is_quiet`] over `body`, with `quiet_call` saying which callees qualify.
-fn subtree_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
-    let mut quiet = true;
-    body.for_each_node_under(node, |n| quiet &= node_quiet(body, n, &quiet_call));
-    quiet
 }
 
 /// Whether `var + j` cannot wrap for any `var` in `span`.

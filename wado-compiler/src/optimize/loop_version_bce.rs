@@ -42,7 +42,6 @@ use crate::tir::TypeId;
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use super::arena_query::{MarkerBuiltins, block_contains_loop, has_break_to};
 use super::bounds;
 use super::condition_implication::{
@@ -50,13 +49,13 @@ use super::condition_implication::{
     build_copy_bindings, capture_block_binding, check_conjuncts, eliminate_condition,
     induction_entry, induction_step, is_seq_length, negated_operand, panic_guard_check,
     parse_bound, parse_break_guard_head, parse_const_i64, parse_var_offset, peel_capture_block,
-    resolve, resolve_panic_ids, stmt_modifies,
+    resolve, stmt_modifies,
 };
 use super::const_branch_prune::BranchPruneRule;
 use super::dce::{DescriptorCache, callee_descriptor};
 use super::elide_local::ElideRule;
 use super::heap_effect::{HeapEffectsCache, LazyHeapFrame};
-use super::writes::modifies_any_root;
+use super::writes::{EngineFacts, modifies_any_root};
 use crate::module_source::ModuleSource;
 use crate::nir::FuncId;
 use crate::nir_arena;
@@ -193,8 +192,6 @@ pub(super) fn version_loops(
         method_info: None,
     });
     let descriptors = cache.descriptors(project);
-    let panic_ids = resolve_panic_ids(project);
-    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let markers = MarkerBuiltins::of(project);
     // Only a body with a loop is versioned, so a program with none pays nothing.
     if !project
@@ -206,8 +203,7 @@ pub(super) fn version_loops(
     }
     let (summaries, builtins) = summarize(project, exec);
     let type_table = project.type_table.borrow();
-    let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table, exec);
+    let facts = EngineFacts::new(project, &type_table, exec);
     let effects = heap.effects(project, &type_table, exec);
     let type_table = &*type_table;
     let versioned = exec.map_init(
@@ -228,18 +224,7 @@ pub(super) fn version_loops(
             let frame =
                 LazyHeapFrame::new(&effects, params.iter().map(|p| p.local_index).collect());
             let body = body.expect("checked above");
-            let alias = builder_alias_sets(
-                body,
-                locals,
-                address_taken_locals,
-                type_table,
-                &first_param_types,
-                &call_immutability,
-            );
-            let mut engine = Engine::new(body, buffers, locals, params, type_table);
-            engine.set_alias_sets(alias);
-            engine.set_panic_callee_ids(&panic_ids);
-            engine.set_pure_builtin_callees(&pure_builtin_callees);
+            let mut engine = facts.engine(body, buffers, locals, params, address_taken_locals);
 
             let binds = build_copy_bindings(&engine);
             let mut loops: Vec<(BlockId, StmtId, BlockId)> = Vec::new();

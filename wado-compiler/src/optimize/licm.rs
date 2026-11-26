@@ -28,12 +28,10 @@ use super::gate::{FunctionGate, GatedPass};
 use crate::nir::NirLocal;
 use crate::nir_arena::PatId;
 use crate::nir_value_graph::ValuePool;
-use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::{is_loop, is_pure_operand, local_available_at, storage_root};
-use crate::optimize::condition_implication::{
-    eliminate_at_root, resolve_panic_ids, resolve_quiet_callee_ids,
-};
+use crate::optimize::condition_implication::eliminate_at_root;
 use crate::optimize::heap_effect::{Effect, HeapEffects, HeapEffectsCache, LazyHeapFrame};
+use crate::optimize::writes::EngineFacts;
 
 /// Field writes by pointee type, each with the local the write goes through
 /// where its receiver is one.
@@ -223,13 +221,8 @@ pub fn apply_licm(
     heap: &mut HeapEffectsCache,
 ) -> bool {
     let type_table = project.type_table.borrow();
-    let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
-    let panic_ids = resolve_panic_ids(project);
-    let quiet_callee_ids = resolve_quiet_callee_ids(project, &panic_ids);
-    let pure_builtin_callees = project.pure_builtin_callee_ids();
+    let facts = EngineFacts::new(project, &type_table, gate.exec());
     let effects = heap.effects(project, &type_table, gate.exec());
-    let type_table = &*type_table;
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::Licm, functions.len(), |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
@@ -251,19 +244,7 @@ pub fn apply_licm(
             ..
         } = func.parts();
         let body = body.expect("checked above");
-        let alias = builder_alias_sets(
-            body,
-            locals,
-            address_taken_locals,
-            type_table,
-            &first_param_types,
-            &call_immutability,
-        );
-        let mut engine = Engine::new(body, buffers, locals, params, type_table);
-        engine.set_alias_sets(alias);
-        engine.set_panic_callee_ids(&panic_ids);
-        engine.set_quiet_callee_ids(&quiet_callee_ids);
-        engine.set_pure_builtin_callees(&pure_builtin_callees);
+        let mut engine = facts.engine(body, buffers, locals, params, address_taken_locals);
         let licm_changed = engine.run(&[&rule]);
         // Condition implication shares licm's session: licm hoists only
         // loop-invariant, move-safe code, so values are preserved.

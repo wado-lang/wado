@@ -5,14 +5,151 @@
 use std::rc::Rc;
 
 use crate::hashmap;
-use crate::nir::{FuncId, NirUnaryOp};
-use crate::nir_arena::{self, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
-use crate::nir_engine::Engine;
+use crate::nir::{FuncId, FunctionKind, NirLocal, NirParam, NirUnaryOp};
+use crate::nir_arena::{
+    self, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtKind, Tracked,
+};
+use crate::nir_engine::{Engine, EngineBuffers};
+use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
+use crate::optimize::alias::{
+    CallImmutability, FirstParamTypes, builder_alias_sets, first_param_types,
+};
 use crate::optimize::arena_query::{WriteRoot, operand_local, storage_root, write_root};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
-use crate::tir::TypeId;
+use crate::parallel::Executor;
+use crate::tir::{BuiltinDeclaration, TypeId};
 use crate::type_table::TypeTable;
+
+/// What an engine reading alias sets and callee classes needs from the whole
+/// program, built once per pass run.
+pub(super) struct EngineFacts<'a> {
+    type_table: &'a TypeTable,
+    pub(super) first_param_types: FirstParamTypes,
+    pub(super) call_immutability: CallImmutability<'a>,
+    panic_ids: hashmap::IndexSet<FuncId>,
+    quiet_callee_ids: hashmap::IndexSet<FuncId>,
+    pure_builtin_callees: hashmap::IndexSet<FuncId>,
+}
+
+impl<'a> EngineFacts<'a> {
+    pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable, exec: &Executor) -> Self {
+        let panic_ids = resolve_panic_ids(project, type_table);
+        let quiet_callee_ids = resolve_quiet_callee_ids(project, &panic_ids);
+        Self {
+            type_table,
+            first_param_types: first_param_types(project),
+            call_immutability: CallImmutability::new(project, type_table, exec),
+            panic_ids,
+            quiet_callee_ids,
+            pure_builtin_callees: project.pure_builtin_callee_ids(),
+        }
+    }
+
+    /// An engine over one function's body, its alias sets and callee classes
+    /// set.
+    pub(super) fn engine<'e>(
+        &'e self,
+        body: &'e mut Body,
+        buffers: &'e mut EngineBuffers,
+        locals: &'e mut Tracked<Vec<NirLocal>>,
+        params: &'e [NirParam],
+        address_taken_locals: &hashmap::IndexSet<u32>,
+    ) -> Engine<'e> {
+        let alias = builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            self.type_table,
+            &self.first_param_types,
+            &self.call_immutability,
+        );
+        let mut engine = Engine::new(body, buffers, locals, params, self.type_table);
+        engine.set_alias_sets(alias);
+        engine.set_panic_callee_ids(&self.panic_ids);
+        engine.set_quiet_callee_ids(&self.quiet_callee_ids);
+        engine.set_pure_builtin_callees(&self.pure_builtin_callees);
+        engine
+    }
+}
+
+/// The [`FuncId`]s of every function that cannot return, so the panic-block
+/// matcher identifies a diverging callee by id.
+fn resolve_panic_ids(project: &NirPackage, type_table: &TypeTable) -> hashmap::IndexSet<FuncId> {
+    project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            // A `-> !` return type, not a name: the matcher needs the arm to be
+            // unable to continue, which is what the type says. A name list would
+            // miss `unwrap_failed` and the helper `cold_outline` moves a panic
+            // guard into, and would claim a `panic_free_parse` that merely reads
+            // like one. `dce` retires the type slots only a dead function names,
+            // and a dead function is uncallable, so skipping one loses nothing.
+            f.id.filter(|_| !f.is_dead && type_table.is_never(f.return_type))
+        })
+        .collect()
+}
+
+/// The callees that do nothing a trap would hide: an unobservable builtin, such
+/// as `builtin::unreachable` (all a contract check calls under
+/// `-f bare-asserts`), a value copy, or a trap that reports nothing but a
+/// failed contract: a contract report, or a function doing nothing else but call
+/// a quiet one, as `cold_outline` leaves.
+fn resolve_quiet_callee_ids(
+    project: &NirPackage,
+    panic_ids: &hashmap::IndexSet<FuncId>,
+) -> hashmap::IndexSet<FuncId> {
+    let mut quiet: hashmap::IndexSet<FuncId> = project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            let id = f.id?;
+            (f.is_value_copy()
+                || project
+                    .builtin_declarations
+                    .get(&*f)
+                    .is_some_and(BuiltinDeclaration::is_unobservable))
+            .then_some(id)
+        })
+        .collect();
+    loop {
+        let grown: Vec<FuncId> = project
+            .functions
+            .iter()
+            .filter_map(|f| {
+                let f = f.borrow();
+                let id =
+                    f.id.filter(|id| panic_ids.contains(id) && !quiet.contains(id))?;
+                let reports_nothing_else = matches!(f.kind, FunctionKind::ContractReport)
+                    || f.body.as_ref().is_some_and(|body| {
+                        subtree_quiet(body, NodeRef::Block(body.root()), |callee| {
+                            quiet.contains(&callee)
+                        })
+                    });
+                reports_nothing_else.then_some(id)
+            })
+            .collect();
+        if grown.is_empty() {
+            return quiet;
+        }
+        quiet.extend(grown);
+    }
+}
+
+/// Whether running `node` does nothing a trap would hide, with `quiet_call`
+/// saying which callees qualify.
+pub(super) fn subtree_quiet(
+    body: &Body,
+    node: NodeRef,
+    quiet_call: impl Fn(FuncId) -> bool,
+) -> bool {
+    let mut quiet = true;
+    body.for_each_node_under(node, |n| quiet &= node_quiet(body, n, &quiet_call));
+    quiet
+}
 
 /// One write an expression node may perform, in the engine's alias sets, so it
 /// and a scoped walk cannot disagree over what a store reaches.
@@ -376,7 +513,7 @@ pub(super) fn is_panic_call(engine: &Engine, e: ExprId) -> bool {
 /// Whether running `node` alone, its children aside, does nothing a trap would
 /// hide: no call that may report, print or exit, and no loop, which might not
 /// end.
-pub(super) fn node_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
+fn node_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
     match node {
         NodeRef::Expr(e) => match &body.exprs[e].kind {
             ExprKind::Call { func_id, .. } => quiet_call(*func_id),
