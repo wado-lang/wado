@@ -615,12 +615,24 @@ impl Query<'_> {
                     // The bound writes its arguments in the impl's own
                     // parameter space, so `T: Eq<U>` under `U = String` asks
                     // about `Eq<String>` and not about `Eq<U>`.
+                    // One naming a parameter left to the call is asked at a
+                    // variable there: the call's inference settles it, and no
+                    // impl at any argument refutes the block now.
                     let args: Vec<SolverType> = bound
                         .args
                         .iter()
                         .map(|arg| {
                             self.at_bindings(arg, &bindings, &unifier)
-                                .unwrap_or_else(|| arg.clone())
+                                .unwrap_or_else(|| {
+                                    arg.map_params(&|i| {
+                                        let own =
+                                            bindings[i as usize].as_ref().map(Binding::as_type);
+                                        own.or_else(|| {
+                                            left_to_the_call[i as usize].then(|| unifier.mint(i))
+                                        })
+                                    })
+                                    .map_or_else(|| arg.clone(), |ty| unifier.resolve(&ty))
+                                })
                         })
                         .collect();
                     self.member_next = through_member;

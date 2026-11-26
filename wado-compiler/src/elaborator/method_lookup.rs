@@ -17,9 +17,7 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{
     ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
-    unalias_namespace_member,
 };
-use crate::synthesis::template::blanket_settled_slots;
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
     StructDef, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId, impl_args_in_slot_order,
@@ -40,9 +38,7 @@ use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess, OpaqueReason};
-use super::trait_env::{
-    BlanketParamSource, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written,
-};
+use super::trait_env::{ImplHeader, ImplMethodHeader, TraitEnv, header_as_written};
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
     MethodInfo, MethodOwner, TypeError, TypeLookup,
@@ -1100,81 +1096,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .decl_in_scope(self.frame_module(), trait_)
     }
 
-    /// Why no blanket answers a call of `method_name` though one declares it:
-    /// the block holds a parameter only its trait reference names (`A` in
-    /// `impl<A, T: Source<A>> Tag<A> for T`), which no method call settles.
-    /// Only a block the call it suggests could reach: `receiver` implements
-    /// each bound's trait at some arguments, and the trait reference writes
-    /// the parameter, so the call can name it.
-    pub(super) fn blanket_left_open_hint(
-        &self,
-        receiver: TypeId,
-        method_name: &str,
-    ) -> Option<String> {
-        let env = &self.tysys.trait_env;
-        let subject = self.tysys.type_table.borrow().peel_refs(receiver);
-        let implemented: Vec<DefId> = self
-            .trait_impls_for_receiver(
-                &ReceiverId::keyed(self.impl_target_of(subject), Some(subject)),
-                &[],
-            )
-            .into_iter()
-            .filter_map(|block| env.impl_headers[&block].trait_def())
-            .collect();
-        env.blanket_impls.values().flatten().find_map(|blanket| {
-            let header = &env.impl_headers[&blanket.def];
-            let mut written = Vec::new();
-            header.trait_ty()?.mentioned_names(&mut written);
-            let open = header
-                .type_params
-                .iter()
-                .filter(|param| param.is_real_type_param())
-                .zip(env.blanket_param_sources(blanket))
-                .find(|(param, source)| {
-                    matches!(source, BlanketParamSource::Unresolved)
-                        && written.contains(&param.name)
-                })?
-                .0;
-            let bounds_reachable = blanket
-                .bounds
-                .iter()
-                .all(|bound| bound.decl().is_some_and(|decl| implemented.contains(&decl)));
-            if !bounds_reachable || !self.impl_offers_method(blanket.def, method_name, None) {
-                return None;
-            }
-            // The call is the caller's to write: the trait by the name its
-            // import gives it, at every argument the block writes, with what
-            // the receiver settles filled in.
-            let trait_def = header.trait_def()?;
-            let trait_name = self
-                .tysys
-                .resolutions
-                .imports_admitting(self.frame_module(), trait_def)
-                .next()
-                .map_or_else(
-                    || self.tysys.type_table.borrow().decl_name(trait_def).to_string(),
-                    unalias_namespace_member,
-                );
-            let mut table = self.tysys.type_table.borrow_mut();
-            let settled = blanket_settled_slots(env, blanket, subject, &[], &mut table);
-            let args: Vec<String> = table
-                .impl_trait_args(blanket.def)
-                .to_vec()
-                .into_iter()
-                .map(|arg| {
-                    let arg = table.substitute_type_params(arg, &settled);
-                    table.name(arg)
-                })
-                .collect();
-            let open = &open.name;
-            Some(format!(
-                "'{}' declares it, and a method call does not settle '{open}': write '{trait_name}::<{}>::{method_name}(…)', naming '{open}'",
-                header_as_written(header),
-                args.join(", "),
-            ))
-        })
-    }
-
     /// Report the bound that keeps the impls `offers` picks from answering
     /// `receiver`: the first that reaches it but whose bound its arguments
     /// miss. Whether one was reported; the caller says the impl is absent
@@ -1604,6 +1525,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut space = given.clone();
         space.extend(inferred);
         self.defer_impl_bounds(block, &space, inferred, span, OwedBounds::All);
+        // And a bound on the receiver's own slot reads these: `T: Source<A>`
+        // in `impl<A, T: Source<A>> Tag<A> for T`, which selecting the block
+        // asked at a variable.
+        let header = impl_header(&env, &ImplBlockRef(block));
+        let reads_inferred = |bound: &ast::TraitBound| {
+            let mut named = Vec::new();
+            for arg in &bound.type_args {
+                arg.mentioned_names(&mut named);
+            }
+            inferred
+                .keys()
+                .filter_map(|slot| names.name_of(slot.index))
+                .any(|name| named.iter().any(|n| n == name))
+        };
+        let reading: TypeArgMap = given
+            .iter()
+            .filter(|(slot, _)| {
+                names.name_of(slot.index).is_some_and(|name| {
+                    header
+                        .type_params
+                        .iter()
+                        .any(|p| p.name == name && p.bounds.iter().any(reads_inferred))
+                })
+            })
+            .map(|(&slot, &arg)| (slot, arg))
+            .collect();
+        self.defer_impl_bounds(block, &space, &reading, span, OwedBounds::All);
     }
 
     /// Close the trait arguments of a call through a blanket whose receiver

@@ -1,0 +1,21 @@
+// Where nothing settles the parameter the call does not select, even where
+// the bound's trait has one impl on the receiver: an impl written elsewhere
+// would later make the call fail.
+
+trait Source<A> with () { fn first(&self) -> A; }
+trait Tag<A> with () { fn tag(&self) -> A; }
+
+impl<A, T: Source<A>> Tag<A> for T {
+    fn tag(&self) -> A { return self.first(); }
+}
+
+struct One { n: i32 }
+impl Source<i32> for One { fn first(&self) -> i32 { return self.n; } }
+
+export fn run() {
+    let one = One { n: 7 };
+    let _ = one.tag();
+}
+
+__DATA__
+{"compile_error": ":17:13: analysis error: cannot infer type parameter `A` of `impl<A, T: Source<A>> Tag<A> for T`"}

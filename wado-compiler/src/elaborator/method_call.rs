@@ -51,7 +51,7 @@ use crate::elaborator::trait_env::{BlanketBound, BlanketReceiver};
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
-use crate::synthesis::template::{blanket_impl_args, ref_blanket_instance};
+use crate::synthesis::template::{blanket_impl_args, blanket_settled_slots, ref_blanket_instance};
 use crate::unparse::unparse_type_into;
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -807,8 +807,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.tysys
                             .trait_declares_method(trait_, method_name, |_| true)
                             .then(|| self.tysys.comparison_withheld_note(tr, base_type_id))?
-                    })
-                    .or_else(|| self.blanket_left_open_hint(base_type_id, method_name));
+                    });
                 let _ = self.emit(TypeError::MethodNotFound {
                     type_name,
                     method_name: method_name.to_string(),
@@ -1141,9 +1140,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             solved
         };
         if let Some(block) = dispatched_impl_block {
+            // A blanket's instance is keyed elsewhere, so its receiver's slot
+            // is read off the receiver here.
+            let mut given = slots_from_impl_args(block, &impl_slot_args);
+            let trait_env = Arc::clone(&self.tysys.trait_env);
+            if let Some(blanket) = trait_env.blanket_of_block(block) {
+                given.extend(blanket_settled_slots(
+                    &trait_env,
+                    blanket,
+                    base_type_id,
+                    &[],
+                    &mut self.tysys.type_table.borrow_mut(),
+                ));
+            }
             self.settle_trait_arg_slots(
                 block,
-                &slots_from_impl_args(block, &impl_slot_args),
+                &given,
                 &inferred_impl_slots,
                 &mut substituted_param_types,
                 &args,
