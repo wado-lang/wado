@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795730990310,
+  "lastUpdate": 1795732668491,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82601,6 +82601,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/767dabc6afbe2574bd62476d32d28d7954318343"
         },
         "date": 1795730989542,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24979,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334351,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0fb78d90861d0e16a35a91761f74176da76af020",
+          "message": "Merge pull request #2774 from wado-lang/ccr-3996c589-s76849\n\nperf(host): a spawn costs the same whatever the host holds",
+          "timestamp": "2026-11-27T06:47:59+09:00",
+          "tree_id": "8fef3c5bbb46026161a0219ba8b9a7a08a4d5ff2",
+          "url": "https://github.com/wado-lang/wado/commit/0fb78d90861d0e16a35a91761f74176da76af020"
+        },
+        "date": 1795732667103,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
