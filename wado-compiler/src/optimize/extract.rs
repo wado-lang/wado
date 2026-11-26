@@ -257,7 +257,7 @@ pub(super) fn freeze_pure_arith(
             } = func.parts();
             let body = body.expect("checked above");
             // Address-taken locals (`&x` / `&mut x`): excluded as `FieldAccess`
-            // receivers by the receiver-stability gate. Cloned before `Engine::new`.
+            // receivers by the receiver-stability gate. Cloned before the engine borrows it.
             let address_taken: hashmap::IndexSet<u32> = address_taken_locals.clone();
             let local_count = locals.len();
             let call_writes = effects

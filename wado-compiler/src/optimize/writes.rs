@@ -29,20 +29,19 @@ pub(super) struct EngineFacts<'a> {
     call_immutability: CallImmutability<'a>,
     panic_ids: hashmap::IndexSet<FuncId>,
     quiet_callee_ids: hashmap::IndexSet<FuncId>,
-    pure_builtin_callees: hashmap::IndexSet<FuncId>,
 }
 
 impl<'a> EngineFacts<'a> {
     pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable, exec: &Executor) -> Self {
         let panic_ids = resolve_panic_ids(project, type_table);
         let quiet_callee_ids = resolve_quiet_callee_ids(project, &panic_ids);
+        let first_param_types = first_param_types(project);
         Self {
             type_table,
-            first_param_types: first_param_types(project),
-            call_immutability: CallImmutability::new(project, type_table, exec),
+            call_immutability: CallImmutability::new(project, type_table, &first_param_types, exec),
+            first_param_types,
             panic_ids,
             quiet_callee_ids,
-            pure_builtin_callees: project.pure_builtin_callee_ids(),
         }
     }
 
@@ -75,7 +74,7 @@ impl<'a> EngineFacts<'a> {
         engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
         engine.set_panic_callee_ids(&self.panic_ids);
         engine.set_quiet_callee_ids(&self.quiet_callee_ids);
-        engine.set_pure_builtin_callees(&self.pure_builtin_callees);
+        engine.set_pure_builtin_callees(self.call_immutability.effect_free());
         engine
     }
 }

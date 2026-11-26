@@ -374,11 +374,15 @@ pub(super) struct CallImmutability<'a> {
 }
 
 impl<'a> CallImmutability<'a> {
-    pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable, exec: &Executor) -> Self {
+    pub(super) fn new(
+        project: &NirPackage,
+        type_table: &'a TypeTable,
+        first_param_types: &FirstParamTypes,
+        exec: &Executor,
+    ) -> Self {
         let struct_fields = StructFieldTypes::new(&project.structs);
-        let first_param_types = first_param_types(project);
         let (receiver_mutating, has_body) =
-            compute_receiver_mutating(project, type_table, &first_param_types, exec);
+            compute_receiver_mutating(project, type_table, first_param_types, exec);
         Self {
             type_table,
             struct_fields,
@@ -394,6 +398,10 @@ impl<'a> CallImmutability<'a> {
     /// conservative default.
     pub(super) fn method_writes_receiver(&self, func_id: FuncId) -> Option<bool> {
         self.has_body[func_id].then(|| self.receiver_mutating[func_id])
+    }
+
+    pub(super) fn effect_free(&self) -> &IndexSet<FuncId> {
+        &self.effect_free
     }
 
     pub(super) fn is_call_immutable(&self, type_id: TypeId) -> bool {
