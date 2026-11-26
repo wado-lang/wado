@@ -808,7 +808,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .trait_declares_method(trait_, method_name, |_| true)
                             .then(|| self.tysys.comparison_withheld_note(tr, base_type_id))?
                     })
-                    .or_else(|| self.blanket_left_open_hint(method_name));
+                    .or_else(|| self.blanket_left_open_hint(base_type_id, method_name));
                 let _ = self.emit(TypeError::MethodNotFound {
                     type_name,
                     method_name: method_name.to_string(),

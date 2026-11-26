@@ -1101,18 +1101,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Why no blanket answers a call of `method_name` though one declares it:
     /// the block holds a parameter only its trait reference names (`A` in
     /// `impl<A, T: Source<A>> Tag<A> for T`), which no method call settles.
-    pub(super) fn blanket_left_open_hint(&self, method_name: &str) -> Option<String> {
+    /// Only a block the call it suggests could reach: `receiver` implements
+    /// each bound's trait at some arguments, and the trait reference writes
+    /// the parameter, so the call can name it.
+    pub(super) fn blanket_left_open_hint(
+        &self,
+        receiver: TypeId,
+        method_name: &str,
+    ) -> Option<String> {
         let env = &self.tysys.trait_env;
+        let subject = self.tysys.type_table.borrow().peel_refs(receiver);
+        let implemented: Vec<DefId> = self
+            .trait_impls_for_receiver(
+                &ReceiverId::keyed(self.impl_target_of(subject), Some(subject)),
+                &[],
+            )
+            .into_iter()
+            .filter_map(|block| env.impl_headers[&block].trait_def())
+            .collect();
         env.blanket_impls.values().flatten().find_map(|blanket| {
             let header = &env.impl_headers[&blanket.def];
+            let mut written = Vec::new();
+            header.trait_ty()?.mentioned_names(&mut written);
             let open = header
                 .type_params
                 .iter()
                 .filter(|param| param.is_real_type_param())
                 .zip(env.blanket_param_sources(blanket))
-                .find(|(_, source)| matches!(source, BlanketParamSource::Unresolved))?
+                .find(|(param, source)| {
+                    matches!(source, BlanketParamSource::Unresolved)
+                        && written.contains(&param.name)
+                })?
                 .0;
-            if !self.impl_offers_method(blanket.def, method_name, None) {
+            let bounds_reachable = blanket
+                .bounds
+                .iter()
+                .all(|bound| bound.decl().is_some_and(|decl| implemented.contains(&decl)));
+            if !bounds_reachable || !self.impl_offers_method(blanket.def, method_name, None) {
                 return None;
             }
             let trait_name = &header.trait_.as_ref()?.name;

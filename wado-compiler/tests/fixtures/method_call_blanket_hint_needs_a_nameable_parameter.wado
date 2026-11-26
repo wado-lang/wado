@@ -1,0 +1,17 @@
+// A parameter the trait reference does not write cannot be named in a call,
+// so the missing method is not pointed at the block holding it.
+
+trait Into2<U> with () { fn into2(&self) -> U; }
+trait Show with () { fn show(&self) -> i32; }
+impl<U, T: Into2<U>> Show for T {
+    fn show(&self) -> i32 { return 1; }
+}
+struct One { n: i32 }
+impl Into2<i32> for One { fn into2(&self) -> i32 { return self.n; } }
+export fn run() {
+    let o = One { n: 7 };
+    let _ = o.show();
+}
+
+__DATA__
+{"compile_error": ":6:1: analysis error: the type parameter `U` is not constrained by the impl target or the trait reference", "compile_errors_contains": ["no method 'show' found on type 'One'"],"compile_errors_not_contains": ["declares it"]}

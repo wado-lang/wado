@@ -612,7 +612,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         type_name,
                         method_name: call.method_name.clone(),
                         hint: self
-                            .blanket_left_open_hint(&call.method_name)
+                            .blanket_left_open_hint(receiver, &call.method_name)
                             .unwrap_or_default(),
                         span: call.span,
                     });
