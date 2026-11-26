@@ -110,17 +110,27 @@ On Linux, seccomp covers what Landlock does not:
 
 ### Starting a confined child
 
-The parent `wado` runs wasmtime on several threads. Between `fork` and `exec`, a
-multithreaded process may make only async-signal-safe calls: no allocation, no
-lock. Each backend fits the confinement into that rule without re-executing
+The parent `wado` runs wasmtime on several threads. Before its `exec`, the child
+of a multithreaded process may make only async-signal-safe calls: no allocation,
+no lock. Each backend fits the confinement into that rule without re-executing
 `wado`, so a host embedded in another binary spawns as `wado` does.
 
-- Linux confines the child in `pre_exec`. Landlock, seccomp and `close_range`
-  are bare system calls, so the window admits them. Everything they read is
-  built before the fork: the ruleset, the BPF program, and an `O_PATH`
-  descriptor for each rule.
-- macOS starts the program through `/usr/bin/sandbox-exec` with `posix_spawn`,
-  which does not fork. `sandbox_init` compiles the profile and allocates, so it
+Neither backend calls `fork`. It copies the page tables of everything the host
+holds, and leaves each page to fault on the host's next write to it. A spawn
+then costs in proportion to the host's memory, and slows every thread of the
+host. `wado test` holds gigabytes while its tests spawn.
+
+- Linux starts the child with `clone(CLONE_VM | CLONE_VFORK)`, as `posix_spawn`
+  does: the child borrows the host's memory on a stack of its own, and the
+  thread that spawned it waits for its `exec`. The child confines itself in
+  that window. Landlock, seccomp and `close_range` are bare system calls, so
+  the window admits them. Everything they read is built before the child
+  starts: the ruleset, the BPF program, and an `O_PATH` descriptor for each
+  rule. Every signal is blocked across the `clone`, and the child sets each
+  signal the host catches back to its default before it unblocks them, so no
+  handler of the host's runs in the child.
+- macOS starts the program through `/usr/bin/sandbox-exec` with `posix_spawn`.
+  `sandbox_init` compiles the profile and allocates, so it
   runs in `sandbox-exec`, a single-threaded process of its own, which then execs
   the program. Its manual page marks it deprecated, but macOS still ships it,
   much software depends on it, and nothing public does what it does.
@@ -153,9 +163,9 @@ it was opened with whatever the child's grants. Rust's standard library opens
 every descriptor with `O_CLOEXEC`, but the descriptors `wado` itself inherited
 from its parent carry no such flag.
 
-- Linux calls `close_range(3, ~0, CLOSE_RANGE_CLOEXEC)` in `pre_exec`, after
-  the confinement. Marked rather than closed, the descriptor the standard
-  library reports a failed `exec` through survives until the `exec`.
+- Linux calls `close_range(3, ~0, CLOSE_RANGE_CLOEXEC)` in the child, after
+  the confinement. Marked rather than closed, the descriptors the child has
+  yet to move to 0, 1 and 2 survive until the `exec`.
 - macOS sets `POSIX_SPAWN_CLOEXEC_DEFAULT`, and the spawn's file actions place
   the child's stdio at 0, 1 and 2. `POSIX_SPAWN_SETPGROUP` gives the child its
   process group.
@@ -538,7 +548,7 @@ the program accepts it.
 
 - [x] The sandbox layer in `wado-host` with the Linux backend: the policy type,
   the baseline, Landlock and seccomp, the ABI 6 check, the confinement and
-  `close_range` in `pre_exec`. Done when the escape tests pass in CI on
+  `close_range` in the child. Done when the escape tests pass in CI on
   Linux.
 - [x] The macOS backend: the fixed profile, its parameters, and the
   `posix_spawn` of `sandbox-exec`. Done when the escape tests pass in CI on

@@ -695,6 +695,69 @@ fn the_probe_runs_confined() {
     assert_eq!(probe_under(tree.policy(Network::Denied), "ok"), OK);
 }
 
+/// The minor page faults the calling thread has taken.
+#[cfg(target_os = "linux")]
+fn minor_faults() -> i64 {
+    // SAFETY: `usage` is plain data the call fills.
+    let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
+    // SAFETY: `usage` outlives the call.
+    assert_eq!(
+        unsafe { libc::getrusage(libc::RUSAGE_THREAD, &raw mut usage) },
+        0
+    );
+    usage.ru_minflt
+}
+
+/// A spawn costs the same whatever the host holds. A child that starts as a
+/// copy of the host leaves every page the host holds to fault on its next
+/// write, which this counts.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_spawn_copies_nothing_the_host_holds() {
+    const PAGES: usize = 4096;
+    assert_available();
+    let tree = Tree::new();
+    let policy = tree.policy(Network::Denied);
+    // SAFETY: plain system call.
+    let page = usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).unwrap();
+    // SAFETY: a fresh anonymous mapping, ours alone and never unmapped. Small
+    // pages, so each page faults for itself.
+    let held = unsafe {
+        let start = libc::mmap(
+            std::ptr::null_mut(),
+            PAGES * page,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+            -1,
+            0,
+        );
+        assert_ne!(start, libc::MAP_FAILED);
+        assert_eq!(libc::madvise(start, PAGES * page, libc::MADV_NOHUGEPAGE), 0);
+        std::slice::from_raw_parts_mut(start.cast::<u8>(), PAGES * page)
+    };
+    let mut write_each_page = || {
+        for at in (0..held.len()).step_by(page) {
+            held[at] = held[at].wrapping_add(1);
+        }
+    };
+    // Another test's fork in this process costs the same faults, so the
+    // quietest of a few spawns is the one that shows this spawn's own.
+    let faults = (0..5)
+        .map(|_| {
+            write_each_page();
+            let before = minor_faults();
+            assert_eq!(sh(&policy, "true"), OK);
+            write_each_page();
+            minor_faults() - before
+        })
+        .min()
+        .unwrap();
+    assert!(
+        faults < (PAGES / 2) as i64,
+        "{faults} faults over {PAGES} pages"
+    );
+}
+
 #[test]
 fn reads_only_what_is_granted() {
     assert_available();
