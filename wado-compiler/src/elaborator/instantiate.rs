@@ -15,7 +15,7 @@ use super::call::slot_names;
 use super::coercion::ExpectedReturn;
 use super::infer_hole::BoundRows;
 use super::scope::ParamRef;
-use super::trait_query::SelfBinding;
+use super::trait_query::{SelfBinding, spelled_at};
 use super::types::{FunctionContext, TypeError};
 use crate::ast::{self, GenericParam};
 
@@ -405,11 +405,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_args: &[(ParamRef, TypeId)],
         span: Span,
     ) {
+        // A bound naming a sibling slot (`T: Source<A>`) reads that slot's
+        // variable.
+        let at_slots = self.tysys.call_site_types(params, &inst.vars, &[]);
         for ((&var, param), &inferred) in inst.vars.iter().zip(params).zip(&inst.inferred) {
             if !inferred {
                 continue;
             }
-            let bounds = self.declared_bounds(param, self_binding, impl_args, BoundRows::Unbound);
+            let mut bounds =
+                self.declared_bounds(param, self_binding, impl_args, BoundRows::Unbound);
+            for bound in &mut bounds {
+                bound.trait_ = spelled_at(&bound.trait_, &at_slots);
+            }
             self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
         }
     }

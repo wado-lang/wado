@@ -737,7 +737,9 @@ adopts the blanket where the referent has no method of the name
 `impl<T: AsStrSlice> AsStrSlice for &T` is why: its methods forward with
 `(*self).len()`, a call on a `&T`, which the blanket ranked first would send
 back to itself. `candidates` still ranks the blanket first, so the elaborator
-sets the solver's verdict aside for these methods.
+sets the solver's verdict aside for these methods. A tie the order reports
+among such blankets is set aside with it, and reported only where the referent
+has no method of the name (`trait_ref_blankets_tied_behind_referent.wado`).
 
 It adopts one for a receiver holding one reference only. On `&mut &mut I` the
 blanket's parameter would stand for `&mut I`, which the lookup does not hand
@@ -777,11 +779,30 @@ A call that names no trait arguments leaves such a parameter to its own
 inference. The solver asks a bound that reads the parameter at a variable, so
 the block stays a candidate, and the call owes the bound once the parameter
 settles (`method_call_settles_blanket_parameter.wado`). The bound itself
-settles it where its subject has one impl of the trait, or one bound in force
-(`Elaborator::settle_bound_args_by_sole_impl`,
+settles it where one impl of the trait applies to its subject, or one bound is
+in force (`Elaborator::settle_bound_args_by_sole_impl`,
 `bound_one_impl_settles_its_arguments.wado`), and the expected type or a later
-use does where it has several. A generic function's bound is owed and settled
-the same way.
+use does where several apply. A blanket beside the subject's own impl is a
+second answer, whatever the order makes of the two
+(`bound_blanket_beside_impl_settles_nothing.wado`). A generic function's bound
+and a method's own are owed and settled the same way, and a method call whose
+receiver still holds a variable runs what is owed first, since a bound may be
+what settles it.
+
+A bound a call owes on the caller's own parameter is not asked in the caller's
+body. `first_of(t)` under `T: Source<i32> + Source<bool>`, its result used as a
+`String`, is accepted there, and refused where the caller is instantiated at a
+type lacking `Source<String>`, at the callee's line.
+
+Two blankets of one trait at different arguments are an overload set where no
+concrete impl answers (`method_call_blankets_form_overload_set.wado`), so the
+expected type selects between them, and one writing its trait arguments wins
+over one leaving them to the call.
+
+A numeric literal argument settles its parameter before a function's bound is
+asked, so `put(&one, 1)` under `fn put<A, T: Sink<A>>(t: &T, a: A)` asks
+`Sink<i32>` where `One` has `Sink<i64>` alone. A method reached through a
+blanket settles the parameter from the one impl first, and takes `1` as `i64`.
 
 - [x] Settle a parameter only the trait reference names, at a method call and a
   static one alike.

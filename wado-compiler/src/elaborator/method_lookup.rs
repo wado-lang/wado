@@ -1357,6 +1357,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.attach_infer_var_bounds(witness, "Self".to_string(), vec![bound], span);
     }
 
+    /// Impl `def`'s parameters at what `slots` settles them to.
+    fn impl_param_space(&self, def: DefId, slots: &TypeArgMap) -> ParamSpace {
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let header = impl_header(&trait_env, &ImplBlockRef(def));
+        let names = ImplParamSlots::of(&header.ty, &header.type_params);
+        slots
+            .iter()
+            .filter_map(|(slot, &arg)| {
+                assert_eq!(slot.owner, def, "an impl's target binds its own parameters");
+                let name = names.name_of(slot.index)?;
+                Some((ParamRef::of(def, name), self.apply_infer_holes(arg)))
+            })
+            .collect()
+    }
+
+    /// Settle the slots of impl `def` a candidate leaves to its call, `open`,
+    /// where a bound on a slot the receiver `given` reads one and has one impl
+    /// to read it from. A candidate is ranked and selected at the trait
+    /// arguments it can only mean.
+    fn settle_open_slots_by_sole_impl(
+        &mut self,
+        def: DefId,
+        given: &TypeArgMap,
+        open: &TypeArgMap,
+    ) {
+        if open.is_empty() {
+            return;
+        }
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let header = impl_header(&trait_env, &ImplBlockRef(def));
+        let mut space = given.clone();
+        space.extend(open);
+        let impl_args = self.impl_param_space(def, &space);
+        for (param, arg) in &self.impl_param_space(def, given) {
+            let Some(declared) = header.type_params.iter().find(|p| p.name == param.name) else {
+                continue;
+            };
+            let bounds = self.declared_bounds(
+                declared,
+                None,
+                &impl_args,
+                BoundRows::All(&EffectRows::default()),
+            );
+            for bound in &bounds {
+                self.settle_bound_args_by_sole_impl(*arg, bound);
+            }
+        }
+    }
+
     /// The bounds impl `def` places on `slots`, read where `space` binds its
     /// parameters, owed by the call at `span`:
     /// the `Open` ones awaiting their answer, or `All` where selecting the
@@ -1373,19 +1422,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
-        let names = ImplParamSlots::of(&header.ty, &header.type_params);
-        let space_of = |this: &Self, slots: &TypeArgMap| -> ParamSpace {
-            slots
-                .iter()
-                .filter_map(|(slot, &arg)| {
-                    assert_eq!(slot.owner, def, "an impl's target binds its own parameters");
-                    let name = names.name_of(slot.index)?;
-                    Some((ParamRef::of(def, name), this.apply_infer_holes(arg)))
-                })
-                .collect()
-        };
-        let impl_args = space_of(self, space);
-        for (bound, arg) in &space_of(self, slots) {
+        let impl_args = self.impl_param_space(def, space);
+        for (bound, arg) in &self.impl_param_space(def, slots) {
             let Some(param) = header.type_params.iter().find(|p| p.name == bound.name) else {
                 continue;
             };
@@ -2492,7 +2530,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             Some(Ordered::AmbiguousTraits(_)) => {
-                self.report_cross_trait_ambiguity(&found_traits, method_name, span);
+                let tie = self.cross_trait_ambiguity(&found_traits, method_name, span);
+                let behind_referent = found_traits.iter().all(|m| {
+                    m.is_blanket_ref_impl
+                        && matches!(
+                            m.method_info.self_kind,
+                            ast::SelfKind::Ref | ast::SelfKind::MutRef
+                        )
+                });
+                if behind_referent {
+                    for m in &mut found_traits {
+                        m.tie_behind_referent = Some(tie.clone());
+                    }
+                } else {
+                    let _ = self.emit(tie);
+                }
                 // The call continues on one of them only to recover, so it
                 // continues on one taking the receiver it was written with.
                 let takes_receiver =
@@ -2879,6 +2931,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // call's to infer, as a method's own parameter is.
         let bound = Self::frame_slots(&scope, impl_ref.0);
         let inferred_impl_slots = scope.mint_trait_arg_slots(impl_ref.0, &bound);
+        scope.settle_open_slots_by_sole_impl(impl_ref.0, &bound, &inferred_impl_slots);
         for (slot, &var) in &inferred_impl_slots {
             let name = param_slots
                 .name_of(slot.index)
@@ -3060,6 +3113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 blanket_binder: blanket_binder.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
+                tie_behind_referent: None,
                 ref_impl_target,
             });
             method_found = true;
@@ -3112,6 +3166,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     blanket_binder,
                     impl_struct_fq,
                     is_blanket_ref_impl,
+                    tie_behind_referent: None,
                     ref_impl_target,
                 });
             }
@@ -3294,15 +3349,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         probe: Option<ArgSource<'_, '_>>,
     ) -> TraitLookup {
-        // The overload set is the concrete candidates of one declaration.
-        // Distinct traits never form one, and a blanket neither forms nor
-        // defeats one, having lost to every concrete impl already.
-        let concrete: Vec<usize> = found_traits
+        // The overload set is the concrete candidates of one declaration, or
+        // its blankets where no concrete impl answers: a blanket has lost to
+        // every concrete impl already. Distinct traits never form one.
+        let mut concrete: Vec<usize> = found_traits
             .iter()
             .enumerate()
             .filter(|(_, m)| m.blanket_binder.is_none())
             .map(|(i, _)| i)
             .collect();
+        if concrete.is_empty() {
+            concrete = (0..found_traits.len()).collect();
+        }
         let mut classes: Vec<ArgClass> = Vec::new();
         if let Some(mut probe) = probe
             && concrete.len() > 1
@@ -3585,12 +3643,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// called, matching the bounds path's `AmbiguousTraitMethod` — the same
     /// rule, so the shape a collision arrives in does not change the answer
     /// (WEP 2026-07-31).
-    fn report_cross_trait_ambiguity(
+    fn cross_trait_ambiguity(
         &self,
         found_traits: &[TraitMethodMatch],
         method_name: &str,
         span: Span,
-    ) {
+    ) -> TypeError {
         // Named on declarations, so two same-named traits from different
         // modules still collide even though their spellings agree — identity is
         // the declaration, not the name.
@@ -3616,11 +3674,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         bases.sort();
         bases.dedup();
-        let _ = self.emit(TypeError::AmbiguousTraitMethod {
+        TypeError::AmbiguousTraitMethod {
             method: method_name.to_string(),
             traits: bases,
             span,
-        });
+        }
     }
 
     /// Run an indexing-trait lookup on `base_type_id`, falling back to the

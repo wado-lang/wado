@@ -48,3 +48,43 @@ test "several impls wait for the expected type" {
     let s: String = first_of(&two);
     assert s == "7";
 }
+
+test "the settled result is a receiver" {
+    let one = One { n: -7 };
+    assert first_of(&one).div_floor(2) == -4;
+}
+
+fn forwards_its_parameter<B, T: Source<B>>(t: &T) -> B {
+    return first_of(t);
+}
+
+test "from a bound in force naming a parameter" {
+    let v = forwards_its_parameter(&One { n: 7 });
+    assert v == 7;
+}
+
+struct Host {}
+
+impl Host {
+    fn first_of<A, T: Source<A>>(&self, t: &T) -> A {
+        return t.first();
+    }
+
+    fn put<A, T: Source<A>>(&self, t: &T, a: A) -> A {
+        return a;
+    }
+
+    fn stat<A, T: Source<A>>(t: &T) -> A {
+        return t.first();
+    }
+}
+
+test "a method's own parameter" {
+    let h = Host {};
+    let one = One { n: 7 };
+    let v = h.first_of(&one);
+    let s = Host::stat(&one);
+    let w: i32 = h.first_of(&one);
+    assert `${v}` == "7" && `${s}` == "7" && w == 7;
+    assert h.put(&one, 1) == 1;
+}

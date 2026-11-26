@@ -2566,7 +2566,12 @@ impl SolverBridge {
             .ok()?;
         let found = bound_candidates_at_any_args(&self.program, &q.env, &q.ty, q.trait_);
         match rank(&found) {
-            Selection::One(index) => self.impl_def_of(found[index].impl_),
+            // The order's loser still answers the bound at its own arguments.
+            Selection::One(index) => found
+                .iter()
+                .all(|other| other.trait_args == found[index].trait_args)
+                .then(|| self.impl_def_of(found[index].impl_))
+                .flatten(),
             Selection::None
             | Selection::Duplicated(_)
             | Selection::AmbiguousTraits(_)

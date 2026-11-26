@@ -331,7 +331,9 @@ second blanket of your own reports at every type satisfying both bounds. Write
 
 Arguments filter candidates before the ranks run: one trait at several argument
 lists is an overload set the call's arguments choose from (see
-[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)).
+[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)). Blankets
+of one trait at several argument lists are an overload set too, where no impl
+for the type itself answers.
 
 #### Eligibility
 
@@ -972,10 +974,11 @@ projection nested inside an argument is answered the same way:
 bound reaches the impl that satisfied the bound.
 
 A bound settles what its arguments leave open where its subject is settled and
-has one impl of the trait: the arguments are that impl's, as a call of the
-trait's method on the subject would read them. A subject that is a type
-parameter has the one bound in force on it instead. Where the subject has
-several, the bound settles nothing and the expected type or a later use
+one impl of the trait applies to it: the arguments are that impl's, as a call of
+the trait's method on the subject would read them. A blanket that applies
+counts as the subject's own impl does. A subject that is a type parameter has
+the one bound in force on it instead. Where several apply at different
+arguments, the bound settles nothing and the expected type or a later use
 chooses, as among the members of an overload set. A variable a literal waits at
 is the literal's to settle, and the bound is asked at the type it takes.
 

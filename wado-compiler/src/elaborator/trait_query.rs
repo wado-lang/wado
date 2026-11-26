@@ -4301,6 +4301,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_binder: None,
             impl_struct_fq,
             is_blanket_ref_impl: false,
+            tie_behind_referent: None,
             ref_impl_target: None,
         })
     }

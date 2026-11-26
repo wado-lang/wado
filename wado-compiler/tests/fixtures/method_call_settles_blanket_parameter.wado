@@ -97,3 +97,17 @@ test "under a bound in force" {
     assert through_a_bound(&One { n: 7 }) == 7;
     assert through_a_bound(&Two { n: 7 }) == 7;
 }
+
+test "the settled result is a receiver" {
+    let one = One { n: -7 };
+    assert one.tag().div_floor(2) == -4;
+}
+
+fn forwards_its_parameter<B, T: Source<B>>(t: &T) -> B {
+    return t.tag();
+}
+
+test "under a bound in force naming a parameter" {
+    let v = forwards_its_parameter(&One { n: 7 });
+    assert v == 7;
+}

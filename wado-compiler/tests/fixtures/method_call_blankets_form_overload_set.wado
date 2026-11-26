@@ -1,0 +1,83 @@
+// Two blankets of one trait at different arguments are an overload set where
+// no concrete impl answers: the expected type selects, and a blanket writing
+// its trait arguments wins over one leaving them to the call.
+
+trait Source<A> with () {
+    fn first(&self) -> A;
+}
+
+trait Marker with () {}
+
+trait Other with () {}
+
+trait Tag<A> with () {
+    fn tag(&self) -> A;
+}
+
+impl<A, T: Source<A>> Tag<A> for T {
+    fn tag(&self) -> A {
+        return self.first();
+    }
+}
+
+impl<T: Marker> Tag<bool> for T {
+    fn tag(&self) -> bool {
+        return true;
+    }
+}
+
+trait Pick<A> with () {
+    fn pick(&self) -> A;
+}
+
+impl<T: Other> Pick<i32> for T {
+    fn pick(&self) -> i32 {
+        return 7;
+    }
+}
+
+impl<T: Marker> Pick<bool> for T {
+    fn pick(&self) -> bool {
+        return true;
+    }
+}
+
+struct One {
+    n: i32,
+}
+
+impl Source<i32> for One {
+    fn first(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Marker for One {}
+
+impl Other for One {}
+
+test "the expected type selects between closed blankets" {
+    let one = One { n: 3 };
+    let b: bool = one.pick();
+    let n: i32 = one.pick();
+    assert b;
+    assert n == 7;
+}
+
+test "the expected type selects the blanket leaving its argument open" {
+    let one = One { n: 3 };
+    let n: i32 = one.tag();
+    assert n == 3;
+}
+
+test "the blanket writing its arguments wins with nothing expected" {
+    let one = One { n: 3 };
+    let b = one.tag();
+    assert `${b}` == "true";
+}
+
+test "a qualified call names either" {
+    let one = One { n: 3 };
+    assert Tag::<bool>::tag(&one);
+    assert Tag::<i32>::tag(&one) == 3;
+}

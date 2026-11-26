@@ -1558,7 +1558,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// its trait that `var`'s answer has: with `impl Source<i32> for One`
     /// alone, `One: Source<?A>` says `?A` is `i32`, as `one.first()` says.
     /// Several impls leave them to the rest of the body.
-    fn settle_bound_args_by_sole_impl(&mut self, var: TypeId, bound: &DeclaredBound) {
+    pub(super) fn settle_bound_args_by_sole_impl(&mut self, var: TypeId, bound: &DeclaredBound) {
         let subject = self.apply_infer_holes(var);
         if bound.each_element || !self.is_settled(subject) {
             return;
@@ -1569,9 +1569,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(|carried| self.trait_decl_of(carried) == bound.trait_.canonical())
             .collect();
-        let offered: Vec<TypeId> = if let [carried] = &in_force[..] {
-            self.bound_args_where_written(carried, &ParamSpace::new())
-        } else if let Some(block) = self.tysys.solver().sole_bound_impl(
+        if let [carried] = &in_force[..] {
+            let offered = self.bound_args_where_written(carried, &ParamSpace::new());
+            for (asked, offered) in bound.trait_.args().iter().zip(offered) {
+                self.equate_open_parts(asked, offered);
+            }
+            return;
+        }
+        let offered: Vec<TypeId> = if let Some(block) = self.tysys.solver().sole_bound_impl(
             &self.tysys,
             &self.annotate_ctx,
             subject,
@@ -1589,7 +1594,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         for (asked, offered) in bound.trait_.args().iter().zip(offered) {
-            self.equate_open_parts(asked, offered);
+            // What the block leaves to its own parameters says nothing.
+            if !self.tysys.type_table.borrow().contains_type_param(offered) {
+                self.equate_open_parts(asked, offered);
+            }
         }
     }
 
@@ -1598,12 +1606,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn equate_open_parts(&mut self, asked: &FqTypeName, offered: TypeId) {
         if let TypeHead::Infer { var, .. } = asked.head() {
             let hole = self.tysys.type_table.borrow_mut().make_infer_var(*var);
-            // What the block leaves to its own parameters says nothing, and a
-            // variable a literal waits at is the literal's to settle: the
+            // A variable a literal waits at is the literal's to settle: the
             // bound is then asked at the type the literal took.
-            if !self.tysys.type_table.borrow().contains_type_param(offered)
-                && !self.annotate_ctx.literals_wait_at(hole)
-            {
+            if !self.annotate_ctx.literals_wait_at(hole) {
                 self.equate(offered, hole);
             }
             return;

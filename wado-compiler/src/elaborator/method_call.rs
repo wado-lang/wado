@@ -491,6 +491,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
+        // What the receiver's own call owes may be what settles its type.
+        if self.type_has_infer_hole(receiver) {
+            self.run_obligations();
+            receiver = self.apply_infer_holes(receiver);
+        }
+
         // Base (non-ref) type for method lookup. `mut`: deferred-inference may
         // concretise the receiver below.
         let mut base_type_id = self.tysys.get_base_type(receiver);
@@ -756,6 +762,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !reported
             && let Some((ref_kind, trait_match)) = behind_referent
         {
+            if let Some(tie) = &trait_match.tie_behind_referent {
+                let _ = self.emit(tie.clone());
+            }
             let adopted = self.adopt_ref_match(trait_match, base_type_id);
             matched_impl_decl = adopted.matched_impl_decl;
             trait_impl_struct_name = adopted.trait_impl_struct_name;
