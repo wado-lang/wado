@@ -984,8 +984,12 @@ if [ ! -x "$bin" ]; then
     # The temp is in the cache dir: a rename is atomic within one filesystem.
     cp "$tmp/tree/target/release/wado" "$bin.$$"
     mv "$bin.$$" "$bin"
-    # One baseline is enough; the rest are compilers no A/B asks for again.
-    find "$cache" -mindepth 1 -maxdepth 1 -not -name "$want" -exec rm -rf {} +
+    # One baseline of main is enough; the rest are compilers no A/B asks for
+    # again. A WADO_BASELINE_REV build evicts nothing: its caller copies it out,
+    # and main's baseline may be what another A/B is running.
+    if [ -z "${WADO_BASELINE_REV:-}" ]; then
+        find "$cache" -mindepth 1 -maxdepth 1 -not -name "$want" -exec rm -rf {} +
+    fi
 fi
 echo "$bin"
 """
