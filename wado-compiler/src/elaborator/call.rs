@@ -5624,9 +5624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_name: &str,
         ident: &ast::IdentExpr,
     ) -> Option<ReceiverId> {
-        // The segment's own site first: it answers in the module that wrote
-        // the path. For a parameter default that is not the module the walk
-        // stands in, which may import another `ns`.
+        // The resolver's own answer for the segment, where it has one.
         let at_site = ident.owner_segment().and_then(|seg| self.receiver_at(seg));
         // An interface has no receiver at its site. The importing module
         // never names `Type` on its own, so a bare-name search reaches no impl
