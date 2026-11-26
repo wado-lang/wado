@@ -1,6 +1,6 @@
 // `#[workload]` marks a test that states the package's real workload.
 // `wado test` runs it like any other test, so `fib` is covered, and it takes
-// `#[timeout_ms]` beside it.
+// `#[timeout]` beside it.
 fn fib(n: i32) -> i32 {
     if n < 2 {
         return n;
@@ -9,7 +9,7 @@ fn fib(n: i32) -> i32 {
 }
 
 #[workload]
-#[timeout_ms(10000)]
+#[timeout(seconds = 10)]
 test "fib to 20" {
     assert fib(20) == 6765;
 }

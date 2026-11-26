@@ -1458,9 +1458,9 @@ pub fn run_test_world(
             state.tls_ctx = build_tls_ctx(tls_mocks.clone());
             let mut store = Store::new(engine, state);
             // Parse the per-test budget from the export name
-            // (e.g., "test-tm2000-0-slow") and meter the guest with it.
-            let timeout_ms =
-                parse_test_timeout_ms(test_name).unwrap_or(DEFAULT_TIMEOUT_MS);
+            // (e.g., "test-tm20-0-slow") and meter the guest with it.
+            let timeout_ms = parse_test_timeout_seconds(test_name)
+                .map_or(DEFAULT_TIMEOUT_MS, |seconds| seconds * 1000);
             limit_store(&mut store, timeout_ms);
 
             let instance = linker.instantiate_async(&mut store, &component).await?;
@@ -1526,8 +1526,8 @@ pub fn run_test_world(
     })
 }
 
-/// Parse per-test timeout from export name (e.g., "test-tm2000-0-slow" → Some(2000)).
-pub fn parse_test_timeout_ms(test_name: &str) -> Option<u64> {
+/// Parse per-test timeout from export name (e.g., "test-tm20-0-slow" → Some(20)).
+pub fn parse_test_timeout_seconds(test_name: &str) -> Option<u64> {
     let rest = test_name
         .strip_prefix("test-trap-")
         .or_else(|| test_name.strip_prefix("test-todo-"))

@@ -1,0 +1,11 @@
+// `#[timeout]` counts in seconds alone: the runner's clock is no finer.
+
+#[timeout(milliseconds = 7000)]
+test "another unit" {
+    assert 1 == 1;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "`timeout` takes `seconds = N`, a whole number of seconds from 1 to 86400", "compile_error_codes": ["ATTR_MISUSE"]}

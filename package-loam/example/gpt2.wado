@@ -128,7 +128,7 @@ struct Oracle {
     generate: List<Generated>,
 }
 
-#[timeout_ms(30000)]
+#[timeout(seconds = 30)]
 test "each prompt continues with the tokens onnxruntime picks greedily" {
     let mut cpu = Cpu {};
     let mut model = gpt2::Model::new(gpt2::Params::embedded(&mut cpu));
@@ -143,7 +143,7 @@ test "each prompt continues with the tokens onnxruntime picks greedily" {
     }
 }
 
-#[timeout_ms(30000)]
+#[timeout(seconds = 30)]
 test "the longest prompt fills every position the model reads" {
     let prompt = List::<i32>::filled(longest_prompt(2), 0);
     let mut cpu = Cpu {};

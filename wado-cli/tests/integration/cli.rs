@@ -2194,7 +2194,7 @@ fn test_test_times_out_a_guest_blocked_on_the_host() {
     let file = tmp.path().join("blocked_test.wado");
     std::fs::write(
         &file,
-        "use { cmd } from \"core:process\";\n\n#[timeout_ms(300)]\ntest \"blocked\" {\n    let _ = cmd`sleep 30`.status();\n}\n",
+        "use { cmd } from \"core:process\";\n\n#[timeout(seconds = 1)]\ntest \"blocked\" {\n    let _ = cmd`sleep 30`.status();\n}\n",
     )
     .unwrap();
     wado_test()
@@ -2202,7 +2202,7 @@ fn test_test_times_out_a_guest_blocked_on_the_host() {
         .timeout(Duration::from_secs(60))
         .assert()
         .failure()
-        .stdout(predicate::str::contains("test timed out after 300ms"));
+        .stdout(predicate::str::contains("test timed out after 1s"));
 }
 
 /// `--process-read` lets a child read a path outside the guest's grants, and

@@ -1763,7 +1763,7 @@ impl<'a> Reify<'a> {
     /// `TirFunction` plus the `TirTest` metadata. Mirrors
     /// `Elaborator::resolve_test_decl`: the function
     /// name encodes `test_index` + attributes (`expect_trap`, `TODO`,
-    /// `timeout_ms`); the body reifies into a unit-returning
+    /// `timeout`); the body reifies into a unit-returning
     /// no-parameter function.
     fn reify_test_decl(
         &mut self,
@@ -1775,7 +1775,7 @@ impl<'a> Reify<'a> {
         let ast::TestMetadata {
             expect_trap,
             is_todo,
-            timeout_ms,
+            timeout_seconds,
             is_synopsis,
             is_workload,
         } = meta;
@@ -1830,7 +1830,7 @@ impl<'a> Reify<'a> {
             span: test_decl.span,
             expect_trap,
             is_todo,
-            timeout_ms,
+            timeout_seconds,
             is_synopsis,
             is_workload,
         };

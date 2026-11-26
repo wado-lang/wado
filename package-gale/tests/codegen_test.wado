@@ -543,7 +543,7 @@ X : 'x' ; Y : 'y' ; Z : 'z' ; W : 'w' ;
 }
 
 // Generating SQLite alone takes about the default five seconds.
-#[timeout_ms(30000)]
+#[timeout(seconds = 30)]
 test "every emitted FOLLOW site is named by a call" {
     let output = gen_source(#include_str("./grammars/SQLite.g4"));
     let mut sites = 0;
@@ -1478,7 +1478,7 @@ D a b a c => (s D a b a c)
 // left-recursive suffix too, a predicate included. On `x . a b` the simulator
 // takes `a`, as the jar does, and its predicate fails; the tournament takes
 // `a B`. The trees and the output are the jar's.
-#[timeout_ms(240000)]
+#[timeout(seconds = 240)]
 test "a group in a left-recursive suffix runs its alternative's actions" {
     let printing = "grammar N5;
 s : e EOF ;
@@ -5066,7 +5066,7 @@ WS : ' ' -> skip ;
 // The scan cannot answer `$d>0`, a local it does not simulate, but it still
 // answers the `{false}?` beside it, so the first alternative fails in the scan
 // as in the parse. The tree is the jar's.
-#[timeout_ms(120000)]
+#[timeout(seconds = 120)]
 test "a gate keeps the predicates a scan answers beside one it cannot" {
     let g4 = "grammar F1;
 s : r EOF ;
@@ -5083,7 +5083,7 @@ WS : ' ' -> skip ;
 // A loop deciding its group's alternative as it enters leaves a group the
 // simulator decides to the simulator, and `verify` checks it. The longest match
 // takes `a B`; the jar takes `a`, then `b` on the next iteration.
-#[timeout_ms(120000)]
+#[timeout(seconds = 120)]
 test "a repeated group the simulator decides takes the simulator's pick" {
     let g4 = "grammar N4;
 s : (a | a B | b)* C EOF ;
@@ -5102,7 +5102,7 @@ WS : ' ' -> skip ;
 // the simulator decides it, and `verify` checks the tournament's pick there.
 // The longest match takes `a B`, which leaves the suffix's `B` nothing to
 // match; the jar takes `a`.
-#[timeout_ms(120000)]
+#[timeout(seconds = 120)]
 test "a group in a left-recursive suffix takes the simulator's pick" {
     let g4 = |suffix: String| `grammar F2;
 s : e EOF ;
@@ -5121,7 +5121,7 @@ WS : ' ' -> skip ;
 
 // `x` matches empty, so entering it consumes nothing, but it still adds a node.
 // The trees are the jar's.
-#[timeout_ms(120000)]
+#[timeout(seconds = 120)]
 test "verify takes an optional entered through an empty rule as entered" {
     let g4 = "grammar F5;
 s : x? 'z' EOF ;
@@ -5133,7 +5133,7 @@ WS : ' ' -> skip ;
     }
 }
 
-#[timeout_ms(60000)]
+#[timeout(seconds = 60)]
 test "a loop the simulator decides stops at the end of the input" {
     let g4 = "grammar L;
 @parser::members {

@@ -38,10 +38,21 @@ struct Login {
     token: String,
 }
 
-#[timeout_ms(30000)]
+#[timeout(seconds = 30)]
 test "attributes the schema admits" {
     let login = Login { user: "alice", token: "t0ken" };
     assert `${login:?}`.len() > 0;
+    assert slow_add(1, 2) == 3;
+}
+
+// The seconds are an integer literal in any of its forms.
+#[timeout(seconds = 1_800)]
+test "a separated timeout" {
+    assert slow_add(1, 2) == 3;
+}
+
+#[timeout(seconds = 0x1E)]
+test "a hex timeout" {
     assert slow_add(1, 2) == 3;
 }
 

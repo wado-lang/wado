@@ -1,0 +1,13 @@
+// One test has one timeout: a second `#[timeout]` is refused rather than
+// silently losing to the first.
+
+#[timeout(seconds = 2)]
+#[timeout(seconds = 9)]
+test "two limits" {
+    assert 1 == 1;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":5:1: analysis error: `timeout(seconds)` is written twice on one declaration", "compile_error_codes": ["ATTR_MISUSE"]}

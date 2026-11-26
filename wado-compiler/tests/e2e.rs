@@ -2076,7 +2076,7 @@ fn compile_synthetic(source: &str, target_world: Option<&str>) -> Vec<u8> {
 fn an_exhausted_budget_is_not_an_expected_trap() {
     let wasm = compile_synthetic(
         r#"#[expect_trap]
-#[timeout_ms(100)]
+#[timeout(seconds = 1)]
 test "never ends" {
     while builtin::black_box(true) {}
 }

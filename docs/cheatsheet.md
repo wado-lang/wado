@@ -1777,9 +1777,9 @@ test "not yet implemented" {
     panic("TODO: implement this");
 }
 
-// Timeout override. The default is 5000ms, and a test that runs longer is
+// Timeout override. The default is 5 seconds, and a test that runs longer is
 // interrupted and fails.
-#[timeout_ms(30000)]
+#[timeout(seconds = 30)]
 test "large data processing" {
     process_large_dataset();
 }
