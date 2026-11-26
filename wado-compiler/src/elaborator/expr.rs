@@ -1962,8 +1962,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The type a part of type `part_type` reads as, out of `base` of
     /// `base_type`: a `&mut` behind a `&` reads as a `&`.
     fn part_read_through(&self, base: &ast::Expr, base_type: TypeId, part_type: TypeId) -> TypeId {
-        let through_shared = self.reference_mutability(base_type) == Some(false)
-            || self.place_roots_at_immutable_ref(base);
+        self.read_through(self.reads_through_shared(base, base_type), part_type)
+    }
+
+    /// Whether a part of `base` of `base_type` is read behind a `&`.
+    fn reads_through_shared(&self, base: &ast::Expr, base_type: TypeId) -> bool {
+        self.reference_mutability(base_type) == Some(false)
+            || self.place_roots_at_immutable_ref(base)
+    }
+
+    pub(super) fn read_through(&self, through_shared: bool, part_type: TypeId) -> TypeId {
         if through_shared {
             self.tysys.shared_view(part_type)
         } else {
@@ -2346,8 +2354,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
+        let through_shared = self.reads_through_shared(&index.expr, expr_type);
         if let Some(read) = self.dispatch_index_through_bounds(index, base_type_id, access, ctx) {
-            return read;
+            return self.read_through(through_shared, read);
         }
 
         // For List and custom types, look for Index or IndexValue trait implementation
@@ -2382,6 +2391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         receiver: expr_type,
                         access,
                         key: index_type,
+                        through_shared,
                     },
                     item,
                     left: base_type_id,
@@ -2391,7 +2401,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 return result;
             }
-            return self.dispatch_index(index.id, index.span, expr_type, access, index_type);
+            let read = self.dispatch_index(index.id, index.span, expr_type, access, index_type);
+            return self.read_through(through_shared, read);
         }
 
         self.report_not_indexable(expr_type, index.span)
@@ -2430,11 +2441,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// shares what the element holds, so a write through it would land in
     /// storage the view may have been lent through a `&`. An in-place element
     /// is refused by `place_roots_at_immutable_ref` instead.
-    fn refuse_mut_element_of_read_only_view(
+    pub(super) fn refuse_mut_element_of_read_only_view(
         &mut self,
-        base_type_id: TypeId,
-        lookup_type_id: TypeId,
-        key: TypeId,
+        container: TypeId,
+        stores_back: bool,
         element: TypeId,
         span: Span,
     ) {
@@ -2442,16 +2452,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             tt.is_in_place_aggregate(tt.representation_head(element))
         };
-        let stores_back = self
-            .index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
-                s.find_index_assign_trait_impl(t, Some(key))
-            })
-            .is_some();
         if !in_place && !stores_back {
             let _ = self.emit(TypeError::CannotMutate {
                 message: format!(
                     "cannot take &mut of an element of read-only '{}': it has no IndexAssign to store the element back",
-                    self.tysys.type_id_to_string(base_type_id)
+                    self.tysys.type_id_to_string(container)
                 ),
                 span,
             });
@@ -2511,10 +2516,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(((trait_info, _), index_method)) = index_trait_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
                 if access == IndexAccess::Mutable && index_method == "index_ref" {
+                    let stores_back = self
+                        .index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                            s.find_index_assign_trait_impl(t, Some(index_type))
+                        })
+                        .is_some();
                     self.refuse_mut_element_of_read_only_view(
                         base_type_id,
-                        lookup_type_id,
-                        index_type,
+                        stores_back,
                         trait_info.output_type,
                         span,
                     );

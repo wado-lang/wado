@@ -1,0 +1,25 @@
+// A container bounded by `IndexRef` alone declares no `IndexAssign` to store
+// an element back, so it is read-only, as a `Slice` is.
+
+struct Named { name: String }
+
+variant Element { Ref(Named), Wildcard }
+
+fn rename(elem: &mut Element) {
+    match elem {
+        Ref(r) => { r.name = "renamed"; },
+        _::Wildcard => (),
+    }
+}
+
+fn poke<C: IndexRef<i32, Output = Element>>(mut c: C) {
+    rename(&mut c[0]);
+}
+
+test {
+    let xs: List<Element> = [Element::Ref(Named { name: "original" })];
+    poke(xs.slice(0, 1));
+}
+
+__DATA__
+{"compile_error": ":16:17: analysis error: cannot take &mut of an element of read-only 'C'"}

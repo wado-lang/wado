@@ -2405,6 +2405,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if item == CompilerItem::IndexValue {
                 return Some(output);
             }
+            if access == IndexAccess::Mutable && item == CompilerItem::IndexRef {
+                let stores_back = self.bounds_declare(&operand, CompilerItem::IndexAssign);
+                let element = self.tysys.through_ref(output);
+                self.refuse_mut_element_of_read_only_view(container, stores_back, element, index.span);
+            }
             self.sem
                 .types
                 .operator_dispatch
@@ -2415,6 +2420,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.report_index_bound_missing(&operand, index, candidates[0], ctx);
         Some(TypeTable::ERROR)
+    }
+
+    /// Whether a bound of `operand`, or a supertrait of one, is the trait `item`.
+    fn bounds_declare(&self, operand: &BoundedOperand, item: CompilerItem) -> bool {
+        let Some(def) = self.tysys.compiler_trait_def(item) else {
+            return false;
+        };
+        self.elaborate_bounds(&operand.bounds)
+            .iter()
+            .any(|b| self.trait_decl_of(&b.bound) == Some(def))
     }
 
     /// Report that no bound of `operand` declares `item`, the key still checked.
