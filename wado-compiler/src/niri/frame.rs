@@ -134,6 +134,10 @@ impl FrameState {
     }
 }
 
+/// An array handle a bound value carries: the path to it inside the value, and
+/// the place it was read from.
+type HandleSource = (Vec<u32>, (u32, Vec<u32>));
+
 /// How control left a statement sequence during compile-time execution.
 ///
 /// `Break` is not loop-specific: a labeled block is the value-producing shape
@@ -405,7 +409,7 @@ impl Interpreter<'_> {
                 if self.binds_unnamed_written_handle(body, index, value) {
                     return Flow::Bail;
                 }
-                let handle_source = self.array_handle_source(body, value);
+                let handle_sources = self.array_handle_sources(body, value);
                 let lattice = match value.as_expr().and_then(|e| self.exec_call_stmt(body, e)) {
                     Some(Flow::Fallthrough(lattice)) => lattice,
                     Some(Flow::Bail | Flow::Return(_) | Flow::Break { .. } | Flow::Continue) => {
@@ -415,7 +419,7 @@ impl Interpreter<'_> {
                 };
                 match lattice {
                     lattice @ Lattice::Const(_) => {
-                        self.bind_handle_copy(index, lattice, handle_source);
+                        self.bind_handle_copy(index, lattice, handle_sources);
                         Flow::Fallthrough(Lattice::Unevaluated)
                     }
                     lattice @ (Lattice::NonConst | Lattice::Unevaluated) => {
@@ -687,14 +691,15 @@ impl Interpreter<'_> {
         if self.binds_unnamed_written_handle(body, root, value) {
             return Flow::Bail;
         }
-        let handle_source = self.array_handle_source(body, value);
+        let handle_sources = self.array_handle_sources(body, value);
         let Lattice::Const(value) = self.eval_operand(body, value) else {
             return Flow::Bail;
         };
         if path.is_empty() {
-            self.bind_handle_copy(root, Lattice::Const(value), handle_source);
+            self.bind_handle_copy(root, Lattice::Const(value), handle_sources);
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
+        let twins = self.twins_of_stored(root, &path, handle_sources);
         self.frame.replace_place(root, &path);
         self.frame
             .retire_twins(|r, p| r == root && p.starts_with(&path));
@@ -707,32 +712,125 @@ impl Interpreter<'_> {
         {
             return Flow::Bail;
         }
-        if let Some(source) = handle_source {
-            self.frame.handle_twins.push([(root, path), source]);
-        }
+        self.frame.handle_twins.extend(twins);
         Flow::Fallthrough(Lattice::Unevaluated)
     }
 
-    /// The place an array-typed `value` reads its handle from, which a binding
-    /// of it leaves shared.
-    fn array_handle_source(&self, body: &Body, value: Operand) -> Option<(u32, Vec<u32>)> {
-        if !self.names_array(body, value) {
-            return None;
+    /// The array handles `value` carries, each with where it sits inside the
+    /// value: `value` itself, or a field of the literal it spells, at any
+    /// depth and through a cast. A literal built around a handle shares the
+    /// array as a bare binding of it does. A handle under a variant payload or
+    /// an array element sits where no field path reaches, and has none.
+    fn array_handles(&self, body: &Body, value: Operand) -> Vec<(Option<Vec<u32>>, Operand)> {
+        let mut handles = Vec::new();
+        let mut pending = vec![(Some(Vec::new()), value)];
+        while let Some((path, op)) = pending.pop() {
+            let fields: Vec<(Option<u32>, Operand)> =
+                match op.as_expr().map(|e| &body.exprs[e].kind) {
+                    Some(ExprKind::StructLiteral { fields, .. }) => fields
+                        .iter()
+                        .map(|f| (Some(f.field_index), f.value))
+                        .collect(),
+                    Some(ExprKind::TupleLiteral { elements }) => elements
+                        .iter()
+                        .enumerate()
+                        .map(|(i, op)| (Some(u32::try_from(i).expect("tuple arity fits u32")), *op))
+                        .collect(),
+                    Some(ExprKind::Cast { expr, .. }) => {
+                        pending.push((path, *expr));
+                        continue;
+                    }
+                    Some(ExprKind::VariantConstruct { payload, .. }) => vec![(None, *payload)],
+                    Some(ExprKind::ArrayLiteral { elements }) => {
+                        elements.iter().map(|op| (None, *op)).collect()
+                    }
+                    _ => {
+                        if self.names_array(body, op) {
+                            handles.push((path, op));
+                        }
+                        continue;
+                    }
+                };
+            for (field, op) in fields {
+                let at = path.clone().zip(field).map(|(mut at, field)| {
+                    at.push(field);
+                    at
+                });
+                pending.push((at, op));
+            }
         }
-        self.frame_place_of(body, value)
+        handles
     }
 
-    /// Bind `index` to `lattice`, read off `handle_source` where it names one.
-    fn bind_handle_copy(
-        &mut self,
-        index: u32,
-        lattice: Lattice,
-        handle_source: Option<(u32, Vec<u32>)>,
-    ) {
+    /// The place each of `value`'s [`Self::array_handles`] reads its handle
+    /// from, which a binding of `value` leaves shared.
+    fn array_handle_sources(&self, body: &Body, value: Operand) -> Vec<HandleSource> {
+        self.array_handles(body, value)
+            .into_iter()
+            .filter_map(|(path, op)| Some((path?, self.frame_place_of(body, op)?)))
+            .collect()
+    }
+
+    /// Bind `index` to `lattice`, paired with the places its handles read from.
+    fn bind_handle_copy(&mut self, index: u32, lattice: Lattice, sources: Vec<HandleSource>) {
+        let twins = self.twins_of_stored(index, &[], sources);
         self.bind_ctfe_local(index, lattice);
-        if let Some(source) = handle_source {
-            self.frame.handle_twins.push([(index, Vec::new()), source]);
+        self.frame.handle_twins.extend(twins);
+    }
+
+    /// The twins a value stored at `(root, path)` takes part in, read off the
+    /// frame as it stands before the store. A source inside the place is about
+    /// to go, so the places sharing its handle stand in for it, and two handles
+    /// of the value read from sharers of one array pair with each other.
+    fn twins_of_stored(
+        &self,
+        root: u32,
+        path: &[u32],
+        sources: Vec<HandleSource>,
+    ) -> Vec<[(u32, Vec<u32>); 2]> {
+        let inside = |(r, p): &(u32, Vec<u32>)| *r == root && p.starts_with(path);
+        let held = |inner: &[u32]| (root, [path, inner].concat());
+        let sharers: Vec<Vec<(u32, Vec<u32>)>> = sources
+            .iter()
+            .map(|(_, source)| self.handle_sharers(source))
+            .collect();
+        let mut twins = Vec::new();
+        for (i, (inner, source)) in sources.iter().enumerate() {
+            for (other_inner, other) in &sources[..i] {
+                if other == source || sharers[i].contains(other) {
+                    twins.push([held(other_inner), held(inner)]);
+                }
+            }
+            if !inside(source) {
+                twins.push([held(inner), source.clone()]);
+                continue;
+            }
+            for sharer in sharers[i].iter().filter(|sharer| !inside(sharer)) {
+                twins.push([held(inner), sharer.clone()]);
+            }
         }
+        twins
+    }
+
+    /// The places holding, through any chain of twins, the array handle a place
+    /// overlapping `from` holds. `from` itself is not among them.
+    fn handle_sharers(&self, from: &(u32, Vec<u32>)) -> Vec<(u32, Vec<u32>)> {
+        let mut reached: Vec<(u32, Vec<u32>)> = vec![from.clone()];
+        let mut next = 0;
+        while let Some((at_root, at_path)) = reached.get(next).cloned() {
+            next += 1;
+            for [a, b] in &self.frame.handle_twins {
+                for (held, other) in [(a, b), (b, a)] {
+                    if places_overlap((held.0, &held.1), (at_root, &at_path))
+                        && !reached.contains(other)
+                    {
+                        reached.push(other.clone());
+                    }
+                }
+            }
+        }
+        reached.remove(0);
+        reached
     }
 
     /// Update the frame's value for `root` in place, applying `update` at `path`.
@@ -766,30 +864,35 @@ impl Interpreter<'_> {
 
     /// The locals a write at `(root, path)` leaves stale: each holding, through
     /// any chain of twins, the array handle a place the write overlaps holds.
-    /// `None` when one lives in `root` itself, which unbinding would take the
-    /// write down with, or in a seeded local.
+    /// `None` when one lives in a seeded local, or in `root` itself where the
+    /// write does not reach it, which unbinding would take the write down
+    /// with. `None` too when the write covers two places sharing one handle:
+    /// the value written was built knowing neither shares.
     fn stale_twins(&self, root: u32, path: &[u32]) -> Option<Vec<u32>> {
-        let mut reached: Vec<(u32, Vec<u32>)> = vec![(root, path.to_vec())];
+        let overlap =
+            |a: &(u32, Vec<u32>), b: &(u32, Vec<u32>)| places_overlap((a.0, &a.1), (b.0, &b.1));
+        let written = (root, path.to_vec());
         let mut stale: Vec<u32> = Vec::new();
-        let mut next = 0;
-        while let Some((at_root, at_path)) = reached.get(next).cloned() {
-            next += 1;
-            for [a, b] in &self.frame.handle_twins {
-                for (written, other) in [(a, b), (b, a)] {
-                    if !places_overlap((written.0, &written.1), (at_root, &at_path))
-                        || reached.contains(other)
-                    {
-                        continue;
-                    }
-                    if other.0 == root || self.frame.seeded.contains(&other.0) {
-                        return None;
-                    }
-                    stale.push(other.0);
-                    reached.push(other.clone());
+        let mut covered: Vec<(u32, Vec<u32>)> = Vec::new();
+        for sharer in self.handle_sharers(&written) {
+            if sharer.0 != root {
+                if self.frame.seeded.contains(&sharer.0) {
+                    return None;
                 }
+                stale.push(sharer.0);
+            } else if overlap(&sharer, &written) {
+                covered.push(sharer);
+            } else {
+                return None;
             }
         }
-        Some(stale)
+        let shared_twice = covered.iter().enumerate().any(|(i, a)| {
+            let sharers = self.handle_sharers(a);
+            covered[i + 1..]
+                .iter()
+                .any(|b| !overlap(a, b) && sharers.contains(b))
+        });
+        (!shared_twice).then_some(stale)
     }
 
     fn names_array(&self, body: &Body, op: Operand) -> bool {
@@ -996,23 +1099,29 @@ impl Interpreter<'_> {
     }
 
     /// Whether binding `index` to `value` leaves a second handle to an array
-    /// whose source place the frame cannot name, and that the body writes
-    /// through either handle. An array is one object every handle shares, and
-    /// the frame holds it by value, so the copy would miss those writes; a
-    /// source it can name becomes a [`FrameState::handle_twins`] pair instead.
+    /// the frame cannot pair, its source place or its place in `value` having
+    /// no name, and that the body writes through either handle. An array is
+    /// one object every handle shares, and the frame holds it by value, so the
+    /// copy would miss those writes; a handle named at both ends becomes a
+    /// [`FrameState::handle_twins`] pair instead.
     fn binds_unnamed_written_handle(&self, body: &Body, index: u32, value: Operand) -> bool {
-        if !self.names_array(body, value) || self.frame_place_of(body, value).is_some() {
+        // A local standing for another's place is written under either name.
+        let roots = |op: Operand| {
+            let aliased = self.frame_place_of(body, op).map(|(root, _)| root);
+            write_root_local(body, op).into_iter().chain(aliased)
+        };
+        let unnamed: Vec<u32> = self
+            .array_handles(body, value)
+            .into_iter()
+            .filter(|(path, op)| path.is_none() || self.frame_place_of(body, *op).is_none())
+            .flat_map(|(_, op)| roots(op))
+            .collect();
+        if unnamed.is_empty() {
             return false;
         }
-        let Some(source_root) = write_root_local(body, value) else {
-            return false;
-        };
         write_targets_under(body, NodeRef::Block(body.root()))
             .into_iter()
-            .any(|target| {
-                let target_root = write_root_local(body, target);
-                target_root == Some(index) || target_root == Some(source_root)
-            })
+            .any(|target| roots(target).any(|root| root == index || unnamed.contains(&root)))
     }
 
     /// Resolve `index` to the place `inner` refers to, so later reads and writes
@@ -1062,6 +1171,10 @@ impl Interpreter<'_> {
             }
             places.push((field, place));
         }
+        if self.binds_unnamed_written_handle(body, index, value) {
+            return Some(Flow::Bail);
+        }
+        let handle_sources = self.array_handle_sources(body, value);
         let mut values = Vec::with_capacity(fields.len());
         for (field, op) in fields {
             if places.iter().any(|(placed, _)| *placed == field) {
@@ -1074,7 +1187,11 @@ impl Interpreter<'_> {
             values.push((field, v));
         }
         let type_id = body.exprs[e].type_id;
-        self.bind_ctfe_local(index, Lattice::Const(Value::aggregate(type_id, values)));
+        self.bind_handle_copy(
+            index,
+            Lattice::Const(Value::aggregate(type_id, values)),
+            handle_sources,
+        );
         if !matches!(self.frame.env.get(&index), Some(Lattice::Const(_))) {
             return Some(Flow::Bail);
         }
