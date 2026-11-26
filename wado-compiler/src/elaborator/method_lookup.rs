@@ -2361,24 +2361,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// answers is such a step where the element is mutated in place: it
     /// arrives as its `&Output`. A replace-on-assign element taken that way is
     /// a detached copy, which lowering writes back, or an affine variant's
-    /// cell, which is the slot.
+    /// cell, which is the slot. A field or subscript step auto-derefs every
+    /// reference layer of its base, so any `&` among them refuses; an explicit
+    /// `*` crosses only the outermost, and a deeper `*` judges the next.
     pub(super) fn place_roots_at_immutable_ref(&self, expr: &ast::Expr) -> bool {
-        let inner = match expr {
-            ast::Expr::FieldAccess(fa) => &fa.expr,
+        let (inner, explicit_deref) = match expr {
+            ast::Expr::FieldAccess(fa) => (&fa.expr, false),
             ast::Expr::Index(ix)
                 if self.subscript_shares(ix.id) && self.mutated_in_place(ix.id) =>
             {
                 return true;
             }
-            ast::Expr::Index(ix) => &ix.expr,
-            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => &u.expr,
+            ast::Expr::Index(ix) => (&ix.expr, false),
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => (&u.expr, true),
             _ => return false,
         };
         let Some(inner_type) = self.sem.types.expression_types.get(&inner.id()).copied() else {
             return false;
         };
-        self.reference_mutability(inner_type) == Some(false)
-            || self.place_roots_at_immutable_ref(inner)
+        let crosses_shared = if explicit_deref {
+            let tt = self.tysys.type_table.borrow();
+            matches!(
+                tt.get(tt.representation_head(inner_type)),
+                ResolvedType::Ref(_)
+            )
+        } else {
+            self.reference_mutability(inner_type) == Some(false)
+        };
+        crosses_shared || self.place_roots_at_immutable_ref(inner)
     }
 
     /// Whether the value `id` evaluates to is mutated in place through a

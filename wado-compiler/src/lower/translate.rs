@@ -1024,9 +1024,17 @@ impl FunctionTranslator<'_, '_> {
                 let mints_mut = tt.is_mut_ref(ref_type) && !tt.is_mut_ref(reference.type_id);
                 drop(tt);
                 if mints_mut {
-                    let mut reference = (**reference).clone();
-                    reference.type_id = ref_type;
-                    Some(self.convert_expr(&reference))
+                    // A cast names its operand's storage, and outlives the
+                    // inlining of the call that produced the `&`.
+                    let cast = TirExpr::new(
+                        TirExprKind::Cast {
+                            expr: reference.clone(),
+                            target_type: ref_type,
+                        },
+                        ref_type,
+                        span,
+                    );
+                    Some(self.convert_expr(&cast))
                 } else {
                     Some(self.convert_expr(reference))
                 }

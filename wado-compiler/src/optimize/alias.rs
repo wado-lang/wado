@@ -450,35 +450,53 @@ impl<'a> CallImmutability<'a> {
     /// only read grant a write. Read off the fields
     /// the package's structs register, which a closure's do and the type
     /// table's do not.
+    ///
+    /// A reachability question, so one query visits each type once. A `false`
+    /// covers every type the query reached, all of whose types it reached too.
     pub(super) fn reaches_writable(&self, type_id: TypeId) -> bool {
-        self.reaches_writable_in(type_id, &mut TypeWalk::new())
+        let mut reached = IndexSet::default();
+        let writable = self.reaches_writable_in(type_id, &mut reached);
+        let mut memo = lock(&self.writable_memo);
+        if writable {
+            memo.insert(type_id, true);
+        } else {
+            memo.extend(reached.into_iter().map(|t| (t, false)));
+        }
+        writable
     }
 
-    fn reaches_writable_in(&self, type_id: TypeId, w: &mut TypeWalk) -> bool {
+    fn reaches_writable_in(&self, type_id: TypeId, reached: &mut IndexSet<TypeId>) -> bool {
+        if let Some(&cached) = lock(&self.writable_memo).get(&type_id) {
+            return cached;
+        }
+        // A type reached before answers where it was first reached.
+        if !reached.insert(type_id) {
+            return false;
+        }
         let tt = self.type_table;
-        // A cycle runs through a field already being walked, which answers
-        // for it.
-        w.visit(&self.writable_memo, type_id, false, |w| {
-            match tt.get(type_id) {
-                ResolvedType::Primitive(_)
-                | ResolvedType::Unit
-                | ResolvedType::Never
-                | ResolvedType::Enum { .. }
-                | ResolvedType::Flags { .. } => false,
-                ResolvedType::MutRef(_) => true,
-                ResolvedType::Ref(inner) => self.reaches_writable_in(*inner, w),
-                ResolvedType::Newtype { base_type, .. } => self.reaches_writable_in(*base_type, w),
-                _ if let Some(elem) = tt.list_element(type_id) => self.reaches_writable_in(elem, w),
-                _ if tt.struct_parts(type_id).is_some() => self
-                    .struct_fields
-                    .of_type(type_id, tt)
-                    // Unknown layout (not in the registry) — conservative.
-                    .is_none_or(|fields| fields.iter().any(|&f| self.reaches_writable_in(f, w))),
-                // Raw arrays, resources, functions, variants, generics, type
-                // params and unknowns may all carry shared mutable state.
-                _ => true,
+        match tt.get(type_id) {
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. } => false,
+            ResolvedType::MutRef(_) => true,
+            ResolvedType::Ref(inner) => self.reaches_writable_in(*inner, reached),
+            ResolvedType::Newtype { base_type, .. } => {
+                self.reaches_writable_in(*base_type, reached)
             }
-        })
+            _ if let Some(elem) = tt.list_element(type_id) => {
+                self.reaches_writable_in(elem, reached)
+            }
+            _ if tt.struct_parts(type_id).is_some() => self
+                .struct_fields
+                .of_type(type_id, tt)
+                // Unknown layout (not in the registry) — conservative.
+                .is_none_or(|fields| fields.iter().any(|&f| self.reaches_writable_in(f, reached))),
+            // Raw arrays, resources, functions, variants, generics, type
+            // params and unknowns may all carry shared mutable state.
+            _ => true,
+        }
     }
 }
 

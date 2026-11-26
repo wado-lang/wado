@@ -1956,12 +1956,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_access.span,
         );
 
-        let through_shared = self.reference_mutability(expr_type) == Some(false)
-            || self.place_roots_at_immutable_ref(&field_access.expr);
+        self.part_read_through(&field_access.expr, expr_type, field_type)
+    }
+
+    /// The type a part of type `part_type` reads as, out of `base` of
+    /// `base_type`: a `&mut` behind a `&` reads as a `&`.
+    fn part_read_through(&self, base: &ast::Expr, base_type: TypeId, part_type: TypeId) -> TypeId {
+        let through_shared = self.reference_mutability(base_type) == Some(false)
+            || self.place_roots_at_immutable_ref(base);
         if through_shared {
-            self.tysys.shared_view(field_type)
+            self.tysys.shared_view(part_type)
         } else {
-            field_type
+            part_type
         }
     }
 
@@ -2316,7 +2322,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Ok(idx) = digits.parse::<usize>()
             {
                 match self.tysys.tuple_literal_index_type(elements, idx) {
-                    Ok(elem) => return elem,
+                    Ok(elem) => return self.part_read_through(&index.expr, expr_type, elem),
                     Err(message) => {
                         let _ = self.emit(TypeError::InvalidLiteral {
                             message,
@@ -2330,7 +2336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(walk) = ctx.variadic_enumerate_walk(&index.index)
                 && let Some(elem) = self.tysys.pack_element_type(elements, walk)
             {
-                return elem;
+                return self.part_read_through(&index.expr, expr_type, elem);
             }
             // Non-constant index on tuple
             let _ = self.emit(TypeError::InvalidLiteral {

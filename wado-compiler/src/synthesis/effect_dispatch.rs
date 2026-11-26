@@ -427,9 +427,11 @@ fn synthesize_dispatch_struct(
         struct_type_id = tt.make_struct(struct_head);
         inner_ref_type_id = tt.make_ref(struct_type_id);
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
+        // A `fn mut`, since a handler whose method takes `&mut self` writes
+        // what its closure holds; a `fn` closure fits one as well.
         for op in &meta.operations {
             let param_types: Vec<TypeId> = op.params.iter().map(|p| p.type_id).collect();
-            let op_func_type = tt.make_function(param_types, op.return_type, vec![]);
+            let op_func_type = tt.make_function_with_mut(true, param_types, op.return_type, vec![]);
             op_field_types.push(op_func_type);
         }
     }

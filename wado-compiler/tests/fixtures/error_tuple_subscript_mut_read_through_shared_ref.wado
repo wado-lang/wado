@@ -1,0 +1,19 @@
+// A tuple subscript reads through a `&` as a field does: `h[0]` of a
+// `&[&mut S]` is a `&S`, as `h.0` is.
+
+struct S {
+    f: i32,
+}
+
+fn leak(h: &[&mut S]) -> &mut S {
+    return h[0];
+}
+
+export fn run() {
+    let mut s = S { f: 1 };
+    let t = [&mut s];
+    let _ = leak(&t);
+}
+
+__DATA__
+{"compile_error": ":9:5: analysis error: type mismatch: expected '&mut S', found '&S'"}

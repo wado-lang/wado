@@ -1161,24 +1161,24 @@ impl ClosureLowerer {
         let mut spec_locals: Vec<SpecializedLocal> = Vec::new();
         for (arg_idx, &functor_type) in &arg_to_functor {
             let slot = (*arg_idx + param_offset) as usize;
-            let functor_ref_type = type_table.make_ref(functor_type);
+            let functor = self
+                .functor_infos
+                .iter()
+                .find(|f| f.struct_type_id == functor_type)
+                .expect("a specialization key names a planned functor");
+            // The reference `$call` takes, a `&mut` where it writes its functor.
+            let functor_ref_type = functor.ref_type_id;
             if slot < new_params.len() {
                 new_params[slot].type_id = functor_ref_type;
             }
             if slot < new_locals.len() {
                 new_locals[slot].type_id = functor_ref_type;
             }
-            if let Some(functor) = self
-                .functor_infos
-                .iter()
-                .find(|f| f.struct_type_id == functor_type)
-            {
-                spec_locals.push(SpecializedLocal {
-                    local_index: slot as u32,
-                    functor_id: functor.id,
-                    functor_ref_type,
-                });
-            }
+            spec_locals.push(SpecializedLocal {
+                local_index: slot as u32,
+                functor_id: functor.id,
+                functor_ref_type,
+            });
         }
 
         // The body is cloned as-is. The TIR → NIR translator handles
