@@ -15,6 +15,7 @@ use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::SeqField;
 use crate::compiler_trace;
 use crate::const_eval::{Value, prim_of};
+use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::nir::{FuncCell, FuncId, FuncParts, FuncRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
@@ -28,7 +29,6 @@ use crate::niri::{
     Interpreter, Lattice, MaterializingGlobals, RefRoot, build_callee_map, build_ctfe_builtin_map,
     guard_declares_locals, materializing_globals,
 };
-use crate::hashmap::IndexMap;
 use crate::optimize::alias::alias_classes;
 use crate::optimize::arena_query::{MutRefAliases, for_each_mutation_under, projected_const_field};
 use crate::optimize::value_copy::mutation::{MutationOracle, build_param_mut};
@@ -1177,4 +1177,3 @@ fn scalar_only(lat: Lattice) -> Lattice {
         _ => Lattice::NonConst,
     }
 }
-
