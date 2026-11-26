@@ -56,7 +56,7 @@ internal struct AtnSim {
 fn atn_take(bytes: &ByteList, pos: &mut i32, width: i32) -> i32 {
     let mut value = 0;
     for let mut i = 0; i < width; i += 1 {
-        value |= (unchecked bytes[*pos + i] as i32) << (8 * i);
+        value |= unchecked bytes[*pos + i] as i32 << 8 * i;
     }
     *pos += width;
     return value;
