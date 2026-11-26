@@ -779,10 +779,10 @@ fn settle_overrides<'a>(
         .map(|(name, r)| (r.name.clone(), *name))
         .collect();
     let serves = |child: &WadoFunction, parent: &WadoFunction| {
-        let params = |m: &WadoFunction| m.params[1..].iter().map(|p| p.ty.clone()).collect();
-        let (child_params, parent_params): (Vec<WadoType>, Vec<WadoType>) =
-            (params(child), params(parent));
-        child_params == parent_params
+        let types = |params: &[WadoParam]| -> Vec<WadoType> {
+            params[1..].iter().map(|p| p.ty.clone()).collect()
+        };
+        types(&child.params) == types(&parent.params)
             && child.is_async == parent.is_async
             && match (&child.return_type, &parent.return_type) {
                 (Some(child), Some(parent)) => narrows(child, parent, |c, p| {

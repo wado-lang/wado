@@ -1007,12 +1007,10 @@ fn a_child_redeclaring_with_another_type_binds_under_its_interfaces_name() {
 #[test]
 fn a_child_narrowing_only_the_result_keeps_the_parents() {
     let mut defs = chain();
-    let twin = |of: &str, nullable: bool| operation("twin", &named(of, nullable), &[], "");
-    defs.interfaces
-        .push(partial("EventTarget", &[twin("EventTarget", true)]));
-    defs.interfaces.push(partial("Node", &[twin("Node", true)]));
-    defs.interfaces
-        .push(partial("Element", &[twin("Element", true)]));
+    for interface in ["EventTarget", "Node", "Element"] {
+        let twin = operation("twin", &nullable(interface), &[], "");
+        defs.interfaces.push(partial(interface, &[twin]));
+    }
     let (code, skipped) = defs.generate();
     assert_eq!(code.matches("fn twin(&self)").count(), 1, "{code}");
     assert_eq!(
