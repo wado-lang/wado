@@ -584,7 +584,10 @@ assert n matches { Some(_: HtmlInputElement) };
 
 A method call resolves statically. `recv.m()` gathers every `m` declared along `recv`'s `extends` chain and every `m` of a trait impl that applies to it. None is an error, and one resolves the call, upcasting the receiver to the resource that declares it. Two or more is ambiguous: write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
 
-- A child may not redeclare a method it inherits.
+- A child may not redeclare a method it inherits. It may declare the name
+  [`#[unavailable]`](./spec-attributes.md#unavailablereason): the name is then an
+  error through the child and through whatever extends it, and the method still
+  answers through the resource that declares it.
 - Static methods (no `&self`) are not inherited.
 - `Self` in an inherited method names the resource that declares it, not the receiver's type.
 

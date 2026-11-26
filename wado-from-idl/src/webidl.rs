@@ -256,9 +256,6 @@ pub enum Cause {
     HtmlConstructor,
     /// A child redeclaring a method of its chain, which a resource may not.
     Override,
-    /// The same, where the parent's method answers with another type than the
-    /// child declares.
-    RetypedOverride,
 }
 
 impl std::fmt::Display for Cause {
@@ -286,7 +283,6 @@ impl std::fmt::Display for Cause {
             Self::StaticAttribute => "a static attribute",
             Self::HtmlConstructor => "`[HTMLConstructor]`",
             Self::Override => "a redeclared inherited method",
-            Self::RetypedOverride => "an inherited method redeclared with another type",
         };
         f.write_str(label)
     }
@@ -414,7 +410,7 @@ impl From<JsMember> for JsFunction {
 
 /// What a function does with the JavaScript object it reaches. `Get`, `Set` and
 /// `Call` act on the receiver; the interface names are `WebIDL`'s.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum JsMember {
     Get(String),
     Set(String),
@@ -569,10 +565,11 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 classes: Some(classes[name]),
                 extends: iface.inheritance.as_deref().map(to_upper_camel_case),
                 methods,
+                unavailable: Vec::new(),
             },
         );
     }
-    drop_overrides(&merged, &mut resources, &mut js, &mut skipped);
+    settle_overrides(&merged, &mut resources, &mut js, &mut skipped);
 
     let mut module = WadoModule::new(snapshot.module.clone(), snapshot.webref.clone());
     if let Some(bindings) = lowering.global_bindings(&merged, &resources)? {
@@ -759,61 +756,158 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
     Ok(merged)
 }
 
-/// Drop each method a child redeclares from its chain, which a resource may
-/// not: the declaration nearest the root serves each one below it. Statics
-/// (`new` above all) are not inherited.
-fn drop_overrides<'a>(
+/// Settle each method a child redeclares from its chain, which a resource may
+/// not. Where the nearest declaration above serves the child, the child's is
+/// dropped: it has the same types, or differs only in a result that is a
+/// resource extending the parent's, which a type pattern narrows. Otherwise the
+/// parent's would answer with the wrong type, and the child's binds under its
+/// interface's name (`svg_element_class_name`), as does a setter restored
+/// below a read-only redeclaration. Either way the child declares unavailable
+/// every name the chain above binds that member under, and so does a child
+/// redeclaring an attribute read-only, for its setter. Statics (`new` above
+/// all) are not inherited.
+fn settle_overrides<'a>(
     merged: &IndexMap<&'a str, Merged<'_>>,
     resources: &mut IndexMap<&'a str, WadoResource>,
     js: &mut IndexMap<String, JsFunction>,
     skipped: &mut Vec<Skip>,
 ) {
     let has_receiver = |m: &WadoFunction| m.params.first().is_some_and(|p| p.wit_name == "self");
-    // What a caller sees past the receiver.
-    let signature = |m: &WadoFunction| {
-        let params: Vec<WadoType> = m.params[1..].iter().map(|p| p.ty.clone()).collect();
-        (params, m.return_type.clone(), m.is_async)
+    let ancestors = |name: &'a str| {
+        std::iter::successors(merged[name].inheritance.as_deref(), |parent| {
+            merged[*parent].inheritance.as_deref()
+        })
     };
-    let declared: IndexMap<&str, IndexMap<String, _>> = resources
+    let interface_of: IndexMap<String, &str> = resources
+        .iter()
+        .map(|(name, r)| (r.name.clone(), *name))
+        .collect();
+    let serves = |child: &WadoFunction, parent: &WadoFunction| {
+        let types = |params: &[WadoParam]| -> Vec<WadoType> {
+            params[1..].iter().map(|p| p.ty.clone()).collect()
+        };
+        types(&child.params) == types(&parent.params)
+            && child.is_async == parent.is_async
+            && match (&child.return_type, &parent.return_type) {
+                (Some(child), Some(parent)) => narrows(child, parent, |c, p| {
+                    ancestors(interface_of[c]).any(|a| a == interface_of[p])
+                }),
+                (None, None) => true,
+                (None, Some(_)) | (Some(_), None) => false,
+            }
+    };
+    let declared: IndexMap<&str, IndexMap<String, WadoFunction>> = resources
         .iter()
         .map(|(name, r)| {
             let receivers = r.methods.iter().filter(|m| has_receiver(m));
-            let signatures = receivers.map(|m| (m.name.clone(), signature(m)));
-            (*name, signatures.collect())
+            (
+                *name,
+                receivers.map(|m| (m.name.clone(), m.clone())).collect(),
+            )
         })
         .collect();
+    // The JavaScript members each interface takes from the bindings above it,
+    // with the reason a call of one reports.
+    let mut taken: IndexMap<&str, Vec<(JsMember, String)>> = IndexMap::new();
     for (name, iface) in merged {
-        resources[name].methods.retain(|method| {
+        let taken = taken.entry(*name).or_default();
+        // An attribute is one accessor in JavaScript, so redeclared read-only
+        // it leaves no setter: the write would throw.
+        taken.extend(read_only_attributes(iface).map(|attribute| {
+            let reason = format!("`{name}` redeclares `{attribute}` as read-only");
+            (JsMember::Set(attribute.to_string()), reason)
+        }));
+        resources[name].methods.retain_mut(|method| {
             if !has_receiver(method) {
                 return true;
             }
-            let chain = std::iter::successors(iface.inheritance.as_deref(), |parent| {
-                merged[parent].inheritance.as_deref()
-            });
-            let Some((parent, serving)) = chain
-                .filter_map(|parent| Some((parent, declared[parent].get(&method.name)?)))
-                .last()
+            let Some((parent, inherited)) = ancestors(name)
+                .find_map(|parent| Some((parent, declared[parent].get(&method.name)?)))
             else {
                 return true;
             };
+            let member = &js[&method.cm_attr].member;
+            let hides_setter = |between: &&str| {
+                matches!(member, JsMember::Set(attribute)
+                    if read_only_attributes(&merged[*between]).any(|a| a == attribute))
+            };
+            let why = if serves(method, inherited) {
+                ancestors(name)
+                    .take_while(|between| *between != parent)
+                    .find(hides_setter)
+                    .map(|between| format!("restores the setter `{between}` hides"))
+            } else {
+                Some("redeclares it with another type".to_string())
+            };
+            if let Some(why) = why {
+                let interface = to_snake_case(name);
+                let own = match member {
+                    JsMember::Set(_) => {
+                        method
+                            .name
+                            .replacen("set_", &format!("set_{interface}_"), 1)
+                    }
+                    _ => format!("{interface}_{}", method.name),
+                };
+                assert!(
+                    !declared[name].contains_key(&own),
+                    "`{name}` must not declare `{own}` beside the `{}` it redeclares",
+                    method.name
+                );
+                taken.push((member.clone(), format!("`{name}` {why}; use `{own}`")));
+                method.name = own;
+                return true;
+            }
             js.shift_remove(&method.cm_attr)
                 .expect("every function has a JavaScript half");
-            let inherited = format!("redeclares a method inherited from `{parent}`");
-            let reason = if *serving == signature(method) {
-                Reason::new(Cause::Override, inherited)
-            } else {
-                Reason::new(
-                    Cause::RetypedOverride,
-                    format!("{inherited} with another type"),
-                )
-            };
             skipped.push(Skip {
                 item: format!("{name}.{}", method.name),
                 lost: Lost::Member,
-                reason,
+                reason: Reason::new(
+                    Cause::Override,
+                    format!("redeclares a method inherited from `{parent}`"),
+                ),
             });
             false
         });
+    }
+    let js = &*js;
+    for (name, taken) in taken {
+        let hidden: Vec<(String, String)> = taken
+            .iter()
+            .flat_map(|(member, reason)| {
+                ancestors(name)
+                    .flat_map(|above| &resources[above].methods)
+                    .filter(move |bound| js[&bound.cm_attr].member == *member)
+                    .map(move |bound| (bound.name.clone(), reason.clone()))
+            })
+            .collect();
+        resources[name].unavailable = hidden;
+    }
+}
+
+/// The attributes an interface declares read-only on its instances.
+fn read_only_attributes<'m>(iface: &'m Merged<'_>) -> impl Iterator<Item = &'m str> {
+    iface.members.iter().filter_map(|member| match member {
+        Member::Attribute {
+            name,
+            readonly: true,
+            special,
+            ..
+        } if special != "static" => Some(name.as_str()),
+        _ => None,
+    })
+}
+
+/// Whether `child` is `parent`, or `parent` with a resource replaced by one
+/// that `extends` it.
+fn narrows(child: &WadoType, parent: &WadoType, extends: impl Fn(&str, &str) -> bool) -> bool {
+    match (child, parent) {
+        (WadoType::Option(child), WadoType::Option(parent)) => narrows(child, parent, extends),
+        (WadoType::Named(child), WadoType::Named(parent)) => {
+            child == parent || extends(child, parent)
+        }
+        _ => child == parent,
     }
 }
 
@@ -864,6 +958,7 @@ impl Lowering<'_> {
             classes: None,
             extends: None,
             methods,
+            unavailable: Vec::new(),
         }
     }
 

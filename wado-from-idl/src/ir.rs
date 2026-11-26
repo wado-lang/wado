@@ -184,6 +184,9 @@ pub struct WadoResource {
     /// The parent resource of a `resource X extends Y`.
     pub extends: Option<String>,
     pub methods: Vec<WadoFunction>,
+    /// The inherited instance methods a handle of this resource must not
+    /// reach, each with the reason its `#[unavailable]` gives.
+    pub unavailable: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
