@@ -138,13 +138,14 @@ pub struct NirPackage {
     /// Which `$value_copy$` helper copies each type — the one join, so a
     /// consumer holding a `TypeId` asks here rather than re-deriving the key.
     pub value_copy_helpers: ValueCopyHelpers<FuncId>,
-    /// Functions `optimize/sroa_param` minted. A clone may gain callers in a
-    /// later round, so its current call sites are not its whole contract.
-    /// Identity, not a name test — see the declaration-identity WEP.
+    /// Functions `optimize/sroa_param` minted, which a later round may call
+    /// again ([`Self::may_gain_callers`]). Identity, not a name test — see the
+    /// declaration-identity WEP.
     pub sroa_param_clones: IndexSet<FuncId>,
     /// Functions `optimize/copy_elision` minted to lend the parts they return
     /// rather than copy them, with what each lends. A clone lends nothing
-    /// further.
+    /// further, and a call that becomes lendable in a later round moves to the
+    /// clone already minted ([`Self::may_gain_callers`]).
     pub lending_clones: IndexMap<FuncId, LentParts>,
     /// How each function `sroa_param` minted, `dae` or `drve` reshaped, or
     /// `param_spec` cloned from one of those stands against the root it
@@ -480,6 +481,12 @@ impl NirPackage {
     /// paths that skip `optimize` (e.g. `wado dump --nir-lowered`). `optimize`
     /// overrides it per opt level.
     pub const DEFAULT_STRING_INLINE_MAX_BYTES: usize = 4;
+
+    /// Whether `id` is a clone a later round may point more calls at, so that
+    /// its current call sites are not its whole contract.
+    pub fn may_gain_callers(&self, id: FuncId) -> bool {
+        self.sroa_param_clones.contains(&id) || self.lending_clones.contains_key(&id)
+    }
 
     /// The pages, from address 0, of the linear memory the embedded wasm assets
     /// reserve. 0 when no asset is referenced.
