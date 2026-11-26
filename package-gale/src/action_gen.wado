@@ -1024,7 +1024,7 @@ fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut EmitCon
     };
     w.begin("if !p.speculating");
     w.begin(`if ${negate_cond(&cond)}`);
-    w.line(`p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);`);
+    w.line(`p.no_viable("failed semantic predicate", p.peek_span(), &NO_EXPECTED);`);
     if ctx.current_rule_emits_vals() {
         w.line("return vals;");
     } else {

@@ -58,12 +58,12 @@ internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut EmitContext) -
 internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>, ctx: &EmitContext) {
     let mut starts: List<i32> = [];
     for let mut i = 0; i < entries.len(); i += 1 {
-        GlobalSpec::new(`_FRAGMENT_FIRST_${i}`, "List<i32>", `[${kind_bitset_words(&entries[i].first_ids).join(", ")}]`).emit(
+        GlobalSpec::new(`_FRAGMENT_FIRST_${i}`, "KindSet", `[${kind_bitset_words(&entries[i].first_ids).join(", ")}]`).emit(
             w,
         );
         starts.extend(&entries[i].first_ids);
     }
-    GlobalSpec::new("_FRAGMENT_STARTS", "List<i32>", `[${kind_bitset_words(&starts).join(", ")}]`).emit(w);
+    GlobalSpec::new("_FRAGMENT_STARTS", "KindSet", `[${kind_bitset_words(&starts).join(", ")}]`).emit(w);
     w.blank();
 
     let mut d = FnSpec::new("_recover_fragment");
@@ -77,7 +77,7 @@ internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragme
             w.line("let _k = p.peek_kind();");
             w.line("p.site = -1;");
             for let mut i = 0; i < entries.len(); i += 1 {
-                w.begin(`if kind_set_has(&_FRAGMENT_FIRST_${i}, _k)`);
+                w.begin(`if _FRAGMENT_FIRST_${i}.has(_k)`);
                 w.line(&entries[i].call);
                 w.line("return true;");
                 w.end();
@@ -252,7 +252,7 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
 /// start rule's `EOF` descends into the fragment it begins, and a nested rule
 /// cannot.
 pub fn syncs_on<P: AsStrSlice, S: AsStrSlice, K: AsStrSlice>(fragment_recovery: bool, parser: P, set: S, k: K) -> String {
-    let member = `kind_set_has(${set}, ${k})`;
+    let member = `${set}.has(${k})`;
     return if fragment_recovery { `(${member} || ${parser}.root_fragment_start(${k}))` } else { member };
 }
 
@@ -286,7 +286,7 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
             w.end();
             w.line("self.recovery_pos = self.pos;");
             w.line("self.recovered_failures.push(failure);");
-            w.line("self.skip_until(&self.resync_set(&[]));");
+            w.line("self.skip_until(&self.resync_set(&EMPTY_SYNC));");
             w.line("return true;");
         },
     );
@@ -317,15 +317,12 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
 
     let mut rs = FnSpec::new("resync_set");
     rs.set_receiver("&self");
-    rs.add_param({ name: "base", type: "&List<i32>" });
-    rs.set_return_type("List<i32>");
+    rs.add_param({ name: "base", type: "&KindSet" });
+    rs.set_return_type("KindSet");
     rs.emit(w, |w| {
         w.line("let mut set = *base;");
         w.begin("for let s of &self.sites");
-        w.line("if *s < 0 { continue; }");
-        w.line("let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];");
-        w.line("while set.len() < f.len() { set.push(0); }");
-        w.line("for let mut i = 0; i < f.len(); i += 1 { set[i] |= f[i]; }");
+        w.line("if *s >= 0 { set.union_with(&CALL_FOLLOW_SETS[CALL_FOLLOW[*s]]); }");
         w.end();
         w.line("return set;");
     });
@@ -339,7 +336,7 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
         w.begin("for let mut i = self.sites.len() - 1; i >= 0; i -= 1");
         w.line("let s = self.sites[i];");
         w.line("if s < 0 { return i == 0 && k == TK_EOF; }");
-        w.line("if kind_set_has(&CALL_FOLLOW_SETS[CALL_FOLLOW[s]], k) { return true; }");
+        w.line("if CALL_FOLLOW_SETS[CALL_FOLLOW[s]].has(k) { return true; }");
         w.line("if !CALL_FOLLOW_ENDS[s] { return false; }");
         w.end();
         w.line("return k == TK_EOF;");
@@ -348,7 +345,7 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
 
     let mut su = FnSpec::new("skip_until");
     su.set_receiver("&mut self");
-    su.add_param({ name: "set", type: "&List<i32>" });
+    su.add_param({ name: "set", type: "&KindSet" });
     su.emit(w, |w| {
         w.begin(`while !self.at_eof() && !${syncs_on(fragment_recovery, "self", "set", "self.peek_kind()")}`);
         w.line("self.skip_one();");
@@ -361,7 +358,7 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
         rf.set_receiver("&self");
         rf.add_param({ name: "k", type: "i32" });
         rf.set_return_type("bool");
-        rf.emit(w, |w| w.line("return self.sites.len() == 1 && kind_set_has(&_FRAGMENT_STARTS, k);"));
+        rf.emit(w, |w| w.line("return self.sites.len() == 1 && _FRAGMENT_STARTS.has(k);"));
         w.blank();
     }
 
@@ -376,7 +373,7 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
 
     let mut sd = FnSpec::new("sync_delete");
     sd.set_receiver("&mut self");
-    sd.add_param({ name: "sync", type: "&List<i32>" });
+    sd.add_param({ name: "sync", type: "&KindSet" });
     sd.add_param({ name: "expected", type: "&List<i32>" });
     sd.set_return_type("bool");
     sd.emit(w, |w| {
@@ -398,7 +395,7 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
 
     let mut se = FnSpec::new("sync_enter");
     se.set_receiver("&mut self");
-    se.add_param({ name: "sync", type: "&List<i32>" });
+    se.add_param({ name: "sync", type: "&KindSet" });
     se.add_param({ name: "expected", type: "&List<i32>" });
     se.emit(w, |w| {
         w.begin("if !self.recovering && !self.sync_delete(sync, expected)");
@@ -409,7 +406,7 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
 
     let mut sa = FnSpec::new("sync_alts");
     sa.set_receiver("&mut self");
-    sa.add_param({ name: "sync", type: "&List<i32>" });
+    sa.add_param({ name: "sync", type: "&KindSet" });
     sa.add_param({ name: "expected", type: "&List<i32>" });
     sa.emit(w, |w| {
         w.begin("if !self.recovering && !self.sync_delete(sync, expected)");
@@ -422,7 +419,7 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
     // reports itself.
     let mut sb = FnSpec::new("sync_back");
     sb.set_receiver("&mut self");
-    sb.add_param({ name: "sync", type: "&List<i32>" });
+    sb.add_param({ name: "sync", type: "&KindSet" });
     sb.add_param({ name: "expected", type: "&List<i32>" });
     sb.emit(w, |w| {
         w.line("if self.recovering || self.at_eof() { return; }");
@@ -1025,7 +1022,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
             let mut f7 = FnSpec::new("expect");
             f7.set_receiver("&mut self");
             f7.add_param({ name: "kind", type: "i32" });
-            f7.add_param({ name: "sync", type: "&List<i32>" });
+            f7.add_param({ name: "sync", type: "&KindSet" });
             f7.add_param({ name: "may_end_rule", type: "bool" });
             f7.set_return_type("i32");
             // Fragment recovery descends into rule entries, so `expect` reaches the
@@ -1131,7 +1128,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
                     // `any` wants no particular kind, so it carries the wanted set in the
                     // message instead of the (kind-id) `expected` list.
                     w.line(
-                        "self.fail_on_token(\"expected any token; got\", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);",
+                        "self.fail_on_token(\"expected any token; got\", &NO_EXPECTED, DiagnosticCode::UnexpectedToken);",
                     );
                     w.line("return self.pos;");
                 },
@@ -1142,12 +1139,12 @@ pub fn gen_parser_struct<S: AsStrSlice>(
             // exclusion set (parser-side `~ X`). Fails at EOF or on an excluded kind.
             let mut f10 = FnSpec::new("expect_not");
             f10.set_receiver("&mut self");
-            f10.add_param({ name: "excluded", type: "&List<i32>" });
+            f10.add_param({ name: "excluded", type: "&KindSet" });
             f10.set_return_type("i32");
             f10.emit(w, |w| {
                 w.line("if self.recovering { return self.pos; }");
-                w.line("if !self.at_eof() && !kind_set_has(excluded, self.peek_kind()) { return self.consume(); }");
-                w.line("self.fail_on_token(\"unexpected token\", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);");
+                w.line("if !self.at_eof() && !excluded.has(self.peek_kind()) { return self.consume(); }");
+                w.line("self.fail_on_token(\"unexpected token\", &NO_EXPECTED, DiagnosticCode::UnexpectedToken);");
                 w.line("return self.pos;");
             });
             w.blank();
@@ -1157,12 +1154,12 @@ pub fn gen_parser_struct<S: AsStrSlice>(
             // set (EOF included unless listed); a listed EOF matches without advancing.
             let mut f11 = FnSpec::new("expect_set");
             f11.set_receiver("&mut self");
-            f11.add_param({ name: "included", type: "&List<i32>" });
+            f11.add_param({ name: "included", type: "&KindSet" });
             f11.add_param({ name: "expected", type: "&List<i32>" });
             f11.set_return_type("i32");
             f11.emit(w, |w| {
                 w.line("if self.recovering { return self.pos; }");
-                w.line("if kind_set_has(included, self.peek_kind()) { return self.consume(); }");
+                w.line("if included.has(self.peek_kind()) { return self.consume(); }");
                 w.line("self.fail_on_token(\"got\", expected, DiagnosticCode::UnexpectedToken);");
                 w.line("return self.pos;");
             });

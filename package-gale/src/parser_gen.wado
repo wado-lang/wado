@@ -339,7 +339,7 @@ fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &EmitContext) {
         };
         index.push(`${id}`);
     }
-    GlobalSpec::new("CALL_FOLLOW_SETS", "List<List<i32>>", `[${sets.join(", ")}]`).emit(w);
+    GlobalSpec::new("CALL_FOLLOW_SETS", "List<KindSet>", `[${sets.join(", ")}]`).emit(w);
     GlobalSpec::new("CALL_FOLLOW", "List<i32>", `[${index.join(", ")}]`).emit(w);
     let mut ends: List<String> = [];
     for let e of &ctx.plan.recovery_sets().call_follow_ends {
@@ -3973,7 +3973,7 @@ fn gen_decision_sync<S: AsStrSlice>(
     let open = ctx.analysis.holds_every_kind(&ids);
     let set = ctx.sync_set(ids);
     let bits = ctx.sync_bits_ref(set);
-    let mut syncs = syncs_on(ctx.settings.emit_fragment_recovery(), "p", `&${bits}`, PEEK_KIND);
+    let mut syncs = syncs_on(ctx.settings.emit_fragment_recovery(), "p", bits, PEEK_KIND);
     if open {
         syncs = `(${syncs} || ${PEEK_KIND} >= ${ctx.analysis.token_kind_count()})`;
     }
@@ -5834,7 +5834,7 @@ fn gen_repeat_gate_break<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element, ctx
         return;
     }
     w.begin(`if ${negate_cond(&cond)}`);
-    w.line(`if ${plus_flag} { p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); }`);
+    w.line(`if ${plus_flag} { p.no_viable("failed semantic predicate", p.peek_span(), &NO_EXPECTED); }`);
     w.line("break;");
     w.end();
 }
@@ -8752,7 +8752,7 @@ fn alt_scan_call<S: AsStrSlice, S1: AsStrSlice>(
 }
 
 /// The report of a decision that picked no alternative at the parse's position.
-global NO_VIABLE_HERE: String = "p.no_viable(\"no viable alternative\", p.peek_span(), &EMPTY_SYNC);";
+global NO_VIABLE_HERE: String = "p.no_viable(\"no viable alternative\", p.peek_span(), &NO_EXPECTED);";
 
 /// What a rule does when its choice finds no viable alternative.
 fn emit_no_viable_pick(w: &mut CodeWriter, side: PickSide, ctx: &EmitContext) {

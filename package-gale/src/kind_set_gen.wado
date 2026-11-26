@@ -145,7 +145,7 @@ pub fn gen_follow_tables(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<S
     w.blank();
 }
 
-/// A set of token kinds as the words `kind_set_has` tests: kind `k` is bit
+/// A set of token kinds as the words of a `KindSet`: kind `k` is bit
 /// `k & 31` of word `k >> 5`.
 pub fn kind_bitset_words(set: &List<i32>) -> List<String> {
     let mut words: List<i32> = [];
@@ -199,11 +199,12 @@ fn intern_position_set(sets: &mut List<List<i32>>, set: &List<i32>) -> i32 {
 pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<String>) {
     // Also the empty wanted-set `fail` takes, so a lexer-only grammar — whose
     // `Parser` runtime is still emitted — needs it too.
-    GlobalSpec::new("EMPTY_SYNC", "List<i32>", "[]").emit(w);
+    GlobalSpec::new("EMPTY_SYNC", "KindSet", "[]").emit(w);
+    GlobalSpec::new("NO_EXPECTED", "List<i32>", "[]").emit(w);
     for let entry of ctx.tables.sync_sets() {
         let bits = sync_bits_name(entry.id);
         if used.contains(bits) {
-            GlobalSpec::new(bits, "List<i32>", `[${kind_bitset_words(&entry.tokens).join(", ")}]`).emit(w);
+            GlobalSpec::new(bits, "KindSet", `[${kind_bitset_words(&entry.tokens).join(", ")}]`).emit(w);
         }
         let list = sync_list_name(entry.id);
         if used.contains(list) {

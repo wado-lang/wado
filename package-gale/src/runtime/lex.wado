@@ -63,12 +63,25 @@ internal fn push_escaped(out: &mut String, src: &StrSlice, start: i32, end: i32)
     out.push_str(unchecked src.slice(run, end));
 }
 
-internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
-    let w = kind >> 5;
-    if w >= set.len() {
-        return false;
+pub type KindSet = List<i32>;
+
+impl KindSet {
+    pub fn has(&self, kind: i32) -> bool {
+        let w = kind >> 5;
+        if w >= self.len() {
+            return false;
+        }
+        return self[w] >> (kind & 31) & 1 == 1;
     }
-    return set[w] >> (kind & 31) & 1 == 1;
+
+    internal fn union_with(&mut self, other: &KindSet) {
+        while self.len() < other.len() {
+            self.push(0);
+        }
+        for let mut i = 0; i < other.len(); i += 1 {
+            self[i] |= other[i];
+        }
+    }
 }
 
 internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
