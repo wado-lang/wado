@@ -813,8 +813,10 @@ impl Interpreter<'_> {
             next += 1;
             for [a, b] in &self.frame.handle_twins {
                 for (written, other) in [(a, b), (b, a)] {
-                    if !places_overlap((written.0, &written.1), (at_root, &at_path))
-                        || reached.contains(other)
+                    let overlaps =
+                        |(r, p): &(u32, Vec<u32>), at: (u32, &[u32])| places_overlap((*r, p), at);
+                    if !overlaps(written, (at_root, &at_path))
+                        || reached.iter().any(|seen| overlaps(other, (seen.0, &seen.1)))
                     {
                         continue;
                     }
