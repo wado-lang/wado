@@ -233,16 +233,12 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
     let mut flat = FlatParams::default();
     let mut args: Vec<String> = if cross_in_memory(&function.params) {
         let record = flat.next();
-        let mut end = 0;
+        let (offsets, ..) = record_layout(function.params.iter().map(|p| &p.ty));
         function
             .params
             .iter()
-            .map(|p| {
-                let (size, align) = layout(&p.ty);
-                let offset = align_to(end, align);
-                end = offset + size;
-                load(&p.ty, &record, offset)
-            })
+            .zip(offsets)
+            .map(|(p, offset)| load(&p.ty, &record, offset))
             .collect()
     } else {
         function
@@ -535,22 +531,25 @@ fn object(fields: &[DictionaryField], mut read: impl FnMut(&WadoType) -> String)
     format!("{{ {} }}", members.join(", "))
 }
 
-/// Each of `fields` with its offset in the record, and the record's size and
-/// alignment.
-fn record_layout(fields: &[DictionaryField]) -> (Vec<(&DictionaryField, u32)>, u32, u32) {
+/// The offset of each of `types` in a record of them, and the record's size
+/// and alignment.
+fn record_layout<'a>(types: impl Iterator<Item = &'a WadoType>) -> (Vec<u32>, u32, u32) {
     let mut end = 0;
     let mut record_align = 1;
-    let placed = fields
-        .iter()
-        .map(|field| {
-            let (size, align) = layout(&field.ty);
+    let offsets = types
+        .map(|ty| {
+            let (size, align) = layout(ty);
             let offset = align_to(end, align);
             end = offset + size;
             record_align = record_align.max(align);
-            (field, offset)
+            offset
         })
         .collect();
-    (placed, align_to(end, record_align), record_align)
+    (offsets, align_to(end, record_align), record_align)
+}
+
+fn field_types(fields: &[DictionaryField]) -> impl Iterator<Item = &WadoType> {
+    fields.iter().map(|field| &field.ty)
 }
 
 /// The host's value of the enum `name` whose case has the index `index`.
@@ -669,7 +668,7 @@ fn layout(ty: &WadoType) -> (u32, u32) {
         }
         Shape::Enum(_) => (1, 1),
         Shape::Record(fields) => {
-            let (_, size, align) = record_layout(fields);
+            let (_, size, align) = record_layout(field_types(fields));
             (size, align)
         }
         Shape::Variant(cases) => {
@@ -734,10 +733,11 @@ fn load(ty: &WadoType, base: &str, offset: u32) -> String {
             )
         }
         Shape::Record(fields) => {
-            let (placed, ..) = record_layout(fields);
-            let mut offsets = placed.iter().map(|(_, field_offset)| offset + field_offset);
+            let (offsets, ..) = record_layout(field_types(fields));
+            let mut offsets = offsets.into_iter();
             let read = object(fields, |ty| {
-                load(ty, base, offsets.next().expect("an offset per field"))
+                let field_offset = offsets.next().expect("an offset per field");
+                load(ty, base, offset + field_offset)
             });
             format!("({read})")
         }
@@ -770,8 +770,8 @@ fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<St
         Shape::Scalar(scalar) => lines.push(scalar.to_memory(&at, value)),
         Shape::Enum(name) => lines.push(Scalar::U8.to_memory(&at, &enum_index(name, value))),
         Shape::Record(fields) => {
-            let (placed, ..) = record_layout(fields);
-            for (field, field_offset) in placed {
+            let (offsets, ..) = record_layout(field_types(fields));
+            for (field, field_offset) in fields.iter().zip(offsets) {
                 let member = format!("{value}.{}", field.host_name);
                 store(&field.ty, base, offset + field_offset, &member, lines);
             }

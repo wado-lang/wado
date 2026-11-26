@@ -24,7 +24,7 @@ const GLOBAL_INTERFACE: &str = "global";
 /// a reason is any value.
 const REJECTION: &str = "Rejection";
 
-/// The CM interface the module's enums are declared in.
+/// The CM interface the module's enums, structs and variants are declared in.
 const TYPES_INTERFACE: &str = "types";
 
 /// The file `snapshot.mjs` writes: the slice's definitions, in webidl2's shape.
@@ -1078,8 +1078,8 @@ impl Lowering<'_> {
         })
     }
 
-    /// Declares in `module` each enum and dictionary a function of it names,
-    /// and answers each enum's values as the host spells them, in case order,
+    /// Declares in `module` each enum, dictionary and union a function of it
+    /// names, and answers each enum's values as the host spells them, in case order,
     /// by Wado name.
     fn declare_types(
         &self,
