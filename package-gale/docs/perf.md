@@ -906,29 +906,29 @@ ATN literal is a measured problem.)
 an `i32`. Backing it with `HashMap<i64, i32>` under a fixed seed, with the same
 `get` / `set` / `clear`, made the simulator slower:
 
-| grammar    | `AtnKeyMap`, ms/iter | `HashMap` | `HashMap`, `clear` keeping its arrays |
-| ---------- | -------------------: | --------: | ------------------------------------: |
-| TypeScript |                  203 |       419 |                               230–277 |
-| Rust       |                 61.6 |      84.8 |                             81.2–82.6 |
-| SQLite     |                 1.14 |      1.08 |                             1.14–1.27 |
+| grammar    | `AtnKeyMap`, ms/iter | `HashMap`, `clear` freeing | `AtnKeyMap`, ms/iter | `HashMap`, `clear` keeping |
+| ---------- | -------------------: | -------------------------: | -------------------: | -------------------------: |
+| TypeScript |                  203 |                        419 |              171–201 |                    225–253 |
+| Rust       |                 61.6 |                       84.8 |            59.8–68.5 |                  70.4–78.5 |
+| SQLite     |                 1.14 |                       1.08 |            1.08–1.29 |                  1.10–1.32 |
 
 `wado run -O2 package-gale/benchmark/<grammar>/<grammar>.wado` on the dev
-build, the arms alternating in one session.
+build, the arms alternating in one session. Each pair of columns is one
+session: the first when `HashMap::clear` dropped its table and entry arrays,
+the second after it came to keep them.
 
-Two costs make the difference:
+Two costs made the difference:
 
-- `HashMap::clear` drops its table and entry arrays, so a map cleared at every
-  prediction step grows from nothing again. `AtnKeyMap::clear` resets only the
-  slots it used. The third column clears in place, which closes most of
-  TypeScript's gap.
+- A `clear` that dropped the arrays made a map cleared at every prediction step
+  grow from nothing again. `AtnKeyMap::clear` resets only the slots it used.
+  `HashMap::clear` now keeps its arrays, which closed most of TypeScript's gap.
 - A lookup hashes with two 128-bit multiplies and reads the slot, the
   fingerprint, the key, the liveness flag and the value from five arrays.
-  `AtnKeyMap` hashes with one multiply and reads two. Rust's gap is this one,
-  and no change to `clear` moves it.
+  `AtnKeyMap` hashes with one multiply and reads two. This is the gap that
+  remains on TypeScript and Rust.
 
-The first is the standard library's to fix. The second is what an
-insertion-ordered, seeded map costs, so `AtnKeyMap` stays until the library
-offers a map without those two properties.
+The second is what an insertion-ordered, seeded map costs, so `AtnKeyMap` stays
+until the library offers a map without those two properties.
 
 ### Measured non-levers
 
