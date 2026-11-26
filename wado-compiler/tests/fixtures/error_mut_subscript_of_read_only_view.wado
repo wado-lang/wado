@@ -1,0 +1,27 @@
+// A `Slice` is a read-only view: it indexes by `IndexRef` and stores nothing
+// back. A variant element's copy still shares its payload, so `&mut s[0]` would
+// write into the list the slice views, here one reached through a `&`.
+
+struct Named { name: String }
+
+variant Element { Ref(Named), Wildcard }
+
+fn rename(elem: &mut Element) {
+    match elem {
+        Ref(r) => { r.name = "renamed"; },
+        _::Wildcard => (),
+    }
+}
+
+fn poke(xs: &List<Element>) {
+    let mut s = xs.slice(0, 1);
+    rename(&mut s[0]);
+}
+
+test {
+    let xs: List<Element> = [Element::Ref(Named { name: "original" })];
+    poke(&xs);
+}
+
+__DATA__
+{"compile_error": ":18:17: analysis error: cannot take &mut of an element of read-only 'Slice<Element>'"}

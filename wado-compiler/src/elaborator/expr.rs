@@ -2424,6 +2424,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::ERROR
     }
 
+    /// A `&mut` subscript resolved through `IndexRef` reaches a copy of the
+    /// element, and only the container's `IndexAssign` stores it back. A
+    /// container with none is a read-only view (a `Slice`), yet a copy still
+    /// shares what the element holds, so a write through it would land in
+    /// storage the view may have been lent through a `&`. An in-place element
+    /// is refused by `place_roots_at_immutable_ref` instead.
+    fn refuse_mut_element_of_read_only_view(
+        &mut self,
+        base_type_id: TypeId,
+        lookup_type_id: TypeId,
+        key: TypeId,
+        element: TypeId,
+        span: Span,
+    ) {
+        let in_place = {
+            let tt = self.tysys.type_table.borrow();
+            tt.is_in_place_aggregate(tt.representation_head(element))
+        };
+        let stores_back = self
+            .index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                s.find_index_assign_trait_impl(t, Some(key))
+            })
+            .is_some();
+        if !in_place && !stores_back {
+            let _ = self.emit(TypeError::CannotMutate {
+                message: format!(
+                    "cannot take &mut of an element of read-only '{}': it has no IndexAssign to store the element back",
+                    self.tysys.type_id_to_string(base_type_id)
+                ),
+                span,
+            });
+        }
+    }
+
     /// Dispatch the subscript `id` on a struct-headed `receiver` by a key of
     /// `index_type` to the indexing impl `access` reaches.
     pub(super) fn dispatch_index(
@@ -2476,6 +2510,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
             if let Some(((trait_info, _), index_method)) = index_trait_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
+                if access == IndexAccess::Mutable && index_method == "index_ref" {
+                    self.refuse_mut_element_of_read_only_view(
+                        base_type_id,
+                        lookup_type_id,
+                        index_type,
+                        trait_info.output_type,
+                        span,
+                    );
+                }
 
                 // `index_ref` returns `&Output`; `index_ref_mut` returns `&mut Output`.
                 let ref_output_type = {
