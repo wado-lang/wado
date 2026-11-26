@@ -2442,7 +2442,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// storage the view may have been lent through a `&`. An in-place element
     /// is refused by `place_roots_at_immutable_ref` instead.
     pub(super) fn refuse_mut_element_of_read_only_view(
-        &mut self,
+        &self,
         container: TypeId,
         stores_back: bool,
         element: TypeId,
