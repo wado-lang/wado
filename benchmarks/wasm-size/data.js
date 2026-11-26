@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795726477138,
+  "lastUpdate": 1795729634768,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82513,6 +82513,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a5379f04ff6c575f2e69342224d0c86bd162935c"
         },
         "date": 1795726476452,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24979,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334351,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "29ebe6d4bc73acf8e3113b671e0a21a03e564054",
+          "message": "Merge pull request #2775 from wado-lang/ccr-f0010f7e-dmdgyw\n\nrefactor(elaborator): call resolution reads one stage at a time, and `&mut self` means a write",
+          "timestamp": "2026-11-27T06:32:55+09:00",
+          "tree_id": "0643614d7dd77474a32a8accc895c67f1e3a76fc",
+          "url": "https://github.com/wado-lang/wado/commit/29ebe6d4bc73acf8e3113b671e0a21a03e564054"
+        },
+        "date": 1795729633803,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
