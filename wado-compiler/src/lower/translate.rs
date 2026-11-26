@@ -1021,8 +1021,7 @@ impl FunctionTranslator<'_, '_> {
                 },
             ) => {
                 let tt = self.base.type_table.borrow();
-                let mints_mut = matches!(tt.get(ref_type), ResolvedType::MutRef(_))
-                    && matches!(tt.get(reference.type_id), ResolvedType::Ref(_));
+                let mints_mut = tt.is_mut_ref(ref_type) && !tt.is_mut_ref(reference.type_id);
                 drop(tt);
                 if mints_mut {
                     let mut reference = (**reference).clone();

@@ -2360,7 +2360,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// receiver TIR is a placeholder without structure. A subscript `IndexRef`
     /// answers is such a step where the element is mutated in place: it
     /// arrives as its `&Output`. A replace-on-assign element taken that way is
-    /// a detached copy, which lowering writes back.
+    /// a detached copy, which lowering writes back, or an affine variant's
+    /// cell, which is the slot.
     pub(super) fn place_roots_at_immutable_ref(&self, expr: &ast::Expr) -> bool {
         let inner = match expr {
             ast::Expr::FieldAccess(fa) => &fa.expr,
