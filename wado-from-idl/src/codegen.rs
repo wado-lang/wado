@@ -236,6 +236,10 @@ impl WadoCodeGenerator {
             for method in &resource.methods {
                 self.write_function(method);
             }
+            for (name, reason) in &resource.unavailable {
+                self.writeln(&format!("#[unavailable(\"{reason}\")]"));
+                self.writeln(&format!("fn {name}(&self);"));
+            }
             if drops {
                 self.writeln("/// Drop the resource. Scope exit drops one that nothing moved.");
                 self.writeln("#[cm(\"resource-drop\")]");

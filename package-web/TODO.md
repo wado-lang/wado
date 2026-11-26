@@ -67,7 +67,8 @@ read the table:
   resource extending the parent's. One redeclared with any other type binds
   under its interface's name, so it is not in the table: `SVGElement.className`,
   an `SVGAnimatedString` where `Element.className` is a string, is
-  `svg_element_class_name`.
+  `svg_element_class_name`, and `class_name` on an `SvgElement` is an error
+  naming it.
 
 The report leaves out the interfaces only a worker or a worklet reaches.
 
@@ -128,9 +129,10 @@ lower is then available to each interface the slice adds.
   costs something whether a program uses it or not.
   `mise run report-webidl-coverage` writes those bindings to
   `scratchpad/webidl-all/dom.wado`.
-- Where a child redeclares an inherited method with another type, the parent's
-  method is still callable on the child, and answers with the parent's type.
-  The child's own is `<interface>_<member>`. No interface of the slice has one.
+- Where a child redeclares a getter with another type and leaves the setter
+  out, the parent's setter is still callable on the child:
+  `set_class_name` on an `SvgElement`, where the browser ignores the write. No
+  interface of the slice has one.
 - A union collapsed to its one typable constituent in an argument is not
   reported, though the other constituents cannot be passed.
 - A program cannot recover from a DOM exception: it traps.

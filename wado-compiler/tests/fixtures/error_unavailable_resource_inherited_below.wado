@@ -1,0 +1,28 @@
+// What extends the resource inherits the reservation, not the method above it.
+
+#[cm("example:ui/target", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
+resource Target {
+    #[cm("example:ui/target#label")]
+    fn label(&self) -> String;
+}
+
+#[cm("example:ui/widget", linearity = "unrestricted", repr = "externref", classes = "1..=2")]
+resource Widget extends Target {
+    #[unavailable("use `widget_label`")]
+    fn label(&self);
+}
+
+#[cm("example:ui/button", linearity = "unrestricted", repr = "externref", classes = "2..=2")]
+resource Button extends Widget {}
+
+fn through_the_grandchild(b: Button) -> String with Target {
+    return b.label();
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":19:12: error: `Widget::label` is unavailable: use `widget_label`",
+    "compile_error_count": 1
+}

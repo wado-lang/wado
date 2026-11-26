@@ -286,7 +286,7 @@ impl UnavailableFault {
                 "`#[unavailable]` needs a reason, as `#[unavailable(\"write `x` instead\")]`"
             }
             Self::Placement => {
-                "`#[unavailable]` belongs on a module function, an `impl` method, or a trait method"
+                "`#[unavailable]` belongs on a module function, or on a method of an `impl`, a trait or a resource"
             }
             Self::Exported => {
                 "`export` lowers a function at the component boundary; an `#[unavailable]` one has none to lower"

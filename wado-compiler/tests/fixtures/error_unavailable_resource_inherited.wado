@@ -1,0 +1,34 @@
+// A resource may not override, but it may declare an inherited name
+// unavailable: the parent's method would answer with the wrong type, as
+// `Element.className` does on an `SVGElement`.
+
+#[cm("example:ui/target", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource Target {
+    #[cm("example:ui/target#label")]
+    fn label(&self) -> String;
+}
+
+#[cm("example:ui/widget", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource Widget extends Target {
+    #[unavailable("a `Widget` answers with a number; use `widget_label`")]
+    fn label(&self);
+
+    #[cm("example:ui/widget#label")]
+    fn widget_label(&self) -> i32;
+}
+
+fn through_the_parent(t: Target) -> String with Target {
+    return t.label();
+}
+
+fn through_the_child(w: Widget) -> String with Target {
+    return w.label();
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":25:12: error: `Widget::label` is unavailable: a `Widget` answers with a number; use `widget_label`",
+    "compile_error_count": 1
+}

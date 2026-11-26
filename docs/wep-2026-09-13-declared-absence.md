@@ -108,8 +108,11 @@ method of the same name is an ambiguity, as two methods are.
 
 ### Placement
 
-Module-level `fn`, `impl` method, and trait method. Writing it anywhere else is
-an error, rather than a line the compiler ignores. Known gaps lists the
+Module-level `fn`, and a method of an `impl`, a trait or a resource. On a
+resource it may name a method the resource inherits, which a child may not
+otherwise redeclare: the nearest declaration along `extends` answers a call, so
+the child's reservation is found before the method above it. Writing it anywhere
+else is an error, rather than a line the compiler ignores. Known gaps lists the
 placements still to come. `export` is refused with it: the keyword lowers a
 function at the component boundary, and this declaration has none to lower.
 
@@ -140,9 +143,9 @@ Nothing is queued. The gaps below are unowned.
   rather than a third `#[unavailable]` state, and why the reasoning above for
   leaving absences out does not carry to it.
 - Every item should carry the attribute eventually. Today only a module `fn`,
-  an `impl` method, and a trait method do; a type, a trait, a global, an
-  `interface` operation, and a `resource` method reject it. Each extension
-  looks mechanical, and none is owned.
+  a method of an `impl`, a trait or a resource do; a type, a trait, a global and
+  an `interface` operation reject it. Each extension looks mechanical, and none
+  is owned.
 - A trait may declare a name `#[unavailable]` and an `impl` may still supply a
   body for it, which the receiver's own type then dispatches to. Wado has no rule
   for any member that an `impl Trait for T` declares only what the trait

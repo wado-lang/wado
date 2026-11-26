@@ -574,7 +574,10 @@ impl<'a> FunctionSite<'a> {
     pub fn allows_unavailable(self) -> bool {
         matches!(
             self,
-            FunctionSite::Free | FunctionSite::Impl(_) | FunctionSite::Trait(_)
+            FunctionSite::Free
+                | FunctionSite::Impl(_)
+                | FunctionSite::Trait(_)
+                | FunctionSite::Resource(_)
         )
     }
 

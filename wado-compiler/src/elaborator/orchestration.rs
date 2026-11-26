@@ -143,8 +143,17 @@ struct PendingExtends {
     span: Span,
 }
 
-/// Every resource's declared instance-method names, by declaration.
-type ResourceMethodNames = IndexMap<DefId, Vec<(String, Span)>>;
+/// An instance method a resource declares.
+struct ResourceMethodName {
+    name: String,
+    span: Span,
+    /// `#[unavailable]`: it takes the name back from the chain rather than
+    /// giving it a second declaration.
+    unavailable: bool,
+}
+
+/// Every resource's declared instance methods, by declaration.
+type ResourceMethodNames = IndexMap<DefId, Vec<ResourceMethodName>>;
 
 /// Resolve every `extends` clause and record the ones that hold.
 /// See `docs/wep-2026-04-28-resource-inheritance.md`.
@@ -437,7 +446,7 @@ fn newtype_cycles(
 }
 
 /// A child may not redeclare a method an ancestor declares: one name must
-/// reach one declaration.
+/// reach one declaration. An `#[unavailable]` one declares none.
 fn reject_overrides<H: CompilerHost>(
     clause: &PendingExtends,
     parent: DefId,
@@ -452,8 +461,8 @@ fn reject_overrides<H: CompilerHost>(
     let mut ancestor = Some(parent);
     while let Some(current) = ancestor {
         let inherited = method_names.get(&current).map_or(&[][..], Vec::as_slice);
-        for (name, span) in own {
-            if inherited.iter().any(|(other, _)| other == name) {
+        for ResourceMethodName { name, span, .. } in own.iter().filter(|m| !m.unavailable) {
+            if inherited.iter().any(|other| other.name == *name) {
                 let _ = logger.error_in(
                     &clause.module,
                     TypeError::ResourceExtends {
@@ -715,7 +724,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .filter(|m| {
                                     m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
                                 })
-                                .map(|m| (m.name.clone(), m.span))
+                                .map(|m| ResourceMethodName {
+                                    name: m.name.clone(),
+                                    span: m.span,
+                                    unavailable: m.unavailable_attr().is_some(),
+                                })
                                 .collect(),
                         );
                         if let Some(parent) = &resource_decl.parent {

@@ -238,9 +238,10 @@ The declaration takes part in name resolution and nothing else:
   beside an instance method of the same name is ambiguous, as two methods are.
 - `wado doc` does not render it.
 
-It goes on a module function, an `impl` method, or a trait method. Anywhere else
-is an error. `export` is refused with it, since there is no function to lower at
-the component boundary.
+It goes on a module function, or on a method of an `impl`, a trait or a
+resource. Anywhere else is an error. `export` is refused with it, since there is
+no function to lower at the component boundary. On a resource it may take an
+inherited name; [Methods](./spec-components.md#methods) states what that does.
 
 Rationale: [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
 

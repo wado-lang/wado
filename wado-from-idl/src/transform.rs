@@ -662,6 +662,7 @@ impl<'a> Transformer<'a> {
             classes: None,
             extends: None,
             methods,
+            unavailable: Vec::new(),
         }))
     }
 }

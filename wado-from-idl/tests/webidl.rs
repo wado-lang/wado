@@ -993,6 +993,9 @@ fn a_child_redeclaring_with_another_type_binds_under_its_interfaces_name() {
         "fn element_label(&self) -> i32;",
         "fn set_element_label(&self, value: i32);",
         "fn element_item(&self, index: i32) -> i32;",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_label`\")]\n    fn label(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `set_element_label`\")]\n    fn set_label(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_item`\")]\n    fn item(&self);",
     ] {
         assert!(code.contains(declaration), "{declaration}\n{code}");
     }

@@ -565,6 +565,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 classes: Some(classes[name]),
                 extends: iface.inheritance.as_deref().map(to_upper_camel_case),
                 methods,
+                unavailable: Vec::new(),
             },
         );
     }
@@ -760,8 +761,8 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
 /// dropped: it has the same types, or differs only in a result that is a
 /// resource extending the parent's, which a type pattern narrows. Otherwise the
 /// parent's would answer with the wrong type, and the child's binds under its
-/// interface's name (`svg_element_class_name`). Statics (`new` above all) are
-/// not inherited.
+/// interface's name (`svg_element_class_name`) while the child declares the
+/// inherited name unavailable. Statics (`new` above all) are not inherited.
 fn settle_overrides<'a>(
     merged: &IndexMap<&'a str, Merged<'_>>,
     resources: &mut IndexMap<&'a str, WadoResource>,
@@ -803,7 +804,8 @@ fn settle_overrides<'a>(
         })
         .collect();
     for name in merged.keys() {
-        resources[name].methods.retain_mut(|method| {
+        let resource = &mut resources[name];
+        resource.methods.retain_mut(|method| {
             if !has_receiver(method) {
                 return true;
             }
@@ -814,7 +816,7 @@ fn settle_overrides<'a>(
             };
             if !serves(method, inherited) {
                 let interface = to_snake_case(name);
-                method.name = match js[&method.cm_attr].member {
+                let own = match js[&method.cm_attr].member {
                     JsMember::Set(_) => {
                         method
                             .name
@@ -822,6 +824,14 @@ fn settle_overrides<'a>(
                     }
                     _ => format!("{interface}_{}", method.name),
                 };
+                let inherited = std::mem::replace(&mut method.name, own);
+                resource.unavailable.push((
+                    inherited,
+                    format!(
+                        "`{name}` redeclares it with another type; use `{}`",
+                        method.name
+                    ),
+                ));
                 return true;
             }
             js.shift_remove(&method.cm_attr)
@@ -898,6 +908,7 @@ impl Lowering<'_> {
             classes: None,
             extends: None,
             methods,
+            unavailable: Vec::new(),
         }
     }
 
