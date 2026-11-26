@@ -166,6 +166,13 @@ impl Regex {
         return build(pattern.as_str_slice(), Syntax::Plain);
     }
 
+    /// The state every copy shares, to write. A `&self` grants reading alone,
+    /// so the `&mut` is read out of a copy of the expression.
+    fn lazy(&self) -> &mut Lazy {
+        let shared = *self;
+        return shared.lazy;
+    }
+
     /// Whether the DFAs can search `text`. An empty text is both of its ends
     /// at once, which a DFA's states do not tell apart.
     fn scans(&self, text: StrSlice) -> bool {
@@ -176,7 +183,7 @@ impl Regex {
     /// `text`. Once it gave up, the answer means nothing and `self.lazy.off`
     /// is set.
     fn end_by_dfa(&self, text: StrSlice, oracle: &Oracle, start: i32, earliest: bool) -> Option<i32> {
-        let lazy = self.lazy;
+        let lazy = self.lazy();
         if lazy.forward matches { null } {
             lazy.forward = Some(Dfa::new(self.program, Scan::End, &self.lookarounds));
         }
@@ -193,7 +200,7 @@ impl Regex {
     /// Where the match ending at `end` and starting leftmost, at or after
     /// `floor`, starts, by the reverse DFA and under `end_by_dfa`'s terms.
     fn start_by_dfa(&self, text: StrSlice, oracle: &Oracle, floor: i32, end: i32) -> i32 {
-        let lazy = self.lazy;
+        let lazy = self.lazy();
         if lazy.reverse matches { null } {
             // The forward program compiled, and this one is no larger.
             let program = compile(&self.tree, self.names.len() - 1, Direction::Reverse).unwrap();
@@ -251,7 +258,7 @@ impl Regex {
 
     /// Where the pattern's lookarounds pass in `text`.
     fn oracle_of(&self, text: StrSlice) -> Oracle {
-        return Oracle::of(&self.lookarounds, &mut self.lazy.markers, text);
+        return Oracle::of(&self.lookarounds, &mut self.lazy().markers, text);
     }
 
     /// Whether `text` holds a match.
