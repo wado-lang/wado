@@ -61,7 +61,7 @@ fn accepted(schema: Schema) -> Schema {
             s.any_of = s.any_of.into_iter().map(|one| accepted(one)).collect();
             s.properties = each_accepted(s.properties);
             s.defs = each_accepted(s.defs);
-            Schema::Object(s)
+            Schema::Object(s);
         },
     };
 }
@@ -75,8 +75,13 @@ fn each_accepted(schemas: HashMap<String, Schema>) -> HashMap<String, Schema> {
 }
 
 test "a format closes every object and bounds no number, however deep" {
-    struct Inner { n: i32 }
-    struct Outer { one: Option<Inner>, many: List<Inner> }
+    struct Inner {
+        n: i32,
+    }
+    struct Outer {
+        one: Option<Inner>,
+        many: List<Inner>,
+    }
 
     let root = Format::of::<Outer>().schema.into_object();
     assert root.defs.len() == 2;
