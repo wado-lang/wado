@@ -861,6 +861,13 @@ impl Semantics {
             .any(|dispatch| dispatch.consumes_self)
     }
 
+    /// Each reference the method call at `id` reads its by-value `self` out
+    /// of, one per walk that dispatched it so.
+    pub fn references_self_is_read_out_of(&self, id: AstId) -> impl Iterator<Item = TypeId> + '_ {
+        self.method_dispatches_at(id)
+            .filter_map(|dispatch| dispatch.self_out_of_reference)
+    }
+
     /// Iterate every recorded method-dispatch decision keyed by the
     /// `MethodCallExpr`'s `(module, AstId)`. Pair with
     /// [`Self::method_dispatch_view`] for the stable public view onto

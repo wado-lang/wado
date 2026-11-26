@@ -132,6 +132,14 @@ pub affine trait Iterator with _ {
         return null;
     }
 
+    /// Returns `&mut self`, which is an iterator that takes from this one: an
+    /// adapter over it leaves this iterator advanced. An adapter called on the
+    /// iterator itself takes a copy and leaves it where it was, or moves it
+    /// where the iterator is affine.
+    fn by_ref(&mut self) -> &mut Self with () {
+        return self;
+    }
+
     /// Returns an adapter that skips elements for which `pred` returns false.
     fn filter<effect E, F: fn mut(Self::Item) -> bool with E>(self, pred: F) -> IterFilter<Self, F> with () {
         return IterFilter { inner: self, pred };
@@ -457,17 +465,15 @@ impl<I: Iterator> IntoIterator for I {
     }
 }
 
-/// An iterator walked through a reference, so what takes from it leaves the
-/// iterator itself advanced: what `for let x of &mut iter` walks.
-pub struct IterRefMut<affine I: Iterator> {
-    internal inner: &mut I,
-}
-
-impl<affine I: Iterator> Iterator for IterRefMut<I> {
+/// A `&mut` to an iterator is an iterator that advances the one it points to,
+/// so a loop, an adapter or a consumer bounded by `Iterator`, handed
+/// `&mut iter`, leaves `iter` where it stopped. One bounded by `IntoIterator`
+/// walks a copy.
+impl<affine I: Iterator> Iterator for &mut I {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<I::Item> with _ {
-        return self.inner.next();
+        return (**self).next();
     }
 }
 

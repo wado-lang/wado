@@ -2679,10 +2679,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_param_entries: Vec<(String, u32)> = if let Type::Generic(generic) = &header.ty {
             target_params(generic)
         } else if let Type::Reference(boxed) | Type::MutReference(boxed) = &header.ty {
-            if let Type::Named(inner) = boxed.as_ref() {
-                // impl<T: Bound> Trait for &T / &mut T: T is at position 0
-                vec![(inner.name.clone(), 0u32)]
-            } else if let Type::Generic(generic) = boxed.as_ref() {
+            if let Type::Generic(generic) = boxed.as_ref() {
                 // impl<T> Trait for &Container<T>: extract type params from generic args
                 target_params(generic)
             } else {
@@ -2714,11 +2711,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             Vec::new()
         };
-        // Extract blanket type param info
-        let blanket_name = if let Type::Named(named) = &header.ty {
-            Some(named.name.clone())
-        } else {
-            None
+        // The parameter a blanket's target is, or refers to: `T` in
+        // `impl<T: Bound> Trait for T` and in `for &T`, which the receiver
+        // handed over fills whole (a reference lookup hands over the referent).
+        let blanket_name = match &header.ty {
+            Type::Named(named) => Some(named.name.clone()),
+            Type::Reference(inner) | Type::MutReference(inner) => match inner.as_ref() {
+                Type::Named(named)
+                    if self
+                        .tysys
+                        .is_impl_target_param(&header.type_params, &named.name) =>
+                {
+                    Some(named.name.clone())
+                }
+                _ => None,
+            },
+            _ => None,
         };
         let impl_module_source = impl_home;
         // A concrete generic instantiation trait impl (`impl Tag for
@@ -2926,7 +2934,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
 
         // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
-        // is a type parameter. These should NOT override base-type methods.
+        // is a type parameter.
         let is_blanket_ref_impl = match &header.ty {
             Type::Reference(inner) | Type::MutReference(inner) => {
                 if let Type::Named(named) = inner.as_ref() {
@@ -2966,12 +2974,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return found_traits;
         };
         let trait_args = impl_sig.trait_type_args;
+        // `Self` in the trait's frame is the block's target. A lookup among
+        // the impls for a reference hands over the referent.
+        let self_type_id = receiver_type_id.map(|referent| {
+            let mut tt = scope.tysys.type_table.borrow_mut();
+            match &header.ty {
+                Type::Reference(_) => tt.make_ref(referent),
+                Type::MutReference(_) => tt.make_mut_ref(referent),
+                _ => referent,
+            }
+        });
         // A trait-declared default spells the trait's own parameters: under
         // `impl One<T> for X`, `fn m(a: A = A::f())` reaches here as `A`.
-        let declared =
-            scope
-                .tysys
-                .trait_declared_bindings(trait_decl, &trait_args, receiver_type_id);
+        let declared = scope
+            .tysys
+            .trait_declared_bindings(trait_decl, &trait_args, self_type_id);
         bind_nearer(&mut impl_type_bindings, declared);
         let trait_name_of_impl = scope
             .tysys
@@ -3031,7 +3048,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter(|m| m.is_inherited())
                 .cloned()
             {
-                let mut declaring_args = vec![receiver_type_id.unwrap_or(TypeTable::UNKNOWN)];
+                let mut declaring_args = vec![self_type_id.unwrap_or(TypeTable::UNKNOWN)];
                 declaring_args.extend(trait_args.iter().copied());
                 let tt = &scope.tysys.type_table;
                 // `Self::X` is what this block binds, which a receiver still
@@ -4669,6 +4686,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type,
             type_args,
             false,
+            None,
         );
         self.record_desugar(method_call.id, DesugarKind::IndexMutMethodCall);
 
@@ -4864,8 +4882,9 @@ pub(super) fn adjusted_receiver_type(
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> TypeId {
     let mutable = match self_kind {
+        // A by-value `self` is `Self`, which holds `self_layers` references.
         ast::SelfKind::None | ast::SelfKind::Value => {
-            return type_table.borrow().peel_refs(receiver);
+            return type_table.borrow().ref_layers(receiver, self_layers);
         }
         ast::SelfKind::Ref => false,
         ast::SelfKind::MutRef => true,

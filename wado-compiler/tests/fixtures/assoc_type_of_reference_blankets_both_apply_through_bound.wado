@@ -1,0 +1,32 @@
+// A generic referent whose bounds keep those of two blankets over a reference
+// is as ambiguous as a concrete one: the body is refused where it is written,
+// before any caller instantiates it.
+
+trait Named with () { fn name(&self) -> String; }
+trait Counted with () { fn count(&self) -> i32; }
+
+trait Out with () {
+    type Of;
+    fn out(self) -> Self::Of;
+}
+
+impl<A: Named> Out for &A {
+    type Of = String;
+    fn out(self) -> String { return (*self).name(); }
+}
+
+impl<B: Counted> Out for &B {
+    type Of = i32;
+    fn out(self) -> i32 { return (*self).count(); }
+}
+
+fn out_of<X: Out>(x: X) -> X::Of {
+    return x.out();
+}
+
+fn via<T: Named + Counted>(t: &T) {
+    let _ = out_of(t);
+}
+
+__DATA__
+{"compile_error": ":28:13: analysis error: ambiguous impls of 'Out' for '&T': 'impl<A: Named> Out for &A' and 'impl<B: Counted> Out for &B' both reach it, and nothing ranks them; write 'impl Out for &T'"}

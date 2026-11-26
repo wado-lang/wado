@@ -947,7 +947,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, args)| args.to_vec());
         let ref_kind =
             RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone());
+        let inherent = self.lookup_method_info(receiver, method);
         if let Some(ref_kind) = ref_kind
+            && inherent.as_ref().is_none_or(|info| {
+                let link = self.inherent_link(base, info.owner);
+                self.trait_answers_before(base, Some(ref_kind == RefKind::Mut), method, link)
+            })
             && let Some(found) = {
                 let lookup = self.find_trait_method_for_type(
                     &ImplTargetKey::Ref(ref_kind),
@@ -960,13 +965,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 self.decide_now(lookup, base, method, span).found()
             }
-            && !found.is_blanket_ref_impl
+            && found.answers_reference_receiver(self.tysys.type_table.borrow().ref_depth(receiver))
         {
             let owner = found.owner_for(base, &self.tysys.type_table.borrow());
             let info = found.method_info;
             return Some(self.return_type_for_receiver(info.return_type, owner, receiver));
         }
-        if let Some(info) = self.lookup_method_info(receiver, method) {
+        if let Some(info) = inherent {
             return Some(self.return_type_for_receiver(info.return_type, info.owner, receiver));
         }
         let target = self.impl_target_of(base);

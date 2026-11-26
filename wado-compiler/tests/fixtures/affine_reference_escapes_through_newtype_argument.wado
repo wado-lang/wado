@@ -1,0 +1,29 @@
+// A newtype over a `&mut` is a `&mut` the callee may store through, and one
+// that outlives the body as a parameter.
+// Regression: only an argument typed `&mut` itself counted, so a reference
+// into an affine local escaped through the newtype.
+
+affine struct Tok { id: i32 }
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+type Seen = &mut List<&Tok>;
+
+fn push_to(out: Seen, t: &Tok) {
+    (out as &mut List<&Tok>).push(t);
+}
+
+fn keep(out: Seen) {
+    let t = Tok { id: 8 };
+    push_to(out, &t);
+}
+
+test {
+    let mut seen: List<&Tok> = [];
+    keep(&mut seen as Seen);
+}
+
+__DATA__
+{"compile_error": ":20:19: analysis error: `out` keeps a reference into `t` past the body, where `t` drops"}

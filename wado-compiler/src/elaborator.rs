@@ -966,6 +966,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         return_type: TypeId,
         method_type_args: Vec<TypeId>,
         consumes_self: bool,
+        self_out_of_reference: Option<TypeId>,
     ) {
         let Some(ast_id) = ast_id else { return };
         let key = ast_id;
@@ -983,6 +984,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 return_type,
                 method_type_args,
                 consumes_self,
+                self_out_of_reference,
                 selection: None,
             },
         );
@@ -1784,19 +1786,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for trait_decl in &trait_decls {
             self.resolve_trait_decl(trait_decl);
         }
-        // A default method's parameters, which the effect index reads before
-        // any impl walks the body.
+        // What the effect index reads before any impl walks a body: every
+        // method's signature, which a dispatch through a bound instantiates
+        // with no impl to read.
         for sig in self.sem.decls.trait_sigs.values() {
             for method in sig.methods.values() {
-                let Some(body) = &method.default_body else {
-                    continue;
-                };
+                let declaration = self.tysys.resolutions.defs().ast_id(method.sig.def);
                 let types = &mut self.sem.types;
                 types
                     .fn_param_types
-                    .insert(body.id, method.sig.decl.param_types.clone());
+                    .insert(declaration, method.sig.decl.param_types.clone());
                 types.fn_return_types.insert(
-                    body.id,
+                    declaration,
                     method.sig.decl.return_type.unwrap_or(TypeTable::UNIT),
                 );
             }
@@ -2065,8 +2066,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let tt = self.tysys.type_table.borrow();
                     (tt.decl_of_type(target_type_id), tt.ref_kind(target_type_id))
                 };
-                if let Some(base_decl) = base_decl {
-                    let impl_def = self.tysys.def_at(impl_block.id);
+                let ref_blanket_param = {
+                    let tt = self.tysys.type_table.borrow();
+                    tt.ref_pointee(target_type_id)
+                        .filter(|&referent| tt.type_param_id(referent).is_some())
+                };
+                let impl_def = self.tysys.def_at(impl_block.id);
+                if let (Some(param), Some(kind)) = (ref_blanket_param, target_ref) {
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .register_ref_blanket_assoc_type_def(
+                            trait_ref, kind, name, param, type_id, impl_def,
+                        );
+                } else if let Some(base_decl) = base_decl {
                     self.tysys
                         .type_table
                         .borrow_mut()

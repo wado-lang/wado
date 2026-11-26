@@ -172,10 +172,10 @@ types this is the usual value-semantics copy — elided to a move at last use �
 `.unwrap()` stays ergonomic and no rejection is needed. Inspectors (`is_ok`, …)
 keep `&self`.
 
-By-value `self` on a value type is otherwise a diagnostic
-(`SelfByValueOnNonResource`); the generic `Result<T, E>` / `Option<T>` impls are
-permitted because a generic self-type resolves to a `GenericInstance`, not a
-concrete value type.
+By-value `self` on a value type was otherwise an error. It is now a warning,
+`self_by_value`:
+[WEP: Affine Types](./wep-2026-10-17-affine-types.md#a-by-value-self-is-a-parameter-like-any-other)
+says why.
 
 ### No move out of a reference
 
@@ -526,9 +526,10 @@ Verified against the tree.
 
 - [x] `SelfKind::Value`; parser accepts bare `self`, `consumes_self` is
   `self_kind == Value`, and `self` on a free function is a parse error.
-- [x] A `Value` receiver is a diagnostic (`SelfByValueOnNonResource`) only on a
-  value type that provably carries no resource; a resource-carrying aggregate
-  (and any generic self-type) may consume with `self`.
+- [x] A `Value` receiver is a diagnostic only on a value type that provably
+  carries no resource; a resource-carrying aggregate (and any generic
+  self-type) may consume with `self`. The diagnostic has since become the
+  `self_by_value` warning.
 - [x] stdlib `self: &R` → `&self` (via `wado-from-idl`); every `self:`
   annotation rejected, fixtures migrated, formatter normalization dropped.
 - [ ] `syntax.rs` grammar + VS Code grammar for the new receiver forms.

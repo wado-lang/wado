@@ -1,0 +1,51 @@
+// A reference satisfies a bound through its referent, and a projection off the
+// type parameter it fills (`C::Iter`) is the referent's. Regression: nothing
+// registered the referent's associated types, and the projection reached
+// codegen unsubstituted.
+
+fn first_two<C: IntoIterator<Item = i32>>(c: C) -> List<i32> with _ {
+    let mut taken: List<i32> = [];
+    for let x of c {
+        taken.push(x);
+        if taken.len() == 2 { break; }
+    }
+    return taken;
+}
+
+test "a reference to a range" {
+    let r = 0..<5;
+    assert first_two(&r) == [0, 1];
+}
+
+test "a reference to an iterator over a list" {
+    let xs: List<i32> = [1, 2, 3];
+    let it = xs.into_iter();
+    assert first_two(&it) == [1, 2];
+}
+
+// An impl written for the reference answers ahead of the referent's, for the
+// projection as for the call. Regression: the loop called `&List`'s
+// `into_iter` and typed what it returned as `List`'s iterator.
+fn count<C: IntoIterator>(c: C) -> i32 with _ {
+    let mut n = 0;
+    for let _x of c {
+        n += 1;
+    }
+    return n;
+}
+
+fn sum_refs<C: IntoIterator<Item = &i32>>(c: C) -> i32 with _ {
+    let mut total = 0;
+    for let x of c {
+        total += *x;
+    }
+    return total;
+}
+
+test "a reference to a list" {
+    let mut xs: List<i32> = [1, 2, 3];
+    assert count(&xs) == 3;
+    assert count(&mut xs) == 3;
+    assert sum_refs(&xs) == 6;
+    assert count(xs) == 3;
+}

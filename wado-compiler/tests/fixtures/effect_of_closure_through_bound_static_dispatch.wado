@@ -1,0 +1,25 @@
+// A closure handed to a static method dispatched through a bound brings its
+// effects to the row the call returns, as one handed to an impl's does.
+// Regression: the effect check read no parameter types for a trait's
+// declaration, so the returned function's row was solved empty and a caller
+// performing `Stdout` through it needed no `with`.
+
+use { println } from "core:cli";
+
+struct Held<F> { f: F }
+
+trait Hold with () {
+    fn make<effect E, F: fn() -> i32 with E>(f: F) -> Held<F>;
+}
+
+fn made<H: Hold>() -> i32 {
+    let shelved = H::make(|| {
+        println("made");
+        return 8;
+    });
+    let f = shelved.f;
+    return f();
+}
+
+__DATA__
+{"compile_error": ":21:12: analysis error: missing effect 'Stdout' required by '(indirect call)'"}

@@ -1,0 +1,28 @@
+// Two bounds on one trait that bind its associated type differently state
+// nothing for a projection, which names no trait arguments to pick by.
+// Regression: the first bound's binding answered for both, so this ill-typed
+// closure was accepted and the compiler panicked building its struct.
+
+trait Conv<T> with () {
+    type To;
+    fn conv(&self, t: T) -> Self::To;
+}
+
+trait Go with () { fn go(&mut self) -> i32; }
+
+struct Holder<C, F> { c: C, f: F }
+
+impl<C: Conv<String>, F: fn(C::To) -> i32> Go for Holder<C, F> {
+    fn go(&mut self) -> i32 {
+        let f = self.f;
+        return f(self.c.conv("x"));
+    }
+}
+
+fn first<C: Conv<i32, To = String> + Conv<String, To = i32>>(c: C) -> i32 {
+    let mut h = Holder { c, f: |s: String| s.len() };
+    return h.go();
+}
+
+__DATA__
+{"compile_error": ":24:12: analysis error: no method 'go' found on type 'Holder<C, fn(String) -> i32>'"}

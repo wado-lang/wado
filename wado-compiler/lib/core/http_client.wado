@@ -656,15 +656,6 @@ impl Iterator for BodyChunks {
     }
 }
 
-impl IntoIterator for &mut BodyChunks {
-    type Item = Result<ByteList, HttpError>;
-    type Iter = IterRefMut<BodyChunks>;
-
-    fn into_iter(&self) -> IterRefMut<BodyChunks> {
-        return IterRefMut { inner: &mut **self };
-    }
-}
-
 /// One Server-Sent Event. Each field is a view into the body as it arrived.
 pub struct SseEvent {
     /// The event type, `message` where the event named none.
@@ -725,15 +716,6 @@ impl Iterator for EventStream {
                 },
             }
         }
-    }
-}
-
-impl IntoIterator for &mut EventStream {
-    type Item = Result<SseEvent, HttpError>;
-    type Iter = IterRefMut<EventStream>;
-
-    fn into_iter(&self) -> IterRefMut<EventStream> {
-        return IterRefMut { inner: &mut **self };
     }
 }
 
