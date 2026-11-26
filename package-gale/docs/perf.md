@@ -900,6 +900,36 @@ embedding the blob as base64/`#data` rather than an `i32`-array literal — a
 source-size/compile-time lever, worth revisiting only once a _large_ grammar's
 ATN literal is a measured problem.)
 
+### `core:collections`' `HashMap` for the simulator's `AtnKeyMap` — NO-GO (2026-11)
+
+`AtnKeyMap` (`atn_predict.wado`) is an open-addressing map from an `i64` key to
+an `i32`. Backing it with `HashMap<i64, i32>` under a fixed seed, with the same
+`get` / `set` / `clear`, made the simulator slower:
+
+| grammar    | `AtnKeyMap`, ms/iter | `HashMap` | `HashMap`, `clear` keeping its arrays |
+| ---------- | -------------------: | --------: | ------------------------------------: |
+| TypeScript |                  203 |       419 |                               230–277 |
+| Rust       |                 61.6 |      84.8 |                             81.2–82.6 |
+| SQLite     |                 1.14 |      1.08 |                             1.14–1.27 |
+
+`wado run -O2 package-gale/benchmark/<grammar>/<grammar>.wado` on the dev
+build, the arms alternating in one session.
+
+Two costs make the difference:
+
+- `HashMap::clear` drops its table and entry arrays, so a map cleared at every
+  prediction step grows from nothing again. `AtnKeyMap::clear` resets only the
+  slots it used. The third column clears in place, which closes most of
+  TypeScript's gap.
+- A lookup hashes with two 128-bit multiplies and reads the slot, the
+  fingerprint, the key, the liveness flag and the value from five arrays.
+  `AtnKeyMap` hashes with one multiply and reads two. Rust's gap is this one,
+  and no change to `clear` moves it.
+
+The first is the standard library's to fix. The second is what an
+insertion-ordered, seeded map costs, so `AtnKeyMap` stays until the library
+offers a map without those two properties.
+
 ### Measured non-levers
 
 General findings — forcing inlining, raising the inline threshold, `br_table`
