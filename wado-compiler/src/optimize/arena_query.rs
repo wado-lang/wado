@@ -1304,8 +1304,7 @@ pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&T
 
 // ---------------------------------------------------------------------------
 // Mutated-root queries — the canonical "which locals may a subtree mutate"
-// facility. Consolidation target for the hand-rolled variants in
-// `const_folding` and `condition_implication`.
+// facility.
 // ---------------------------------------------------------------------------
 
 /// Flow-insensitive `&mut`-alias map: per `&mut`-typed local, the function locals

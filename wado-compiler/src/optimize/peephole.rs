@@ -85,8 +85,6 @@ pub(super) fn run_peephole(
     let match_rule = MatchToSwitchRule::new(cold_path_id, unreachable_id);
     let known_case_rule = KnownCaseRule { markers };
     let closure_devirt_rule = build_closure_devirt(project);
-    let heap_effects =
-        (side == InlineSide::Post).then(|| heap.effects(project, &type_table, gate.exec()));
 
     debug_assert!(
         gate.any_pending(gated_pass, len),
@@ -102,6 +100,10 @@ pub(super) fn run_peephole(
             rule.runs_on(side) && pass_dump::decides(&format!("nir/peephole/{}", rule.name()))
         })
         .collect();
+    let heap_effects = enabled
+        .contains(&PeepholeRule::RefElim)
+        .then(|| heap.effects(project, &type_table, gate.exec()));
+    let elide_box = enabled.contains(&PeepholeRule::ElideBoxLocal);
     // Once for the run.
     let summaries = mod_ref.summaries(project, gate.exec());
     let type_table = &*type_table;
@@ -121,8 +123,8 @@ pub(super) fn run_peephole(
             let params = func.params.iter().map(|p| p.local_index).collect();
             build_ref_elim(pristine, LazyHeapFrame::new(effects, params), type_table)
         });
-        let elide_box_rule = (side == InlineSide::Post)
-            .then(|| build_elide_box_local(pristine, &func.address_taken_locals));
+        let elide_box_rule =
+            elide_box.then(|| build_elide_box_local(pristine, &func.address_taken_locals));
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
         let FuncParts {
@@ -138,8 +140,8 @@ pub(super) fn run_peephole(
                 PeepholeRule::IfChainToMatch => &IfChainToMatchRule,
                 PeepholeRule::MatchToBitset => &bitset_rule,
                 PeepholeRule::MatchToSwitch => &match_rule,
-                PeepholeRule::RefElim => ref_elim_rule.as_ref().expect("built post-inline"),
-                PeepholeRule::ElideBoxLocal => elide_box_rule.as_ref().expect("built post-inline"),
+                PeepholeRule::RefElim => ref_elim_rule.as_ref().expect("built when enabled"),
+                PeepholeRule::ElideBoxLocal => elide_box_rule.as_ref().expect("built when enabled"),
                 PeepholeRule::LabeledBlockFusion => &LabeledBlockFusionRule,
                 PeepholeRule::SlotTempSroa => &SlotTempSroaRule,
                 PeepholeRule::DropValue => &DropValueRule,
@@ -267,7 +269,6 @@ peephole_rules! {
     ConstFold = "const_fold" on Both,
     BranchPrune = "branch_prune" on Both,
     TupleProjection = "tuple_projection" on Both,
-    /// Matches a `push` call, which only the pre-inline run still sees whole.
     ConstAsciiPush = "const_ascii_push" on Both,
     /// After `ConstAsciiPush`: the run it fuses holds the `push_ascii_byte`
     /// calls that one retargets.

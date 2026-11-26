@@ -134,8 +134,7 @@ struct OptConfig {
 
 impl OptConfig {
     /// `level`'s budget, as `opt` overrides it, or `None` at `-O0`, which runs
-    /// DCE alone: it cuts codegen work, and nothing else may change the program
-    /// `-O0` emits.
+    /// no loop.
     fn of(level: OptLevel, opt: OptOverrides) -> Option<Self> {
         let OptOverrides {
             // The compile entered these, decisions ahead of the optimizer included.

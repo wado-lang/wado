@@ -89,11 +89,16 @@ fn fold_pass(
     let maps = build_fold_maps(project, type_table, shapes, exec, frozen);
     let globals = build_global_view(project, type_table, &maps, exec);
     let param_mut = build_param_mut(project);
+    let inputs = FoldInputs {
+        type_table,
+        maps: &maps,
+        globals: &globals,
+        param_mut: &param_mut,
+    };
     let functions = &project.functions;
     let changed = drive(&|buffers, fid| {
         let func = &functions[fid.index()];
-        let mut visitor = new_visitor(type_table, &maps, &globals, &param_mut);
-        let changed = fold_function(func, &mut visitor, buffers, type_table);
+        let changed = fold_function(func, &inputs, buffers);
         if changed {
             compiler_trace!("const_fold", "changed {}", func.borrow().name);
         }
@@ -144,35 +149,21 @@ pub fn fold_constants_all(project: &mut NirPackage, gate: &mut FunctionGate) -> 
     )
 }
 
-fn new_visitor<'a>(
+/// What every function's fold of one pass reads.
+struct FoldInputs<'a> {
     type_table: &'a TypeTable,
     maps: &'a FoldMaps,
     globals: &'a GlobalView,
     param_mut: &'a IndexMap<FuncId, Vec<bool>>,
-) -> ConstFoldVisitor<'a> {
-    let mut visitor = ConstFoldVisitor {
-        interpreter: Interpreter::new(type_table),
-        type_table,
-        oracle: MutationOracle::new(param_mut),
-        aliases: MutRefAliases::default(),
-    };
-    visitor.interpreter.with_callees(&maps.callees);
-    visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
-    visitor.interpreter.with_shapes(&maps.shapes);
-    visitor
-        .interpreter
-        .with_globals(&globals.values)
-        .with_global_fields(&globals.fields)
-        .with_materializing_globals(&globals.materializing);
-    visitor
 }
 
-fn fold_function(
-    func_rc: &FuncCell,
-    visitor: &mut ConstFoldVisitor<'_>,
-    buffers: &mut EngineBuffers,
-    type_table: &TypeTable,
-) -> bool {
+fn fold_function(func_rc: &FuncCell, inputs: &FoldInputs<'_>, buffers: &mut EngineBuffers) -> bool {
+    let FoldInputs {
+        type_table,
+        maps,
+        globals,
+        param_mut,
+    } = *inputs;
     let mut func = func_rc.borrow_mut();
     compiler_trace!("region_seed", "folding {}", func.name);
     let FuncParts {
@@ -184,14 +175,25 @@ fn fold_function(
     let Some(body) = body else {
         return false;
     };
-    // Local indices are per-function; reset the interpreter env at each boundary.
-    visitor.interpreter.enter_function();
+    let mut visitor = ConstFoldVisitor {
+        interpreter: Interpreter::new(type_table),
+        type_table,
+        oracle: MutationOracle::new(param_mut),
+        aliases: MutRefAliases::of_body(body, locals, params.len(), type_table),
+    };
+    visitor.interpreter.with_callees(&maps.callees);
+    visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
+    visitor.interpreter.with_shapes(&maps.shapes);
+    visitor
+        .interpreter
+        .with_globals(&globals.values)
+        .with_global_fields(&globals.fields)
+        .with_materializing_globals(&globals.materializing);
     visitor.interpreter.record_ref_global_aliases(body);
     visitor.interpreter.record_aggregate_locals(body);
     visitor
         .interpreter
         .record_alias_classes(alias_classes(body, type_table).to_classes());
-    visitor.aliases = MutRefAliases::of_body(body, locals, params.len(), type_table);
     let mut engine = Engine::new(body, buffers, locals, params, type_table);
     let root = engine.body.root();
     visitor.visit_block(&mut engine, root)
@@ -655,8 +657,8 @@ struct ConstFoldVisitor<'a> {
     interpreter: Interpreter<'a>,
     type_table: &'a TypeTable,
     oracle: MutationOracle<'a>,
-    /// The walked function's, built before the walk: folding only drops and
-    /// replaces nodes, so it may claim more than remains, never less.
+    /// Built before the walk: folding only drops and replaces nodes, so it
+    /// may claim more than remains, never less.
     aliases: MutRefAliases,
 }
 
@@ -736,12 +738,10 @@ impl ConstFoldVisitor<'_> {
 
         match &engine.body.stmts[s].kind {
             StmtKind::Loop { body: lb } => {
-                // Loop back-edge: every local the body may reassign or take
-                // `&mut` is dropped to `NonConst` before and after the body
-                // walk (`apply_loop_invalidations`), a conservative fixpoint
-                // approximation — only facts unaffected by the body hold at
-                // entry and post-loop. Struct-field heap effects across the
-                // loop are the engine `ValueGraph`'s concern, not niri's.
+                // Loop back-edge: every local the body may mutate is dropped to
+                // `NonConst` before and after the body walk, a conservative
+                // fixpoint approximation — only facts unaffected by the body
+                // hold at entry and post-loop.
                 let lb = *lb;
                 let writes = self.written_under(engine.body, NodeRef::Block(lb));
                 self.apply_loop_invalidations(&writes);
