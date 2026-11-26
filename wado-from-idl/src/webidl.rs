@@ -961,7 +961,7 @@ fn narrows(child: &WadoType, parent: &WadoType, extends: impl Fn(&str, &str) -> 
 /// Each enum's Wado cases, or why it has none, by its `WebIDL` name.
 type Enums<'a> = IndexMap<&'a str, std::result::Result<Vec<String>, Reason>>;
 
-type LoweredDictionary = std::result::Result<WadoDictionary, Reason>;
+type DictionaryFields = std::result::Result<Vec<DictionaryField>, Reason>;
 
 struct Lowering<'a> {
     package: &'a str,
@@ -969,7 +969,7 @@ struct Lowering<'a> {
     /// Each dictionary's definition and partials, by name.
     dictionaries: IndexMap<&'a str, Vec<&'a Dictionary>>,
     /// Each dictionary lowered so far; `None` while its members are lowered.
-    lowered_dictionaries: RefCell<IndexMap<&'a str, Option<LoweredDictionary>>>,
+    lowered_dictionaries: RefCell<IndexMap<&'a str, Option<DictionaryFields>>>,
     /// The members a lowered dictionary leaves to the host's default.
     dropped_fields: RefCell<Vec<Skip>>,
     enums: Enums<'a>,
@@ -1021,7 +1021,22 @@ impl Lowering<'_> {
     /// its own. A member is as the host may answer it, since one struct serves
     /// both ways. One that does not lower is left to the host's default,
     /// unless it is required.
-    fn lower_dictionary(&self, name: &str) -> LoweredDictionary {
+    fn lower_dictionary(&self, name: &str) -> std::result::Result<WadoDictionary, Reason> {
+        let fields = self.dictionary_fields(name)?;
+        if fields.is_empty() {
+            return Err(Reason::new(
+                Cause::Dictionary,
+                "a dictionary without a member that binds",
+            ));
+        }
+        Ok(WadoDictionary {
+            name: to_upper_camel_case(name),
+            fields,
+        })
+    }
+
+    /// The members of the dictionary `name` that bind, its parent's first.
+    fn dictionary_fields(&self, name: &str) -> DictionaryFields {
         let (&name, parts) = self
             .dictionaries
             .get_key_value(name)
@@ -1042,13 +1057,13 @@ impl Lowering<'_> {
         lowered
     }
 
-    fn lower_dictionary_parts(&self, name: &str, parts: &[&Dictionary]) -> LoweredDictionary {
+    fn lower_dictionary_parts(&self, name: &str, parts: &[&Dictionary]) -> DictionaryFields {
         let mut fields = Vec::new();
         for parent in parts.iter().filter_map(|part| part.inheritance.as_deref()) {
-            let parent = self
-                .lower_dictionary(parent)
+            let inherited = self
+                .dictionary_fields(parent)
                 .map_err(|reason| reason.reworded(|r| format!("its parent `{parent}`: {r}")))?;
-            fields.extend(parent.fields);
+            fields.extend(inherited);
         }
         for field in parts.iter().flat_map(|part| &part.members) {
             match self.lower_type(&field.idl_type, Flow::Out) {
@@ -1067,16 +1082,7 @@ impl Lowering<'_> {
                 }),
             }
         }
-        if fields.is_empty() {
-            return Err(Reason::new(
-                Cause::Dictionary,
-                "a dictionary without a member that binds",
-            ));
-        }
-        Ok(WadoDictionary {
-            name: to_upper_camel_case(name),
-            fields,
-        })
+        Ok(fields)
     }
 
     /// Declares in `module` each enum, dictionary and union a function of it

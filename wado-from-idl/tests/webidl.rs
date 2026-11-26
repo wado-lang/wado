@@ -933,6 +933,65 @@ fn a_dictionary_is_a_struct_crossing_as_a_record() {
     );
 }
 
+/// A parent none of whose members binds has no struct of its own, and gives
+/// its child nothing: the child holds its own members.
+#[test]
+fn a_dictionary_keeps_its_members_under_a_parent_that_binds_none() {
+    let mut defs = chain();
+    defs.dictionaries = vec![
+        definition(
+            "dictionary",
+            "BaseOptions",
+            "null",
+            "",
+            false,
+            &[field("detail", &plain("any"), false)],
+        ),
+        definition(
+            "dictionary",
+            "SendOptions",
+            r#""BaseOptions""#,
+            "",
+            false,
+            &[field("count", &plain("long"), true)],
+        ),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "send",
+                &plain("undefined"),
+                &[argument("options", &plain("SendOptions"), false, "null")],
+                "",
+            ),
+            operation(
+                "base",
+                &plain("undefined"),
+                &[argument("options", &plain("BaseOptions"), false, "null")],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains("pub struct SendOptions {\n    #[cm(\"count\")]\n    pub count: i32,\n}\n"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn send(&self, options: SendOptions);"),
+        "{code}"
+    );
+    assert_eq!(
+        skipped,
+        [
+            "BaseOptions.detail: `any`",
+            "BaseOptions: a dictionary without a member that binds",
+            "Element.base: `options`: `BaseOptions` is a dictionary without a binding",
+        ]
+    );
+}
+
 /// The host refuses a required member that is `undefined`, so a `None` there
 /// is `null`.
 #[test]

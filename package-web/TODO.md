@@ -24,11 +24,11 @@ left before the slice can be everything:
 | a constant                                      | 0           | 1261    | 0         | 0         |
 | a callback in a result                          | 5           | 954     | 0         | 0         |
 | a type outside the slice                        | 2           | 281     | 1         | 2         |
-| a union                                         | 14          | 200     | 0         | 0         |
-| `any`                                           | 3           | 147     | 0         | 34        |
+| a union                                         | 15          | 200     | 0         | 0         |
+| `any`                                           | 3           | 150     | 0         | 34        |
 | a buffer                                        | 15          | 144     | 16        | 5         |
 | a namespace member                              | 0           | 133     | 0         | 0         |
-| a dictionary                                    | 39          | 67      | 0         | 17        |
+| a dictionary                                    | 34          | 67      | 0         | 15        |
 | a special operation                             | 0           | 81      | 0         | 0         |
 | `object`                                        | 4           | 66      | 1         | 7         |
 | `[HTMLConstructor]`                             | 0           | 76      | 0         | 0         |
@@ -44,7 +44,7 @@ left before the slice can be everything:
 | `ObservableArray<…>`                            | 0           | 4       | 0         | 0         |
 | `bigint`                                        | 0           | 2       | 0         | 0         |
 | `async_sequence<…>`                             | 0           | 1       | 0         | 0         |
-| Total                                           | 105         | 3679    | 20        | 74        |
+| Total                                           | 101         | 3682    | 20        | 72        |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
@@ -154,6 +154,13 @@ lower is then available to each interface the slice adds.
 - A dictionary's member is typed as a result is, so a callback or a union of
   several types is left out of it even where the dictionary is only an
   argument.
+- An optional member of a nullable type cannot be passed as `null`: its `None`
+  is the member left out, for which the host reads the WebIDL default.
+- Two unions that differ take one name where a typedef's name is another
+  union's generated one, or where two constituents take one word, as
+  `sequence<Node>` and `NodeList` do. The generator stops on it.
+- A union that makes a second overload of a member typable takes the member
+  out, until overloads are merged.
 - No member of the slice takes more than sixteen core values, so no test runs
   parameters read from memory against a host.
 - `SurfaceDom` takes the options of what it does not model and ignores them:
