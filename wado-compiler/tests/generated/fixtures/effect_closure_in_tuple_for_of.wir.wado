@@ -966,7 +966,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_clos
     let tens: i32;
     let $sroa_out_repr_302: ref Array<u8>;
     let $sroa_out_used_303: i32;
-    let $sroa_write_back_311: ref "core:prelude/string.wado//String";
+    let $sroa_write_back_312: ref "core:prelude/string.wado//String";
     $sroa_out_repr_302 = builtin::array_new<u8>(16);
     $sroa_out_used_303 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
@@ -975,33 +975,28 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_clos
     is_negative_65 = t < 0;
     t = "core:prelude/numeric.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
     if is_negative_65 {
-        if @unlikely(1 > builtin::array_len($sroa_out_repr_302)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_311(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_302, used: 0 }), 1);
-            $sroa_out_repr_302 = $sroa_write_back_311.repr;
-        }
         $sroa_out_used_303 = 1;
         builtin::array_set_u8($sroa_out_repr_302, 0, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_65($sroa_out_used_303 + t) > builtin::array_len($sroa_out_repr_302)) {
+    if @unlikely(local.tee is_negative_65($sroa_out_used_303 + t) > 16) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_311(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_302, used: $sroa_out_used_303 }), is_negative_65);
-        $sroa_out_repr_302 = $sroa_write_back_311.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_312(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_302, used: $sroa_out_used_303 }), is_negative_65);
+        $sroa_out_repr_302 = $sroa_write_back_312.repr;
     }
     start_138 = $sroa_out_used_303;
     $sroa_out_used_303 = is_negative_65;
     t = start_138 + t;
-    b106: block {
-        l107: loop {
-            break_if b106 (t - start_138) < 2;
+    b105: block {
+        l106: loop {
+            break_if b105 (t - start_138) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($sroa_out_repr_302, t - 1, (48 + is_negative_65) - (tens * 10));
             builtin::array_set_u8($sroa_out_repr_302, t - 2, 48 + tens);
             t = t - 2;
             x = q;
-            continue l107;
+            continue l106;
         };
     };
     if t > start_138 {

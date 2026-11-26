@@ -26,7 +26,6 @@ use crate::nir_engine::Rule;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValuePool, value_kind_to_const};
 use crate::nir_visitor::reachable_exprs;
-use crate::optimize::alias::call_verdicts;
 use crate::optimize::arena_query::local_available_at;
 use crate::optimize::heap_effect::HeapEffectsCache;
 use crate::optimize::writes::EngineFacts;
@@ -261,19 +260,12 @@ pub(super) fn freeze_pure_arith(
             // receivers by the receiver-stability gate. Cloned before `Engine::new`.
             let address_taken: hashmap::IndexSet<u32> = address_taken_locals.clone();
             let local_count = locals.len();
-            let verdicts = call_verdicts(
-                body,
-                type_table,
-                &facts.first_param_types,
-                &facts.call_immutability,
-            );
             let call_writes = effects
                 .as_ref()
                 .map(|e| e.body_call_writes(body))
                 .unwrap_or_default();
             let mut engine = facts.engine(body, buffers, locals, params, address_taken_locals);
             engine.seed_params();
-            engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
             engine.set_call_writes(call_writes);
 
             // Locals a frozen value may not name, from the same predicate that

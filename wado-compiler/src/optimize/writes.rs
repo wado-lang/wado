@@ -13,7 +13,7 @@ use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::optimize::alias::{
-    CallImmutability, FirstParamTypes, builder_alias_sets, first_param_types,
+    CallImmutability, FirstParamTypes, builder_alias_sets, call_verdicts, first_param_types,
 };
 use crate::optimize::arena_query::{WriteRoot, operand_local, storage_root, write_root};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
@@ -25,8 +25,8 @@ use crate::type_table::TypeTable;
 /// program, built once per pass run.
 pub(super) struct EngineFacts<'a> {
     type_table: &'a TypeTable,
-    pub(super) first_param_types: FirstParamTypes,
-    pub(super) call_immutability: CallImmutability<'a>,
+    first_param_types: FirstParamTypes,
+    call_immutability: CallImmutability<'a>,
     panic_ids: hashmap::IndexSet<FuncId>,
     quiet_callee_ids: hashmap::IndexSet<FuncId>,
     pure_builtin_callees: hashmap::IndexSet<FuncId>,
@@ -64,8 +64,15 @@ impl<'a> EngineFacts<'a> {
             &self.first_param_types,
             &self.call_immutability,
         );
+        let verdicts = call_verdicts(
+            body,
+            self.type_table,
+            &self.first_param_types,
+            &self.call_immutability,
+        );
         let mut engine = Engine::new(body, buffers, locals, params, self.type_table);
         engine.set_alias_sets(alias);
+        engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
         engine.set_panic_callee_ids(&self.panic_ids);
         engine.set_quiet_callee_ids(&self.quiet_callee_ids);
         engine.set_pure_builtin_callees(&self.pure_builtin_callees);
@@ -304,8 +311,9 @@ fn collect_read_kinds(
     }
 }
 
-/// Every write the expression node `e` itself may perform. A receiver counts as
-/// the callee declares: boxing can erase the `&mut self` a type test would read.
+/// Every write the expression node `e` itself may perform. A receiver counts
+/// unless the engine's call verdicts clear the callee, which go by what its
+/// body writes: boxing can erase the `&mut self` a type test would read.
 pub(super) fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(Write)) {
     let body = &*engine.body;
     let no_signatures = hashmap::IndexMap::default();
@@ -332,9 +340,12 @@ pub(super) fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(W
                 write_through(engine, expr, handed(expr), sink);
             }
         }
-        Witness::Receiver { expr, .. } | Witness::IndirectArg(expr) => {
-            write_through(engine, expr, handed(expr), sink);
+        Witness::Receiver { expr, .. } => {
+            if !engine.is_receiver_immutable_call(e) {
+                write_through(engine, expr, handed(expr), sink);
+            }
         }
+        Witness::IndirectArg(expr) => write_through(engine, expr, handed(expr), sink),
     });
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, .. } => {

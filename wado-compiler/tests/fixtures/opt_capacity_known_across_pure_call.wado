@@ -1,0 +1,29 @@
+// `div_rem` writes none of the caller's locals, so the buffer `with_capacity`
+// made keeps its known length across it: the first push needs no grow check,
+// and the second compares against the constant capacity.
+
+#[inline(never)]
+fn sign_of(t: i128) -> String {
+    let mut out = String::with_capacity(16);
+    let m = t.abs_u128();
+    let [h, _r] = m.div_rem(&(2 as u128));
+    if t < 0 {
+        out.push('-');
+    }
+    if h == (0 as u128) {
+        out.push('0');
+    }
+    return out;
+}
+
+export fn run() {
+    assert sign_of(builtin::black_box(-5 as i128)) == "-";
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_scope": "opt_capacity_known_across_pure_call.wado/sign_of",
+    "wir_pass": {"O2": ["nir/store_load_forward_post_scalarize"]},
+    "wir_not_expect:O2": ["array_len"]
+}

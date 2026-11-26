@@ -2014,7 +2014,7 @@ fn "effect_iterator_map_closure.wado/effect_iterator_map_closure.wado/$Closure_0
     let start_187: i32;
     let $sroa_out_repr_350: ref Array<u8>;
     let $sroa_out_used_351: i32;
-    let $sroa_write_back_352: ref "core:prelude/string.wado//String";
+    let $sroa_write_back_353: ref "core:prelude/string.wado//String";
     $sroa_out_repr_350 = builtin::array_new<u8>(16);
     $sroa_out_used_351 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
@@ -2023,19 +2023,14 @@ fn "effect_iterator_map_closure.wado/effect_iterator_map_closure.wado/$Closure_0
     is_negative_75 = x < 0;
     digit_count_77 = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_79(x_79 = builtin::i64_extend_i32_s(x); select i64(x_79 < 0_i64, 0_i64 - x_79, x_79)));
     if is_negative_75 {
-        if @unlikely(1 > builtin::array_len($sroa_out_repr_350)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_352(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_350, used: 0 }), 1);
-            $sroa_out_repr_350 = $sroa_write_back_352.repr;
-        }
         $sroa_out_used_351 = 1;
         builtin::array_set_u8($sroa_out_repr_350, 0, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_75($sroa_out_used_351 + digit_count_77) > builtin::array_len($sroa_out_repr_350)) {
+    if @unlikely(local.tee is_negative_75($sroa_out_used_351 + digit_count_77) > 16) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_352(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_350, used: $sroa_out_used_351 }), is_negative_75);
-        $sroa_out_repr_350 = $sroa_write_back_352.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_353(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_350, used: $sroa_out_used_351 }), is_negative_75);
+        $sroa_out_repr_350 = $sroa_write_back_353.repr;
     }
     start_187 = $sroa_out_used_351;
     $sroa_out_used_351 = is_negative_75;
@@ -2079,9 +2074,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     $licm_arith_37 = c <u 128;
     $licm_arith_38 = c & 255;
     $hfs_used_39 = self.used;
-    b249: block {
-        l250: loop {
-            break_if b249 i >= n;
+    b248: block {
+        l249: loop {
+            break_if b248 i >= n;
             $inline_core_prelude_string_wado_String__push_0: block {
                 if $licm_arith_37 {
                     if @unlikely(local.tee $hfs_used_39($hfs_used_39 + 1) > builtin::array_len($licm_repr_36)) {
@@ -2113,7 +2108,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
             };
             i = i + 1;
             self.used = $hfs_used_39;
-            continue l250;
+            continue l249;
         };
     };
 }

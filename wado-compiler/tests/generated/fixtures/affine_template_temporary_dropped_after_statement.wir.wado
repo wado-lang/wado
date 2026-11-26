@@ -1145,26 +1145,21 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temp
     let start_155: i32;
     let $sroa_out_repr_299: ref Array<u8>;
     let $sroa_out_used_300: i32;
-    let $sroa_write_back_302: ref "core:prelude/string.wado//String";
+    let $sroa_write_back_303: ref "core:prelude/string.wado//String";
     $sroa_out_repr_299 = builtin::array_new<u8>(21);
     $sroa_out_used_300 = 5;
     builtin::array_copy<u8>($sroa_out_repr_299, 0, global:core:prelude/string.wado::$const_obj_29, 0, 5);
     is_negative_65 = t < 0;
     t = "core:prelude/numeric.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
     if is_negative_65 {
-        if @unlikely(6 > builtin::array_len($sroa_out_repr_299)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_302(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_299, used: 5 }), 6);
-            $sroa_out_repr_299 = $sroa_write_back_302.repr;
-        }
         $sroa_out_used_300 = 6;
         builtin::array_set_u8($sroa_out_repr_299, 5, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_65($sroa_out_used_300 + t) > builtin::array_len($sroa_out_repr_299)) {
+    if @unlikely(local.tee is_negative_65($sroa_out_used_300 + t) > 21) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_302(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_299, used: $sroa_out_used_300 }), is_negative_65);
-        $sroa_out_repr_299 = $sroa_write_back_302.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_303(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_299, used: $sroa_out_used_300 }), is_negative_65);
+        $sroa_out_repr_299 = $sroa_write_back_303.repr;
     }
     start_155 = $sroa_out_used_300;
     $sroa_out_used_300 = is_negative_65;
