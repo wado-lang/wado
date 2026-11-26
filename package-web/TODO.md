@@ -156,8 +156,9 @@ lower is then available to each interface the slice adds.
   argument.
 - No member of the slice takes more than sixteen core values, so no test runs
   parameters read from memory against a host.
-- `SurfaceDom` reads `capture` alone from the options of `add_event_listener`,
-  and nothing from an `EventInit`.
+- `SurfaceDom` takes the options of what it does not model and ignores them:
+  `passive`, since no event is cancelled, the `is` of `create_element`, and
+  those of `get_html`, `scroll_into_view` and `request_fullscreen`.
 - A program cannot recover from a DOM exception: it traps.
 - A host answering an enum value the snapshot does not declare traps the
   program: jsdom's `document.visibilityState` is `"prerender"`.

@@ -36,6 +36,7 @@ variant Content {
 struct Listener {
     type: String,
     capture: bool,
+    once: bool,
     callback: fn mut(Event) with Dom,
 }
 
@@ -60,6 +61,9 @@ struct SurfaceNode {
 
 struct SurfaceEvent {
     type: String,
+    bubbles: bool,
+    cancelable: bool,
+    composed: bool,
     target: Option<EventTarget>,
     // Empty unless the event is being dispatched.
     path: List<EventTarget>,
@@ -507,15 +511,23 @@ impl SurfaceDom {
     }
 
     // Runs with this DOM reinstalled, since a listener is a program calling back
-    // into it. A listener added meanwhile waits for the next dispatch.
+    // into it. A listener added meanwhile waits for the next dispatch, and one
+    // added with `once` is gone before it runs, as the DOM standard removes it.
     fn invoke(&mut self, target: EventTarget, event: Event, capture: bool) {
         let type = &surface_event(event).type;
+        let node = surface_node(target);
         let mut callbacks: List<fn mut(Event) with Dom> = [];
-        for let listener of &surface_node(target).listeners {
-            if listener.capture == capture && listener.type == *type {
+        let mut kept: List<Listener> = [];
+        for let listener of node.listeners {
+            let heard = listener.capture == capture && listener.type == *type;
+            if heard {
                 callbacks.push(listener.callback);
             }
+            if !(heard && listener.once) {
+                kept.push(listener);
+            }
         }
+        node.listeners = kept;
         for let mut callback of callbacks {
             with &mut *self do {
                 callback(event);
@@ -614,8 +626,6 @@ impl Window for SurfaceDom {
     ..trap
 }
 
-// No event bubbles: `bubbles` is set only through `EventInit`, which the slice
-// leaves out.
 impl EventTarget for SurfaceDom {
     fn add_event_listener(
         &mut self,
@@ -624,12 +634,15 @@ impl EventTarget for SurfaceDom {
         callback: fn mut(Event) with Dom,
         options: Option<AddEventListenerOptionsOrBool>,
     ) {
-        let capture = match options {
-            Some(AsBool(capture)) => capture,
-            Some(AsAddEventListenerOptions(options)) => options.capture.unwrap_or(false),
-            null => false,
+        let [capture, once] = match options {
+            Some(AsBool(capture)) => [capture, false],
+            Some(AsAddEventListenerOptions(options)) => [
+                options.capture.unwrap_or(false),
+                options.once.unwrap_or(false),
+            ],
+            null => [false, false],
         };
-        self.own(*this).listeners.push(Listener { type, capture, callback });
+        self.own(*this).listeners.push(Listener { type, capture, once, callback });
         resume ();
     }
 
@@ -644,6 +657,11 @@ impl EventTarget for SurfaceDom {
             self.invoke(path[i], event, true);
         }
         self.invoke(target, event, false);
+        if dispatched.bubbles {
+            for let i of 1..<path.len() {
+                self.invoke(path[i], event, false);
+            }
+        }
         dispatched.path = [];
         resume true;
     }
@@ -653,7 +671,27 @@ impl EventTarget for SurfaceDom {
 
 impl Event for SurfaceDom {
     fn new(&mut self, type: String, event_init_dict: Option<EventInit>) -> Event {
-        resume Event::backed_by(SurfaceEvent { type, target: null, path: [] });
+        let init = event_init_dict.unwrap_or(EventInit {});
+        resume Event::backed_by(SurfaceEvent {
+            type,
+            bubbles: init.bubbles.unwrap_or(false),
+            cancelable: init.cancelable.unwrap_or(false),
+            composed: init.composed.unwrap_or(false),
+            target: null,
+            path: [],
+        });
+    }
+
+    fn bubbles(&mut self, this: &Event) -> bool {
+        resume surface_event(*this).bubbles;
+    }
+
+    fn cancelable(&mut self, this: &Event) -> bool {
+        resume surface_event(*this).cancelable;
+    }
+
+    fn composed(&mut self, this: &Event) -> bool {
+        resume surface_event(*this).composed;
     }
 
     fn composed_path(&mut self, this: &Event) -> List<EventTarget> {
