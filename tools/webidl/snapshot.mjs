@@ -101,7 +101,8 @@ const keptEnums = new Map();
 const keptDictionaries = new Map();
 const visitMembers = (members) => {
   for (const m of members) {
-    if (m.idlType) visit(m.idlType);
+    // An iteration declaration holds a list of types, and a constructor none.
+    for (const t of [m.idlType ?? []].flat()) visit(t);
     for (const a of m.arguments ?? []) visit(a.idlType);
   }
 };

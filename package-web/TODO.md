@@ -21,10 +21,10 @@ left before the slice can be everything:
 
 | Cause                                            | Definitions | Members | Overloads | Arguments |
 | ------------------------------------------------ | ----------- | ------- | --------- | --------- |
-| a dictionary                                     | 775         | 261     | 7         | 396       |
+| a dictionary                                     | 776         | 261     | 7         | 396       |
 | a constant                                       | 0           | 1261    | 0         | 0         |
 | a callback in a result                           | 0           | 932     | 0         | 0         |
-| an enum                                          | 356         | 283     | 1         | 6         |
+| an enum                                          | 357         | 283     | 1         | 6         |
 | a type outside the slice                         | 0           | 263     | 1         | 2         |
 | a union                                          | 0           | 196     | 7         | 16        |
 | `any`                                            | 0           | 128     | 0         | 32        |
@@ -46,7 +46,7 @@ left before the slice can be everything:
 | parameters passed through memory                 | 0           | 1       | 0         | 2         |
 | `bigint`                                         | 0           | 1       | 0         | 0         |
 | `async_sequence<…>`                              | 0           | 1       | 0         | 0         |
-| Total                                            | 1131        | 4012    | 37        | 472       |
+| Total                                            | 1133        | 4012    | 37        | 472       |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
