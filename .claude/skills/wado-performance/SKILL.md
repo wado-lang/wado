@@ -351,7 +351,8 @@ A CI "Performance Alert" on rows the diff cannot reach is the shared runner.
 Confirm it locally before treating it as a regression.
 
 While the user is iterating, the reading is 4–5 back-to-back pairs on the target
-row plus the wasm hash; the whole-suite A/B below is for the wrap-up.
+row's `(no-pgo)` build plus the wasm hash; the whole-suite A/B below, PGO rows
+included, is for the wrap-up.
 
 **A dev-build A/B is only valid where the dev build is.** The inflation §1
 describes flips A/B verdicts, not only profile weights. Dev runs the wasmtime
@@ -535,13 +536,14 @@ is all that differs. It refuses to run over uncommitted edits under `lib/`.
 Toggling `lib/` under the dev build instead (`git stash`) is no A/B, even for a
 quick reading.
 
-Each arm runs under the profiles its own commit records. A profile keys a
-function by its body's hash, so a profile recorded for the other stdlib misses
-every function the change touched, and the arm it runs is neither build. A
-stdlib change read +3.1% that way on json-twitter ser, measured flat with each
-arm's own profiles, and −17% without one. So commit `HEAD`'s profiles first
-(`mise run update-baselines`), restore each arm's before its round, and read
-the `(no-pgo)` rows too.
+Iterate on the `(no-pgo)` rows alone (`-f no-pgo`): they need no profile. The
+PGO and `(no-pgo)` rows both decide, so the A/B that settles a change reads both,
+each arm under the profiles its own commit records. A profile keys a function by
+its body's hash, so a profile recorded for the other stdlib misses every
+function the change touched, and the arm it runs is neither build. A stdlib
+change read +3.1% that way on json-twitter ser, measured flat with each arm's
+own profiles, and −17% without one. So commit `HEAD`'s profiles first
+(`mise run update-baselines`), and restore each arm's before its round.
 
 ```sh
 mise run benchmark-stdlib-arms
