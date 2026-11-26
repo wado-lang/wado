@@ -418,6 +418,8 @@ an operation.
 
 `#[cm_params("name", ...)]` on an operation gives the CM-side names of its parameters. Without it, each parameter's CM name is its Wado name in kebab-case.
 
+`#[cm("name")]` on a field, a case or a flag of a `#[cm(...)]` type gives the member's CM name. Without it, the member's CM name is its Wado name in kebab-case.
+
 #### Resource Linearity
 
 A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`, and a resource without `#[cm(...)]` is affine: `linearity` is a field of `#[cm(...)]`, so nothing declares one copyable.
