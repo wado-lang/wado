@@ -707,16 +707,16 @@ test "shrink_to_fit drops the room the entries do not need" {
     for let i of 0..<100 {
         map[i] = i * 2;
     }
-    for let i of 0..<97 {
+    for let i of 0..<90 {
         map.remove(i);
     }
     map.shrink_to_fit();
-    assert map.log.keys.len() == 3;
-    assert map.fps.len() == 3;
-    assert map.table.len() == MIN_SLOTS;
+    assert map.log.keys.len() == 10;
+    assert map.fps.len() == 10;
+    assert map.table.len() == 32;
     assert map.get(98) == Option::Some(196);
     map[5] = 10;
-    assert map.len() == 4;
+    assert map.len() == 11;
 
     map.clear();
     map.shrink_to_fit();
