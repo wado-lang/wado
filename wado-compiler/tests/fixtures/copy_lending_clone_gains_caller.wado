@@ -1,0 +1,82 @@
+// A `$lend` clone is found by name, so a call may move to it rounds after the
+// first one did. `map_len` lends in the round before `array_len` can: there
+// `annotate` still writes the result, until `verbose` folds to `false`. Between
+// the two, the clone's one caller passes `want = 5`, which is not what the
+// later caller passes.
+struct Reader {
+    data: List<u8>,
+    pos: i32,
+}
+
+struct Mismatch {
+    expected: String,
+    at: i32,
+}
+
+global EXPECTED_ARRAY: String = "expected array";
+global EXPECTED_MAP: String = "expected map";
+
+impl Reader {
+    #[inline(never)]
+    fn begin(&mut self, want: u8, expected: &String) -> Result<i32, Mismatch> {
+        loop {
+            let head = self.data[self.pos];
+            self.pos += 1;
+            if head == 0 {
+                continue;
+            }
+            if head >> 4 != want {
+                return Result::Err(Mismatch { expected: *expected, at: self.pos });
+            }
+            return Result::Ok((head & 15) as i32);
+        }
+    }
+
+    fn begin_map(&mut self) -> Result<i32, Mismatch> {
+        return self.begin(5, &EXPECTED_MAP);
+    }
+
+    fn begin_array(&mut self) -> Result<i32, Mismatch> {
+        return self.begin(4, &EXPECTED_ARRAY);
+    }
+}
+
+#[inline(never)]
+fn annotate(message: &mut String, on: bool) {
+    if on {
+        message.push_str(" here");
+    }
+}
+
+#[inline(never)]
+fn map_len(data: List<u8>) -> i32 {
+    let mut r = Reader { data, pos: 0 };
+    return match r.begin_map() {
+        Ok(n) => n,
+        Err(e) => -e.expected.len(),
+    };
+}
+
+#[inline(never)]
+fn array_len(data: List<u8>, verbose: bool) -> i32 {
+    let mut r = Reader { data, pos: 0 };
+    return match r.begin_array() {
+        Ok(n) => n,
+        Err(mut e) => {
+            annotate(&mut e.expected, verbose);
+            -e.expected.len()
+        },
+    };
+}
+
+#[inline(never)]
+fn array_len_of(data: List<u8>, verbose: bool) -> i32 {
+    return array_len(data, verbose);
+}
+
+test "each caller of the clone keeps its own `want`" {
+    let array: List<u8> = builtin::black_box([0, 0x43]);
+    let map: List<u8> = builtin::black_box([0x52]);
+    assert array_len_of(array, false) == 3;
+    assert map_len(map) == 2;
+}
