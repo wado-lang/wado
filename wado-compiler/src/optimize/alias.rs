@@ -424,11 +424,12 @@ impl<'a> CallImmutability<'a> {
             | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
-            | ResolvedType::Flags { .. }
-            // `&T` is immutable: a callee cannot write through it. The pointee
-            // being mutated through a *different* handle is the alias-group
-            // closure's concern, not this type-shape check.
-            | ResolvedType::Ref(_) => true,
+            | ResolvedType::Flags { .. } => true,
+            // A callee writes nothing through `&T` itself, but may through a
+            // `&mut` it reaches. The pointee being mutated through a *different*
+            // handle is the alias-group closure's concern, not this type-shape
+            // check.
+            ResolvedType::Ref(_) => !self.type_table.reaches_mut_ref(type_id),
             ResolvedType::Newtype { base_type, .. } => {
                 let base = *base_type;
                 self.walk(base, stack)
@@ -475,20 +476,16 @@ pub(super) fn call_verdicts(
         if arg.is_mut {
             return false;
         }
-        let Some(ae) = arg.expr.as_expr() else {
-            return true; // a promoted constant operand mutates nothing
-        };
-        match &body.exprs[ae].kind {
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                ..
-            } => true,
-            ExprKind::Unary {
-                op: NirUnaryOp::MutRef | NirUnaryOp::Deref,
-                ..
-            } => false,
-            _ => call_immutability.is_call_immutable(body.exprs[ae].type_id),
-        }
+        let handed_mut = arg.expr.as_expr().is_some_and(|ae| {
+            matches!(
+                &body.exprs[ae].kind,
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef | NirUnaryOp::Deref,
+                    ..
+                }
+            )
+        });
+        !handed_mut && call_immutability.is_call_immutable(body.operand_type(arg.expr))
     };
     // Walk reachable nodes only: `body.exprs` also holds orphaned nodes left by
     // earlier promotion, whose stale `type_id`s are no longer in the table.
@@ -512,19 +509,23 @@ pub(super) fn call_verdicts(
         }
         // A receiver is judged by the callee's declared `self` mode, which
         // stays conservative for a callee absent from `first_param_types`;
-        // `arg_safe` alone would clear an unknown one.
+        // `arg_safe` alone would clear an unknown one. That mode says nothing
+        // of a `&mut` the receiver holds, which the callee may write through
+        // whatever the mode, and which the receiver-write summary leaves out
+        // for a by-value `self`.
         let (receiver, rest) = args.split();
         let receiver_safe = receiver.is_none_or(|r| {
             r.expr.as_expr().is_some_and(|re| {
-                !method_mutates_receiver(
-                    body,
-                    re,
-                    *func_id,
-                    first_param_types,
-                    type_table,
-                    true,
-                    Some(call_immutability),
-                )
+                !type_table.reaches_mut_ref(body.exprs[re].type_id)
+                    && !method_mutates_receiver(
+                        body,
+                        re,
+                        *func_id,
+                        first_param_types,
+                        type_table,
+                        true,
+                        Some(call_immutability),
+                    )
             })
         });
         if receiver_safe {
