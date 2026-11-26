@@ -13,12 +13,12 @@ use crate::primitive::PrimitiveType;
 use crate::synthesis::traits::REFLECT_FIELD_INPUTS_ASSOC;
 use crate::tir::{EffectRef, InferVarId, ResolvedType, TypeId, TypeParamId};
 use crate::trait_solver::{
-    ArgDefault, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef, ImplId,
-    ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule,
-    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, Verdict, answering_link,
-    bound_candidates, candidates, cmp_giving_eq, comparison_row, derive, derive_alongside,
-    holds_with_args, instance_candidates, mark_rejected, owed, pair_comparisons, rank, rank_open,
-    sourced, written_comparison, written_over,
+    ArgDefault, AssocEquality, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef,
+    ImplId, ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program,
+    RefRule, Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, Verdict,
+    answering_link, bound_candidates, candidates, cmp_giving_eq, comparison_row, derive,
+    derive_alongside, holds_with_args, instance_candidates, mark_rejected, owed, pair_comparisons,
+    rank, rank_open, sourced, written_comparison, written_over,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -2173,7 +2173,11 @@ impl SolverBridge {
                 .get(&binder.type_id)
                 .into_iter()
                 .flatten()
-                .map(|declared| self.lowering.bound_named(&table, declared, &named));
+                .map(|declared| {
+                    self.lowering
+                        .bound_named(&table, declared, &named)
+                        .map(|bound| (bound, Vec::new()))
+                });
             let scoped = binder.bounds.iter().map(|scoped| {
                 let self_type = scoped
                     .self_binding
@@ -2201,10 +2205,22 @@ impl SolverBridge {
                                 .iter()
                                 .map(|arg| self.lowering.ast_type(arg, &space)),
                         )?;
-                        Ok(ParamBound {
-                            trait_: self.lowering.known_trait(def).ok_or(Unsaid::Unsayable)?,
-                            args,
-                        })
+                        let trait_ = self.lowering.known_trait(def).ok_or(Unsaid::Unsayable)?;
+                        // A binding the solver cannot say states nothing to
+                        // it; the bound itself still holds.
+                        let equalities: Vec<AssocEquality> = scoped
+                            .bound
+                            .assoc_types
+                            .iter()
+                            .filter_map(|binding| {
+                                Some(AssocEquality {
+                                    trait_,
+                                    assoc: self.lowering.known_assoc(trait_, &binding.name)?,
+                                    ty: self.lowering.ast_type(&binding.ty, &space).ok()?,
+                                })
+                            })
+                            .collect();
+                        Ok((ParamBound { trait_, args }, equalities))
                     })
             });
             let mut ids = Vec::new();
@@ -2213,13 +2229,18 @@ impl SolverBridge {
             {
                 ids.push(ParamBound::bare(copyable));
             }
+            let mut equalities = Vec::new();
             for stated in declared.chain(scoped) {
                 match stated {
-                    Ok(bound) => ids.push(bound),
+                    Ok((bound, stated)) => {
+                        ids.push(bound);
+                        equalities.extend(stated);
+                    }
                     Err(unsaid) => unstated.push((position as u32, unsaid)),
                 }
             }
             env.param_bounds.push(ids);
+            env.param_assoc.push(equalities);
         }
         let ty = self
             .lowering

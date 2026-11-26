@@ -1,0 +1,40 @@
+// `#[allow(self_by_value)]` on the method or on its impl waives the warning. A
+// generic type and a trait method never raise it: an affine instance moves
+// through the same declaration.
+
+struct Point { x: i32, y: i32 }
+
+#[allow(self_by_value)]
+impl Point {
+    fn second(self) -> i32 { return self.y; }
+}
+
+struct Cell<affine T> { value: T }
+
+impl<affine T> Cell<T> {
+    fn into_value(self) -> T { return self.value; }
+}
+
+trait Total with () {
+    fn total(self) -> i32;
+}
+
+impl Total for Point {
+    fn total(self) -> i32 { return self.x + self.y; }
+}
+
+impl Point {
+    #[allow(self_by_value)]
+    fn first(self) -> i32 { return self.x; }
+}
+
+export fn run() {
+    let p = Point { x: 1, y: 2 };
+    assert p.first() == 1;
+    assert p.second() == 2;
+    assert p.total() == 3;
+    assert Cell { value: 7 }.into_value() == 7;
+}
+
+__DATA__
+{"warnings_not_contains":["`self` by value copies"]}

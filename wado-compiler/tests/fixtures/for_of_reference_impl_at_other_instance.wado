@@ -1,0 +1,48 @@
+// An `IntoIterator` written for a reference to one instance of a type says
+// nothing about a reference to another: a loop over `&mut Cursor<i32>` walks
+// the cursor, whatever `&mut Cursor<String>` implements.
+// Regression: the impl was looked up by the referent's head alone, so the
+// loop called an `into_iter` the receiver does not have and walked a copy.
+
+struct Cursor<T> { n: i32, tag: T }
+
+impl<T> Iterator for Cursor<T> {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        if self.n >= 3 {
+            return null;
+        }
+        self.n += 1;
+        return Option::Some(self.n);
+    }
+}
+
+impl IntoIterator for &mut Cursor<String> {
+    type Item = i32;
+    type Iter = RangeExclusive<i32>;
+
+    fn into_iter(&self) -> RangeExclusive<i32> {
+        return 10..<12;
+    }
+}
+
+test "a reference to another instance walks the cursor itself" {
+    let mut c = Cursor { n: 0, tag: 1 };
+    for let x of &mut c {
+        if x == 1 {
+            break;
+        }
+    }
+    assert c.next() == Option::Some(2);
+}
+
+test "the instance the impl is written for walks what it says" {
+    let mut c = Cursor { n: 0, tag: "s" };
+    let mut seen: List<i32> = [];
+    for let x of &mut c {
+        seen.push(x);
+    }
+    assert seen == [10, 11];
+    assert c.n == 0;
+}

@@ -273,7 +273,7 @@ ref_eq(&f, &g);                 // false or true: two places holding one closure
 
 ### Method Receiver: `self` by Value
 
-A method receiver is `&self`, `&mut self` or `self`. Bare `self` (by value) is allowed only on an [affine type](./spec-affine.md), or on a generic type, since its type arguments may be affine (`Option<T>::unwrap(self)`):
+A method receiver is `&self`, `&mut self` or `self`:
 
 <!-- {"fixture":"spec_memory_values.wado"} -->
 
@@ -291,7 +291,9 @@ test {
 }
 ```
 
-`Point` is not affine, so `self` by value on it is an error:
+A by-value `self` is passed as any parameter is: copied, or [moved](./spec-affine.md#moves) when it is affine. `Option<i32>::unwrap` leaves its binding usable, and so does an iterator adapter: `it.take(2)` takes a copy of `it` and leaves `it` where it was. `(&mut it).take(2)` advances `it` itself, since a `&mut` to an iterator [is an iterator](./spec-standard-traits.md#iterator---core-iteration-trait).
+
+Every value of `Point` is copyable, so a by-value `self` on it copies the receiver at every call. The declaration warns ([`self_by_value`](./spec-diagnostics.md#the-self_by_value-lint)):
 
 <!-- {"fixture":"spec_memory_self_by_value.wado"} -->
 
@@ -299,11 +301,51 @@ test {
 impl Point {
     fn consume(self) -> i32 { return self.x; }
 }
+
+export fn run() {
+    let p = Point { x: 1, y: 2 };
+    assert p.consume() == 1;
+    assert p.y == 2;
+}
 ```
 
-A by-value `self` is passed as any parameter is: copied, or [moved](./spec-affine.md#moves) when it is affine. `Option<i32>::unwrap` leaves its binding usable.
+Called on a `&` to a copyable value, a by-value `self` takes a copy of what the reference points to:
 
-A trait's method counts as generic, since its `Self` is a type parameter, so it may take `self` by value (`Iterator::map(self, f)`). Every impl of it takes the receiver the trait declares.
+<!-- {"fixture":"self_by_value_through_reference_copies.wado"} -->
+
+```wado
+fn head(r: &Option<i32>) -> i32 {
+    return r.unwrap();
+}
+
+test "the receiver is copied out of a shared reference" {
+    let o = Option::Some(1);
+    assert head(&o) == 1;
+    assert o matches { Some(1) };
+}
+```
+
+Where a trait is implemented for the reference itself, the method called on a reference is that impl's, and its `self` is the reference. A blanket impl over a reference (`impl<T: Bound> Tr for &mut T`) answers a by-value `self` this way and leaves `&self` and `&mut self` methods to the referent.
+
+Otherwise a by-value `self` is not called on a `&mut`, nor on a reference to one at any depth (`&&mut T`): the call would act on a copy, where `&mut` says the caller meant the value itself. That is a compile error (`RECEIVER_MISMATCH`), and a written `*` asks for the copy.
+
+<!-- {"fixture":"self_by_value_through_dereference.wado"} -->
+
+```wado
+fn or_zero(o: &mut Option<i32>) -> i32 {
+    return (*o).unwrap_or(0);
+}
+
+test "a dereferenced receiver is copied" {
+    let mut o = Option::Some(1);
+    assert or_zero(&mut o) == 1;
+    assert o matches { Some(1) };
+}
+```
+
+An affine value is not read out of either reference: the call would [move it out](./spec-affine.md#no-move-out-of-a-reference).
+
+Every impl of a trait's method takes the receiver the trait declares.
 
 ### `mut` Parameters
 

@@ -1,0 +1,28 @@
+// A generic body is checked at its definition: a by-value `self` of an affine
+// parameter cannot be reached through a reference to it.
+
+affine trait Finish with () {
+    fn finish(self) -> i32;
+}
+
+affine struct Job { id: i32 }
+
+impl Drop for Job {
+    fn drop(self) {}
+}
+
+impl Finish for Job {
+    fn finish(self) -> i32 { return self.id; }
+}
+
+fn finish_through<affine T: Finish>(t: &mut T) -> i32 {
+    return t.finish();
+}
+
+export fn run() {
+    let mut j = Job { id: 7 };
+    let _ = finish_through(&mut j);
+}
+
+__DATA__
+{"compile_error": ":19:12: analysis error: cannot move affine type `T` out of a reference"}

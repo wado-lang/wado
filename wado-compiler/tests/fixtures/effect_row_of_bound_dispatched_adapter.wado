@@ -1,0 +1,69 @@
+// A call dispatched through a bound solves the effect variable its own
+// `effect E` became, as one dispatched to an impl does. Regression: such a
+// dispatch selected no template, so the declared return type that pairs `E`
+// with the variable was never read, and the next call on the result read a
+// variable nothing had solved.
+
+use { println, Stdout } from "core:cli";
+
+fn kept<I: Iterator>(it: I) -> i32 with _ {
+    return it.filter(|_x| true).count();
+}
+
+fn bumped<I: Iterator<Item = i32>>(it: I) -> List<i32> with _ {
+    return it.map(|x| x + 1).collect();
+}
+
+fn announced<I: Iterator<Item = i32>>(it: I) -> i32 with Stdout {
+    return it.map(|x| {
+        println(`${x}`);
+        return x;
+    }).count();
+}
+
+struct Held<F> { f: F }
+
+trait Hold with () {
+    fn hold<effect E, F: fn() -> i32 with E>(&self, f: F) -> Held<F>;
+    fn make<effect E, F: fn() -> i32 with E>(f: F) -> Held<F>;
+}
+
+struct Shelf {}
+
+impl Hold for Shelf {
+    fn hold<effect E, F: fn() -> i32 with E>(&self, f: F) -> Held<F> {
+        return Held { f };
+    }
+    fn make<effect E, F: fn() -> i32 with E>(f: F) -> Held<F> {
+        return Held { f };
+    }
+}
+
+fn held<H: Hold>(h: &H) -> i32 {
+    let shelved = h.hold(|| 7);
+    let f = shelved.f;
+    return f();
+}
+
+fn made<H: Hold>() -> i32 {
+    let shelved = H::make(|| 8);
+    let f = shelved.f;
+    return f();
+}
+
+test "a closure adapter called on a bounded parameter, then walked" {
+    assert kept(0..<6) == 6;
+    assert bumped(1..<3) == [2, 3];
+}
+
+test "what its closure performs is required of the caller" {
+    assert announced(1..<3) == 2;
+}
+
+test "a declaration without a body" {
+    assert held(&Shelf {}) == 7;
+}
+
+test "a static call" {
+    assert made::<Shelf>() == 8;
+}

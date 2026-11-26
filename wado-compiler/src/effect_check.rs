@@ -1056,6 +1056,7 @@ pub(crate) struct OwnedEffectData {
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    trait_method_decls: IndexMap<TraitMethodKey, AstId>,
     /// The trait methods whose `#[ambient(_)]` every impl inherits.
     ambient_trait_methods: IndexSet<TraitMethodKey>,
     /// The traits that leave their effects to the impl — a `with _` head, or a
@@ -1182,6 +1183,7 @@ impl OwnedEffectData {
         // A declaration has no body, so `fn_effects` holds nothing for it.
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
+        let mut trait_method_decls: IndexMap<TraitMethodKey, AstId> = IndexMap::default();
         let mut open_traits: IndexSet<DefId> = IndexSet::default();
         let mut supertraits: IndexMap<DefId, Vec<DefId>> = IndexMap::default();
         // The trait methods that write no clause of their own, so the head's
@@ -1212,6 +1214,7 @@ impl OwnedEffectData {
                         .map(|effect| resolutions.effect_named(effect, src))
                         .collect();
                     trait_method_effects.insert((def, method.name.clone()), effects);
+                    trait_method_decls.insert((def, method.name.clone()), method.id);
                     if method.effects_source == ast::EffectsSource::Inherited {
                         head_methods.insert((def, method.name.clone()));
                     }
@@ -1383,6 +1386,7 @@ impl OwnedEffectData {
             mangled_index,
             mangled_params,
             trait_method_effects,
+            trait_method_decls,
             ambient_trait_methods,
             open_traits,
             supertraits,
@@ -1416,6 +1420,7 @@ impl OwnedEffectData {
             mangled_index: &self.mangled_index,
             mangled_params: &self.mangled_params,
             trait_method_effects: &self.trait_method_effects,
+            trait_method_decls: &self.trait_method_decls,
             ambient_trait_methods: &self.ambient_trait_methods,
             open_traits: &self.open_traits,
             supertraits: &self.supertraits,
@@ -1459,6 +1464,7 @@ struct EffectIndex<'a> {
     /// Trait method → the effects it declares. A call through a type
     /// parameter's bound selects no impl, so this is what it can demand.
     trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    trait_method_decls: &'a IndexMap<TraitMethodKey, AstId>,
     ambient_trait_methods: &'a IndexSet<TraitMethodKey>,
     /// The traits that leave their effects to the impl.
     open_traits: &'a IndexSet<DefId>,
@@ -2466,10 +2472,11 @@ fn dispatch_effects(
 ) -> (Resolved, OperationDemands) {
     // A synthesized template (a derived method) is a method of the type it is
     // derived for, so it takes `self`.
-    let has_receiver = match func_ref.template.as_ref().and_then(TemplateId::def) {
-        Some(def) => index
-            .receiver_methods
-            .contains(&index.resolutions.defs().ast_id(def)),
+    let declaration = index
+        .template_body(func_ref)
+        .or_else(|| index.bound_dispatch_decl(func_ref));
+    let has_receiver = match declaration {
+        Some(declaration) => index.receiver_methods.contains(&declaration),
         None => func_ref.method_info.is_some(),
     };
     let effects = index.method_effects(func_ref);
@@ -2988,12 +2995,37 @@ impl EffectIndex<'_> {
 
     /// Parameter type ids for a method / static dispatch target.
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
-        self.callee_entry(func_ref, self.fn_params, self.mangled_params)
+        match self.bound_dispatch_decl(func_ref) {
+            Some(declaration) => self
+                .fn_params
+                .get(&declaration)
+                .cloned()
+                .unwrap_or_default(),
+            None => self.callee_entry(func_ref, self.fn_params, self.mangled_params),
+        }
     }
 
     /// The declared return type of the declaration a dispatch selected.
     fn callee_return(&self, func_ref: &FunctionRef) -> Option<TypeId> {
-        self.fn_returns.get(&self.template_body(func_ref)?).copied()
+        let declaration = self
+            .template_body(func_ref)
+            .or_else(|| self.bound_dispatch_decl(func_ref))?;
+        self.fn_returns.get(&declaration).copied()
+    }
+
+    /// The trait's own declaration of the method a dispatch through a bound
+    /// names. Such a dispatch selects no template, so that declaration is the
+    /// signature its call instantiates.
+    fn bound_dispatch_decl(&self, func_ref: &FunctionRef) -> Option<AstId> {
+        if func_ref.template.is_some() {
+            return None;
+        }
+        let method_info = func_ref.method_info.as_ref()?;
+        let key = (
+            method_info.trait_name.as_ref()?.canonical()?,
+            method_info.declared_method_name().to_string(),
+        );
+        self.trait_method_decls.get(&key).copied()
     }
 
     /// The declaration whose body a dispatch to `func_ref` runs.
@@ -3394,7 +3426,8 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 .cloned()
                 .collect();
             for info in &iterators {
-                for func_ref in [&info.into_iter, &info.next] {
+                let start = info.start.as_ref().map(|start| &start.func);
+                for func_ref in start.into_iter().chain([&info.next]) {
                     let (resolved, resource) = dispatch_effects(
                         self.sem,
                         self.index,

@@ -1500,6 +1500,9 @@ for let x of arr { println(`${x}`); }
 // Explicit iterator
 let mut iter = arr.into_iter();
 iter.next();                              // Option<i32>
+let two = iter.take(2).collect();         // an adapter takes a copy: iter has not advanced
+let also = (&mut iter).take(2).collect(); // `&mut iter` is an iterator that advances iter
+for let x of &mut iter { break; }         // and so the loop does; iter.by_ref() is `&mut iter`
 let rest = iter.collect();                // List<i32> (default target)
 let bytes: ByteList = s.bytes().collect(); // any FromIterator target, incl. a newtype over List
 

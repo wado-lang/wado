@@ -1,0 +1,29 @@
+// A written `*` copies what a reference points to, and the by-value `self`
+// takes the copy. The referent is left as it was.
+
+fn first_two<I: Iterator<Item = i32>>(it: &mut I) -> List<i32> with _ {
+    return (*it).take(2).collect();
+}
+
+test "the adapter advances the copy" {
+    let mut r = 0..<5;
+    assert first_two(&mut r) == [0, 1];
+    assert r.next() matches { Some(0) };
+}
+
+test "by_ref advances the iterator itself" {
+    let mut r = 0..<5;
+    let head: List<i32> = r.by_ref().take(2).collect();
+    assert head == [0, 1];
+    assert r.next() matches { Some(2) };
+}
+
+fn or_zero(o: &mut Option<i32>) -> i32 {
+    return (*o).unwrap_or(0);
+}
+
+test "a dereferenced receiver is copied" {
+    let mut o = Option::Some(1);
+    assert or_zero(&mut o) == 1;
+    assert o matches { Some(1) };
+}

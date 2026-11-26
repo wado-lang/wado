@@ -28,14 +28,14 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
-use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
+use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo, ForOfStart};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::elaborator::util::reserve_float_pattern_locals;
 use crate::name::{
-    constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
+    Receiver, constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
     namespace_member_alias, range_local_name,
 };
 use crate::primitive::PrimitiveType;
@@ -2937,22 +2937,75 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let iter_var = minted_name("iter", unique_id);
         let label = minted_name("for_of", unique_id);
 
+        let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
+        // An `IntoIterator` written for the reference itself says what a walk
+        // of it is, and answers first as a reference's own impl always does.
+        // A newtype inherits its base's, a link at a time.
+        let reference_states_its_walk = {
+            let tt = self.tysys.type_table.borrow();
+            let into_iterator = self
+                .tysys
+                .compiler_trait(CompilerItem::IntoIterator)
+                .and_then(|fq| fq.canonical());
+            tt.ref_kind(into_iter_receiver_type)
+                .zip(tt.ref_pointee(into_iter_receiver_type))
+                .zip(into_iterator)
+                .is_some_and(|((kind, referent), trait_)| {
+                    std::iter::successors(Some(referent), |&link| match tt.get(link) {
+                        ResolvedType::Newtype { base_type, .. } => Some(*base_type),
+                        _ => None,
+                    })
+                    .map(|link| tt.fq_type_name(link))
+                    .filter(|name| name.binder_name().is_none())
+                    .any(|name| {
+                        self.tysys
+                            .trait_env
+                            .methodful_impls_by_receiver(
+                                &Receiver::RefTo(kind, name.head_only()),
+                                trait_,
+                            )
+                            .any(|entry| tt.impl_reaches_instance(entry, into_iter_receiver_type))
+                    })
+                })
+        };
+        // An iterator that is a reference advances what it points to, so the
+        // loop walks it as it stands: `into_iter` and `start` reach the
+        // referent, and would walk a copy of it or move it out. An iterator
+        // of a type the instance settles may be such a reference, and is
+        // walked the same way, which copies or moves any other as `into_iter`
+        // and `start` would.
+        let walks_operand = !reference_states_its_walk
+            && {
+                let tt = self.tysys.type_table.borrow();
+                tt.is_reference(into_iter_receiver_type)
+                    || tt.representation_awaits_substitution(into_iter_receiver_type)
+            }
+            && iterator.as_ref().is_some_and(|trait_| {
+                self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    into_iter_receiver_type,
+                    trait_,
+                )
+            });
         // An affine value moves into the loop through `ForOf::start`, so the
         // loop owns what it walks. A copyable one walks its `IntoIterator`,
         // whose iterator shares the operand's storage where a moved one would
         // cost a copy of a list read after the loop (WEP: Affine Types).
-        let walks_value = self.tysys.is_affine(
-            into_iter_receiver_type,
-            &self.annotate_ctx.trait_ctx.affine_params(),
-        ) && self.tysys.compiler_trait(CompilerItem::ForOf).is_some_and(
-            |trait_| {
-                self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    into_iter_receiver_type,
-                    &trait_,
-                )
-            },
-        );
+        let walks_value = !walks_operand
+            && self.tysys.is_affine(
+                into_iter_receiver_type,
+                &self.annotate_ctx.trait_ctx.affine_params(),
+            )
+            && self
+                .tysys
+                .compiler_trait(CompilerItem::ForOf)
+                .is_some_and(|trait_| {
+                    self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        into_iter_receiver_type,
+                        &trait_,
+                    )
+                });
         let (start_name, start_trait) = if walks_value {
             (
                 "start",
@@ -2967,28 +3020,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // outcome's `dispatch` carries the `(self_kind, FunctionRef)` reify
         // needs to reproduce the same call shape
         // (WEP 2026-05-26).
-        let into_iter_outcome = self.resolve_method_call_with(
-            MethodCallInput {
-                receiver: into_iter_receiver_type,
-                receiver_ast: None,
-                method_name: start_name,
-                method_id: None,
-                call_id: None,
-                defaults_site: None,
-                type_args: vec![],
-                args: &[],
-                expected_type: None,
-                span,
-                required_trait: start_trait,
-            },
-            ctx,
-        );
-        let into_iter_dispatch = into_iter_outcome.dispatch;
-        let iter_type = into_iter_outcome.type_id;
+        let (start, iter_type) = if walks_operand {
+            (None, into_iter_receiver_type)
+        } else {
+            let outcome = self.resolve_method_call_with(
+                MethodCallInput {
+                    receiver: into_iter_receiver_type,
+                    receiver_ast: None,
+                    method_name: start_name,
+                    method_id: None,
+                    call_id: None,
+                    defaults_site: None,
+                    type_args: vec![],
+                    args: &[],
+                    expected_type: None,
+                    span,
+                    required_trait: start_trait,
+                },
+                ctx,
+            );
+            (outcome.dispatch, outcome.type_id)
+        };
 
         // Iterator-trait conformance check, mirroring the pre-refactor
         // surface error. A `ForOf` state answers `next` without being one.
-        let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
         if !walks_value
             && !iterator.is_some_and(|trait_| {
                 self.tysys
@@ -3096,15 +3151,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // WEP 2026-05-26: record the iterator-path
         // dispatch decision so reify can re-emit the synthetic
         // `into_iter()` / `next()` calls without re-dispatching. Only
-        // record when both dispatches succeeded (the trait-check error
-        // path above bailed without resolving them).
-        if let (Some(into_iter), Some(next)) = (into_iter_dispatch, next_dispatch) {
+        // record when every dispatch the loop makes succeeded (the
+        // trait-check error path above bailed without resolving them).
+        if let Some(next) = next_dispatch
+            && (walks_operand || start.is_some())
+        {
             self.record_for_of_iterator(
                 for_of.id,
                 ForOfIteratorInfo {
-                    into_iter_def: into_iter.method_def,
-                    into_iter: into_iter.func,
-                    into_iter_self_kind: into_iter.self_kind,
+                    start: start.map(|start| ForOfStart {
+                        def: start.method_def,
+                        func: start.func,
+                        self_kind: start.self_kind,
+                    }),
                     next_def: next.method_def,
                     next: next.func,
                     next_self_kind: next.self_kind,

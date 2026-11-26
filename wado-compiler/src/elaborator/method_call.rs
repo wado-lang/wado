@@ -51,7 +51,7 @@ use crate::elaborator::trait_env::{BlanketBound, BlanketReceiver};
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
-use crate::synthesis::template::blanket_impl_args;
+use crate::synthesis::template::{blanket_impl_args, ref_blanket_instance};
 use crate::unparse::unparse_type_into;
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -575,7 +575,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
-        // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
+        // A blanket over references (`impl Inspect for &T`) is preferred only
+        // where `answers_reference_receiver` says it answers this receiver.
         // A default body's call whose author reached the bound's subject
         // through a reference reads the subject, so the reference the author
         // wrote selects no `&T` impl. The subject may be a reference itself,
@@ -628,11 +629,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Err(result) => result,
             };
             reported |= matches!(result, TraitLookup::Reported);
-            // Only use ref-type impls that target a concrete container type
-            // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
-            // (e.g., impl Inspect for &T where the inner type is just a type param).
             if let Some(trait_match) = result.found()
-                && !trait_match.is_blanket_ref_impl
+                && trait_match
+                    .answers_reference_receiver(self.tysys.type_table.borrow().ref_depth(subject))
             {
                 let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
                 matched_impl_decl = trait_match.impl_struct_fq.head().def();
@@ -1069,8 +1068,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_mut_receiver(receiver, receiver_ast, method_name, span, ctx);
         }
 
-        // The reference lookup admits an `&X` impl alone (`is_blanket_ref_impl`),
-        // whose `Self` holds one reference.
+        let written_receiver = receiver;
+        // An impl the reference lookup adopted is for `&X`, whose `Self` holds
+        // one reference.
         receiver = adjusted_receiver_type(
             receiver,
             self_kind,
@@ -1227,6 +1227,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return_type,
                 method_type_args,
                 consumes_self,
+                (consumes_self
+                    && !is_ref_impl
+                    && self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .represented_ref_kind(written_receiver)
+                        .is_some())
+                .then_some(written_receiver),
             );
             if waits_for_selection {
                 self.wait_for_selection(PendingCall {
@@ -1265,9 +1274,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The function `site` names through a blanket over a reference
+    /// (`impl<T: Bound> Tr for &T`), which its pointee alone keys: the name
+    /// monomorphization gives the same call in a generic body.
+    fn ref_blanket_function_ref(&self, site: &DispatchSite<'_>) -> Option<FunctionRef> {
+        let block = site.dispatched_impl_block?;
+        let blanket = self.tysys.trait_env.blanket_of_block(block)?;
+        if !matches!(blanket.receiver, BlanketReceiver::Ref { .. }) {
+            return None;
+        }
+        let generic = LocalMethodName::new_ref(
+            site.matched_ref_kind?,
+            site.trait_name.clone(),
+            site.method_name.to_string(),
+        );
+        let (mut info, monomorph_info) = ref_blanket_instance(
+            generic,
+            site.base_type_id,
+            self.apply_infer_holes_each(&site.method_type_args),
+            &self.tysys.type_table.borrow(),
+        );
+        info.trait_type_args = self.apply_infer_holes_each(&site.trait_args);
+        Some(FunctionRef {
+            module_source: blanket.module.clone(),
+            name: info.to_mangled_name(),
+            template: self.tysys.trait_env.call_template(block, &info),
+            monomorph_info: Some(monomorph_info),
+            method_info: Some(info),
+        })
+    }
+
     /// The function a call dispatches to once its declaration is chosen,
     /// named after the receiver and the impl that answers it.
     pub(super) fn dispatch_function_ref(&mut self, site: DispatchSite<'_>) -> FunctionRef {
+        if let Some(func) = self.ref_blanket_function_ref(&site) {
+            return func;
+        }
         let DispatchSite {
             owner,
             base_type_id,
@@ -1534,7 +1576,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The link of `receiver`'s newtype chain whose inherent impl declares the
     /// method `owner` says answered: 0 for the receiver's own. A reference a
     /// newtype wraps is no link of its own.
-    fn inherent_link(&self, receiver: TypeId, owner: MethodOwner) -> u32 {
+    pub(super) fn inherent_link(&self, receiver: TypeId, owner: MethodOwner) -> u32 {
         let declaring = match owner {
             MethodOwner::Receiver => return 0,
             MethodOwner::InheritedFrom(ty) | MethodOwner::Referent(ty) => Some(ty),
@@ -2042,7 +2084,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether a trait impl the call site can name answers `method_name` on
     /// `receiver` at a link nearer than `inherent_link`.
-    fn trait_answers_before(
+    pub(super) fn trait_answers_before(
         &self,
         receiver: TypeId,
         through_ref: Option<bool>,

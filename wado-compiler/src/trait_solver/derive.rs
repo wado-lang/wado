@@ -42,6 +42,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
                         .collect()
                 })
                 .collect(),
+            param_assoc: Vec::new(),
         };
         standing.push((decl, id, env));
     }

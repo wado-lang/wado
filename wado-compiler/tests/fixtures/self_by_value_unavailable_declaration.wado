@@ -1,0 +1,16 @@
+// A reserved name has no body, so nothing copies its receiver: the
+// `self_by_value` lint leaves it alone.
+
+struct P { x: i32 }
+
+impl P {
+    #[unavailable("removed; read `x`")]
+    fn old(self);
+}
+
+export fn run() {
+    assert P { x: 1 }.x == 1;
+}
+
+__DATA__
+{"warnings_not_contains": ["`self` by value copies"]}

@@ -591,12 +591,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A by-value `self` receiver on a copyable type, which takes `&self`.
-    SelfByValueOnCopyable {
-        type_name: String,
-        span: Span,
-    },
-
     /// `_` inference placeholder outside a type an expression writes.
     InferPlaceholderNotAllowed {
         span: Span,
@@ -1922,13 +1916,6 @@ impl TypeError {
                 format!(
                     "flags `{name}` has {count} members; at most 32 are supported \
                      (a flags value is a single 32-bit word at the Component Model boundary)"
-                ),
-                *span,
-            ),
-            TypeError::SelfByValueOnCopyable { type_name, span } => (
-                Code::ReceiverMismatch,
-                format!(
-                    "`self` by value is only allowed on an affine type; `{type_name}` is copyable — use `&self`"
                 ),
                 *span,
             ),
@@ -4512,6 +4499,22 @@ pub(super) struct TraitMethodMatch {
 }
 
 impl TraitMethodMatch {
+    /// Whether this match, found among the impls for a reference, answers a
+    /// call on one ahead of the referent's own method. An impl for a named
+    /// referent does. A blanket one (`impl<T: Bound> Trait for &T`) does for a
+    /// by-value `self` alone, which takes the reference where the referent's
+    /// method would take the referent out of it; through `&self` both read
+    /// the same value, and the referent's is the direct one.
+    ///
+    /// The blanket answers a receiver holding one reference. Past that its
+    /// parameter would stand for a reference, which the lookup does not hand
+    /// over, so the referent's method is asked and the move check refuses it
+    /// where a `&mut` is among the layers.
+    pub(super) fn answers_reference_receiver(&self, receiver_ref_depth: usize) -> bool {
+        !self.is_blanket_ref_impl
+            || (self.method_info.self_kind == ast::SelfKind::Value && receiver_ref_depth == 1)
+    }
+
     /// The owner a call on `receiver_base` dispatches with: a newtype inherits
     /// a reference impl the way it inherits a value one, so its signature
     /// re-types to the receiver.

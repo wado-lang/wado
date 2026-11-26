@@ -872,6 +872,7 @@ mod tests {
         let p = program(Builder::default().bounded(TR, SolverType::Param(0), vec![LIMIT]));
         let env = Env {
             param_bounds: vec![vec![ParamBound::bare(LIMIT)]],
+            param_assoc: Vec::new(),
         };
         let found = candidates(&p, &env, &SolverType::Param(0), M, HERE, &[]);
         assert_eq!(found.in_scope.len(), 1);
