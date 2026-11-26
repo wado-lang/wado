@@ -1025,100 +1025,56 @@ internal struct AtnSim {
     internal rule_follow: List<i32>,
 }
 
-fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
-    return unchecked bytes[pos] as i32;
+fn atn_take(bytes: &ByteList, pos: &mut i32, width: i32) -> i32 {
+    let mut value = 0;
+    for let mut i = 0; i < width; i += 1 {
+        value |= unchecked bytes[*pos + i] as i32 << 8 * i;
+    }
+    *pos += width;
+    return value;
 }
 
-fn atn_read_u16(bytes: &ByteList, pos: i32) -> i32 {
-    let b0 = unchecked bytes[pos] as i32;
-    let b1 = unchecked bytes[pos + 1] as i32;
-    return b0 | b1 << 8;
-}
-
-fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
-    let b0 = unchecked bytes[pos] as i32;
-    let b1 = unchecked bytes[pos + 1] as i32;
-    let b2 = unchecked bytes[pos + 2] as i32;
-    return b0 | b1 << 8 | b2 << 16;
+fn atn_take_list(bytes: &ByteList, pos: &mut i32, count: i32, width: i32, bias: i32) -> List<i32> {
+    let mut out: List<i32> = List::with_capacity(count);
+    for let mut i = 0; i < count; i += 1 {
+        out.push(atn_take(bytes, pos, width) - bias);
+    }
+    return out;
 }
 
 internal fn atn_decode(bytes: &ByteList) -> AtnSim {
     let mut p = 0;
-    let nrules = atn_read_u16(bytes, p);
-    p += 2;
-    let ndec = atn_read_u16(bytes, p);
-    p += 2;
-    let nstates = atn_read_u16(bytes, p);
-    p += 2;
-    let num_tokens = atn_read_u16(bytes, p);
-    p += 2;
+    let nrules = atn_take(bytes, &mut p, 2);
+    let ndec = atn_take(bytes, &mut p, 2);
+    let nstates = atn_take(bytes, &mut p, 2);
+    let num_tokens = atn_take(bytes, &mut p, 2);
 
-    let mut rule_start: List<i32> = List::with_capacity(nrules);
-    for let mut i = 0; i < nrules; i += 1 {
-        rule_start.push(atn_read_u16(bytes, p));
-        p += 2;
-    }
-    let mut decision_state: List<i32> = List::with_capacity(ndec);
-    for let mut i = 0; i < ndec; i += 1 {
-        decision_state.push(atn_read_u16(bytes, p));
-        p += 2;
-    }
+    let rule_start = atn_take_list(bytes, &mut p, nrules, 2, 0);
+    let decision_state = atn_take_list(bytes, &mut p, ndec, 2, 0);
 
-    let mut state_kind: List<i32> = List::with_capacity(nstates);
-    for let mut i = 0; i < nstates; i += 1 {
-        state_kind.push(atn_read_u8(bytes, p));
-        p += 1;
-    }
+    let state_kind = atn_take_list(bytes, &mut p, nstates, 1, 0);
+    let state_tr_count = atn_take_list(bytes, &mut p, nstates, 2, 0);
     let mut state_tr_start: List<i32> = List::with_capacity(nstates);
-    let mut state_tr_count: List<i32> = List::with_capacity(nstates);
     let mut ntrans_total = 0;
-    for let mut i = 0; i < nstates; i += 1 {
-        let count = atn_read_u16(bytes, p);
-        p += 2;
+    for let count of &state_tr_count {
         state_tr_start.push(ntrans_total);
-        state_tr_count.push(count);
-        ntrans_total += count;
+        ntrans_total += *count;
     }
 
-    let mut tr_kind: List<i32> = List::with_capacity(ntrans_total);
-    for let mut i = 0; i < ntrans_total; i += 1 {
-        tr_kind.push(atn_read_u8(bytes, p));
-        p += 1;
-    }
-    let mut tr_target: List<i32> = List::with_capacity(ntrans_total);
-    for let mut i = 0; i < ntrans_total; i += 1 {
-        tr_target.push(atn_read_u16(bytes, p) - 1);
-        p += 2;
-    }
-    let mut tr_label: List<i32> = List::with_capacity(ntrans_total);
-    for let mut i = 0; i < ntrans_total; i += 1 {
-        tr_label.push(atn_read_u24(bytes, p) - 1);
-        p += 3;
-    }
-    let mut tr_follow: List<i32> = List::with_capacity(ntrans_total);
-    for let mut i = 0; i < ntrans_total; i += 1 {
-        tr_follow.push(atn_read_u24(bytes, p) - 1);
-        p += 3;
-    }
-    let mut tr_prec: List<i32> = List::with_capacity(ntrans_total);
-    for let mut i = 0; i < ntrans_total; i += 1 {
-        tr_prec.push(atn_read_u16(bytes, p));
-        p += 2;
-    }
+    let tr_kind = atn_take_list(bytes, &mut p, ntrans_total, 1, 0);
+    let tr_target = atn_take_list(bytes, &mut p, ntrans_total, 2, 1);
+    let tr_label = atn_take_list(bytes, &mut p, ntrans_total, 3, 1);
+    let tr_follow = atn_take_list(bytes, &mut p, ntrans_total, 3, 1);
+    let tr_prec = atn_take_list(bytes, &mut p, ntrans_total, 2, 0);
 
-    let nsets = atn_read_u16(bytes, p);
-    p += 2;
+    let nsets = atn_take(bytes, &mut p, 2);
     let mut set_members: List<List<i32>> = List::with_capacity(nsets);
     let mut kinds = 0;
     for let mut i = 0; i < nsets; i += 1 {
-        let count = atn_read_u16(bytes, p);
-        p += 2;
-        let mut members: List<i32> = List::with_capacity(count);
-        for let mut k = 0; k < count; k += 1 {
-            let t = atn_read_u16(bytes, p);
-            p += 2;
-            members.push(t);
-            kinds = i32::max(kinds, t + 1);
+        let count = atn_take(bytes, &mut p, 2);
+        let members = atn_take_list(bytes, &mut p, count, 2, 0);
+        for let t of &members {
+            kinds = i32::max(kinds, *t + 1);
         }
         set_members.push(members);
     }
