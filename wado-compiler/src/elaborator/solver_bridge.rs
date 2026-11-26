@@ -2551,32 +2551,33 @@ impl SolverBridge {
         .collect()
     }
 
-    /// The one block that answers a bound on `type_id` naming `trait_` at
-    /// whatever arguments: `None` where several argument lists answer, where
-    /// none does, or where the answer names no block.
-    pub(super) fn sole_bound_impl(
+    /// The impls that answer a bound on `type_id` naming `trait_` at whatever
+    /// arguments.
+    pub(super) fn bound_impls_at_any_args(
         &self,
         tysys: &TypeSystem,
         ctx: &scope::Scope,
         type_id: TypeId,
         trait_: &FqTraitName,
-    ) -> Option<DefId> {
-        let q = self
-            .question(tysys, ctx, type_id, &trait_.head_only(), Variables::Refused)
-            .ok()?;
+    ) -> BoundImpls {
+        let Ok(q) = self.question(tysys, ctx, type_id, &trait_.head_only(), Variables::Refused)
+        else {
+            return BoundImpls::Several;
+        };
         let found = bound_candidates_at_any_args(&self.program, &q.env, &q.ty, q.trait_);
         match rank(&found) {
+            Selection::None => BoundImpls::None,
             // The order's loser still answers the bound at its own arguments.
             Selection::One(index) => found
                 .iter()
                 .all(|other| other.trait_args == found[index].trait_args)
                 .then(|| self.impl_def_of(found[index].impl_))
-                .flatten(),
-            Selection::None
-            | Selection::Duplicated(_)
+                .flatten()
+                .map_or(BoundImpls::Several, BoundImpls::One),
+            Selection::Duplicated(_)
             | Selection::AmbiguousTraits(_)
             | Selection::AmbiguousBlankets(_)
-            | Selection::Overloaded(_) => None,
+            | Selection::Overloaded(_) => BoundImpls::Several,
             Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
         }
     }
@@ -3100,6 +3101,16 @@ pub(crate) enum InstanceOrder {
     Nothing,
     /// Impls the order cannot tell apart, by their blocks.
     Tied(Vec<Option<DefId>>),
+}
+
+/// How many impls answer a bound at whatever arguments
+/// ([`SolverBridge::bound_impls_at_any_args`]).
+pub(super) enum BoundImpls {
+    None,
+    /// One block answers, at one argument list.
+    One(DefId),
+    /// Several argument lists answer, or the one answer names no block.
+    Several,
 }
 
 /// What the order answers, naming each candidate by the impl block it came

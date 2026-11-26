@@ -1,0 +1,25 @@
+// `&mut self` of an impl for a reference names the binding holding the
+// reference, so assigning `*self` retargets it.
+
+trait Retarget with () {
+    fn retarget(&mut self, other: Self);
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Retarget for &Point {
+    fn retarget(&mut self, other: &Point) {
+        *self = other;
+    }
+}
+
+#[TODO]
+test "the write reaches the binding" {
+    let p = Point { x: 1 };
+    let q = Point { x: 2 };
+    let mut r = &p;
+    r.retarget(&q);
+    assert r.x == 2;
+}

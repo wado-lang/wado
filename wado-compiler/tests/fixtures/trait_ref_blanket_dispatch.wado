@@ -1,8 +1,8 @@
 // A blanket over a reference (`impl<T: Bound> Tr for &T`) answers a call on a
-// reference whatever receiver its method takes. Its `&self` or `&mut self`
-// method answers where the referent has no method of the name.
-// Regression: only a by-value `self` reached it, and a `&self` or `&mut self`
-// method reported no method on the referent.
+// reference through a by-value `self` method, and through a `&self` method
+// where the referent has no method of the name.
+// Regression: only a by-value `self` reached it, and a `&self` method
+// reported no method on the referent.
 
 trait Limit with () {
     fn limit() -> i32;
@@ -74,12 +74,6 @@ test "a blanket over a reference dispatches" {
     assert r.describe() == "ref blanket 7";
     assert (&p).describe() == "ref blanket 7";
     assert r.describe_value() == "ref blanket, value";
-}
-
-test "through `&mut self`" {
-    let p = Point { x: 1 };
-    let mut r = &p;
-    assert r.describe_mut() == "ref blanket, mut";
 }
 
 test "a qualified call" {

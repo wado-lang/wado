@@ -56,6 +56,7 @@ use crate::elaborator::types::{
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::{FqTraitName, FqTypeName, RefKind, UNIT_TYPE_NAME};
 use crate::resolve::Resolution;
+use crate::synthesis::template::blanket_settled_slots;
 use crate::unparse::binary_op_str;
 
 /// Keep the `candidates`, each leaving a slot to the call, that `reaches`: two
@@ -1423,6 +1424,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
         let impl_args = self.impl_param_space(def, space);
+        // A bound reading a parameter `space` does not bind is owed where the
+        // call mints that parameter's variable (`settle_trait_arg_slots`).
+        let unbound: Vec<FqTypeName> = header
+            .type_params
+            .iter()
+            .map(|p| ParamRef::of(def, &p.name))
+            .filter(|p| !impl_args.iter().any(|(bound, _)| bound == p))
+            .map(|p| p.binder(&self.tysys.resolutions))
+            .collect();
+        let reads_unbound =
+            |bound: &DeclaredBound| {
+                bound.trait_.args().iter().any(|arg| {
+                    arg.mentions(&|head| unbound.iter().any(|binder| binder.head() == head))
+                })
+            };
         for (bound, arg) in &self.impl_param_space(def, slots) {
             let Some(param) = header.type_params.iter().find(|p| p.name == bound.name) else {
                 continue;
@@ -1442,12 +1458,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                 );
             }
-            let bounds = self.declared_bounds(
+            let mut bounds = self.declared_bounds(
                 param,
                 None,
                 &impl_args,
                 BoundRows::All(&EffectRows::default()),
             );
+            bounds.retain(|bound| !reads_unbound(bound));
             let owes = matches!(owed, OwedBounds::All) || {
                 let tt = self.tysys.type_table.borrow();
                 !tt.infer_vars_in(*arg).is_empty()
@@ -1505,6 +1522,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.equate(*arg, param);
             }
         }
+    }
+
+    /// The slots of `block` a call on `receiver` settles: `impl_slot_args`,
+    /// and a blanket's receiver slot, which its instance is keyed without.
+    pub(super) fn receiver_slots(
+        &self,
+        block: DefId,
+        impl_slot_args: &[TypeId],
+        receiver: TypeId,
+    ) -> TypeArgMap {
+        let mut slots = slots_from_impl_args(block, impl_slot_args);
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        if let Some(blanket) = trait_env.blanket_of_block(block) {
+            slots.extend(blanket_settled_slots(
+                &trait_env,
+                blanket,
+                receiver,
+                &[],
+                &mut self.tysys.type_table.borrow_mut(),
+            ));
+        }
+        slots
     }
 
     /// Whether `block`'s bounds hold at `slots`, a slot the use has not
@@ -2532,11 +2571,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(Ordered::AmbiguousTraits(_)) => {
                 let tie = self.cross_trait_ambiguity(&found_traits, method_name, span);
                 let behind_referent = found_traits.iter().all(|m| {
-                    m.is_blanket_ref_impl
-                        && matches!(
-                            m.method_info.self_kind,
-                            ast::SelfKind::Ref | ast::SelfKind::MutRef
-                        )
+                    m.is_blanket_ref_impl && m.method_info.self_kind == ast::SelfKind::Ref
                 });
                 if behind_referent {
                     for m in &mut found_traits {
@@ -3416,9 +3451,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.settle_slots_from_classes(&found_traits[i], &classes);
                 }
                 narrow_to_reaching(&mut admitted, |&i| {
-                    let block = slot_leaving_block(&found_traits[i]);
-                    let args = &found_traits[i].method_info.impl_slot_args;
-                    self.slot_bounds_hold(block, &slots_from_impl_args(block, args))
+                    let found = &found_traits[i];
+                    let block = slot_leaving_block(found);
+                    let mut slots =
+                        self.receiver_slots(block, &found.method_info.impl_slot_args, receiver);
+                    slots.extend(&found.method_info.inferred_impl_slots);
+                    self.slot_bounds_hold(block, &slots)
                 });
                 // Two impls each leaving a slot to the call cover the same
                 // function where both bounds hold, and no argument can tell

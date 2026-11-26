@@ -16,7 +16,6 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateId, TupleSlot, TypeArgMap, TypeId,
-    slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -51,7 +50,7 @@ use crate::elaborator::trait_env::{BlanketBound, BlanketReceiver};
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
-use crate::synthesis::template::{blanket_impl_args, blanket_settled_slots, ref_blanket_instance};
+use crate::synthesis::template::{blanket_impl_args, ref_blanket_instance};
 use crate::unparse::unparse_type_into;
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -603,9 +602,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // no trait is named, which a qualified call would have to keep to.
         let mut waits_for_selection = false;
         let can_wait = call_id.is_some() && required_trait.is_none();
-        // A reference blanket's `&self` or `&mut self` method, which answers
-        // where the referent has no method of the name: both would read the
-        // same value, and the referent's is the direct one.
+        // A reference blanket's `&self` method, which answers where the
+        // referent has no method of the name: both would read the same value,
+        // and the referent's is the direct one. A `&mut self` one is not
+        // adopted: it would write to a copy of the reference.
         let mut behind_referent = None;
         if let Some(ref_kind) = subject_ref_kind
             && trait_answers_nearer(self, Some(ref_kind == RefKind::Mut))
@@ -650,7 +650,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info = Some(adopted.info);
                     trait_impl_module_source = adopted.trait_impl_module_source;
                     blanket_binder = adopted.blanket_binder;
-                } else if ref_depth == 1 {
+                } else if ref_depth == 1 && trait_match.method_info.self_kind == ast::SelfKind::Ref
+                {
                     behind_referent = Some((ref_kind, trait_match));
                 }
             }
@@ -1166,19 +1167,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             solved
         };
         if let Some(block) = dispatched_impl_block {
-            // A blanket's instance is keyed elsewhere, so its receiver's slot
-            // is read off the receiver here.
-            let mut given = slots_from_impl_args(block, &impl_slot_args);
-            let trait_env = Arc::clone(&self.tysys.trait_env);
-            if let Some(blanket) = trait_env.blanket_of_block(block) {
-                given.extend(blanket_settled_slots(
-                    &trait_env,
-                    blanket,
-                    base_type_id,
-                    &[],
-                    &mut self.tysys.type_table.borrow_mut(),
-                ));
-            }
+            let given = self.receiver_slots(block, &impl_slot_args, base_type_id);
             self.settle_trait_arg_slots(
                 block,
                 &given,

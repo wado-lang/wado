@@ -730,10 +730,15 @@ adopts it ahead of the referent for a method taking `self` by value
 (`TraitMethodMatch::answers_reference_receiver`,
 `iterator_through_mut_reference.wado`), which is what
 [WEP: Affine Types](./wep-2026-10-17-affine-types.md#a-by-value-self-is-a-parameter-like-any-other)
-decided. For a `&self` or `&mut self` method it asks the referent first and
-adopts the blanket where the referent has no method of the name
+decided. For a `&self` method it asks the referent first and adopts the blanket
+where the referent has no method of the name
 (`trait_ref_blanket_dispatch.wado`), as
-[The Order](./spec-traits.md#the-order) says. The prelude's
+[The Order](./spec-traits.md#the-order) says. A `&mut self` method is not
+adopted, so no call reaches it: the call hands an impl for a reference a copy
+of the reference, and a write to `*self` would land in the copy. An impl
+written for a named referent is reached and loses that write
+(`trait_ref_impl_mut_self_writes_binding.wado`), and is called through an
+immutable binding without complaint. The prelude's
 `impl<T: AsStrSlice> AsStrSlice for &T` is why: its methods forward with
 `(*self).len()`, a call on a `&T`, which the blanket ranked first would send
 back to itself. `candidates` still ranks the blanket first, so the elaborator
@@ -782,9 +787,11 @@ settles (`method_call_settles_blanket_parameter.wado`). The bound itself
 settles it where one impl of the trait applies to its subject, or one bound is
 in force (`Elaborator::settle_bound_args_by_sole_impl`,
 `bound_one_impl_settles_its_arguments.wado`), and the expected type or a later
-use does where several apply. A blanket beside the subject's own impl is a
-second answer, whatever the order makes of the two
-(`bound_blanket_beside_impl_settles_nothing.wado`). A generic function's bound
+use does where several apply. A blanket beside the subject's own impl, or
+beside a bound in force, is a second answer, whatever the order makes of the
+two (`bound_blanket_beside_impl_settles_nothing.wado`). A blanket leaving its
+own trait arguments open settles nothing through a bound, though a call of its
+method does. A generic function's bound
 and a method's own are owed and settled the same way, and a method call whose
 receiver still holds a variable runs what is owed first, since a bound may be
 what settles it.
@@ -798,6 +805,15 @@ Two blankets of one trait at different arguments are an overload set where no
 concrete impl answers (`method_call_blankets_form_overload_set.wado`), so the
 expected type selects between them, and one writing its trait arguments wins
 over one leaving them to the call.
+
+A type-qualified static call does not reach such a blanket: `One::make()`
+through `impl<A: Default, T: Source<A>> Tag<A> for T` reports an unknown
+function, where `Tag::make` selects it.
+
+A blanket whose own trait arguments name its parameter reads a newtype subject
+two ways. Under `impl<T: Marker> Source<List<T>> for T` and `type W = One`,
+`w.first()` is a `List<W>`, a bound settles `Source<List<W>>` the same, and the
+instance of a generic body asks `One` for `Source<List<W>>`, which it lacks.
 
 A numeric literal argument takes the one impl's type before its default, as in
 Rust: `put(&one, 1)` under `fn put<A, T: Sink<A>>(t: &T, a: A)` takes `1` as

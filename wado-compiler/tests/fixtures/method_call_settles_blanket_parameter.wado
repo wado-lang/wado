@@ -111,3 +111,13 @@ test "under a bound in force naming a parameter" {
     let v = forwards_its_parameter(&One { n: 7 });
     assert v == 7;
 }
+
+fn id<T>(t: T) -> T {
+    return t;
+}
+
+test "a receiver a generic call returns" {
+    let v = id(Bx { inner: One { n: 7 } }).unbox();
+    let xs = [Bx { inner: One { n: 7 } }];
+    assert `${v}` == "7" && `${xs[0].unbox()}` == "7";
+}

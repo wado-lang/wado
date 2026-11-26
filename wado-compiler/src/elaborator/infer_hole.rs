@@ -19,7 +19,7 @@ use super::pending_selection::{
     ElementHome, PendingSelection, SelectedDispatch, Undecided, Waiting,
 };
 use super::scope::{ParamRef, ScopeParams};
-use super::solver_bridge::Commitment;
+use super::solver_bridge::{BoundImpls, Commitment};
 use super::synth::ArgClass;
 use super::trait_query::{SelfBinding, spelled_at};
 use super::type_resolution::ParamSpace;
@@ -1574,32 +1574,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(|carried| self.trait_decl_of(carried) == bound.trait_.canonical())
             .collect();
-        let offered: Vec<Option<TypeId>> = if let [carried] = &in_force[..] {
-            self.bound_args_where_written(carried, &ParamSpace::new())
-                .into_iter()
-                .map(Some)
-                .collect()
-        } else if let Some(block) = self.tysys.solver().sole_bound_impl(
+        let impls = self.tysys.solver().bound_impls_at_any_args(
             &self.tysys,
             &self.annotate_ctx,
             subject,
             &bound.trait_,
-        ) {
-            let mut table = self.tysys.type_table.borrow_mut();
-            let slots = table.impl_receiver_slots(block, subject);
-            table
-                .impl_trait_args(block)
-                .to_vec()
-                .into_iter()
-                .map(|arg| {
-                    let arg = table.substitute_type_params(arg, &slots);
-                    // What the block leaves to its own parameters says nothing.
-                    (!table.contains_type_param(arg)).then_some(arg)
-                })
-                .collect()
-        } else {
-            return;
-        };
+        );
+        // A bound in force and an impl are each an answer, so one of either
+        // beside any of the other settles nothing.
+        let offered: Vec<Option<TypeId>> =
+            if let ([carried], BoundImpls::None) = (&in_force[..], &impls) {
+                self.bound_args_where_written(carried, &ParamSpace::new())
+                    .into_iter()
+                    .map(Some)
+                    .collect()
+            } else if let ([], &BoundImpls::One(block)) = (&in_force[..], &impls) {
+                let mut table = self.tysys.type_table.borrow_mut();
+                let slots = table.impl_receiver_slots(block, subject);
+                table
+                    .impl_trait_args(block)
+                    .to_vec()
+                    .into_iter()
+                    .map(|arg| {
+                        let arg = table.substitute_type_params(arg, &slots);
+                        // What the block leaves to its own parameters says nothing.
+                        (!table.contains_type_param(arg)).then_some(arg)
+                    })
+                    .collect()
+            } else {
+                return;
+            };
         for (asked, offered) in bound.trait_.args().iter().zip(offered) {
             if let Some(offered) = offered {
                 self.equate_open_parts(asked, offered);

@@ -40,3 +40,12 @@ test "a later use selects the impl" {
     let n: i32 = v;
     assert n == 7;
 }
+
+fn forwarded<T: Source<i32> + Marker>(t: &T) -> String {
+    let s: String = first_of(t);
+    return s;
+}
+
+test "a blanket beside a bound in force is a second answer" {
+    assert forwarded(&One { n: 7 }) == "blanket";
+}
