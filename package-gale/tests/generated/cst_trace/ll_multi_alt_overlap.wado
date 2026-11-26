@@ -1006,8 +1006,20 @@ impl<K: Hash> Interner<K> {
         return id;
     }
 
+    internal fn find(&self, item: K) -> Option<i32> {
+        return self.ids.get(item);
+    }
+
     internal fn at(&self, id: i32) -> K {
         return self.items[id];
+    }
+
+    internal fn at_ref(&self, id: i32) -> &K {
+        return &self.items[id];
+    }
+
+    internal fn len(&self) -> i32 {
+        return self.items.len();
     }
 }
 
@@ -1323,7 +1335,8 @@ global ATN_ACCEPT_EOF: i32 = -2;
 global ATN_CLOSURE_GUARD: i32 = 2000000;
 global ATN_ARENA_CAP: i32 = 400000;
 
-global ATN_NODE_PAIR_STRIDE: i64 = 1073741824;
+global ATN_NODE_BITS: i64 = 30;
+global ATN_NODE_PAIR_STRIDE: i64 = 1 << ATN_NODE_BITS;
 global ATN_DFA_NODE_CAP: i32 = 4000000;
 
 global CFG_KEY_PR_SLOT: i32 = 2048;
@@ -1366,9 +1379,12 @@ internal struct AtnPredictor {
     internal stack: List<i32>,
     floor: i32,
     reach: i32,
-    questions: AtnKeyLists,
-    verdict_alt: List<i32>,
-    verdict_reach: List<i32>,
+    verdicts: HashMap<List<i32>, AtnVerdict>,
+}
+
+struct AtnVerdict {
+    alt: i32,
+    reach: i32,
 }
 
 internal struct AtnFloor {
@@ -1378,14 +1394,7 @@ internal struct AtnFloor {
 
 impl AtnPredictor {
     internal fn new() -> AtnPredictor {
-        return AtnPredictor {
-            stack: [],
-            floor: 0,
-            reach: 0,
-            questions: AtnKeyLists::new(),
-            verdict_alt: [],
-            verdict_reach: [],
-        };
+        return AtnPredictor { stack: [], floor: 0, reach: 0, verdicts: HashMap::new() };
     }
 
     internal fn hide_callers(&mut self) -> AtnFloor {
@@ -1462,118 +1471,73 @@ impl AtnPredictor {
         }
     }
 
-    fn ask(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
-        let from = self.questions.keys.len();
-        self.questions.keys.push(decision);
-        self.questions.keys.push(pos);
-        self.questions.keys.push(min_prec);
+    fn question(&self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> List<i32> {
+        let mut question: List<i32> = [decision, pos, min_prec];
         for let mut i = 0; i < depth; i += 1 {
-            self.questions.keys.push(self.stack[i]);
+            question.push(self.stack[i]);
         }
-        return from;
+        return question;
     }
 
-    fn recorded_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
-        let from = self.ask(decision, pos, min_prec, depth);
-        let v = self.questions.find(from);
-        self.questions.keys.truncate(from);
-        return v;
+    fn recorded_verdict(&self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> Option<AtnVerdict> {
+        return self.verdicts.get(self.question(decision, pos, min_prec, depth));
     }
 
     internal fn record_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32, alt: i32, reach: i32) {
-        let from = self.ask(decision, pos, min_prec, depth);
-        if self.questions.find(from) >= 0 {
-            self.questions.keys.truncate(from);
-            return;
-        }
-        self.questions.add(from);
-        self.verdict_alt.push(alt);
-        self.verdict_reach.push(reach);
-    }
-}
-
-struct AtnKeyLists {
-    keys: List<i32>,
-    start: List<i32>,
-    len: List<i32>,
-    same_hash_next: List<i32>,
-    index: AtnKeyMap,
-}
-
-impl AtnKeyLists {
-    fn new() -> AtnKeyLists {
-        return AtnKeyLists { keys: [], start: [], len: [], same_hash_next: [], index: AtnKeyMap::new() };
-    }
-
-    fn hash_from(&self, from: i32) -> i64 {
-        let mut h: i64 = 1469598103934665603;
-        for let mut i = from; i < self.keys.len(); i += 1 {
-            h = (h ^ self.keys[i] as i64 + 16) * 1099511628211;
-        }
-        return h & 4611686018427387903;
-    }
-
-    fn equals_pending(&self, id: i32, from: i32) -> bool {
-        let n = self.keys.len() - from;
-        if self.len[id] != n {
-            return false;
-        }
-        let s = self.start[id];
-        for let mut i = 0; i < n; i += 1 {
-            if self.keys[s + i] != self.keys[from + i] {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    fn find(&self, from: i32) -> i32 {
-        let mut id = self.index.get(self.hash_from(from)).unwrap_or(-1);
-        while id >= 0 && !self.equals_pending(id, from) {
-            id = self.same_hash_next[id];
-        }
-        return id;
-    }
-
-    fn add(&mut self, from: i32) -> i32 {
-        let id = self.start.len();
-        let h = self.hash_from(from);
-        self.start.push(from);
-        self.len.push(self.keys.len() - from);
-        self.same_hash_next.push(self.index.get(h).unwrap_or(-1));
-        self.index[h] = id;
-        return id;
+        self.verdicts.try_insert(self.question(decision, pos, min_prec, depth), AtnVerdict { alt, reach });
     }
 }
 
 type AtnKeyMap = HashMap<i64, i32>;
 
+type AtnEdge = i64;
+
+global ATN_EDGE_RPR_BITS: i64 = 11;
+global ATN_EDGE_RET_BIAS: i32 = 8;
+
+impl AtnEdge {
+    fn to(ret: i32, rpr: i32, parent: i32) -> AtnEdge
+        contract ret + ATN_EDGE_RET_BIAS > 0
+        contract rpr >= 0 && (rpr as i64) < 1 << ATN_EDGE_RPR_BITS
+        contract parent >= 0 && (parent as i64) < ATN_NODE_PAIR_STRIDE
+    {
+        let label = (ret + ATN_EDGE_RET_BIAS) as i64 << ATN_EDGE_RPR_BITS | rpr as i64;
+        return (label << ATN_NODE_BITS | parent as i64) as AtnEdge;
+    }
+
+    fn label(&self) -> i64 {
+        return *self as i64 >> ATN_NODE_BITS;
+    }
+
+    fn ret(&self) -> i32 {
+        return (self.label() >> ATN_EDGE_RPR_BITS) as i32 - ATN_EDGE_RET_BIAS;
+    }
+
+    fn rpr(&self) -> i32 {
+        return (self.label() & (1 << ATN_EDGE_RPR_BITS) - 1) as i32;
+    }
+
+    fn parent(&self) -> i32 {
+        return (*self as i64 & ATN_NODE_PAIR_STRIDE - 1) as i32;
+    }
+
+    fn above(&self, parent: i32) -> AtnEdge {
+        return AtnEdge::to(self.ret(), self.rpr(), parent);
+    }
+}
+
 struct RealStacks {
-    start: List<i32>,
-    len: List<i32>,
-    ret: List<i32>,
-    rpr: List<i32>,
-    parent: List<i32>,
-    index: AtnKeyMap,
-    same_hash_next: List<i32>,
+    nodes: Interner<List<AtnEdge>>,
     cover_cache: AtnKeyMap,
     merge_cache: AtnKeyMap,
-    pending: List<i32>,
 }
 
 impl RealStacks {
     fn new() -> RealStacks {
         let mut real = RealStacks {
-            start: [],
-            len: [],
-            ret: [],
-            rpr: [],
-            parent: [],
-            index: AtnKeyMap::new(),
-            same_hash_next: [],
+            nodes: Interner::new(),
             cover_cache: AtnKeyMap::new(),
             merge_cache: AtnKeyMap::new(),
-            pending: [],
         };
         let empty = real.push(CTX_BOUNDARY, 0, CTX_EMPTY);
         let unknown = real.push(CTX_UNKNOWN_RETURN, 0, CTX_EMPTY);
@@ -1582,41 +1546,12 @@ impl RealStacks {
         return real;
     }
 
-    fn append_edge(&mut self, return_state: i32, restore_pr: i32, parent: i32) {
-        self.ret.push(return_state);
-        self.rpr.push(restore_pr);
-        self.parent.push(parent);
-    }
-
     fn push(&mut self, return_state: i32, restore_pr: i32, parent: i32) -> i32 {
-        let s = self.ret.len();
-        self.append_edge(return_state, restore_pr, parent);
-        return self.intern_from(s);
+        return self.nodes.intern([AtnEdge::to(return_state, restore_pr, parent)]);
     }
 
-    fn intern_from(&mut self, s: i32) -> i32 {
-        let n = self.ret.len() - s;
-        let h = atn_edges_hash(&self.ret, &self.rpr, &self.parent, s, n);
-        let head = self.index.get(h).unwrap_or(-1);
-        let mut known = head;
-        while known >= 0 {
-            if self.len[known] == n && atn_edges_eq(&self.ret, &self.rpr, &self.parent, self.start[known], s, n) {
-                self.ret.truncate(s);
-                self.rpr.truncate(s);
-                self.parent.truncate(s);
-                return known;
-            }
-            known = self.same_hash_next[known];
-        }
-        self.start.push(s);
-        self.len.push(n);
-        self.same_hash_next.push(head);
-        self.index[h] = self.start.len() - 1;
-        return self.start.len() - 1;
-    }
-
-    fn key_cmp(&self, x: i32, y: i32) -> i32 {
-        return atn_edge_key_cmp(&self.ret, &self.rpr, x, y);
+    fn edges(&self, node: i32) -> &List<AtnEdge> {
+        return self.nodes.at_ref(node);
     }
 
     fn covers(&mut self, outer: i32, inner: i32) -> bool {
@@ -1627,17 +1562,16 @@ impl RealStacks {
         if let Some(cached) = self.cover_cache.get(ck) {
             return cached == 1;
         }
-        let so = self.start[outer];
-        let no = self.len[outer];
-        let si = self.start[inner];
-        let ni = self.len[inner];
+        let has = self.edges(outer);
+        let wants = self.edges(inner);
         let mut i = 0;
         let mut covered = true;
-        for let mut j = 0; j < ni; j += 1 {
-            while i < no && self.key_cmp(so + i, si + j) < 0 {
+        for let mut j = 0; j < wants.len(); j += 1 {
+            let want = wants[j];
+            while i < has.len() && has[i].label() < want.label() {
                 i += 1;
             }
-            if i >= no || self.key_cmp(so + i, si + j) != 0 || !self.covers(self.parent[so + i], self.parent[si + j]) {
+            if i >= has.len() || has[i].label() != want.label() || !self.covers(has[i].parent(), want.parent()) {
                 covered = false;
                 break;
             }
@@ -1655,30 +1589,8 @@ impl RealStacks {
         if let Some(cached) = self.merge_cache.get(ck) {
             return cached;
         }
-        let sa = self.start[a];
-        let na = self.len[a];
-        let sb = self.start[b];
-        let nb = self.len[b];
-        let base = self.pending.len();
-        let mut i = 0;
-        let mut j = 0;
-        while i < na && j < nb {
-            let c = self.key_cmp(sa + i, sb + j);
-            if c < 0 {
-                i += 1;
-            } else if c > 0 {
-                j += 1;
-            } else {
-                let m = self.merge(self.parent[sa + i], self.parent[sb + j]);
-                self.pending.push(m);
-                i += 1;
-                j += 1;
-            }
-        }
-        let s = self.ret.len();
-        atn_append_merged(&mut self.ret, &mut self.rpr, &mut self.parent, sa, na, sb, nb, &self.pending, base);
-        self.pending.truncate(base);
-        let id = self.intern_from(s);
+        let merged = atn_merge_edges(self.edges(a), self.edges(b), |x, y| self.merge(x, y));
+        let id = self.nodes.intern(merged);
         self.merge_cache[ck] = id;
         return id;
     }
@@ -1687,8 +1599,9 @@ impl RealStacks {
         let mut below: List<i32> = [];
         let mut n = caller;
         while n != CTX_EMPTY && n != CTX_UNKNOWN {
-            assert self.len[n] == 1, "a caller stack is a chain";
-            n = self.parent[self.start[n]];
+            let edges = self.edges(n);
+            assert edges.len() == 1, "a caller stack is a chain";
+            n = edges[0].parent();
             below.push(n);
         }
         return below;
@@ -1701,9 +1614,9 @@ impl RealStacks {
         if stack == caller || stack == CTX_EMPTY || stack == CTX_UNKNOWN || stays.contains(&stack) {
             return false;
         }
-        let s = self.start[stack];
-        for let mut e = s; e < s + self.len[stack]; e += 1 {
-            if self.ret[e] == CTX_ANY_CALLER_RETURN || self.returns_below(self.parent[e], caller, below, stays) {
+        let edges = self.edges(stack);
+        for let mut e = 0; e < edges.len(); e += 1 {
+            if edges[e].ret() == CTX_ANY_CALLER_RETURN || self.returns_below(edges[e].parent(), caller, below, stays) {
                 below.push(stack);
                 return true;
             }
@@ -1714,14 +1627,8 @@ impl RealStacks {
 }
 
 struct CtxArena {
-    node_start: List<i32>,
-    node_len: List<i32>,
-    ret: List<i32>,
-    rpr: List<i32>,
-    parent: List<i32>,
-    pending: List<i32>,
-    intern_head: AtnKeyMap,
-    intern_next: List<i32>,
+    nodes: List<List<AtnEdge>>,
+    ids: HashMap<List<AtnEdge>, i32>,
     merge_cache: AtnKeyMap,
     walk_merge_cache: AtnKeyMap,
     question_index: AtnKeyMap,
@@ -1732,7 +1639,6 @@ struct CtxArena {
     node_slot: List<i32>,
     node_open: List<bool>,
     slot_node: List<i32>,
-    slot_cap: List<i32>,
     slot_revealed_in: List<i32>,
     slot_read_in: List<i32>,
     env: List<i32>,
@@ -1781,14 +1687,8 @@ internal fn atn_unasked(_label: i32) -> bool {
 impl CtxArena {
     fn new() -> CtxArena {
         let mut arena = CtxArena {
-            node_start: [],
-            node_len: [],
-            ret: [],
-            rpr: [],
-            parent: [],
-            pending: [],
-            intern_head: AtnKeyMap::new(),
-            intern_next: [],
+            nodes: [],
+            ids: HashMap::new(),
             merge_cache: AtnKeyMap::new(),
             walk_merge_cache: AtnKeyMap::new(),
             question_index: AtnKeyMap::new(),
@@ -1799,7 +1699,6 @@ impl CtxArena {
             node_slot: [],
             node_open: [],
             slot_node: [],
-            slot_cap: [],
             slot_revealed_in: [],
             slot_read_in: [],
             env: [],
@@ -1875,7 +1774,7 @@ impl CtxArena {
     }
 
     fn node_count(&self) -> i32 {
-        return self.node_start.len();
+        return self.nodes.len();
     }
 
     fn open_budget(&mut self) {
@@ -1883,7 +1782,7 @@ impl CtxArena {
     }
 
     fn enter_caller_stack(&mut self, sim: &AtnSim, rstk: &List<i32>, floor: i32) -> i32 {
-        if self.real.start.len() >= ATN_REAL_NODE_CAP {
+        if self.real.nodes.len() >= ATN_REAL_NODE_CAP {
             self.real = RealStacks::new();
             self.closed_real.clear();
         }
@@ -1907,13 +1806,10 @@ impl CtxArena {
 
     fn slot(&mut self, k: i32) -> i32 {
         while self.slot_node.len() <= k {
-            self.slot_node.push(self.node_start.len());
-            self.slot_cap.push(0);
+            self.slot_node.push(self.nodes.len());
             self.slot_revealed_in.push(0);
             self.slot_read_in.push(0);
-            self.node_start.push(0);
-            self.node_len.push(0);
-            self.intern_next.push(-1);
+            self.nodes.push([]);
             self.node_slot.push(self.slot_node.len() - 1);
             self.node_open.push(true);
         }
@@ -1970,19 +1866,13 @@ impl CtxArena {
         if let Some(real) = known {
             return real;
         }
-        let from = self.pending.len();
-        let s = self.node_start[node];
-        let n = self.node_len[node];
-        for let mut e = s; e < s + n; e += 1 {
-            let below = self.real_of(self.parent[e]);
-            self.pending.push(below);
+        let edges = &self.nodes[node];
+        let mut real_edges: List<AtnEdge> = [];
+        for let mut e = 0; e < edges.len(); e += 1 {
+            let below = self.real_of(edges[e].parent());
+            real_edges.push(edges[e].above(below));
         }
-        let at = self.real.ret.len();
-        for let mut i = 0; i < n; i += 1 {
-            self.real.append_edge(self.ret[s + i], self.rpr[s + i], self.pending[from + i]);
-        }
-        self.pending.truncate(from);
-        let real = self.real.intern_from(at);
+        let real = self.real.nodes.intern(real_edges);
         if self.node_open[node] {
             self.env_real[node as i64] = real;
         } else {
@@ -1992,19 +1882,15 @@ impl CtxArena {
     }
 
     fn enter_env(&mut self, sources: &List<i32>, from: i32, count: i32) {
-        let reals = self.pending.len();
+        let mut reals: List<i32> = [];
         for let mut i = from; i < from + count; i += 1 {
-            let real = self.real_of(sources[i]);
-            self.pending.push(real);
+            reals.push(self.real_of(sources[i]));
         }
         self.left_env_base = self.env_base;
         self.left_env_len = self.env_len;
         self.env_base = self.env.len();
         self.env_len = count;
-        for let mut i = 0; i < count; i += 1 {
-            self.env.push(self.pending[reals + i]);
-        }
-        self.pending.truncate(reals);
+        self.env.extend(&reals);
         self.enter_epoch();
     }
 
@@ -2020,29 +1906,13 @@ impl CtxArena {
             return;
         }
         let real = self.env[self.env_base + k];
-        let s = self.real.start[real];
-        let n = self.real.len[real];
-        let from = self.pending.len();
-        for let mut e = s; e < s + n; e += 1 {
-            let above = self.bind(self.real.parent[e]);
-            self.pending.push(above);
+        let real_edges = self.real.edges(real);
+        let mut edges: List<AtnEdge> = [];
+        for let mut e = 0; e < real_edges.len(); e += 1 {
+            let above = self.bind(real_edges[e].parent());
+            edges.push(real_edges[e].above(above));
         }
-        let slot = self.slot_node[k];
-        if n > self.slot_cap[k] {
-            self.slot_cap[k] = n * 2;
-            self.node_start[slot] = self.ret.len();
-            for let mut i = 0; i < n * 2; i += 1 {
-                self.append_edge(0, 0, 0);
-            }
-        }
-        let start = self.node_start[slot];
-        for let mut i = 0; i < n; i += 1 {
-            self.ret[start + i] = self.real.ret[s + i];
-            self.rpr[start + i] = self.real.rpr[s + i];
-            self.parent[start + i] = self.pending[from + i];
-        }
-        self.node_len[slot] = n;
-        self.pending.truncate(from);
+        self.nodes[self.slot_node[k]] = edges;
         self.slot_revealed_in[k] = self.epoch;
     }
 
@@ -2074,13 +1944,13 @@ impl CtxArena {
         if self.node_slot[a] >= 0 || self.node_slot[b] >= 0 {
             return self.ask(ATN_ASK_SAME, i32::min(a, b), i32::max(a, b)) == 1;
         }
-        if self.node_len[a] != self.node_len[b] {
+        let left = &self.nodes[a];
+        let right = &self.nodes[b];
+        if left.len() != right.len() {
             return false;
         }
-        for let mut i = 0; i < self.node_len[a]; i += 1 {
-            let x = self.node_start[a] + i;
-            let y = self.node_start[b] + i;
-            if self.key_cmp(x, y) != 0 || !self.same(self.parent[x], self.parent[y]) {
+        for let mut i = 0; i < left.len(); i += 1 {
+            if left[i].label() != right[i].label() || !self.same(left[i].parent(), right[i].parent()) {
                 return false;
             }
         }
@@ -2116,52 +1986,28 @@ impl CtxArena {
         return (if kind == ATN_ASK_SAME { first == second } else { self.real.covers(first, second) }) as i32;
     }
 
-    fn append_edge(&mut self, return_state: i32, restore_pr: i32, parent: i32) {
-        self.ret.push(return_state);
-        self.rpr.push(restore_pr);
-        self.parent.push(parent);
-    }
-
-
-    fn intern_from(&mut self, s: i32) -> i32 {
-        let n = self.ret.len() - s;
-        assert n > 0, "a context has at least one edge";
-        let h = atn_edges_hash(&self.ret, &self.rpr, &self.parent, s, n);
-        let head = self.intern_head.get(h).unwrap_or(-1);
-        let mut cand = head;
-        while cand >= 0 {
-            if self.node_len[cand] == n
-                && atn_edges_eq(&self.ret, &self.rpr, &self.parent, self.node_start[cand], s, n) {
-                self.ret.truncate(s);
-                self.rpr.truncate(s);
-                self.parent.truncate(s);
-                return cand;
-            }
-            cand = self.intern_next[cand];
+    fn intern(&mut self, edges: List<AtnEdge>) -> i32
+        contract !edges.is_empty(), "a context has at least one edge"
+    {
+        if let Some(known) = self.ids.get(edges) {
+            return known;
         }
-        let id = self.node_start.len();
+        let id = self.nodes.len();
         assert (id as i64) < ATN_NODE_PAIR_STRIDE, "a node id at the pair-key stride aliases two node pairs onto one key";
         let mut open = false;
-        for let mut e = s; e < s + n; e += 1 {
-            open = open || self.parent[e] < id && self.node_open[self.parent[e]];
+        for let mut e = 0; e < edges.len(); e += 1 {
+            let parent = edges[e].parent();
+            open = open || parent < id && self.node_open[parent];
         }
-        self.node_start.push(s);
-        self.node_len.push(n);
+        self.nodes.push(edges);
         self.node_slot.push(-1);
         self.node_open.push(open);
-        self.intern_next.push(head);
-        self.intern_head[h] = id;
+        self.ids[edges] = id;
         return id;
     }
 
     fn push(&mut self, return_state: i32, restore_pr: i32, parent: i32) -> i32 {
-        let s = self.ret.len();
-        self.append_edge(return_state, restore_pr, parent);
-        return self.intern_from(s);
-    }
-
-    fn key_cmp(&self, x: i32, y: i32) -> i32 {
-        return atn_edge_key_cmp(&self.ret, &self.rpr, x, y);
+        return self.intern([AtnEdge::to(return_state, restore_pr, parent)]);
     }
 
     fn merge(&mut self, a: i32, b: i32) -> i32 {
@@ -2181,30 +2027,8 @@ impl CtxArena {
             return cached_for_walk;
         }
         let slot_merges_before = self.slot_merges;
-        let sa = self.node_start[a];
-        let na = self.node_len[a];
-        let sb = self.node_start[b];
-        let nb = self.node_len[b];
-        let base = self.pending.len();
-        let mut i = 0;
-        let mut j = 0;
-        while i < na && j < nb {
-            let c = self.key_cmp(sa + i, sb + j);
-            if c < 0 {
-                i += 1;
-            } else if c > 0 {
-                j += 1;
-            } else {
-                let m = self.merge(self.parent[sa + i], self.parent[sb + j]);
-                self.pending.push(m);
-                i += 1;
-                j += 1;
-            }
-        }
-        let s = self.ret.len();
-        atn_append_merged(&mut self.ret, &mut self.rpr, &mut self.parent, sa, na, sb, nb, &self.pending, base);
-        self.pending.truncate(base);
-        let id = self.intern_from(s);
+        let merged = atn_merge_edges(&self.nodes[a], &self.nodes[b], |x, y| self.merge(x, y));
+        let id = self.intern(merged);
         if self.slot_merges == slot_merges_before {
             self.merge_cache[ck] = id;
         } else {
@@ -2226,72 +2050,28 @@ impl CtxArena {
     }
 }
 
-fn atn_edges_hash(ret: &List<i32>, rpr: &List<i32>, parent: &List<i32>, s: i32, n: i32) -> i64 {
-    let mut h: i64 = 1469598103934665603;
-    for let mut e = s; e < s + n; e += 1 {
-        h = (h ^ ret[e] as i64 + 1) * 1099511628211;
-        h = (h ^ rpr[e] as i64 + 1) * 1099511628211;
-        h = (h ^ parent[e] as i64 + 1) * 1099511628211;
-    }
-    return h & 4611686018427387903;
-}
-
-fn atn_edges_eq(ret: &List<i32>, rpr: &List<i32>, parent: &List<i32>, t: i32, s: i32, n: i32) -> bool {
-    for let mut i = 0; i < n; i += 1 {
-        if ret[t + i] != ret[s + i] || rpr[t + i] != rpr[s + i] || parent[t + i] != parent[s + i] {
-            return false;
-        }
-    }
-    return true;
-}
-
-fn atn_append_merged(
-    ret: &mut List<i32>,
-    rpr: &mut List<i32>,
-    parent: &mut List<i32>,
-    sa: i32,
-    na: i32,
-    sb: i32,
-    nb: i32,
-    merged_below: &List<i32>,
-    from: i32,
-) {
-    let mut k = from;
+fn atn_merge_edges(
+    left: &List<AtnEdge>,
+    right: &List<AtnEdge>,
+    mut merge_below: fn mut(i32, i32) -> i32,
+) -> List<AtnEdge> {
+    let mut merged: List<AtnEdge> = [];
     let mut i = 0;
     let mut j = 0;
-    while i < na || j < nb {
-        let c = if i >= na {
-            1;
-        } else if j >= nb {
-            -1;
-        } else {
-            atn_edge_key_cmp(ret, rpr, sa + i, sb + j);
-        };
-        let e = if c > 0 { sb + j } else { sa + i };
-        let below = if c == 0 { merged_below[k] } else { parent[e] };
-        ret.push(ret[e]);
-        rpr.push(rpr[e]);
-        parent.push(below);
-        if c <= 0 {
+    while i < left.len() || j < right.len() {
+        if j >= right.len() || i < left.len() && left[i].label() < right[j].label() {
+            merged.push(left[i]);
             i += 1;
-        }
-        if c >= 0 {
+        } else if i >= left.len() || right[j].label() < left[i].label() {
+            merged.push(right[j]);
+            j += 1;
+        } else {
+            merged.push(left[i].above(merge_below(left[i].parent(), right[j].parent())));
+            i += 1;
             j += 1;
         }
-        if c == 0 {
-            k += 1;
-        }
     }
-}
-
-fn atn_edge_key_cmp(ret: &List<i32>, rpr: &List<i32>, x: i32, y: i32) -> i32 {
-    if ret[x] != ret[y] {
-        return if ret[x] < ret[y] { -1 } else { 1 };
-    }
-    if rpr[x] != rpr[y] {
-        return if rpr[x] < rpr[y] { -1 } else { 1 };
-    }
-    return 0;
+    return merged;
 }
 
 fn atn_node_pair_key(a: i32, b: i32) -> i64 {
@@ -2519,45 +2299,47 @@ fn atn_collapse_into_caller_loop(
         return cur.pctx;
     }
     arena.read(cur.pctx);
-    let s = arena.node_start[cur.pctx];
-    let n = arena.node_len[cur.pctx];
+    let edges = &arena.nodes[cur.pctx];
     let mut collapses = false;
     let settled = atn_settled_alt(cur.alt);
-    for let mut e = s; e < s + n; e += 1 {
-        if arena.ret[e] == CTX_HIDDEN_RETURN && !hidden_alts.contains(&settled) {
+    for let mut e = 0; e < edges.len(); e += 1 {
+        if edges[e].ret() == CTX_HIDDEN_RETURN && !hidden_alts.contains(&settled) {
             hidden_alts.push(settled);
         }
-        collapses = collapses || atn_edge_collapses(sim, arena, e, cur);
+        collapses = collapses || atn_edge_collapses(sim, edges[e], cur);
     }
     if !collapses {
         return cur.pctx;
     }
-    let kept = arena.ret.len();
-    for let mut e = s; e < s + n; e += 1 {
-        if atn_edge_collapses(sim, arena, e, cur) {
-            work.push(AtnConfig { ..*cur, pctx: arena.parent[e], pr: arena.rpr[e] });
+    let mut kept: List<AtnEdge> = [];
+    for let mut e = 0; e < edges.len(); e += 1 {
+        if atn_edge_collapses(sim, edges[e], cur) {
+            work.push(AtnConfig {
+                ..*cur,
+                pctx: edges[e].parent(),
+                pr: edges[e].rpr(),
+            });
         } else {
-            arena.append_edge(arena.ret[e], arena.rpr[e], arena.parent[e]);
+            kept.push(edges[e]);
         }
     }
-    if arena.ret.len() == kept {
+    if kept.is_empty() {
         return -1;
     }
-    return arena.intern_from(kept);
+    return arena.intern(kept);
 }
 
-fn atn_edge_collapses(sim: &AtnSim, arena: &CtxArena, e: i32, cur: &AtnConfig) -> bool {
-    let r = arena.ret[e];
-    return r >= 0 && sim.state_collapse_to[r] == cur.state && cur.pr >= arena.rpr[e];
+fn atn_edge_collapses(sim: &AtnSim, edge: AtnEdge, cur: &AtnConfig) -> bool {
+    let r = edge.ret();
+    return r >= 0 && sim.state_collapse_to[r] == cur.state && cur.pr >= edge.rpr();
 }
 
 fn atn_pop(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch) {
     arena.read(cur.pctx);
-    let s = arena.node_start[cur.pctx];
-    let n = arena.node_len[cur.pctx];
+    let edges = &arena.nodes[cur.pctx];
     let settled = atn_settled_alt(cur.alt);
-    for let mut e = s; e < s + n; e += 1 {
-        let r = arena.ret[e];
+    for let mut e = 0; e < edges.len(); e += 1 {
+        let r = edges[e].ret();
         if r == CTX_BOUNDARY || r == CTX_ANY_CALLER_RETURN {
             atn_pop_into_callers(sim, arena, cur, scratch);
         } else if r == CTX_UNKNOWN_RETURN {
@@ -2567,7 +2349,12 @@ fn atn_pop(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut Cl
                 scratch.hidden_alts.push(settled);
             }
         } else {
-            scratch.work.push(AtnConfig { ..*cur, state: r, pctx: arena.parent[e], pr: arena.rpr[e] });
+            scratch.work.push(AtnConfig {
+                ..*cur,
+                state: r,
+                pctx: edges[e].parent(),
+                pr: edges[e].rpr(),
+            });
         }
     }
 }
@@ -2715,10 +2502,9 @@ internal fn atn_predict_once(
     min_prec: i32 = 0,
 ) -> i32 {
     let depth = atn.stack.len();
-    let v = atn.recorded_verdict(decision, pos, min_prec, depth);
-    if v >= 0 {
-        atn.read_down_to(atn.verdict_reach[v]);
-        return atn.verdict_alt[v];
+    if let Some(known) = atn.recorded_verdict(decision, pos, min_prec, depth) {
+        atn.read_down_to(known.reach);
+        return known.alt;
     }
     let [alt, reach] = atn.predict_reaching(
         sim,
@@ -2897,9 +2683,9 @@ internal struct AtnDfa {
     scratch: ClosureScratch,
     state_configs: List<List<AtnConfig>>,
     internal state_verdict: List<i32>,
-    seeds: AtnKeyLists,
+    seeds: Interner<List<i32>>,
     seed_branch: List<i32>,
-    branches: AtnKeyLists,
+    branches: Interner<List<i32>>,
     branch_asks: List<i32>,
     branch_state: List<i32>,
     edges: AtnKeyMap,
@@ -2916,9 +2702,9 @@ impl AtnDfa {
             scratch: ClosureScratch::new(),
             state_configs: [],
             state_verdict: [],
-            seeds: AtnKeyLists::new(),
+            seeds: Interner::new(),
             seed_branch: [],
-            branches: AtnKeyLists::new(),
+            branches: Interner::new(),
             branch_asks: [],
             branch_state: [],
             edges: AtnKeyMap::new(),
@@ -2943,17 +2729,13 @@ impl AtnDfa {
     }
 
     fn start_state(&mut self, sim: &AtnSim, decision: i32, caller: i32, min_prec: i32, preds: &AtnPreds) -> i32 {
-        let from = self.seeds.keys.len();
-        self.seeds.keys.push(ATN_DFA_START_KEY);
-        self.seeds.keys.push(decision);
-        self.seeds.keys.push(caller);
-        self.seeds.keys.push(min_prec);
-        self.seeds.keys.extend(&preds.met);
-        self.seeds.keys.push(ATN_DFA_START_KEY);
-        self.seeds.keys.extend(&preds.own);
-        self.seeds.keys.push(ATN_DFA_START_KEY);
-        self.seeds.keys.extend(&preds.failed);
-        let seed = self.seed(from);
+        let mut key: List<i32> = [ATN_DFA_START_KEY, decision, caller, min_prec];
+        key.extend(&preds.met);
+        key.push(ATN_DFA_START_KEY);
+        key.extend(&preds.own);
+        key.push(ATN_DFA_START_KEY);
+        key.extend(&preds.failed);
+        let seed = self.seed(key);
         let known = self.known_state(seed);
         if known >= 0 {
             return known;
@@ -2985,7 +2767,7 @@ impl AtnDfa {
         let mut taken = self.edges.get(edge).unwrap_or(-1);
         if taken < 0 {
             let moved = atn_move(sim, &self.state_configs[s], token, eof);
-            let from = self.seeds.keys.len();
+            let mut key: List<i32> = [];
             let sources_from = self.edge_sources.len();
             for let c of &moved {
                 let mut pctx = c.pctx;
@@ -2999,14 +2781,14 @@ impl AtnDfa {
                     }
                     pctx = self.arena.slot(i - sources_from);
                 }
-                self.seeds.keys.push(c.state);
-                self.seeds.keys.push(c.alt);
-                self.seeds.keys.push(c.pr);
-                self.seeds.keys.push(pctx);
-                self.seeds.keys.push(c.guard);
+                key.push(c.state);
+                key.push(c.alt);
+                key.push(c.pr);
+                key.push(pctx);
+                key.push(c.guard);
             }
             taken = self.edge_seed.len();
-            self.edge_seed.push(self.seed(from));
+            self.edge_seed.push(self.seed(key));
             self.edge_sources_from.push(sources_from);
             self.edges[edge] = taken;
         }
@@ -3028,57 +2810,52 @@ impl AtnDfa {
         return self.add_state(sim, configs, seed);
     }
 
-    fn seed(&mut self, from: i32) -> i32 {
-        let known = self.seeds.find(from);
-        if known >= 0 {
-            self.seeds.keys.truncate(from);
-            return known;
+    fn seed(&mut self, key: List<i32>) -> i32 {
+        let seed = self.seeds.intern(key);
+        if seed == self.seed_branch.len() {
+            let root = self.branch([seed]);
+            self.seed_branch.push(root);
         }
-        let root = self.branches.keys.len();
-        self.branches.keys.push(self.seeds.start.len());
-        let branch = self.open_branch(root);
-        self.seed_branch.push(branch);
-        return self.seeds.add(from);
+        return seed;
     }
 
     fn seed_configs(&self, seed: i32) -> List<AtnConfig> {
         let mut configs: List<AtnConfig> = [];
-        let from = self.seeds.start[seed];
-        for let mut i = from; i < from + self.seeds.len[seed]; i += 5 {
+        let key = self.seeds.at_ref(seed);
+        for let mut i = 0; i < key.len(); i += 5 {
             configs.push(AtnConfig {
-                state: self.seeds.keys[i],
-                alt: self.seeds.keys[i + 1],
-                pr: self.seeds.keys[i + 2],
-                pctx: self.seeds.keys[i + 3],
-                guard: self.seeds.keys[i + 4],
+                state: key[i],
+                alt: key[i + 1],
+                pr: key[i + 2],
+                pctx: key[i + 3],
+                guard: key[i + 4],
             });
         }
         return configs;
     }
 
-    fn open_branch(&mut self, from: i32) -> i32 {
-        self.branch_asks.push(ATN_DFA_BRANCH_OPEN);
-        self.branch_state.push(-1);
-        return self.branches.add(from);
+    fn branch(&mut self, key: List<i32>) -> i32 {
+        let branch = self.branches.intern(key);
+        if branch == self.branch_asks.len() {
+            self.branch_asks.push(ATN_DFA_BRANCH_OPEN);
+            self.branch_state.push(-1);
+        }
+        return branch;
     }
 
-    fn branch_key(&mut self, branch: i32, read: i32) -> i32 {
-        let from = self.branches.keys.len();
+    fn branch_key(&mut self, branch: i32, read: i32) -> List<i32> {
         if read < 0 {
-            self.branches.keys.push(branch);
-            self.branches.keys.push(self.arena.answer(-1 - read));
-            return from;
+            return [branch, self.arena.answer(-1 - read)];
         }
         self.arena.reveal(read);
-        let node = self.arena.slot_node[read];
-        let s = self.arena.node_start[node];
-        self.branches.keys.push(branch);
-        for let mut e = s; e < s + self.arena.node_len[node]; e += 1 {
-            self.branches.keys.push(self.arena.ret[e]);
-            self.branches.keys.push(self.arena.rpr[e]);
-            self.branches.keys.push(self.arena.parent[e]);
+        let edges = &self.arena.nodes[self.arena.slot_node[read]];
+        let mut key: List<i32> = [branch];
+        for let mut e = 0; e < edges.len(); e += 1 {
+            key.push(edges[e].ret());
+            key.push(edges[e].rpr());
+            key.push(edges[e].parent());
         }
-        return from;
+        return key;
     }
 
     fn known_state(&mut self, seed: i32) -> i32 {
@@ -3087,9 +2864,8 @@ impl AtnDfa {
             if self.branch_asks[branch] == ATN_DFA_BRANCH_OPEN {
                 return -1;
             }
-            let from = self.branch_key(branch, self.branch_asks[branch]);
-            branch = self.branches.find(from);
-            self.branches.keys.truncate(from);
+            let key = self.branch_key(branch, self.branch_asks[branch]);
+            branch = self.branches.find(key).unwrap_or(-1);
         }
         return if branch >= 0 { self.branch_state[branch] } else { -1 };
     }
@@ -3105,12 +2881,8 @@ impl AtnDfa {
                 self.branch_asks[branch] = read;
             }
             assert self.branch_asks[branch] == read, "equal frames lead a closure to read the same frame next";
-            let from = self.branch_key(branch, read);
-            let known = self.branches.find(from);
-            if known >= 0 {
-                self.branches.keys.truncate(from);
-            }
-            branch = if known >= 0 { known } else { self.open_branch(from) };
+            let key = self.branch_key(branch, read);
+            branch = self.branch(key);
         }
         assert self.branch_asks[branch] == ATN_DFA_BRANCH_OPEN, "a state is kept once per seed and frames read";
         self.branch_asks[branch] = ATN_DFA_BRANCH_LEAF;
