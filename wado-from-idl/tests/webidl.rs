@@ -960,9 +960,10 @@ fn a_child_redeclaring_an_inherited_method_keeps_the_parents() {
 }
 
 /// What `SVGElement.className` is, an `SVGAnimatedString` over the `DOMString`
-/// of `Element.className`: the parent's method answers with the wrong type.
+/// of `Element.className`: the parent's method would answer with the wrong
+/// type, so the child's binds under its interface's name.
 #[test]
-fn a_child_redeclaring_with_another_type_is_counted_apart() {
+fn a_child_redeclaring_with_another_type_binds_under_its_interfaces_name() {
     let mut defs = chain();
     defs.interfaces.push(partial(
         "EventTarget",
@@ -983,29 +984,44 @@ fn a_child_redeclaring_with_another_type_is_counted_apart() {
             operation("item", &plain("long"), &[index], ""),
         ],
     ));
-    let (_, skipped) = defs.transform();
-    let reported: Vec<(String, Cause)> = skipped
-        .iter()
-        .map(|s| (s.to_string(), s.reason.cause.clone()))
-        .collect();
-    let retyped = |member: &str| {
-        (
-            format!(
-                "Element.{member}: redeclares a method inherited from `EventTarget` with another type"
-            ),
-            Cause::RetypedOverride,
-        )
-    };
-    let expected = [
-        (
-            "Node.label: redeclares a method inherited from `EventTarget`".to_string(),
-            Cause::Override,
-        ),
-        retyped("label"),
-        retyped("set_label"),
-        retyped("item"),
-    ];
-    assert_eq!(reported, expected);
+    let (code, skipped) = defs.generate();
+    assert_eq!(
+        skipped,
+        ["Node.label: redeclares a method inherited from `EventTarget`"]
+    );
+    for declaration in [
+        "fn element_label(&self) -> i32;",
+        "fn set_element_label(&self, value: i32);",
+        "fn element_item(&self, index: i32) -> i32;",
+    ] {
+        assert!(code.contains(declaration), "{declaration}\n{code}");
+    }
+    let glue = generate(&defs.build(), "idl/dom.webidl.json")
+        .expect("the slice should generate")
+        .glue;
+    assert!(glue.contains("web/element#set-label\""), "{glue}");
+}
+
+/// What `MediaStreamTrack.clone` is to its children: the parent's method hands
+/// back the child's object, which a type pattern narrows.
+#[test]
+fn a_child_narrowing_only_the_result_keeps_the_parents() {
+    let mut defs = chain();
+    let twin = |of: &str, nullable: bool| operation("twin", &named(of, nullable), &[], "");
+    defs.interfaces
+        .push(partial("EventTarget", &[twin("EventTarget", true)]));
+    defs.interfaces.push(partial("Node", &[twin("Node", true)]));
+    defs.interfaces
+        .push(partial("Element", &[twin("Element", true)]));
+    let (code, skipped) = defs.generate();
+    assert_eq!(code.matches("fn twin(&self)").count(), 1, "{code}");
+    assert_eq!(
+        skipped,
+        [
+            "Node.twin: redeclares a method inherited from `EventTarget`",
+            "Element.twin: redeclares a method inherited from `Node`",
+        ]
+    );
 }
 
 /// What `MouseEvent.initMouseEvent` asks for: the arguments a caller may leave

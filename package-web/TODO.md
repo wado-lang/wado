@@ -19,34 +19,33 @@ each thing it does not bind on stderr, and counts them by cause.
 interface a page can reach, and every namespace. That is the measure of what is
 left before the slice can be everything:
 
-| Cause                                            | Definitions | Members | Overloads | Arguments |
-| ------------------------------------------------ | ----------- | ------- | --------- | --------- |
-| a dictionary                                     | 776         | 261     | 7         | 396       |
-| a constant                                       | 0           | 1261    | 0         | 0         |
-| a callback in a result                           | 0           | 932     | 0         | 0         |
-| an enum                                          | 357         | 283     | 1         | 6         |
-| a type outside the slice                         | 0           | 263     | 1         | 2         |
-| a union                                          | 0           | 196     | 7         | 16        |
-| `any`                                            | 0           | 128     | 0         | 32        |
-| a buffer                                         | 0           | 126     | 20        | 2         |
-| a namespace member                               | 0           | 133     | 0         | 0         |
-| a special operation                              | 0           | 81      | 0         | 0         |
-| `[HTMLConstructor]`                              | 0           | 76      | 0         | 0         |
-| `object`                                         | 0           | 54      | 1         | 6         |
-| a redeclared inherited method                    | 0           | 52      | 0         | 0         |
-| overloads                                        | 0           | 44      | 0         | 0         |
-| an iteration declaration                         | 0           | 41      | 0         | 0         |
-| `Promise<…>`                                     | 0           | 29      | 0         | 1         |
-| a callback the glue cannot call                  | 0           | 19      | 0         | 8         |
-| an inherited method redeclared with another type | 0           | 10      | 0         | 0         |
-| a static attribute                               | 0           | 7       | 0         | 0         |
-| `record<…>`                                      | 0           | 6       | 0         | 0         |
-| a list of a list, a nullable type or a callback  | 0           | 3       | 0         | 1         |
-| `ObservableArray<…>`                             | 0           | 4       | 0         | 0         |
-| parameters passed through memory                 | 0           | 1       | 0         | 2         |
-| `bigint`                                         | 0           | 1       | 0         | 0         |
-| `async_sequence<…>`                              | 0           | 1       | 0         | 0         |
-| Total                                            | 1133        | 4012    | 37        | 472       |
+| Cause                                           | Definitions | Members | Overloads | Arguments |
+| ----------------------------------------------- | ----------- | ------- | --------- | --------- |
+| a dictionary                                    | 776         | 261     | 7         | 396       |
+| a constant                                      | 0           | 1261    | 0         | 0         |
+| a callback in a result                          | 0           | 932     | 0         | 0         |
+| an enum                                         | 357         | 283     | 1         | 6         |
+| a type outside the slice                        | 0           | 263     | 1         | 2         |
+| a union                                         | 0           | 196     | 7         | 16        |
+| `any`                                           | 0           | 128     | 0         | 32        |
+| a buffer                                        | 0           | 126     | 20        | 2         |
+| a namespace member                              | 0           | 133     | 0         | 0         |
+| a special operation                             | 0           | 81      | 0         | 0         |
+| `[HTMLConstructor]`                             | 0           | 76      | 0         | 0         |
+| a redeclared inherited method                   | 0           | 55      | 0         | 0         |
+| `object`                                        | 0           | 54      | 1         | 6         |
+| overloads                                       | 0           | 44      | 0         | 0         |
+| an iteration declaration                        | 0           | 41      | 0         | 0         |
+| `Promise<…>`                                    | 0           | 29      | 0         | 1         |
+| a callback the glue cannot call                 | 0           | 19      | 0         | 8         |
+| a static attribute                              | 0           | 7       | 0         | 0         |
+| `record<…>`                                     | 0           | 6       | 0         | 0         |
+| a list of a list, a nullable type or a callback | 0           | 3       | 0         | 1         |
+| `ObservableArray<…>`                            | 0           | 4       | 0         | 0         |
+| parameters passed through memory                | 0           | 1       | 0         | 2         |
+| `bigint`                                        | 0           | 1       | 0         | 0         |
+| `async_sequence<…>`                             | 0           | 1       | 0         | 0         |
+| Total                                           | 1133        | 4005    | 37        | 472       |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
@@ -64,8 +63,11 @@ read the table:
   whole platform those are `CSSOMString`, `WindowProxy`, the legacy aliases
   `SVGPoint`, `SVGRect` and `SVGMatrix`, and an interface only a worker reaches.
 - A redeclared inherited method is not lost: the parent's method serves the
-  child. One redeclared with another type is lost, as `SVGElement.className` is:
-  an `SVGAnimatedString`, where `Element.className` is a string.
+  child, since it has the same types or differs only in a result that is a
+  resource extending the parent's. One redeclared with any other type binds
+  under its interface's name, so it is not in the table: `SVGElement.className`,
+  an `SVGAnimatedString` where `Element.className` is a string, is
+  `svg_element_class_name`.
 
 The report leaves out the interfaces only a worker or a worklet reaches.
 
@@ -127,8 +129,8 @@ lower is then available to each interface the slice adds.
   `mise run report-webidl-coverage` writes those bindings to
   `scratchpad/webidl-all/dom.wado`.
 - Where a child redeclares an inherited method with another type, the parent's
-  method is the one a call on the child reaches, and it answers with the
-  parent's type. No interface of the slice does.
+  method is still callable on the child, and answers with the parent's type.
+  The child's own is `<interface>_<member>`. No interface of the slice has one.
 - A union collapsed to its one typable constituent in an argument is not
   reported, though the other constituents cannot be passed.
 - A program cannot recover from a DOM exception: it traps.

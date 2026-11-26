@@ -291,7 +291,7 @@ pub resource Node    extends EventTarget { fn clone(&self) -> Node; }
 pub resource Element extends Node        { fn clone(&self) -> Element; }  // ERROR: Element redeclares Node::clone
 ```
 
-Reason: with no override, resolution stays purely static and `Self` semantics (see (4)) stay simple. WebIDL does redeclare an inherited member in places, as `DOMPoint.x` does over `DOMPointReadOnly.x`. The binding generator keeps the declaration nearest the root and reports each one below it.
+Reason: with no override, resolution stays purely static and `Self` semantics (see (4)) stay simple. WebIDL does redeclare an inherited member in places, as `DOMPoint.x` does over `DOMPointReadOnly.x`. The binding generator drops a redeclaration the parent's method serves, and binds any other under its interface's name; see [WEP: The Web Interface for Wado](./wep-2026-04-01-web.md).
 
 ##### (2) Trait-vs-inherited collisions are an error
 

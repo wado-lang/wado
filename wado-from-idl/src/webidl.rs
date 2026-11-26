@@ -256,9 +256,6 @@ pub enum Cause {
     HtmlConstructor,
     /// A child redeclaring a method of its chain, which a resource may not.
     Override,
-    /// The same, where the parent's method answers with another type than the
-    /// child declares.
-    RetypedOverride,
 }
 
 impl std::fmt::Display for Cause {
@@ -286,7 +283,6 @@ impl std::fmt::Display for Cause {
             Self::StaticAttribute => "a static attribute",
             Self::HtmlConstructor => "`[HTMLConstructor]`",
             Self::Override => "a redeclared inherited method",
-            Self::RetypedOverride => "an inherited method redeclared with another type",
         };
         f.write_str(label)
     }
@@ -572,7 +568,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
             },
         );
     }
-    drop_overrides(&merged, &mut resources, &mut js, &mut skipped);
+    settle_overrides(&merged, &mut resources, &mut js, &mut skipped);
 
     let mut module = WadoModule::new(snapshot.module.clone(), snapshot.webref.clone());
     if let Some(bindings) = lowering.global_bindings(&merged, &resources)? {
@@ -759,61 +755,99 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
     Ok(merged)
 }
 
-/// Drop each method a child redeclares from its chain, which a resource may
-/// not: the declaration nearest the root serves each one below it. Statics
-/// (`new` above all) are not inherited.
-fn drop_overrides<'a>(
+/// Settle each method a child redeclares from its chain, which a resource may
+/// not. Where the nearest declaration above serves the child, the child's is
+/// dropped: it has the same types, or differs only in a result that is a
+/// resource extending the parent's, which a type pattern narrows. Otherwise the
+/// parent's would answer with the wrong type, and the child's binds under its
+/// interface's name (`svg_element_class_name`). Statics (`new` above all) are
+/// not inherited.
+fn settle_overrides<'a>(
     merged: &IndexMap<&'a str, Merged<'_>>,
     resources: &mut IndexMap<&'a str, WadoResource>,
     js: &mut IndexMap<String, JsFunction>,
     skipped: &mut Vec<Skip>,
 ) {
     let has_receiver = |m: &WadoFunction| m.params.first().is_some_and(|p| p.wit_name == "self");
-    // What a caller sees past the receiver.
-    let signature = |m: &WadoFunction| {
-        let params: Vec<WadoType> = m.params[1..].iter().map(|p| p.ty.clone()).collect();
-        (params, m.return_type.clone(), m.is_async)
+    let ancestors = |name: &'a str| {
+        std::iter::successors(merged[name].inheritance.as_deref(), |parent| {
+            merged[*parent].inheritance.as_deref()
+        })
     };
-    let declared: IndexMap<&str, IndexMap<String, _>> = resources
+    let interface_of: IndexMap<String, &str> = resources
+        .iter()
+        .map(|(name, r)| (r.name.clone(), *name))
+        .collect();
+    let serves = |child: &WadoFunction, parent: &WadoFunction| {
+        let params = |m: &WadoFunction| m.params[1..].iter().map(|p| p.ty.clone()).collect();
+        let (child_params, parent_params): (Vec<WadoType>, Vec<WadoType>) =
+            (params(child), params(parent));
+        child_params == parent_params
+            && child.is_async == parent.is_async
+            && match (&child.return_type, &parent.return_type) {
+                (Some(child), Some(parent)) => narrows(child, parent, |c, p| {
+                    ancestors(interface_of[c]).any(|a| a == interface_of[p])
+                }),
+                (None, None) => true,
+                (None, Some(_)) | (Some(_), None) => false,
+            }
+    };
+    let declared: IndexMap<&str, IndexMap<String, WadoFunction>> = resources
         .iter()
         .map(|(name, r)| {
             let receivers = r.methods.iter().filter(|m| has_receiver(m));
-            let signatures = receivers.map(|m| (m.name.clone(), signature(m)));
-            (*name, signatures.collect())
+            (
+                *name,
+                receivers.map(|m| (m.name.clone(), m.clone())).collect(),
+            )
         })
         .collect();
-    for (name, iface) in merged {
-        resources[name].methods.retain(|method| {
+    for name in merged.keys() {
+        resources[name].methods.retain_mut(|method| {
             if !has_receiver(method) {
                 return true;
             }
-            let chain = std::iter::successors(iface.inheritance.as_deref(), |parent| {
-                merged[parent].inheritance.as_deref()
-            });
-            let Some((parent, serving)) = chain
-                .filter_map(|parent| Some((parent, declared[parent].get(&method.name)?)))
-                .last()
+            let Some((parent, inherited)) = ancestors(name)
+                .find_map(|parent| Some((parent, declared[parent].get(&method.name)?)))
             else {
                 return true;
             };
+            if !serves(method, inherited) {
+                let interface = to_snake_case(name);
+                method.name = match js[&method.cm_attr].member {
+                    JsMember::Set(_) => {
+                        method
+                            .name
+                            .replacen("set_", &format!("set_{interface}_"), 1)
+                    }
+                    _ => format!("{interface}_{}", method.name),
+                };
+                return true;
+            }
             js.shift_remove(&method.cm_attr)
                 .expect("every function has a JavaScript half");
-            let inherited = format!("redeclares a method inherited from `{parent}`");
-            let reason = if *serving == signature(method) {
-                Reason::new(Cause::Override, inherited)
-            } else {
-                Reason::new(
-                    Cause::RetypedOverride,
-                    format!("{inherited} with another type"),
-                )
-            };
             skipped.push(Skip {
                 item: format!("{name}.{}", method.name),
                 lost: Lost::Member,
-                reason,
+                reason: Reason::new(
+                    Cause::Override,
+                    format!("redeclares a method inherited from `{parent}`"),
+                ),
             });
             false
         });
+    }
+}
+
+/// Whether `child` is `parent`, or `parent` with a resource replaced by one
+/// that `extends` it.
+fn narrows(child: &WadoType, parent: &WadoType, extends: impl Fn(&str, &str) -> bool) -> bool {
+    match (child, parent) {
+        (WadoType::Option(child), WadoType::Option(parent)) => narrows(child, parent, extends),
+        (WadoType::Named(child), WadoType::Named(parent)) => {
+            child == parent || extends(child, parent)
+        }
+        _ => child == parent,
     }
 }
 
