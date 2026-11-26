@@ -6,7 +6,7 @@ use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { HashMap } from "core:collections";
 use { to_bytes, from_bytes, from_string } from "core:json";
-use { Serialize, Deserialize } from "core:serde";
+use { Serialize, SerializeError, Serializer, Deserialize } from "core:serde";
 use { Value, to_value, from_value } from "core:value";
 use { HttpClient } from "core:http_client";
 use { JsonSchema, JsonTypes, Schema, schema_for } from "wado-lang:jade";
@@ -31,27 +31,40 @@ struct Shaped {
 }
 
 /// The shape of a reply: the API holds the reply's text to `schema`, so the
-/// text is one JSON value and nothing else.
+/// text is one JSON value and nothing else. Only `Format::of` makes one, which
+/// is what keeps `schema` to what the API takes.
 pub struct Format {
+    schema: Schema,
+}
+
+struct FormatWire {
     #[wire(name = "type")]
-    pub kind: String = "json_schema",
-    pub schema: Schema,
+    kind: String = "json_schema",
+    schema: Schema,
+}
+
+impl Serialize for Format {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return FormatWire { schema: self.schema }.serialize(s);
+    }
 }
 
 impl Format {
-    /// The JSON form of `T`.
+    /// The JSON form of `T`. The doc comments of `T`, of the types it holds
+    /// and of their fields reach the model as the schema's descriptions, so
+    /// they are part of the prompt.
     pub fn of<T: JsonSchema>() -> Format {
         return Format { schema: accepted(schema_for::<T>()) };
     }
 }
 
 /// `schema` as the API takes one: every object closed to properties it does
-/// not name, and no number bounded. The API refuses any other keyword it does
-/// not take, so a type whose schema holds one fails at its first request.
+/// not name, and no number bounded.
 fn accepted(schema: Schema) -> Schema {
     return match schema {
         Bool(_) => schema,
         Object(mut s) => {
+            assert s.one_of.is_empty() && s.prefix_items.is_empty() && s.additional_properties matches { null }, "a reply type must hold only structs, lists, options and scalars";
             if s.type & JsonTypes::Object != JsonTypes::none() {
                 s.additional_properties = Some(Schema::Bool(false));
             }

@@ -15,7 +15,7 @@ use { MonotonicClock } from "wasi:clocks";
 use { Call } from "./agent.wado";
 use { ask_json, shaped, Credential, Usage } from "./anthropic.wado";
 use { git, try_git } from "./git.wado";
-use { Repro, Reviewed, Submission } from "./review.wado";
+use { Repro, Reviewed, Submission, Told } from "./review.wado";
 use { checkout_at, reset_snapshot, Worktree } from "./snapshot.wado";
 use { Ran, RunInput, Runner, Workspace, WriteInput, RUN_TIMEOUT } from "./tools.wado";
 
@@ -49,12 +49,6 @@ struct Claim {
 
 struct Answer {
     findings: List<Placed>,
-}
-
-struct Told {
-    file: String,
-    summary: String,
-    detail: String,
 }
 
 /// Gives each finding of `reviewed`, a review of `change` in the tree at `w`

@@ -64,13 +64,13 @@ pub struct Reviewed {
 }
 
 /// What a reviewer says of one defect.
-struct Told {
+internal struct Told {
     /// The path of the file the defect is in.
-    file: String,
+    internal file: String,
     /// The defect, in one sentence.
-    summary: String,
+    internal summary: String,
     /// Why it is wrong, and when it goes wrong.
-    detail: String,
+    internal detail: String,
 }
 
 struct Answer {
@@ -194,7 +194,7 @@ test "a reviewer is asked for a finding's words and nothing a report adds" {
     let told = instructions(&Workspace { root: "src", runner: Some(runner) });
     assert !told.contains(#""line""#) && !told.contains(#""repro""#) && !told.contains(#""paths""#);
     let format = to_string(&Format::of::<Answer>()).unwrap();
-    assert format.contains(#""detail""#);
+    assert format.contains(#""description":"Why it is wrong, and when it goes wrong.""#);
     assert !format.contains(#""line""#) && !format.contains(#""repro""#) && !format.contains(#""paths""#);
 }
 
