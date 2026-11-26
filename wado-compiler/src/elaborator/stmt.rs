@@ -428,7 +428,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report every `..X` in a written type whose `X` no type parameter list
     /// declares a pack.
-    pub(super) fn reject_non_pack_spreads(&mut self, ty: &ast::Type) {
+    pub(super) fn reject_non_pack_spreads(&self, ty: &ast::Type) {
         let bad: Vec<(String, Span)> = ty
             .pack_spreads()
             .into_iter()
@@ -909,7 +909,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Check the binding of a walk over a type pack, a `for` or a tuple
     /// comprehension: a name, `_`, or a tuple of them as long as the element.
     pub(super) fn check_pack_binding(
-        &mut self,
+        &self,
         binding: &Pattern,
         binding_type: TypeId,
         span: Span,
@@ -979,7 +979,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Why `pattern` itself, apart from its parts, can fail against `scrutinee`.
     /// A case cannot when no other case of its type holds a value.
-    fn refutation(&mut self, pattern: &Pattern, scrutinee: TypeId) -> Option<String> {
+    fn refutation(&self, pattern: &Pattern, scrutinee: TypeId) -> Option<String> {
         match pattern {
             Pattern::Variant { variant_name, .. }
                 if !self.another_case_holds_a_value(scrutinee, variant_name) =>
@@ -1015,7 +1015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .any(|(case, payload)| case.name != name && !self.is_uninhabited(payload))
     }
 
-    fn reject_refutable(&mut self, site: BindingSite, reason: &str, span: Span) {
+    fn reject_refutable(&self, site: BindingSite, reason: &str, span: Span) {
         let (position, remedy) = match site {
             BindingSite::Let => ("`let` binding", "use `let ... else` or `if let` instead"),
             BindingSite::ForOf => (
@@ -1234,7 +1234,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// wrap happens, because it is where `&mut` onto a scalar is refused: Wasm
     /// GC has no interior pointer to one, so it would reference a copy.
     fn pattern_binding_type(
-        &mut self,
+        &self,
         name: &str,
         type_id: TypeId,
         ref_binding: RefBinding,
@@ -2242,7 +2242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A narrowing tests the class a handle carries, so its target must number one.
-    fn require_handle_classes(&mut self, target: TypeId, span: Span) {
+    fn require_handle_classes(&self, target: TypeId, span: Span) {
         let unnumbered = {
             let tt = self.tysys.type_table.borrow();
             tt.narrowing_classes(target)
@@ -2290,7 +2290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// A narrowing is the host's answer about the value itself: it binds that
     /// value whole, and not through a reference.
-    fn check_narrowing_shape(&mut self, inner: &Pattern, ref_binding: RefBinding, span: Span) {
+    fn check_narrowing_shape(&self, inner: &Pattern, ref_binding: RefBinding, span: Span) {
         let message = if ref_binding != RefBinding::None {
             "a type pattern narrows a resource value, not a reference to one"
         } else if !matches!(
@@ -2309,7 +2309,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// A narrowing where the pattern cannot fail over to anything.
     fn reject_refutable_narrowing(
-        &mut self,
+        &self,
         value: TypeId,
         target: TypeId,
         span: Span,
@@ -2428,8 +2428,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: Span,
     ) {
         let (errors, inexact) = if self.settles_literal_patterns(scrutinee_type) {
-            let mut type_table = self.tysys.type_table.borrow_mut();
-            match util::settle_instance_pattern(pattern, scrutinee_type, &mut type_table) {
+            let type_table = self.tysys.type_table.borrow();
+            match util::settle_instance_pattern(pattern, scrutinee_type, &type_table) {
                 Ok(settled) => {
                     if let util::SettledPattern::Float(_) = settled {
                         reserve_float_pattern_locals(scrutinee_type, &type_table, |name, ty| {
@@ -2466,7 +2466,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn emit_pattern_literal_error(
-        &mut self,
+        &self,
         error: util::PatternLiteralError,
         scrutinee_type: TypeId,
         span: Span,
@@ -2554,8 +2554,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let error = match util::range_bound(bound, &self.tysys.resolutions) {
                 Some(Ok(bound)) => {
-                    let mut type_table = self.tysys.type_table.borrow_mut();
-                    util::bound_value(&bound, scrutinee, &mut type_table).err()
+                    let type_table = self.tysys.type_table.borrow();
+                    util::bound_value(&bound, scrutinee, &type_table).err()
                 }
                 Some(Err(message)) => message.map(util::PatternLiteralError::Invalid),
                 None => Some(util::PatternLiteralError::Invalid(
@@ -2752,7 +2752,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// What a for-of binds per element: the element, or `[i32, element]` under
     /// `.enumerate()`.
-    fn for_of_binding_type(&mut self, is_enumerate: bool, element: TypeId) -> TypeId {
+    fn for_of_binding_type(&self, is_enumerate: bool, element: TypeId) -> TypeId {
         if is_enumerate {
             self.tysys
                 .type_table
@@ -3207,7 +3207,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report a `break` or `continue` written in a for-of the compiler expands:
     /// the expansion leaves neither a loop to name. `kind` names the for-of.
-    fn reject_expanded_control_flow(&mut self, body: &Block, kind: &str) -> bool {
+    fn reject_expanded_control_flow(&self, body: &Block, kind: &str) -> bool {
         let mut finder = LoopControlFlowFinder { found: None };
         finder.visit_block(body);
         let Some((written, span)) = finder.found else {

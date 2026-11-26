@@ -506,7 +506,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn try_coerce_numeric_literal_inner(
-        &mut self,
+        &self,
         literal: NumericLiteral<'_>,
         target_type: TypeId,
     ) -> Option<TypeId> {
@@ -833,7 +833,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// What `ret` says of each variable its declared type names, where that is
     /// a type a numeric literal can be: in `let x: u64 = unbox(Box { v: 1 })`
     /// it answers `T` ahead of the literal's default.
-    fn literal_hints(&mut self, ret: Option<ExpectedReturn>) -> IndexMap<TypeId, TypeId> {
+    fn literal_hints(&self, ret: Option<ExpectedReturn>) -> IndexMap<TypeId, TypeId> {
         let Some(ret) = ret else {
             return IndexMap::default();
         };
@@ -849,7 +849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// substitution [`Elaborator::context_literal_expected`] applies: the
     /// type a call's site expects reaches its arguments first, as a hint.
     pub(super) fn expected_return_hints(
-        &mut self,
+        &self,
         own_vars: &[TypeId],
         ret: Option<ExpectedReturn>,
     ) -> IndexMap<InferVarId, TypeId> {
@@ -874,7 +874,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// tuple. A typed argument is checked against `expected` alone, so it
     /// still decides what the hint only suggests.
     pub(super) fn context_literal_expected(
-        &mut self,
+        &self,
         arg: &Expr,
         expected: TypeId,
         hints: &IndexMap<InferVarId, TypeId>,
@@ -893,7 +893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .substitute_infer_vars(expected, hints)
     }
 
-    fn unify_expected_return(&mut self, ret: ExpectedReturn) -> IndexMap<TypeId, TypeId> {
+    fn unify_expected_return(&self, ret: ExpectedReturn) -> IndexMap<TypeId, TypeId> {
         let declared = self.apply_infer_holes(ret.declared);
         let expected = self.apply_infer_holes(ret.expected);
         let mut bindings = IndexMap::default();
@@ -1427,7 +1427,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `newtype` with the inference variables its `base` names answered by
     /// `built`, the value that base was checked against.
-    fn instantiate_from_base(&mut self, newtype: TypeId, base: TypeId, built: TypeId) -> TypeId {
+    fn instantiate_from_base(&self, newtype: TypeId, base: TypeId, built: TypeId) -> TypeId {
         let mut bindings = IndexMap::default();
         unify(&self.tysys.type_table, base, built, &mut bindings);
         let answers = infer_var_answers(&self.tysys.type_table.borrow(), bindings);
@@ -1759,11 +1759,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Assemble the `from` call's facts for a resolved `From<Array<E>>`,
     /// already remangled.
-    fn literal_from_call(
-        &mut self,
-        from_info: &FromArrayInfo,
-        output_type: TypeId,
-    ) -> LiteralFromCall {
+    fn literal_from_call(&self, from_info: &FromArrayInfo, output_type: TypeId) -> LiteralFromCall {
         LiteralFromCall {
             from_type: from_info.array_type,
             output_type,
@@ -1779,7 +1775,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Name the trait method a literal calls on `output_type`, remangled.
     fn literal_callee(
-        &mut self,
+        &self,
         impl_def: Option<DefId>,
         impl_module_source: ModuleSource,
         trait_name: FqTraitName,

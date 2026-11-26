@@ -460,7 +460,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_generic_reflect_from_fields(
                 self_ty,
                 type_param_name,
-                reflect_trait_name.clone(),
+                reflect_trait_name,
                 static_call,
                 ctx,
             );
@@ -536,7 +536,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The diagnostic for a reflect member on a generic subject `T` that
     /// carries no pack bound to source the member's shape from.
     fn emit_missing_pack_bound(
-        &mut self,
+        &self,
         trait_name: &str,
         type_param_name: &str,
         method: &str,
@@ -1557,7 +1557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// — projecting a pack out of `T: ReflectFlags<Members = [..M]>` — finds
     /// nothing in the registry and must compute it.
     pub(super) fn concrete_reflect_assoc_type(
-        &mut self,
+        &self,
         subject: TypeId,
         trait_: DefId,
         assoc_name: &str,
@@ -1653,7 +1653,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The member tuple for a kind whose handle carries a payload type:
     /// `[StructField<T, F_0>, ...]` / `[VariantCase<T, P_0>, ...]`.
     fn payload_members_ty(
-        &mut self,
+        &self,
         member_struct_item: CompilerItem,
         subject: TypeId,
         member_types: &[TypeId],
@@ -1669,7 +1669,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The concrete N-tuple `[M<Self>; N]` for `members()`, N being the
     /// subject's case / bit count.
-    fn scalar_concrete_members_ty(&mut self, spec: ScalarReflectSpec, self_ty: TypeId) -> TypeId {
+    fn scalar_concrete_members_ty(&self, spec: ScalarReflectSpec, self_ty: TypeId) -> TypeId {
         let count = self.scalar_member_count(spec, self_ty);
         let mut tt = self.tysys.type_table.borrow_mut();
         let def = tt.require_compiler_item_def(spec.member_struct_item);
