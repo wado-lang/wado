@@ -1,6 +1,6 @@
 #![generated(by = "src/generator.wado", sources = ["tests/antlr4-compat/grammars/LeftRecursion/WhitespaceInfluence_1.g4"])]
 
-use { HashMap, HashSet, HashSeed } from "core:collections";
+use { HashMap, HashSeed, HashSet } from "core:collections";
 
 pub struct Span {
     pub start: i32,
@@ -65,12 +65,25 @@ internal fn push_escaped(out: &mut String, src: &StrSlice, start: i32, end: i32)
     out.push_str(unchecked src.slice(run, end));
 }
 
-internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
-    let w = kind >> 5;
-    if w >= set.len() {
-        return false;
+pub type KindSet = List<i32>;
+
+impl KindSet {
+    pub fn has(&self, kind: i32) -> bool {
+        let w = kind >> 5;
+        if w >= self.len() {
+            return false;
+        }
+        return self[w] >> (kind & 31) & 1 == 1;
     }
-    return set[w] >> (kind & 31) & 1 == 1;
+
+    internal fn union_with(&mut self, other: &KindSet) {
+        while self.len() < other.len() {
+            self.push(0);
+        }
+        for let mut i = 0; i < other.len(); i += 1 {
+            self[i] |= other[i];
+        }
+    }
 }
 
 internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
@@ -969,6 +982,33 @@ fn emit_lexer_token(
         out.push_str(`channel=${channel},`);
     }
     out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
+}
+
+global INTERN_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
+
+internal struct Interner<K> {
+    items: List<K>,
+    ids: HashMap<K, i32>,
+}
+
+impl<K: Hash> Interner<K> {
+    internal fn new() -> Interner<K> {
+        return Interner { items: [], ids: HashMap::with_seed(INTERN_SEED) };
+    }
+
+    internal fn intern(&mut self, item: K) -> i32 {
+        if let Some(id) = self.ids.get(item) {
+            return id;
+        }
+        let id = self.items.len();
+        self.items.push(item);
+        self.ids[item] = id;
+        return id;
+    }
+
+    internal fn at(&self, id: i32) -> K {
+        return self.items[id];
+    }
 }
 internal struct ScanMemo<G> {
     heads: Array<i32>,
@@ -3514,24 +3554,9 @@ struct LThread {
     accept: bool,
 }
 
-struct LatnStacks {
-    parent: List<i32>,
-    ret: List<i32>,
-    ids: HashMap<i64, i32>,
-}
-
-impl LatnStacks {
-    fn push(&mut self, parent: i32, ret: i32) -> i32 {
-        let key = latn_pair_key(parent, ret);
-        if let Some(id) = self.ids.get(key) {
-            return id;
-        }
-        let id = self.parent.len();
-        self.parent.push(parent);
-        self.ret.push(ret);
-        self.ids[key] = id;
-        return id;
-    }
+struct LatnFrame {
+    parent: i32,
+    ret: i32,
 }
 
 fn latn_pair_key(hi: i32, lo: i32) -> i64
@@ -3588,7 +3613,7 @@ impl LatnVisited {
 
 fn latn_closure(
     sim: &AtnSim,
-    stacks: &mut LatnStacks,
+    stacks: &mut Interner<LatnFrame>,
     out: &mut List<LThread>,
     visited: &mut LatnVisited,
     state: i32,
@@ -3605,7 +3630,8 @@ fn latn_closure(
             return;
         }
         let returned = open.pop();
-        latn_closure(sim, stacks, out, visited, stacks.ret[stack], stacks.parent[stack], open);
+        let frame = stacks.at(stack);
+        latn_closure(sim, stacks, out, visited, frame.ret, frame.parent, open);
         if let Some(rule) = returned {
             open.push(rule);
         }
@@ -3627,7 +3653,7 @@ fn latn_closure(
             if target < 0 || open.contains(&target) {
                 continue;
             }
-            let pushed = stacks.push(stack, sim.tr_follow[idx]);
+            let pushed = stacks.intern(LatnFrame { parent: stack, ret: sim.tr_follow[idx] });
             open.push(target);
             latn_closure(sim, stacks, out, visited, target, pushed, open);
             let _ = open.pop();
@@ -3639,7 +3665,7 @@ fn latn_closure(
 
 internal fn latn_match(sim: &AtnSim, start_rule: i32, src: &StrSlice, start: i32, longest: bool) -> i32 {
     let mut best = -1;
-    let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::with_seed(LATN_SEED) };
+    let mut stacks = Interner::<LatnFrame>::new();
     let mut open: List<i32> = [];
     let visited = &mut LATN_VISITED;
     visited.cover(sim.state_kind.len());
@@ -4537,7 +4563,7 @@ impl Parser {
         }
         self.recovery_pos = self.pos;
         self.recovered_failures.push(failure);
-        self.skip_until(&self.resync_set(&[]));
+        self.skip_until(&self.resync_set(&EMPTY_SYNC));
         return true;
     }
 
@@ -4555,13 +4581,10 @@ impl Parser {
         self.b.mark_error();
     }
 
-    fn resync_set(&self, base: &List<i32>) -> List<i32> {
+    fn resync_set(&self, base: &KindSet) -> KindSet {
         let mut set = *base;
         for let s of &self.sites {
-            if *s < 0 { continue; }
-            let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];
-            while set.len() < f.len() { set.push(0); }
-            for let mut i = 0; i < f.len(); i += 1 { set[i] |= f[i]; }
+            if *s >= 0 { set.union_with(&CALL_FOLLOW_SETS[CALL_FOLLOW[*s]]); }
         }
         return set;
     }
@@ -4570,14 +4593,14 @@ impl Parser {
         for let mut i = self.sites.len() - 1; i >= 0; i -= 1 {
             let s = self.sites[i];
             if s < 0 { return i == 0 && k == TK_EOF; }
-            if kind_set_has(&CALL_FOLLOW_SETS[CALL_FOLLOW[s]], k) { return true; }
+            if CALL_FOLLOW_SETS[CALL_FOLLOW[s]].has(k) { return true; }
             if !CALL_FOLLOW_ENDS[s] { return false; }
         }
         return k == TK_EOF;
     }
 
-    fn skip_until(&mut self, set: &List<i32>) {
-        while !self.at_eof() && !kind_set_has(set, self.peek_kind()) {
+    fn skip_until(&mut self, set: &KindSet) {
+        while !self.at_eof() && !set.has(self.peek_kind()) {
             self.skip_one();
         }
     }
@@ -4588,8 +4611,8 @@ impl Parser {
         self.b.skip(_sk);
     }
 
-    fn sync_delete(&mut self, sync: &List<i32>, expected: &List<i32>) -> bool {
-        if self.speculating || self.at_eof() || !kind_set_has(sync, self.peek_at(1)) {
+    fn sync_delete(&mut self, sync: &KindSet, expected: &List<i32>) -> bool {
+        if self.speculating || self.at_eof() || !sync.has(self.peek_at(1)) {
             return false;
         }
         self.report_extraneous(expected, RecoveryAction::Deleted);
@@ -4597,19 +4620,19 @@ impl Parser {
         return true;
     }
 
-    fn sync_enter(&mut self, sync: &List<i32>, expected: &List<i32>) {
+    fn sync_enter(&mut self, sync: &KindSet, expected: &List<i32>) {
         if !self.recovering && !self.sync_delete(sync, expected) {
             self.fail_expecting(expected);
         }
     }
 
-    fn sync_alts(&mut self, sync: &List<i32>, expected: &List<i32>) {
+    fn sync_alts(&mut self, sync: &KindSet, expected: &List<i32>) {
         if !self.recovering && !self.sync_delete(sync, expected) {
             self.no_viable("no viable alternative", self.peek_span(), expected);
         }
     }
 
-    fn sync_back(&mut self, sync: &List<i32>, expected: &List<i32>) {
+    fn sync_back(&mut self, sync: &KindSet, expected: &List<i32>) {
         if self.recovering || self.at_eof() { return; }
         if self.speculating {
             self.fail_expecting(expected);
@@ -4723,7 +4746,7 @@ impl Parser {
         return i;
     }
 
-    fn expect(&mut self, kind: i32, sync: &List<i32>, may_end_rule: bool) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &KindSet, may_end_rule: bool) -> i32 {
         if self.recovering { return self.pos; }
         if self.peek_kind() == kind { return self.consume(); }
         if self.speculating {
@@ -4735,7 +4758,7 @@ impl Parser {
             self.skip_one();
             return self.consume();
         }
-        if kind_set_has(sync, self.peek_kind()) || may_end_rule && self.follows_rules_under_way(self.peek_kind()) {
+        if sync.has(self.peek_kind()) || may_end_rule && self.follows_rules_under_way(self.peek_kind()) {
             self.report_missing(kind);
             return self.insert_missing(kind);
         }
@@ -4747,7 +4770,7 @@ impl Parser {
             self.report_unexpected(kind);
             if !self.at_eof() {
                 self.b.start_error(self.peek_start());
-                while !self.at_eof() && self.peek_kind() != kind && !kind_set_has(sync, self.peek_kind()) {
+                while !self.at_eof() && self.peek_kind() != kind && !sync.has(self.peek_kind()) {
                     self.skip_one();
                 }
                 self.b.finish_node(self.last_end());
@@ -4767,20 +4790,20 @@ impl Parser {
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if !self.at_eof() { return self.consume(); }
-        self.fail_on_token("expected any token; got", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);
+        self.fail_on_token("expected any token; got", &NO_EXPECTED, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 
-    fn expect_not(&mut self, excluded: &List<i32>) -> i32 {
+    fn expect_not(&mut self, excluded: &KindSet) -> i32 {
         if self.recovering { return self.pos; }
-        if !self.at_eof() && !kind_set_has(excluded, self.peek_kind()) { return self.consume(); }
-        self.fail_on_token("unexpected token", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);
+        if !self.at_eof() && !excluded.has(self.peek_kind()) { return self.consume(); }
+        self.fail_on_token("unexpected token", &NO_EXPECTED, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &KindSet, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
-        if kind_set_has(included, self.peek_kind()) { return self.consume(); }
+        if included.has(self.peek_kind()) { return self.consume(); }
         self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
@@ -5177,13 +5200,13 @@ fn _parse_expression__inner_alt_0(p: &mut Parser, min_prec: i32) {
     p.site = 1;
     p.atn_ret_pending = 17;
     _parse_expression(p);
-    if !kind_set_has(&SYNC_2, p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !SYNC_2.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     while !p.recovering && p.peek_kind() == TK_LIT_COMMA {
         p.take();
         p.site = 2;
         p.atn_ret_pending = 25;
         _parse_expression(p);
-        if !kind_set_has(&SYNC_2, p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
+        if !SYNC_2.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
     }
     p.expect(TK_LIT_RPAREN, &SYNC_3, true);
     return;
@@ -5234,12 +5257,12 @@ fn scan_expression__alt_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
 }
 
 fn _parse_expression__inner_atom(p: &mut Parser, min_prec: i32 = 0) {
-    if !kind_set_has(&SYNC_1, p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !SYNC_1.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_ID {
         let _atn_alt = atn_decide_0(&mut p.atn, &p.kinds, p.pos, min_prec);
         if _atn_alt < 0 {
-            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED);
             return;
         }
         if _atn_alt == 0 {
@@ -5286,13 +5309,13 @@ fn _parse_expression__inner_atom(p: &mut Parser, min_prec: i32 = 0) {
         p.site = 38;
         p.atn_ret_pending = 50;
         _parse_expression(p);
-        if !kind_set_has(&SYNC_4, p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
+        if !SYNC_4.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
         while !p.recovering && p.peek_kind() == TK_LIT_COMMA {
             p.take();
             p.site = 39;
             p.atn_ret_pending = 58;
             _parse_expression(p);
-            if !kind_set_has(&SYNC_4, p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
+            if !SYNC_4.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
         }
         p.expect(TK_LIT_RBRACKET, &SYNC_3, true);
         return;
@@ -5449,13 +5472,13 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) {
             p.site = 32;
             p.atn_ret_pending = 132;
             _parse_expression(p, 0);
-            if !kind_set_has(&SYNC_2, p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
+            if !SYNC_2.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
             while !p.recovering && p.peek_kind() == TK_LIT_COMMA {
                 p.take();
                 p.site = 33;
                 p.atn_ret_pending = 140;
                 _parse_expression(p);
-                if !kind_set_has(&SYNC_2, p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
+                if !SYNC_2.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
             }
             p.expect(TK_LIT_RPAREN, &SYNC_3, true);
             p.b.finish_node(p.last_end());
@@ -5518,7 +5541,7 @@ pub fn parse_expression<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> 
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[8192], [196608], [131072], [-523392, 1], [], [65536, 4]];
+global CALL_FOLLOW_SETS: List<KindSet> = [[8192], [196608], [131072], [-523392, 1], [], [65536, 4]];
 global CALL_FOLLOW: List<i32> = [0, 1, 1, 2, 3, 3, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 1, 1, 4, 3, 4, 3, 5, 5];
 global CALL_FOLLOW_ENDS: List<bool> = [false, false, false, false, true, true, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, false, false, false, true, false, true, false, false];
 
@@ -5543,14 +5566,15 @@ fn _kind_set_1(k: i32) -> bool {
     return k matches { == TK_K_OR | == TK_LIT_PIPE };
 }
 
-global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [32768];
-global SYNC_1: List<i32> = [1874959, 2];
+global EMPTY_SYNC: KindSet = [];
+global NO_EXPECTED: List<i32> = [];
+global SYNC_0: KindSet = [32768];
+global SYNC_1: KindSet = [1874959, 2];
 global EXPECTED_1: List<i32> = [TK_DATE, TK_ID, TK_K_FALSE, TK_K_NULL, TK_K_TRUE, TK_LIT_BANG, TK_LIT_LBRACKET, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_NUMBER, TK_SQ_STRING];
-global SYNC_2: List<i32> = [196608];
+global SYNC_2: KindSet = [196608];
 global EXPECTED_2: List<i32> = [TK_LIT_COMMA, TK_LIT_RPAREN];
-global SYNC_3: List<i32> = [-523392, 1];
-global SYNC_4: List<i32> = [65536, 4];
+global SYNC_3: KindSet = [-523392, 1];
+global SYNC_4: KindSet = [65536, 4];
 global EXPECTED_4: List<i32> = [TK_LIT_COMMA, TK_LIT_RBRACKET];
 
 global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b"\x02\x00\x07\x00\x9c\x00\x23\x00\x00\x00\x02\x00\x0a\x00\x12\x00\x33\x00\x4c\x00\x85\x00\x90\x00\x96\x00\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x07\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x07\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x07\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x0d\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x10\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x01\x00\x01\x00\x04\x00\x01\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x00\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x04\x00\x01\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x01\x00\x00\x00\x06\x00\x04\x00\x00\x00\x06\x00\x04\x00\x05\x00\x0b\x00\x07\x00\x02\x00\x03\x00\x09\x00\x0a\x00\x06\x00\x0d\x00\x1e\x00\x24\x00\x28\x00\x2c\x00\x30\x00\x3f\x00\x41\x00\x43\x00\x45\x00\x47\x00\x49\x00\x4b\x00\x4d\x00\x0e\x00\x0f\x00\x10\x00\x11\x00\x03\x00\x13\x00\x15\x00\x14\x00\x1c\x00\x17\x00\x1b\x00\x18\x00\x19\x00\x03\x00\x16\x00\x13\x00\x1d\x00\x0c\x00\x1f\x00\x20\x00\x03\x00\x22\x00\x23\x00\x0c\x00\x25\x00\x26\x00\x03\x00\x0c\x00\x29\x00\x2a\x00\x03\x00\x0c\x00\x2d\x00\x2e\x00\x03\x00\x0c\x00\x31\x00\x32\x00\x03\x00\x34\x00\x36\x00\x35\x00\x3d\x00\x38\x00\x3c\x00\x39\x00\x3a\x00\x03\x00\x37\x00\x34\x00\x3e\x00\x0c\x00\x40\x00\x0c\x00\x42\x00\x0c\x00\x44\x00\x0c\x00\x46\x00\x0c\x00\x48\x00\x0c\x00\x4a\x00\x0c\x00\x4c\x00\x0c\x00\x50\x00\x54\x00\x58\x00\x5c\x00\x60\x00\x64\x00\x68\x00\x6c\x00\x70\x00\x74\x00\x78\x00\x7c\x00\x80\x00\x91\x00\x97\x00\x4e\x00\x04\x00\x4d\x00\x51\x00\x52\x00\x03\x00\x4f\x00\x55\x00\x56\x00\x03\x00\x4f\x00\x59\x00\x5a\x00\x03\x00\x4f\x00\x5d\x00\x5e\x00\x03\x00\x4f\x00\x61\x00\x62\x00\x03\x00\x4f\x00\x65\x00\x66\x00\x03\x00\x4f\x00\x69\x00\x6a\x00\x03\x00\x4f\x00\x6d\x00\x6e\x00\x03\x00\x4f\x00\x71\x00\x72\x00\x03\x00\x4f\x00\x75\x00\x76\x00\x03\x00\x4f\x00\x79\x00\x7a\x00\x03\x00\x4f\x00\x7d\x00\x7e\x00\x03\x00\x4f\x00\x81\x00\x82\x00\x83\x00\x84\x00\x03\x00\x86\x00\x88\x00\x87\x00\x8f\x00\x8a\x00\x8e\x00\x8b\x00\x8c\x00\x03\x00\x89\x00\x86\x00\x90\x00\x4f\x00\x93\x00\x95\x00\x94\x00\x92\x00\x03\x00\x4f\x00\x99\x00\x9b\x00\x9a\x00\x98\x00\x03\x00\x4f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x12\x00\x00\x00\x00\x00\x13\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x14\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x15\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x22\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x16\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x17\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x18\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x14\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x15\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x1a\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x1b\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x1c\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x1d\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x1e\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x1f\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x27\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x33\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x53\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x57\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x67\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x6b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x6f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x73\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x77\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x7b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x7f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x85\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x8d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x96\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x9c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0f\x00\x0e\x00\x0d\x00\x0c\x00\x0b\x00\x0a\x00\x09\x00\x08\x00\x07\x00\x06\x00\x05\x00\x04\x00\x03\x00\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x02\x00\x02\x00\x1f\x00\x08\x00\x02\x00\x20\x00\x09\x00"));

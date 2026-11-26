@@ -68,12 +68,25 @@ internal fn push_escaped(out: &mut String, src: &StrSlice, start: i32, end: i32)
     out.push_str(unchecked src.slice(run, end));
 }
 
-internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
-    let w = kind >> 5;
-    if w >= set.len() {
-        return false;
+pub type KindSet = List<i32>;
+
+impl KindSet {
+    pub fn has(&self, kind: i32) -> bool {
+        let w = kind >> 5;
+        if w >= self.len() {
+            return false;
+        }
+        return self[w] >> (kind & 31) & 1 == 1;
     }
-    return set[w] >> (kind & 31) & 1 == 1;
+
+    internal fn union_with(&mut self, other: &KindSet) {
+        while self.len() < other.len() {
+            self.push(0);
+        }
+        for let mut i = 0; i < other.len(); i += 1 {
+            self[i] |= other[i];
+        }
+    }
 }
 
 internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
@@ -974,6 +987,33 @@ fn emit_lexer_token(
     out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 
+global INTERN_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
+
+internal struct Interner<K> {
+    items: List<K>,
+    ids: HashMap<K, i32>,
+}
+
+impl<K: Hash> Interner<K> {
+    internal fn new() -> Interner<K> {
+        return Interner { items: [], ids: HashMap::with_seed(INTERN_SEED) };
+    }
+
+    internal fn intern(&mut self, item: K) -> i32 {
+        if let Some(id) = self.ids.get(item) {
+            return id;
+        }
+        let id = self.items.len();
+        self.items.push(item);
+        self.ids[item] = id;
+        return id;
+    }
+
+    internal fn at(&self, id: i32) -> K {
+        return self.items[id];
+    }
+}
+
 internal global FOLLOW_MAX_DEPTH: i32 = 4;
 
 internal global FOLLOW_SLOT_BITS: i64 = 10;
@@ -996,22 +1036,15 @@ internal fn follow_push(site: i64, cont: i64) -> i64 {
     return site | follow_behind(cont, FOLLOW_SLOT_BITS) << FOLLOW_SLOT_BITS;
 }
 
-internal struct FollowLinks {
-    conts: List<i64>,
-    ids: HashMap<i64, i32>,
-}
+global mut FOLLOW_LINKS: Interner<i64> = Interner::<i64>::new();
 
-global FOLLOW_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
-
-global mut FOLLOW_LINKS: FollowLinks = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
-
-internal fn follow_links_enter() -> FollowLinks {
+internal fn follow_links_enter() -> Interner<i64> {
     let outer = FOLLOW_LINKS;
-    FOLLOW_LINKS = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
+    FOLLOW_LINKS = Interner::<i64>::new();
     return outer;
 }
 
-internal fn follow_links_leave(outer: FollowLinks) {
+internal fn follow_links_leave(outer: Interner<i64>) {
     FOLLOW_LINKS = outer;
 }
 
@@ -1021,19 +1054,9 @@ fn follow_behind(cont: i64, prefix_bits: i64) -> i64 {
         return cont;
     }
     assert !follow_is_link(cont), "a continuation starts with a site, never a link";
-    let link = FOLLOW_LINK_ID | follow_link_id(cont) as i64 << FOLLOW_SLOT_BITS;
+    let link = FOLLOW_LINK_ID | FOLLOW_LINKS.intern(cont) as i64 << FOLLOW_SLOT_BITS;
     assert link >> room == 0, "a link must fit behind the prefix";
     return link;
-}
-
-fn follow_link_id(cont: i64) -> i32 {
-    if let Some(id) = FOLLOW_LINKS.ids.get(cont) {
-        return id;
-    }
-    let id = FOLLOW_LINKS.conts.len();
-    FOLLOW_LINKS.conts.push(cont);
-    FOLLOW_LINKS.ids[cont] = id;
-    return id;
 }
 
 fn follow_is_link(c: i64) -> bool {
@@ -1043,7 +1066,7 @@ fn follow_is_link(c: i64) -> bool {
 fn follow_linked(c: i64) -> i64
     contract follow_is_link(c)
 {
-    return FOLLOW_LINKS.conts[(c >> FOLLOW_SLOT_BITS) as i32];
+    return FOLLOW_LINKS.at((c >> FOLLOW_SLOT_BITS) as i32);
 }
 
 internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {
@@ -4346,7 +4369,7 @@ impl Parser {
         }
         self.recovery_pos = self.pos;
         self.recovered_failures.push(failure);
-        self.skip_until(&self.resync_set(&[]));
+        self.skip_until(&self.resync_set(&EMPTY_SYNC));
         return true;
     }
 
@@ -4364,13 +4387,10 @@ impl Parser {
         self.b.mark_error();
     }
 
-    fn resync_set(&self, base: &List<i32>) -> List<i32> {
+    fn resync_set(&self, base: &KindSet) -> KindSet {
         let mut set = *base;
         for let s of &self.sites {
-            if *s < 0 { continue; }
-            let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];
-            while set.len() < f.len() { set.push(0); }
-            for let mut i = 0; i < f.len(); i += 1 { set[i] |= f[i]; }
+            if *s >= 0 { set.union_with(&CALL_FOLLOW_SETS[CALL_FOLLOW[*s]]); }
         }
         return set;
     }
@@ -4379,14 +4399,14 @@ impl Parser {
         for let mut i = self.sites.len() - 1; i >= 0; i -= 1 {
             let s = self.sites[i];
             if s < 0 { return i == 0 && k == TK_EOF; }
-            if kind_set_has(&CALL_FOLLOW_SETS[CALL_FOLLOW[s]], k) { return true; }
+            if CALL_FOLLOW_SETS[CALL_FOLLOW[s]].has(k) { return true; }
             if !CALL_FOLLOW_ENDS[s] { return false; }
         }
         return k == TK_EOF;
     }
 
-    fn skip_until(&mut self, set: &List<i32>) {
-        while !self.at_eof() && !kind_set_has(set, self.peek_kind()) {
+    fn skip_until(&mut self, set: &KindSet) {
+        while !self.at_eof() && !set.has(self.peek_kind()) {
             self.skip_one();
         }
     }
@@ -4397,8 +4417,8 @@ impl Parser {
         self.b.skip(_sk);
     }
 
-    fn sync_delete(&mut self, sync: &List<i32>, expected: &List<i32>) -> bool {
-        if self.speculating || self.at_eof() || !kind_set_has(sync, self.peek_at(1)) {
+    fn sync_delete(&mut self, sync: &KindSet, expected: &List<i32>) -> bool {
+        if self.speculating || self.at_eof() || !sync.has(self.peek_at(1)) {
             return false;
         }
         self.report_extraneous(expected, RecoveryAction::Deleted);
@@ -4406,19 +4426,19 @@ impl Parser {
         return true;
     }
 
-    fn sync_enter(&mut self, sync: &List<i32>, expected: &List<i32>) {
+    fn sync_enter(&mut self, sync: &KindSet, expected: &List<i32>) {
         if !self.recovering && !self.sync_delete(sync, expected) {
             self.fail_expecting(expected);
         }
     }
 
-    fn sync_alts(&mut self, sync: &List<i32>, expected: &List<i32>) {
+    fn sync_alts(&mut self, sync: &KindSet, expected: &List<i32>) {
         if !self.recovering && !self.sync_delete(sync, expected) {
             self.no_viable("no viable alternative", self.peek_span(), expected);
         }
     }
 
-    fn sync_back(&mut self, sync: &List<i32>, expected: &List<i32>) {
+    fn sync_back(&mut self, sync: &KindSet, expected: &List<i32>) {
         if self.recovering || self.at_eof() { return; }
         if self.speculating {
             self.fail_expecting(expected);
@@ -4532,7 +4552,7 @@ impl Parser {
         return i;
     }
 
-    fn expect(&mut self, kind: i32, sync: &List<i32>, may_end_rule: bool) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &KindSet, may_end_rule: bool) -> i32 {
         if self.recovering { return self.pos; }
         if self.peek_kind() == kind { return self.consume(); }
         if self.speculating {
@@ -4544,7 +4564,7 @@ impl Parser {
             self.skip_one();
             return self.consume();
         }
-        if kind_set_has(sync, self.peek_kind()) || may_end_rule && self.follows_rules_under_way(self.peek_kind()) {
+        if sync.has(self.peek_kind()) || may_end_rule && self.follows_rules_under_way(self.peek_kind()) {
             self.report_missing(kind);
             return self.insert_missing(kind);
         }
@@ -4556,7 +4576,7 @@ impl Parser {
             self.report_unexpected(kind);
             if !self.at_eof() {
                 self.b.start_error(self.peek_start());
-                while !self.at_eof() && self.peek_kind() != kind && !kind_set_has(sync, self.peek_kind()) {
+                while !self.at_eof() && self.peek_kind() != kind && !sync.has(self.peek_kind()) {
                     self.skip_one();
                 }
                 self.b.finish_node(self.last_end());
@@ -4576,20 +4596,20 @@ impl Parser {
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if !self.at_eof() { return self.consume(); }
-        self.fail_on_token("expected any token; got", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);
+        self.fail_on_token("expected any token; got", &NO_EXPECTED, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 
-    fn expect_not(&mut self, excluded: &List<i32>) -> i32 {
+    fn expect_not(&mut self, excluded: &KindSet) -> i32 {
         if self.recovering { return self.pos; }
-        if !self.at_eof() && !kind_set_has(excluded, self.peek_kind()) { return self.consume(); }
-        self.fail_on_token("unexpected token", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);
+        if !self.at_eof() && !excluded.has(self.peek_kind()) { return self.consume(); }
+        self.fail_on_token("unexpected token", &NO_EXPECTED, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &KindSet, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
-        if kind_set_has(included, self.peek_kind()) { return self.consume(); }
+        if included.has(self.peek_kind()) { return self.consume(); }
         self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
@@ -4599,35 +4619,35 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) {
     loop {
         if p.recovering { break; }
         let rs_pick_0 = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
-        if rs_pick_0 < 0 && rs_pick_0 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_0 < 0 && rs_pick_0 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
         if rs_pick_0 != 0 { break; }
         p.site = 0;
         p.atn_ret_pending = 27;
         _parse_scriptlet_or_sea_ws(p);
     }
     let rs_pick_1 = atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0);
-    if rs_pick_1 < 0 && rs_pick_1 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_1 < 0 && rs_pick_1 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
     if rs_pick_1 == 0 {
         p.expect(TK_XML, &SYNC_0, true);
     }
     loop {
         if p.recovering { break; }
         let rs_pick_2 = atn_decide_2(&mut p.atn, &p.kinds, p.pos, 0);
-        if rs_pick_2 < 0 && rs_pick_2 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_2 < 0 && rs_pick_2 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
         if rs_pick_2 != 0 { break; }
         p.site = 1;
         p.atn_ret_pending = 36;
         _parse_scriptlet_or_sea_ws(p);
     }
     let rs_pick_3 = atn_decide_3(&mut p.atn, &p.kinds, p.pos, 0);
-    if rs_pick_3 < 0 && rs_pick_3 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_3 < 0 && rs_pick_3 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
     if rs_pick_3 == 0 {
         p.expect(TK_DTD, &SYNC_1, true);
     }
     loop {
         if p.recovering { break; }
         let rs_pick_4 = atn_decide_4(&mut p.atn, &p.kinds, p.pos, 0);
-        if rs_pick_4 < 0 && rs_pick_4 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_4 < 0 && rs_pick_4 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
         if rs_pick_4 != 0 { break; }
         p.site = 2;
         p.atn_ret_pending = 45;
@@ -4636,7 +4656,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) {
     loop {
         if p.recovering { break; }
         let rs_pick_5 = atn_decide_5(&mut p.atn, &p.kinds, p.pos, 0);
-        if rs_pick_5 < 0 && rs_pick_5 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_5 < 0 && rs_pick_5 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
         if rs_pick_5 != 0 { break; }
         p.site = 3;
         p.atn_ret_pending = 50;
@@ -4652,7 +4672,7 @@ fn _parse_html_document(p: &mut Parser, follow: i64 = 0) {
 }
 
 fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser) {
-    if !kind_set_has(&SYNC_2, p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !SYNC_2.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         p.take();
@@ -4673,12 +4693,12 @@ fn _parse_scriptlet_or_sea_ws(p: &mut Parser) {
 }
 
 fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) {
-    if !kind_set_has(&SYNC_1, p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
+    if !SYNC_1.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
     while !p.recovering && _kind_set_1(p.peek_kind()) {
         p.site = 4;
         p.atn_ret_pending = 61;
         _parse_html_misc(p);
-        if !kind_set_has(&SYNC_1, p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
+        if !SYNC_1.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
     }
     p.site = 5;
     p.atn_ret_pending = 64;
@@ -4686,7 +4706,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) {
     loop {
         if p.recovering { break; }
         let rs_pick_7 = atn_decide_8(&mut p.atn, &p.kinds, p.pos, 0);
-        if rs_pick_7 < 0 && rs_pick_7 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_7 < 0 && rs_pick_7 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
         if rs_pick_7 != 0 { break; }
         p.site = 6;
         p.atn_ret_pending = 68;
@@ -4702,24 +4722,24 @@ fn _parse_html_elements(p: &mut Parser, follow: i64 = 0) {
 }
 
 fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) {
-    if !kind_set_has(&SYNC_3, p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
+    if !SYNC_3.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
     let kind = p.peek_kind();
     if kind == TK_TAG_OPEN {
         p.take();
         p.expect(TK_TAG_NAME, &SYNC_4, false);
-        if !kind_set_has(&SYNC_4, p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
+        if !SYNC_4.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
         while !p.recovering && p.peek_kind() == TK_TAG_NAME {
             p.site = 7;
             p.atn_ret_pending = 79;
             _parse_html_attribute(p, follow_push(FOLLOW_SITE_8, follow));
-            if !kind_set_has(&SYNC_4, p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
+            if !SYNC_4.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
         }
-        if !kind_set_has(&SYNC_5, p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_5, &EXPECTED_5); }
+        if !SYNC_5.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_5, &EXPECTED_5); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_TAG_CLOSE {
             p.take();
             let rs_pick_10 = atn_decide_12(&mut p.atn, &p.kinds, p.pos, 0);
-            if rs_pick_10 < 0 && rs_pick_10 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+            if rs_pick_10 < 0 && rs_pick_10 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
             if rs_pick_10 == 0 {
                 p.site = 8;
                 p.atn_ret_pending = 90;
@@ -4765,7 +4785,7 @@ fn _parse_html_element(p: &mut Parser, follow: i64 = 0) {
 
 fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) {
     let rs_pick_12 = atn_decide_13(&mut p.atn, &p.kinds, p.pos, 0);
-    if rs_pick_12 < 0 && rs_pick_12 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_12 < 0 && rs_pick_12 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
     if rs_pick_12 == 0 {
         p.site = 11;
         p.atn_ret_pending = 112;
@@ -4774,9 +4794,9 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) {
     loop {
         if p.recovering { break; }
         let rs_pick_13 = atn_decide_14(&mut p.atn, &p.kinds, p.pos, 0);
-        if rs_pick_13 < 0 && rs_pick_13 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_13 < 0 && rs_pick_13 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
         if rs_pick_13 != 0 { break; }
-        if !kind_set_has(&SYNC_9, p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_9, &EXPECTED_9); }
+        if !SYNC_9.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_9, &EXPECTED_9); }
         let grp_kind = p.peek_kind();
         if _kind_set_2(grp_kind) {
             p.site = 12;
@@ -4792,7 +4812,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_9);
         }
         let rs_pick_16 = atn_decide_16(&mut p.atn, &p.kinds, p.pos, 0);
-        if rs_pick_16 < 0 && rs_pick_16 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+        if rs_pick_16 < 0 && rs_pick_16 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
         if rs_pick_16 == 0 {
             p.site = 14;
             p.atn_ret_pending = 128;
@@ -4811,7 +4831,7 @@ fn _parse_html_content(p: &mut Parser, follow: i64 = 0) {
 fn _parse_html_attribute__inner(p: &mut Parser, follow: i64 = 0) {
     p.expect(TK_TAG_NAME, &SYNC_10, true);
     let rs_pick_17 = atn_decide_17(&mut p.atn, &p.kinds, p.pos, 0);
-    if rs_pick_17 < 0 && rs_pick_17 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC); }
+    if rs_pick_17 < 0 && rs_pick_17 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
     if rs_pick_17 == 0 {
         p.expect(TK_TAG_EQUALS, &SYNC_11, false);
         p.expect(TK_ATTVALUE_VALUE, &EMPTY_SYNC, true);
@@ -4826,7 +4846,7 @@ fn _parse_html_attribute(p: &mut Parser, follow: i64 = 0) {
 }
 
 fn _parse_html_chardata__inner(p: &mut Parser) {
-    if !kind_set_has(&SYNC_12, p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_12, &EXPECTED_12); }
+    if !SYNC_12.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_12, &EXPECTED_12); }
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
         p.take();
@@ -4847,7 +4867,7 @@ fn _parse_html_chardata(p: &mut Parser) {
 }
 
 fn _parse_html_misc__inner(p: &mut Parser) {
-    if !kind_set_has(&SYNC_13, p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_13, &EXPECTED_13); }
+    if !SYNC_13.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_13, &EXPECTED_13); }
     let kind = p.peek_kind();
     if _kind_set_3(kind) {
         p.site = 15;
@@ -4873,7 +4893,7 @@ fn _parse_html_misc(p: &mut Parser) {
 }
 
 fn _parse_html_comment__inner(p: &mut Parser) {
-    if !kind_set_has(&SYNC_14, p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_14, &EXPECTED_14); }
+    if !SYNC_14.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_14, &EXPECTED_14); }
     let kind = p.peek_kind();
     if _kind_set_3(kind) {
         p.take();
@@ -4895,7 +4915,7 @@ fn _parse_html_comment(p: &mut Parser) {
 
 fn _parse_script__inner(p: &mut Parser) {
     p.expect(TK_SCRIPT_OPEN, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_15, &EXPECTED_15); }
+    if !SYNC_15.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_15, &EXPECTED_15); }
     p.expect_set(&SYNC_15, &EXPECTED_15);
     return;
 }
@@ -4908,7 +4928,7 @@ fn _parse_script(p: &mut Parser) {
 
 fn _parse_style__inner(p: &mut Parser) {
     p.expect(TK_STYLE_OPEN, &SYNC_16, false);
-    if !kind_set_has(&SYNC_16, p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_16, &EXPECTED_16); }
+    if !SYNC_16.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_16, &EXPECTED_16); }
     p.expect_set(&SYNC_16, &EXPECTED_16);
     return;
 }
@@ -4983,7 +5003,7 @@ pub fn parse_style<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> Parse
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_style(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[1015], [1011], [995], [67], [38912], [512], [], [939], [2027]];
+global CALL_FOLLOW_SETS: List<KindSet> = [[1015], [1011], [995], [67], [38912], [512], [], [939], [2027]];
 global CALL_FOLLOW: List<i32> = [0, 1, 2, 2, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8, 7, 6];
 global CALL_FOLLOW_ENDS: List<bool> = [true, true, true, true, false, true, true, false, false, true, true, true, true, true, true, true];
 
@@ -5020,34 +5040,35 @@ fn _kind_set_4(k: i32) -> bool {
     return k matches { == TK_HTML_TEXT | == TK_SEA_WS };
 }
 
-global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [1011];
-global SYNC_1: List<i32> = [995];
+global EMPTY_SYNC: KindSet = [];
+global NO_EXPECTED: List<i32> = [];
+global SYNC_0: KindSet = [1011];
+global SYNC_1: KindSet = [995];
 global EXPECTED_1: List<i32> = [TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SCRIPTLET, TK_SCRIPT_OPEN, TK_SEA_WS, TK_STYLE_OPEN, TK_TAG_OPEN];
-global SYNC_2: List<i32> = [96];
+global SYNC_2: KindSet = [96];
 global EXPECTED_2: List<i32> = [TK_SCRIPTLET, TK_SEA_WS];
-global SYNC_3: List<i32> = [928];
+global SYNC_3: KindSet = [928];
 global EXPECTED_3: List<i32> = [TK_SCRIPTLET, TK_SCRIPT_OPEN, TK_STYLE_OPEN, TK_TAG_OPEN];
-global SYNC_4: List<i32> = [38912];
+global SYNC_4: KindSet = [38912];
 global EXPECTED_4: List<i32> = [TK_TAG_CLOSE, TK_TAG_NAME, TK_TAG_SLASH_CLOSE];
-global SYNC_5: List<i32> = [6144];
+global SYNC_5: KindSet = [6144];
 global EXPECTED_5: List<i32> = [TK_TAG_CLOSE, TK_TAG_SLASH_CLOSE];
-global SYNC_6: List<i32> = [8192];
-global SYNC_7: List<i32> = [32768];
-global SYNC_8: List<i32> = [2048];
-global SYNC_9: List<i32> = [939];
+global SYNC_6: KindSet = [8192];
+global SYNC_7: KindSet = [32768];
+global SYNC_8: KindSet = [2048];
+global SYNC_9: KindSet = [939];
 global EXPECTED_9: List<i32> = [TK_CDATA, TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SCRIPTLET, TK_SCRIPT_OPEN, TK_STYLE_OPEN, TK_TAG_OPEN];
-global SYNC_10: List<i32> = [16384];
-global SYNC_11: List<i32> = [2097152];
-global SYNC_12: List<i32> = [1088];
+global SYNC_10: KindSet = [16384];
+global SYNC_11: KindSet = [2097152];
+global SYNC_12: KindSet = [1088];
 global EXPECTED_12: List<i32> = [TK_HTML_TEXT, TK_SEA_WS];
-global SYNC_13: List<i32> = [67];
+global SYNC_13: KindSet = [67];
 global EXPECTED_13: List<i32> = [TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SEA_WS];
-global SYNC_14: List<i32> = [3];
+global SYNC_14: KindSet = [3];
 global EXPECTED_14: List<i32> = [TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT];
-global SYNC_15: List<i32> = [393216];
+global SYNC_15: KindSet = [393216];
 global EXPECTED_15: List<i32> = [TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY];
-global SYNC_16: List<i32> = [1572864];
+global SYNC_16: KindSet = [1572864];
 global EXPECTED_16: List<i32> = [TK_STYLE_BODY, TK_STYLE_SHORT_BODY];
 
 global FOLLOW_TABLES: FollowTables = FollowTables {
