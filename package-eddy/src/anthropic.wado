@@ -64,7 +64,10 @@ fn accepted(schema: Schema) -> Schema {
     return match schema {
         Bool(_) => schema,
         Object(mut s) => {
-            assert s.one_of.is_empty() && s.prefix_items.is_empty() && s.additional_properties matches { null } && !s.unique_items, "a reply type must hold only structs, lists, options and scalars";
+            assert s.one_of.is_empty()
+                && s.prefix_items.is_empty()
+                && s.additional_properties matches { null }
+                && !s.unique_items, "a reply type must hold only structs, lists, options and scalars";
             if s.type & JsonTypes::Object != JsonTypes::none() {
                 s.additional_properties = Some(Schema::Bool(false));
             }
