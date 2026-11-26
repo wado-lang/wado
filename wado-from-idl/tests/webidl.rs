@@ -933,6 +933,65 @@ fn a_dictionary_is_a_struct_crossing_as_a_record() {
     );
 }
 
+/// The host refuses a required member that is `undefined`, so a `None` there
+/// is `null`.
+#[test]
+fn a_required_nullable_member_left_none_is_null() {
+    let mut defs = chain();
+    defs.dictionaries = vec![definition(
+        "dictionary",
+        "EntryInit",
+        "null",
+        "",
+        false,
+        &[
+            field("root", &nullable("Node"), true),
+            field("target", &nullable("Node"), false),
+        ],
+    )];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "observe",
+                &plain("undefined"),
+                &[argument("init", &plain("EntryInit"), false, "null")],
+                "",
+            ),
+            operation(
+                "observeAll",
+                &plain("undefined"),
+                &[argument(
+                    "inits",
+                    &sequence("sequence", &plain("EntryInit")),
+                    false,
+                    "null",
+                )],
+                "",
+            ),
+        ],
+    ));
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(
+        glue.contains(
+            "p0.observe({ \
+             root: ((p1 === 0 ? undefined : $core.exports[$SLOT_GET](p2)) ?? null), \
+             target: (p3 === 0 ? undefined : $core.exports[$SLOT_GET](p4)) });"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "p0.observeAll($list(p1, p2, 16, (at) => ({ \
+             root: (($view().getUint8(at) === 0 ? undefined : \
+             $core.exports[$SLOT_GET]($view().getUint32(at + 4, true))) ?? null), "
+        ),
+        "{glue}"
+    );
+}
+
 /// A value Wado cannot spell as a case leaves its enum, and each member
 /// naming it, without a binding.
 #[test]

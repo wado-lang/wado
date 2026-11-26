@@ -333,6 +333,8 @@ pub struct DictionaryField {
     /// The member's name on the host's object.
     pub host_name: String,
     pub ty: WadoType,
+    /// Whether the host refuses an object without it.
+    pub required: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

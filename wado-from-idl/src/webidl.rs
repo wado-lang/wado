@@ -1055,6 +1055,7 @@ impl Lowering<'_> {
                 Ok(ty) => fields.push(DictionaryField {
                     host_name: field.name.clone(),
                     ty: optional(ty, !field.required),
+                    required: field.required,
                 }),
                 Err(reason) if field.required => {
                     return Err(reason.reworded(|r| format!("`{}`: {r}", field.name)));

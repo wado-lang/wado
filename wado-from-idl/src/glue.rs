@@ -522,11 +522,20 @@ fn variant_layout(cases: &[UnionCase]) -> (u32, u32, u32) {
     (payload, align_to(payload + size, align), align)
 }
 
-/// The host's object of `fields`, each member read by `read`.
+/// The host's object of `fields`, each member read by `read`. A `None` is a
+/// member left out, except a required one, which the host refuses unless it
+/// is there: that one is `null`.
 fn object(fields: &[DictionaryField], mut read: impl FnMut(&WadoType) -> String) -> String {
     let members: Vec<String> = fields
         .iter()
-        .map(|field| format!("{}: {}", field.host_name, read(&field.ty)))
+        .map(|field| {
+            let value = read(&field.ty);
+            if field.required && matches!(Shape::of(&field.ty), Shape::Option(_)) {
+                format!("{}: ({value} ?? null)", field.host_name)
+            } else {
+                format!("{}: {value}", field.host_name)
+            }
+        })
         .collect();
     format!("{{ {} }}", members.join(", "))
 }
