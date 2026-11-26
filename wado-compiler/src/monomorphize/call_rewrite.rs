@@ -2,15 +2,17 @@
 
 use std::rc::Rc;
 
+use crate::module_source::ModuleSource;
 use crate::tir::{
-    FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirModule, TirStmt, TirStmtKind, TypeId, TypeParamId,
+    CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirLocal, TirModule, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeParamId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::TypeTable;
 
 use super::Unrewritten;
-use super::state::Monomorphizer;
+use super::state::{Monomorphizer, SharedMutLeak};
 
 impl Monomorphizer {
     /// Rewrite the function calls in what is `unrewritten` to use monomorphized
@@ -25,10 +27,17 @@ impl Monomorphizer {
         let mut rewriter = CallRewriter {
             mono: self,
             type_table: &mut type_table,
+            judged: None,
         };
 
         for func_rc in unrewritten.functions(module) {
             let mut func = func_rc.borrow_mut();
+            // An instance's calls answer to the call that instantiated it, which
+            // was judged where it was written.
+            rewriter.judged = func
+                .monomorph_info
+                .is_none()
+                .then(|| func.module_source.clone());
             if let Some(mut body) = func.body.take() {
                 rewriter.visit_block(&mut body);
                 Self::sync_local_types_from_lets(&body, &mut func.locals);
@@ -37,6 +46,7 @@ impl Monomorphizer {
             }
         }
 
+        rewriter.judged = None;
         for global in unrewritten.globals_mut(module) {
             rewriter.visit_expr(global.init.slot_expr_mut());
         }
@@ -90,11 +100,30 @@ impl Monomorphizer {
 
     /// Point a call or function reference at the instance its template reaches,
     /// the same answer collection queued it under.
-    fn rewrite_to_instance(&self, expr: &mut TirExpr, type_table: &mut TypeTable) {
+    fn rewrite_to_instance(
+        &self,
+        expr: &mut TirExpr,
+        type_table: &mut TypeTable,
+        judged: Option<&ModuleSource>,
+    ) {
         let templates = &self.functions.templates;
         let Some(key) = self.call_instance(expr, templates, type_table) else {
             return;
         };
+        if let Some(module_source) = judged
+            && let TirExprKind::Call { args, .. } = &expr.kind
+            && let Some(template) = key.template.as_ref().and_then(|t| templates.get(t))
+            && let Some((param, arg)) =
+                mut_leaked_through_shared(&template.borrow(), &key, args, type_table)
+        {
+            self.shared_mut_leaks.borrow_mut().push(SharedMutLeak {
+                module_source: module_source.clone(),
+                span: expr.span,
+                callee: template.borrow().name.clone(),
+                param,
+                arg,
+            });
+        }
         let Some(mangled) = self.lookup_function_instantiation(&key).cloned() else {
             return;
         };
@@ -141,6 +170,74 @@ fn instance_arg(
     key.method_type_args.get(at).copied()
 }
 
+/// The type parameter of `template`, and the `&mut` `key` instantiates it to,
+/// that a `&` parameter reads where the caller holds that argument shared, and
+/// that a return, a `&mut` parameter or a function parameter can hand back.
+fn mut_leaked_through_shared(
+    template: &TirFunction,
+    key: &InstantiationKey,
+    args: &[CallArg],
+    tt: &TypeTable,
+) -> Option<(String, TypeId)> {
+    let head = |ty: TypeId| tt.get(tt.representation_head(ty));
+    let mentions = |ty: TypeId, param: TypeParamId| tt.type_params_in(ty).contains(&param);
+    template
+        .impl_type_params
+        .iter()
+        .chain(&template.type_params)
+        .filter(|param| !param.is_pack)
+        .find_map(|param| {
+            let arg = instance_arg(template, key, param.id)?;
+            if !matches!(head(arg), ResolvedType::MutRef(_)) {
+                return None;
+            }
+            let read_shared = template.params.iter().zip(args).any(|(p, a)| {
+                matches!(head(p.type_id), ResolvedType::Ref(_))
+                    && mentions(p.type_id, param.id)
+                    && reaches_through_shared(&a.expr, tt)
+            });
+            let handed_back = mentions(template.return_type, param.id)
+                || template.params.iter().any(|p| {
+                    matches!(
+                        head(p.type_id),
+                        ResolvedType::MutRef(_) | ResolvedType::Function { .. }
+                    ) && mentions(p.type_id, param.id)
+                });
+            (read_shared && handed_back).then(|| (param.name.clone(), arg))
+        })
+}
+
+/// Whether the argument `expr` lends a `&` its caller holds: a `&` value, or a
+/// place one is on the way to.
+fn reaches_through_shared(expr: &TirExpr, tt: &TypeTable) -> bool {
+    let is_shared = |ty: TypeId| matches!(tt.get(tt.representation_head(ty)), ResolvedType::Ref(_));
+    match &expr.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: place,
+        } => place_crosses_shared(place, tt),
+        _ => is_shared(expr.type_id) || place_crosses_shared(expr, tt),
+    }
+}
+
+/// Whether the place `expr` names is reached through a `&`.
+fn place_crosses_shared(expr: &TirExpr, tt: &TypeTable) -> bool {
+    match &expr.kind {
+        TirExprKind::FieldAccess { expr: base, .. }
+        | TirExprKind::Index { expr: base, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: base,
+        } => {
+            matches!(
+                tt.get(tt.representation_head(base.type_id)),
+                ResolvedType::Ref(_)
+            ) || place_crosses_shared(base, tt)
+        }
+        _ => false,
+    }
+}
+
 /// Point `func` at the instance `key` names, recording in `monomorph_info` the
 /// template's name and the arguments the instance was keyed with.
 fn apply_instantiation(func: &mut FunctionRef, key: &InstantiationKey, mangled: String) {
@@ -164,6 +261,9 @@ fn apply_instantiation(func: &mut FunctionRef, key: &InstantiationKey, mangled: 
 struct CallRewriter<'a> {
     mono: &'a Monomorphizer,
     type_table: &'a mut TypeTable,
+    /// The module of the function whose calls are judged for a `&mut` handed
+    /// behind a `&`; `None` for an instance.
+    judged: Option<ModuleSource>,
 }
 
 impl TirMutVisitor for CallRewriter<'_> {
@@ -183,7 +283,8 @@ impl TirMutVisitor for CallRewriter<'_> {
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
-        self.mono.rewrite_to_instance(expr, self.type_table);
+        self.mono
+            .rewrite_to_instance(expr, self.type_table, self.judged.as_ref());
         self.walk_expr(expr);
     }
 }

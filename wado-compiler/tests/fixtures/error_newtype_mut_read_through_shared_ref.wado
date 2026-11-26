@@ -1,0 +1,22 @@
+// A newtype over a `&mut` read through a `&` reads as the shared form of the
+// reference it wraps, as a `&mut` field does, so it cannot write.
+
+struct S { f: i32 }
+
+type H = &mut S;
+
+struct Holder { h: H }
+
+fn poke(holder: &Holder) {
+    let x = holder.h;
+    x.f = 2;
+}
+
+test {
+    let mut s = S { f: 1 };
+    let holder = Holder { h: &mut s as H };
+    poke(&holder);
+}
+
+__DATA__
+{"compile_error": ":12:5: analysis error: cannot assign through immutable reference"}

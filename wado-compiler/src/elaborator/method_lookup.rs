@@ -372,11 +372,15 @@ impl TypeSystem {
     }
 
     /// `id` as a holder of a `&` to it sees it: a `&mut T` is a `&T`, since a
-    /// `&` grants reading alone to everything reached through it.
+    /// `&` grants reading alone to everything reached through it. A newtype
+    /// over a `&mut T` is one too, and reads as the `&T` it wraps.
     pub(crate) fn shared_view(&self, id: TypeId) -> TypeId {
-        let inner = match self.type_table.borrow().get(id) {
-            ResolvedType::MutRef(inner) => *inner,
-            _ => return id,
+        let inner = {
+            let tt = self.type_table.borrow();
+            match tt.get(tt.representation_head(id)) {
+                ResolvedType::MutRef(inner) => *inner,
+                _ => return id,
+            }
         };
         self.type_table.borrow_mut().make_ref(inner)
     }

@@ -1,0 +1,22 @@
+// A generic body is checked before its type parameter is known, so reading a
+// `T` through a `&` cannot narrow a `&mut` there. A call instantiating `T` to a
+// `&mut`, behind a `&` the caller holds, that can hand it back is refused.
+
+struct S { f: i32 }
+
+fn first<T>(xs: &List<T>) -> T {
+    return xs[0];
+}
+
+fn poke(xs: &List<&mut S>) {
+    first(xs).f = 2;
+}
+
+test {
+    let mut s = S { f: 1 };
+    let xs: List<&mut S> = [&mut s];
+    poke(&xs);
+}
+
+__DATA__
+{"compile_error": ":12:5: analysis error: cannot call `first` with `T = &mut S` behind a `&`"}
