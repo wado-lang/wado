@@ -1,0 +1,19 @@
+// A block naming its trait through a namespace is pointed at like any other,
+// and the call it suggests reaches the trait through the caller's namespace.
+
+use ns from "./sub/open_parameter_traits.wado";
+
+impl<A, T: ns::Source<A>> ns::Tag<A> for T {
+    fn tag(&self) -> A { return self.first(); }
+}
+
+struct One { n: i32 }
+impl ns::Source<i32> for One { fn first(&self) -> i32 { return self.n; } }
+
+export fn run() {
+    let one = One { n: 7 };
+    let _: i32 = one.tag();
+}
+
+__DATA__
+{"compile_error": "no method 'tag' found on type 'One'; 'impl<A, T: ns::Source<A>> ns::Tag<A> for T' declares it, and a method call does not settle 'A': write 'ns::Tag::<A>::tag(…)', naming 'A'"}

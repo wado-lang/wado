@@ -568,8 +568,8 @@ fn method_call_info_for_type(
     }
 }
 
-/// The name and instance of a call through the universal `&T` blanket, keyed
-/// by its pointee.
+/// The name and record of a call through the universal `&T` blanket: both
+/// name its pointee, from which monomorphization fills the instance's slots.
 pub(crate) fn ref_blanket_call(
     ref_kind: RefKind,
     trait_name: &FqTraitName,
@@ -580,14 +580,16 @@ pub(crate) fn ref_blanket_call(
 ) -> (LocalMethodName, MonomorphInfo) {
     let generic =
         LocalMethodName::new_ref(ref_kind, Some(trait_name.clone()), method_name.to_string());
-    ref_blanket_instance(generic, pointee, method_type_args, tt)
+    ref_blanket_instance(generic, pointee, vec![], method_type_args, tt)
 }
 
 /// [`ref_blanket_call`] for the call `generic` names, which may be marked
-/// `unchecked`.
+/// `unchecked`, at the trait arguments it names: they settle the blanket's
+/// parameters the pointee does not (`A` in `impl<A, T: Src<A>> Tag<A> for &T`).
 pub(crate) fn ref_blanket_instance(
     generic: LocalMethodName,
     pointee: TypeId,
+    trait_type_args: Vec<TypeId>,
     method_type_args: Vec<TypeId>,
     tt: &TypeTable,
 ) -> (LocalMethodName, MonomorphInfo) {
@@ -596,7 +598,9 @@ pub(crate) fn ref_blanket_instance(
         .iter()
         .map(|&arg| tt.fq_type_name(arg))
         .collect();
-    let local_name = generic.with_type_args(&[tt.fq_type_name(pointee)], &method_type_arg_names);
+    let mut local_name =
+        generic.with_type_args(&[tt.fq_type_name(pointee)], &method_type_arg_names);
+    local_name.trait_type_args = trait_type_args;
     let monomorph_info = MonomorphInfo {
         generic_name,
         impl_type_args: vec![pointee],
@@ -884,18 +888,16 @@ fn value_blanket_link<'a>(
         .filter(|(blanket, _)| blanket.receiver == BlanketReceiver::Value)
 }
 
-/// The `&T` blanket the order selects for the reference `receiver` itself.
+/// The `&T` blanket the order selects for `receiver`, with the reference it
+/// answers: `receiver` itself, or the one a newtype over a reference names.
 pub(crate) fn ranked_ref_blanket<'a>(
     trait_env: &'a TraitEnv,
     trait_name: &FqTraitName,
     receiver: TypeId,
     tt: &TypeTable,
-) -> Option<&'a BlanketImpl> {
+) -> Option<(&'a BlanketImpl, TypeId)> {
     ranked_blanket(trait_env, trait_name, receiver, tt)
-        .filter(|(blanket, link)| {
-            matches!(blanket.receiver, BlanketReceiver::Ref { .. }) && *link == receiver
-        })
-        .map(|(blanket, _)| blanket)
+        .filter(|(blanket, _)| matches!(blanket.receiver, BlanketReceiver::Ref { .. }))
 }
 
 /// The blanket the order selects for `receiver`, with the link of its chain
@@ -1039,6 +1041,29 @@ pub(crate) fn blanket_impl_args(
     trait_args: &[TypeId],
     tt: &mut TypeTable,
 ) -> Option<Vec<TypeId>> {
+    let slots = blanket_settled_slots(trait_env, blanket, receiver, trait_args, tt);
+    (0..)
+        .take(trait_env.blanket_param_sources(blanket).len())
+        .map(|index| {
+            let slot = TypeParamId {
+                owner: blanket.def,
+                index,
+            };
+            slots.get(&slot).copied()
+        })
+        .collect()
+}
+
+/// The slots of `blanket` that `receiver` and `trait_args` settle: the
+/// receiver's own, what the trait arguments bind, and what its bounds project
+/// off those.
+pub(crate) fn blanket_settled_slots(
+    trait_env: &TraitEnv,
+    blanket: &BlanketImpl,
+    receiver: TypeId,
+    trait_args: &[TypeId],
+    tt: &mut TypeTable,
+) -> TypeArgMap {
     // A blanket's slots are its parameters in declaration order, so a
     // source's position is its slot.
     let sources = trait_env.blanket_param_sources(blanket);
@@ -1057,10 +1082,7 @@ pub(crate) fn blanket_impl_args(
             .map(|(_, index)| (slot(index), receiver)),
     );
     tt.project_impl_slots(blanket.def, &mut slots);
-    (0..)
-        .take(sources.len())
-        .map(|index| slots.get(&slot(index)).copied())
-        .collect()
+    slots
 }
 
 /// The call through the value blanket providing `local_name` where no written

@@ -5,6 +5,7 @@
 //! - Component Model ABI: type conversion and support checking for CM codegen
 
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -1020,6 +1021,11 @@ pub struct CmInterfaceRegistry {
     /// locals and component imports). WASI/core interfaces are absent: their
     /// module path is their FQ.
     cm_interface_module_sources: IndexMap<String, ModuleSource>,
+
+    /// The bare names of the enums, resources and structs above, which a
+    /// support check reads. Built once per registration, or a check of every
+    /// function would rebuild them from every type.
+    known_names: OnceLock<KnownNames>,
 
     /// FQs of interfaces imported from a CM component dependency. The plan
     /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
@@ -2194,6 +2200,7 @@ impl CmInterfaceRegistry {
         module: &ast::Module,
         scope: &CmDeclScope,
     ) -> Result<(), String> {
+        self.known_names = OnceLock::new();
         for item in &module.items {
             let name = match item {
                 Item::Resource(resource) => &resource.name,
@@ -2787,6 +2794,7 @@ impl CmInterfaceRegistry {
     /// `item`'s type references must already answer their source interface: the
     /// caller binds them by declaration.
     fn register_lib_local_item(&mut self, item: &Item, iface_fq: &str) {
+        self.known_names = OnceLock::new();
         if let Some(decl) = item.type_decl() {
             self.register_decl(item.id(), iface_fq, decl.name);
         }
@@ -3472,24 +3480,40 @@ impl CmInterfaceRegistry {
         None
     }
 
-    /// Check if a WASI function is supported for Component Model generation.
-    ///
-    /// This uses the registry's known enums and resources to determine if
-    /// all types in the function signature are supported.
-    pub fn is_function_supported(&self, func: &CmFunctionInfo) -> bool {
-        // Build sets of known enum, variant, flags, and resource names
-        // (bare name is enough here — the sets are only used as a membership check).
-        let known = KnownTypes {
-            decls: &self.type_decls,
+    fn known_names(&self) -> &KnownNames {
+        let registered = self.enums.len()
+            + self.variants.len()
+            + self.flags.len()
+            + self.resources.len()
+            + self.structs.len();
+        let bare = |(_, name): &(String, String)| name.clone();
+        let names = self.known_names.get_or_init(|| KnownNames {
             enums: self
                 .enums
                 .keys()
                 .chain(self.variants.keys())
                 .chain(self.flags.keys())
-                .map(|(_, n)| n.as_str())
+                .map(bare)
                 .collect(),
-            resources: self.resources.keys().map(|(_, n)| n.as_str()).collect(),
-            structs: self.structs.keys().map(|(_, n)| n.as_str()).collect(),
+            resources: self.resources.keys().map(bare).collect(),
+            structs: self.structs.keys().map(bare).collect(),
+            registered,
+        });
+        assert_eq!(
+            names.registered, registered,
+            "every registration of a type resets the known names"
+        );
+        names
+    }
+
+    /// Check if a WASI function is supported for Component Model generation.
+    ///
+    /// This uses the registry's known enums and resources to determine if
+    /// all types in the function signature are supported.
+    pub fn is_function_supported(&self, func: &CmFunctionInfo) -> bool {
+        let known = KnownTypes {
+            decls: &self.type_decls,
+            names: self.known_names(),
         };
         // Each type with its newtypes (`Mark`, `Duration`, `Instant`, an extern
         // handle) resolved to their bases.
@@ -4933,9 +4957,18 @@ pub fn type_id_to_valtype(type_id: TypeId) -> ValType {
 /// enums, resources and records the registry knows.
 struct KnownTypes<'a> {
     decls: &'a CmTypeDecls,
-    enums: IndexSet<&'a str>,
-    resources: IndexSet<&'a str>,
-    structs: IndexSet<&'a str>,
+    names: &'a KnownNames,
+}
+
+/// The bare names of a registry's types: a membership check needs no more.
+#[derive(Debug, Clone, Default)]
+struct KnownNames {
+    /// Enums, variants and flags.
+    enums: IndexSet<String>,
+    resources: IndexSet<String>,
+    structs: IndexSet<String>,
+    /// How many types the registry held when these were read.
+    registered: usize,
 }
 
 impl KnownTypes<'_> {
@@ -4960,7 +4993,7 @@ impl KnownTypes<'_> {
             Type::Reference(inner) | Type::MutReference(inner) => {
                 // borrow<resource> - passed as i32 handle at CM boundary
                 if let Type::Named(named) = inner.as_ref() {
-                    self.resources.contains(named.name.as_str())
+                    self.names.resources.contains(named.name.as_str())
                 } else {
                     false
                 }
@@ -4979,9 +5012,9 @@ impl KnownTypes<'_> {
         self.decls.is(named.id, CompilerItem::String)
             || self.decls.is(named.id, CompilerItem::ExternObject)
             || wado_primitive_name_to_cm(name).is_some()
-            || self.enums.contains(name)
-            || self.resources.contains(name)
-            || self.structs.contains(name)
+            || self.names.enums.contains(name)
+            || self.names.resources.contains(name)
+            || self.names.structs.contains(name)
     }
 
     /// Whether a result type, its aliases already resolved, has a CM lifting.
@@ -5564,11 +5597,10 @@ mod tests {
             vec![Type::Tuple(vec![string(), string()])],
         );
         let option_string = item(CompilerItem::Option, vec![string()]);
+        let names = KnownNames::default();
         let known = KnownTypes {
             decls: &decls,
-            enums: IndexSet::default(),
-            resources: IndexSet::default(),
-            structs: IndexSet::default(),
+            names: &names,
         };
         for ty in [array_string, array_tuple, option_string] {
             assert!(

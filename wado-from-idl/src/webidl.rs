@@ -37,6 +37,21 @@ pub struct Snapshot {
     pub includes: Vec<Includes>,
     pub typedefs: Vec<Typedef>,
     pub callbacks: Vec<Callback>,
+    /// Every `dictionary` (and partial) a member of the slice names.
+    pub dictionaries: Vec<Named>,
+    /// Every `enum` a member of the slice names.
+    pub enums: Vec<Named>,
+    /// Every `namespace` (and partial) the snapshot was asked for.
+    pub namespaces: Vec<Interface>,
+}
+
+/// A definition the frontend reads only the name of.
+#[derive(Deserialize)]
+pub struct Named {
+    pub name: String,
+    /// An `enum` has no partials, and no such field.
+    #[serde(default)]
+    pub partial: bool,
 }
 
 #[derive(Deserialize)]
@@ -97,8 +112,9 @@ pub enum Member {
     #[serde(rename = "operation")]
     Operation {
         name: String,
+        /// Absent on a bare `stringifier;`.
         #[serde(rename = "idlType")]
-        idl_type: IdlType,
+        idl_type: Option<IdlType>,
         arguments: Vec<Argument>,
         special: String,
     },
@@ -108,9 +124,32 @@ pub enum Member {
         #[serde(rename = "extAttrs")]
         ext_attrs: Vec<ExtAttr>,
     },
-    /// `const`, `iterable`, `maplike`, `setlike`: nothing a resource carries.
-    #[serde(other)]
-    Other,
+    #[serde(rename = "const")]
+    Const { name: String },
+    #[serde(rename = "iterable")]
+    Iterable,
+    #[serde(rename = "maplike")]
+    Maplike,
+    #[serde(rename = "setlike")]
+    Setlike,
+    #[serde(rename = "async_iterable")]
+    AsyncIterable,
+}
+
+impl Member {
+    /// What a report calls the member: its `WebIDL` name, or what stands in for one.
+    fn label(&self) -> String {
+        match self {
+            Self::Attribute { name, .. } | Self::Const { name } => name.clone(),
+            Self::Operation { name, special, .. } if name.is_empty() => format!("({special})"),
+            Self::Operation { name, .. } => name.clone(),
+            Self::Constructor { .. } => "new".to_string(),
+            Self::Iterable => "(iterable)".to_string(),
+            Self::Maplike => "(maplike)".to_string(),
+            Self::Setlike => "(setlike)".to_string(),
+            Self::AsyncIterable => "(async_iterable)".to_string(),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -173,8 +212,187 @@ pub struct WebIdlOutput {
     pub js: IndexMap<String, JsFunction>,
     /// Each resource's `WebIDL` interface name, keyed by its Wado name.
     pub interfaces: IndexMap<String, String>,
-    /// `Interface.member: reason`, in source order.
-    pub skipped: Vec<String>,
+    /// Everything the snapshot holds that the module does not bind.
+    pub skipped: Vec<Skip>,
+}
+
+/// What would have to lower for a skipped item to. A wrapper (a list of it, an
+/// argument of it) rewords a reason and keeps its cause.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Cause {
+    Dictionary,
+    Enum,
+    Namespace,
+    Any,
+    Object,
+    /// An `ArrayBuffer`, a view of one, or a typed array.
+    Buffer,
+    BigInt,
+    /// `undefined` anywhere but a return type.
+    Undefined,
+    /// A name the snapshot does not define.
+    OutsideSlice,
+    /// A generic other than a list or a returned `Promise`, by its name.
+    Generic(String),
+    /// A list whose elements are lists, nullable or callbacks.
+    ListElement,
+    /// A union of several expressible types, or one narrowed in a result.
+    Union,
+    /// Several overloads lower, and nothing merges them.
+    Overloads,
+    /// A callback in a result, as an event handler attribute is.
+    CallbackResult,
+    /// A callback the glue cannot call: one returning a value, or taking more
+    /// than scalars and handles.
+    Callback,
+    /// More parameters than cross as core values, so they cross in memory.
+    ParamsInMemory,
+    Constant,
+    /// `iterable`, `maplike`, `setlike` or `async_iterable`.
+    Iteration,
+    /// A getter, setter, deleter or stringifier operation.
+    SpecialOperation,
+    StaticAttribute,
+    HtmlConstructor,
+    /// A child redeclaring a method of its chain, which a resource may not.
+    Override,
+    /// The same, where the parent's method answers with another type than the
+    /// child declares.
+    RetypedOverride,
+}
+
+impl std::fmt::Display for Cause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let label = match self {
+            Self::Dictionary => "a dictionary",
+            Self::Enum => "an enum",
+            Self::Namespace => "a namespace member",
+            Self::Any => "`any`",
+            Self::Object => "`object`",
+            Self::Buffer => "a buffer",
+            Self::BigInt => "`bigint`",
+            Self::Undefined => "`undefined` outside a return type",
+            Self::OutsideSlice => "a type outside the slice",
+            Self::Generic(generic) => return write!(f, "`{generic}<…>`"),
+            Self::ListElement => "a list of a list, a nullable type or a callback",
+            Self::Union => "a union",
+            Self::Overloads => "overloads",
+            Self::CallbackResult => "a callback in a result",
+            Self::Callback => "a callback the glue cannot call",
+            Self::ParamsInMemory => "parameters passed through memory",
+            Self::Constant => "a constant",
+            Self::Iteration => "an iteration declaration",
+            Self::SpecialOperation => "a special operation",
+            Self::StaticAttribute => "a static attribute",
+            Self::HtmlConstructor => "`[HTMLConstructor]`",
+            Self::Override => "a redeclared inherited method",
+            Self::RetypedOverride => "an inherited method redeclared with another type",
+        };
+        f.write_str(label)
+    }
+}
+
+/// Why something has no binding.
+#[derive(Debug, Clone)]
+pub struct Reason {
+    pub cause: Cause,
+    pub text: String,
+}
+
+impl Reason {
+    fn new(cause: Cause, text: impl Into<String>) -> Self {
+        Self {
+            cause,
+            text: text.into(),
+        }
+    }
+
+    /// The reason whose text is its cause's label.
+    fn of(cause: Cause) -> Self {
+        let text = cause.to_string();
+        Self { cause, text }
+    }
+
+    fn reworded(self, reword: impl FnOnce(&str) -> String) -> Self {
+        Self {
+            text: reword(&self.text),
+            cause: self.cause,
+        }
+    }
+}
+
+/// How much of the platform a skip takes away.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lost {
+    /// A dictionary or an enum.
+    Definition,
+    Member,
+    /// One overload of a member another overload binds.
+    Overload,
+    /// A trailing optional argument of a bound member, and each one after it.
+    Argument,
+}
+
+/// One thing the snapshot holds and the module does not bind.
+#[derive(Debug)]
+pub struct Skip {
+    /// `Interface.member`, or a definition's name.
+    pub item: String,
+    pub lost: Lost,
+    pub reason: Reason,
+}
+
+impl std::fmt::Display for Skip {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.item, self.reason.text)
+    }
+}
+
+/// The skips counted by cause and by what each lost, most frequent cause first.
+#[must_use]
+pub fn skip_table(skipped: &[Skip]) -> String {
+    const COLUMNS: [(&str, Lost); 4] = [
+        ("Definitions", Lost::Definition),
+        ("Members", Lost::Member),
+        ("Overloads", Lost::Overload),
+        ("Arguments", Lost::Argument),
+    ];
+    let mut counts: IndexMap<&Cause, [usize; COLUMNS.len()]> = IndexMap::new();
+    let mut total = [0; COLUMNS.len()];
+    for skip in skipped {
+        let column = COLUMNS
+            .iter()
+            .position(|(_, lost)| *lost == skip.lost)
+            .expect("every `Lost` has a column");
+        counts.entry(&skip.reason.cause).or_default()[column] += 1;
+        total[column] += 1;
+    }
+    // The sort is stable, so causes of one count stay in source order.
+    counts.sort_by(|_, a, _, b| b.iter().sum::<usize>().cmp(&a.iter().sum()));
+    let mut rows: Vec<(String, [usize; COLUMNS.len()])> = counts
+        .into_iter()
+        .map(|(cause, counts)| (cause.to_string(), counts))
+        .collect();
+    rows.push(("Total".to_string(), total));
+    let width = rows
+        .iter()
+        .map(|(label, _)| label.chars().count())
+        .max()
+        .expect("the table has a total row");
+    let mut table = format!("{:<width$}", "Cause");
+    for (header, _) in COLUMNS {
+        table.push_str("  ");
+        table.push_str(header);
+    }
+    table.push('\n');
+    for (label, counts) in rows {
+        table.push_str(&format!("{label:<width$}"));
+        for ((header, _), count) in COLUMNS.iter().zip(counts) {
+            table.push_str(&format!("  {count:>w$}", w = header.len()));
+        }
+        table.push('\n');
+    }
+    table
 }
 
 /// A function's JavaScript half.
@@ -228,12 +446,19 @@ struct Merged<'a> {
     members: Vec<&'a Member>,
 }
 
-/// A member's lowering: a function and its JavaScript half, or the Wado name it
-/// would have had and why there is none.
-type Lowered = std::result::Result<(WadoFunction, JsFunction), (String, String)>;
+/// A function, its JavaScript half, and why its trailing optional arguments
+/// were left out, where they were.
+struct Bound {
+    function: WadoFunction,
+    js: JsFunction,
+    dropped: Option<Reason>,
+}
+
+/// A member's lowering, or the Wado name it would have had and why there is none.
+type Lowered = std::result::Result<Bound, (String, Reason)>;
 
 /// A callback's return type and arguments, or why no function stands in for it.
-type Signature<'a> = std::result::Result<(&'a IdlType, &'a [Argument]), String>;
+type Signature<'a> = std::result::Result<(&'a IdlType, &'a [Argument]), Reason>;
 
 impl Callback {
     fn signature(&self) -> (&str, Signature<'_>) {
@@ -248,7 +473,7 @@ impl Callback {
                     .iter()
                     .filter_map(|member| match member {
                         Member::Operation {
-                            idl_type,
+                            idl_type: Some(idl_type),
                             arguments,
                             ..
                         } => Some((idl_type, arguments.as_slice())),
@@ -257,9 +482,9 @@ impl Callback {
                     .collect();
                 let signature = match operations[..] {
                     [operation] => Ok(operation),
-                    _ => Err(format!(
-                        "callback interface of {} operations",
-                        operations.len()
+                    _ => Err(Reason::new(
+                        Cause::Callback,
+                        format!("callback interface of {} operations", operations.len()),
                     )),
                 };
                 (name, signature)
@@ -280,30 +505,38 @@ pub fn generate(snapshot: &Snapshot, source: &str) -> Result<Generated> {
     Ok(Generated {
         wado: WadoCodeGenerator::new().generate(&output.module),
         glue: glue::generate(&output, source),
+        bound: output.js.len(),
         skipped: output.skipped,
     })
 }
 
-/// A package's generated files, and the members the slice could not express.
+/// A package's generated files, and what the snapshot holds beyond them.
 pub struct Generated {
     /// The Wado module declaring the slice's imports.
     pub wado: String,
     /// The JavaScript module serving them from the browser's objects.
     pub glue: String,
-    pub skipped: Vec<String>,
+    /// How many functions the module binds.
+    pub bound: usize,
+    pub skipped: Vec<Skip>,
 }
 
 /// Transform a snapshot into the module binding the slice's interfaces.
 ///
 /// # Errors
 ///
-/// The slice is not closed (a parent or a mixin it names is missing), a child
-/// redeclares an inherited method, or the slice holds two `[Global]` interfaces.
+/// The slice is not closed (a parent or a mixin it names is missing), or it
+/// holds two `[Global]` interfaces.
 pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     let merged = merge(snapshot)?;
+    fn names(definitions: &[Named]) -> IndexSet<&str> {
+        definitions.iter().map(|d| d.name.as_str()).collect()
+    }
     let lowering = Lowering {
         package: &snapshot.package,
         slice: merged.keys().copied().collect(),
+        dictionaries: names(&snapshot.dictionaries),
+        enums: names(&snapshot.enums),
         typedefs: snapshot
             .typedefs
             .iter()
@@ -317,7 +550,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     };
 
     let classes = number_classes(&merged)?;
-    let mut skipped = Vec::new();
+    let mut skipped = unbound_definitions(snapshot);
     let mut js = IndexMap::new();
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
@@ -339,7 +572,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
             },
         );
     }
-    reject_overrides(&merged, &resources)?;
+    drop_overrides(&merged, &mut resources, &mut js, &mut skipped);
 
     let mut module = WadoModule::new(snapshot.module.clone(), snapshot.webref.clone());
     if let Some(bindings) = lowering.global_bindings(&merged, &resources)? {
@@ -374,6 +607,32 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         interfaces,
         skipped,
     })
+}
+
+/// The definitions no resource stands for: each dictionary and enum, and each
+/// member of a namespace.
+fn unbound_definitions(snapshot: &Snapshot) -> Vec<Skip> {
+    let definitions = |named: &'_ [Named], cause: Cause| {
+        named
+            .iter()
+            .filter(|definition| !definition.partial)
+            .map(move |definition| Skip {
+                item: definition.name.clone(),
+                lost: Lost::Definition,
+                reason: Reason::of(cause.clone()),
+            })
+            .collect::<Vec<_>>()
+    };
+    let mut skipped = definitions(&snapshot.dictionaries, Cause::Dictionary);
+    skipped.extend(definitions(&snapshot.enums, Cause::Enum));
+    for namespace in &snapshot.namespaces {
+        skipped.extend(namespace.members.iter().map(|member| Skip {
+            item: format!("{}.{}", namespace.name, member.label()),
+            lost: Lost::Member,
+            reason: Reason::of(Cause::Namespace),
+        }));
+    }
+    skipped
 }
 
 /// The functions of `bindings`, their JavaScript halves moved into `js`.
@@ -500,39 +759,69 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
     Ok(merged)
 }
 
-/// A child may not redeclare a method reachable through its chain. Statics
+/// Drop each method a child redeclares from its chain, which a resource may
+/// not: the declaration nearest the root serves each one below it. Statics
 /// (`new` above all) are not inherited.
-fn reject_overrides(
-    merged: &IndexMap<&str, Merged<'_>>,
-    resources: &IndexMap<&str, WadoResource>,
-) -> Result<()> {
-    let methods: IndexMap<&str, IndexSet<&str>> = resources
+fn drop_overrides<'a>(
+    merged: &IndexMap<&'a str, Merged<'_>>,
+    resources: &mut IndexMap<&'a str, WadoResource>,
+    js: &mut IndexMap<String, JsFunction>,
+    skipped: &mut Vec<Skip>,
+) {
+    let has_receiver = |m: &WadoFunction| m.params.first().is_some_and(|p| p.wit_name == "self");
+    // What a caller sees past the receiver.
+    let signature = |m: &WadoFunction| {
+        let params: Vec<WadoType> = m.params[1..].iter().map(|p| p.ty.clone()).collect();
+        (params, m.return_type.clone(), m.is_async)
+    };
+    let declared: IndexMap<&str, IndexMap<String, _>> = resources
         .iter()
         .map(|(name, r)| {
-            let receivers = r
-                .methods
-                .iter()
-                .filter(|m| m.params.first().is_some_and(|p| p.wit_name == "self"))
-                .map(|m| m.name.as_str())
-                .collect();
-            (*name, receivers)
+            let receivers = r.methods.iter().filter(|m| has_receiver(m));
+            let signatures = receivers.map(|m| (m.name.clone(), signature(m)));
+            (*name, signatures.collect())
         })
         .collect();
     for (name, iface) in merged {
-        let mut ancestor = iface.inheritance.as_deref();
-        while let Some(parent) = ancestor {
-            if let Some(method) = methods[name].intersection(&methods[parent]).next() {
-                bail!("`{name}.{method}` redeclares a method inherited from `{parent}`");
+        resources[name].methods.retain(|method| {
+            if !has_receiver(method) {
+                return true;
             }
-            ancestor = merged[parent].inheritance.as_deref();
-        }
+            let chain = std::iter::successors(iface.inheritance.as_deref(), |parent| {
+                merged[parent].inheritance.as_deref()
+            });
+            let Some((parent, serving)) = chain
+                .filter_map(|parent| Some((parent, declared[parent].get(&method.name)?)))
+                .last()
+            else {
+                return true;
+            };
+            js.shift_remove(&method.cm_attr)
+                .expect("every function has a JavaScript half");
+            let inherited = format!("redeclares a method inherited from `{parent}`");
+            let reason = if *serving == signature(method) {
+                Reason::new(Cause::Override, inherited)
+            } else {
+                Reason::new(
+                    Cause::RetypedOverride,
+                    format!("{inherited} with another type"),
+                )
+            };
+            skipped.push(Skip {
+                item: format!("{name}.{}", method.name),
+                lost: Lost::Member,
+                reason,
+            });
+            false
+        });
     }
-    Ok(())
 }
 
 struct Lowering<'a> {
     package: &'a str,
     slice: IndexSet<&'a str>,
+    dictionaries: IndexSet<&'a str>,
+    enums: IndexSet<&'a str>,
     typedefs: IndexMap<&'a str, &'a IdlType>,
     callbacks: IndexMap<&'a str, Signature<'a>>,
     /// The interface handing out the first handle, which a callback's body may
@@ -579,40 +868,61 @@ impl Lowering<'_> {
     }
 
     /// Every member of `iface` that lowers, appending to `skipped` the ones
-    /// that do not and the names two overloads compete for.
+    /// that do not, the names two overloads compete for, and what a bound
+    /// member leaves out.
     fn methods_of(
         &self,
         iface: &str,
         path: &str,
         merged: &Merged<'_>,
-        skipped: &mut Vec<String>,
+        skipped: &mut Vec<Skip>,
     ) -> Vec<(WadoFunction, JsFunction)> {
-        let mut candidates: IndexMap<String, (Vec<(WadoFunction, JsFunction)>, Vec<String>)> =
-            IndexMap::new();
+        let mut candidates: IndexMap<String, (Vec<Bound>, Vec<Reason>)> = IndexMap::new();
         for member in &merged.members {
             for lowered in self.lower_member(iface, path, member) {
                 match lowered {
-                    Ok(binding) => {
-                        candidates
-                            .entry(binding.0.name.clone())
-                            .or_default()
-                            .0
-                            .push(binding);
+                    Ok(bound) => {
+                        let name = bound.function.name.clone();
+                        candidates.entry(name).or_default().0.push(bound);
                     }
                     Err((name, reason)) => candidates.entry(name).or_default().1.push(reason),
                 }
             }
         }
         let mut methods = Vec::new();
-        for (name, (mut functions, reasons)) in candidates {
-            match functions.len() {
-                1 => methods.push(functions.pop().unwrap()),
-                0 => skipped.extend(
-                    reasons
-                        .into_iter()
-                        .map(|reason| format!("{iface}.{name}: {reason}")),
+        for (name, (mut bound, reasons)) in candidates {
+            let item = format!("{iface}.{name}");
+            let mut skip = |lost, reason| {
+                skipped.push(Skip {
+                    item: item.clone(),
+                    lost,
+                    reason,
+                });
+            };
+            match bound.len() {
+                1 => {
+                    let Bound {
+                        function,
+                        js,
+                        dropped,
+                    } = bound.pop().unwrap();
+                    methods.push((function, js));
+                    for reason in reasons {
+                        skip(Lost::Overload, reason);
+                    }
+                    if let Some(reason) = dropped {
+                        skip(Lost::Argument, reason);
+                    }
+                }
+                0 => {
+                    for reason in reasons {
+                        skip(Lost::Member, reason);
+                    }
+                }
+                n => skip(
+                    Lost::Member,
+                    Reason::new(Cause::Overloads, format!("{n} overloads")),
                 ),
-                n => skipped.push(format!("{iface}.{name}: {n} overloads")),
             }
         }
         methods
@@ -630,19 +940,20 @@ impl Lowering<'_> {
             } => {
                 let getter = to_wado_identifier(name);
                 if special == "static" {
-                    return vec![Err((getter, "static attribute".to_string()))];
+                    let reason = Reason::new(Cause::StaticAttribute, "static attribute");
+                    return vec![Err((getter, reason))];
                 }
                 let kebab = to_kebab_case(name);
                 let mut out = vec![match self.lower_type(idl_type, Flow::Out) {
-                    Ok(ty) => Ok((
+                    Ok(ty) => Bound::whole(
                         function(
                             getter,
                             format!("{path}#{kebab}"),
                             vec![self_param(iface)],
                             Some(ty),
                         ),
-                        JsMember::Get(name.clone()).into(),
-                    )),
+                        JsMember::Get(name.clone()),
+                    ),
                     Err(reason) => Err((getter, reason)),
                 }];
                 // `Flow::In` admits everything `Flow::Out` does, so a setter
@@ -655,15 +966,15 @@ impl Lowering<'_> {
                         default: None,
                         lends_view: false,
                     };
-                    out.push(Ok((
+                    out.push(Bound::whole(
                         function(
                             format!("set_{}", to_snake_case(name)),
                             format!("{path}#set-{kebab}"),
                             vec![self_param(iface), value],
                             None,
                         ),
-                        JsMember::Set(name.clone()).into(),
-                    )));
+                        JsMember::Set(name.clone()),
+                    ));
                 }
                 out
             }
@@ -687,8 +998,15 @@ impl Lowering<'_> {
                             name: name.clone(),
                         },
                     ),
-                    _ => return vec![Err((wado_name, format!("{special} operation")))],
+                    _ => {
+                        let reason =
+                            Reason::new(Cause::SpecialOperation, format!("{special} operation"));
+                        return vec![Err((wado_name, reason))];
+                    }
                 };
+                let idl_type = idl_type
+                    .as_ref()
+                    .expect("only a bare `stringifier;` has no return type");
                 vec![self.lower_operation(
                     iface,
                     (wado_name, js),
@@ -704,7 +1022,8 @@ impl Lowering<'_> {
             } => {
                 // `[HTMLConstructor]` runs only from a custom element definition.
                 if ext_attrs.iter().any(|a| a.name == "HTMLConstructor") {
-                    return vec![Err(("new".to_string(), "HTMLConstructor".to_string()))];
+                    let reason = Reason::new(Cause::HtmlConstructor, "HTMLConstructor");
+                    return vec![Err(("new".to_string(), reason))];
                 }
                 let js = JsMember::New {
                     interface: iface.to_string(),
@@ -718,7 +1037,10 @@ impl Lowering<'_> {
                     None,
                 )]
             }
-            Member::Other => Vec::new(),
+            Member::Const { .. } => vec![Err((member.label(), Reason::of(Cause::Constant)))],
+            Member::Iterable | Member::Maplike | Member::Setlike | Member::AsyncIterable => {
+                vec![Err((member.label(), Reason::of(Cause::Iteration)))]
+            }
         }
     }
 
@@ -732,7 +1054,7 @@ impl Lowering<'_> {
         arguments: &[Argument],
         return_type: Option<&IdlType>,
     ) -> Lowered {
-        let skip = |reason: String| Err((wado_name.clone(), reason));
+        let skip = |reason: Reason| Err((wado_name.clone(), reason));
         // A `Promise<T>` result is an `async` function settling to `T` or to
         // the reason it was rejected for.
         let settled = return_type.and_then(promised);
@@ -754,7 +1076,9 @@ impl Lowering<'_> {
             answered
         };
         let mut params: Vec<WadoParam> = receiver.into_iter().collect();
+        let receivers = params.len();
         let mut variadic = false;
+        let mut dropped = None;
         for arg in arguments {
             assert!(!variadic, "WebIDL admits a variadic argument only last");
             let (ty, default) = match self.lower_type(&arg.idl_type, Flow::In) {
@@ -767,8 +1091,14 @@ impl Lowering<'_> {
                 Ok(ty) => (ty, None),
                 // A trailing optional the slice cannot express is left to
                 // its WebIDL default; a required one takes the member with it.
-                Err(_) if arg.optional => break,
-                Err(reason) => return skip(format!("`{}`: {reason}", arg.name)),
+                Err(reason) if arg.optional => {
+                    dropped =
+                        Some(reason.reworded(|r| format!("optional `{}` dropped: {r}", arg.name)));
+                    break;
+                }
+                Err(reason) => {
+                    return skip(reason.reworded(|r| format!("`{}`: {r}", arg.name)));
+                }
             };
             params.push(WadoParam {
                 name: to_wado_identifier(&arg.name),
@@ -784,16 +1114,32 @@ impl Lowering<'_> {
                 param.default = None;
             }
         }
+        // No shim reads parameters from memory, so trailing optionals are
+        // left to their WebIDL defaults until the rest cross as core values.
+        while !glue::reads_params(&params) {
+            if params.pop().is_none_or(|last| last.default.is_none()) {
+                return skip(Reason::of(Cause::ParamsInMemory));
+            }
+            let left_out = &arguments[params.len() - receivers].name;
+            dropped = Some(
+                Reason::of(Cause::ParamsInMemory)
+                    .reworded(|r| format!("optional `{left_out}` dropped: {r}")),
+            );
+        }
         let function = WadoFunction {
             is_async,
             ..function(wado_name, cm_attr, params, return_type)
         };
-        Ok((function, JsFunction { member, variadic }))
+        Ok(Bound {
+            function,
+            js: JsFunction { member, variadic },
+            dropped,
+        })
     }
 
     /// The Wado type of a `WebIDL` type, or why the slice has none. A union is
     /// the one constituent the slice can express; `undefined` in it means nullable.
-    fn lower_type(&self, ty: &IdlType, flow: Flow) -> std::result::Result<WadoType, String> {
+    fn lower_type(&self, ty: &IdlType, flow: Flow) -> std::result::Result<WadoType, Reason> {
         let (inner, nullable) = match &ty.inner {
             IdlTypeInner::Types(arguments) if !ty.generic.is_empty() => (
                 self.lower_generic(&ty.generic, arguments, flow)?,
@@ -812,16 +1158,31 @@ impl Lowering<'_> {
                         Err(reason) => reasons.push(reason),
                     }
                 }
+                let texts = || {
+                    let texts: Vec<&str> = reasons.iter().map(|r| r.text.as_str()).collect();
+                    texts.join("; ")
+                };
                 match expressible.len() {
                     1 if reasons.is_empty() || flow == Flow::In => (),
                     1 => {
-                        return Err(format!(
-                            "union narrowed in a result: {}",
-                            reasons.join("; ")
+                        return Err(Reason::new(
+                            Cause::Union,
+                            format!("union narrowed in a result: {}", texts()),
                         ));
                     }
-                    0 => return Err(format!("union: {}", reasons.join("; "))),
-                    n => return Err(format!("union of {n} expressible types")),
+                    // Its first constituent has to lower before the union can.
+                    0 => {
+                        return Err(Reason::new(
+                            reasons[0].cause.clone(),
+                            format!("union: {}", texts()),
+                        ));
+                    }
+                    n => {
+                        return Err(Reason::new(
+                            Cause::Union,
+                            format!("union of {n} expressible types"),
+                        ));
+                    }
                 }
                 let nullable = ty.nullable || constituents.iter().any(is_undefined);
                 (expressible.pop().unwrap(), nullable)
@@ -837,19 +1198,27 @@ impl Lowering<'_> {
         generic: &str,
         arguments: &[IdlType],
         flow: Flow,
-    ) -> std::result::Result<WadoType, String> {
+    ) -> std::result::Result<WadoType, Reason> {
         let ("sequence" | "FrozenArray", [element]) = (generic, arguments) else {
-            return Err(format!("`{generic}<…>`"));
+            return Err(Reason::of(Cause::Generic(generic.to_string())));
         };
         let reason = |of: &str| format!("`{generic}` of {of}");
-        let element = self.lower_type(element, flow).map_err(|r| reason(&r))?;
+        let element = self
+            .lower_type(element, flow)
+            .map_err(|r| r.reworded(reason))?;
         if !glue::list_carries(&element) {
-            return Err(reason("a list, a nullable type or a callback"));
+            return Err(Reason::new(
+                Cause::ListElement,
+                reason("a list, a nullable type or a callback"),
+            ));
         }
         Ok(WadoType::List(Box::new(element)))
     }
 
-    fn lower_name(&self, name: &str, flow: Flow) -> std::result::Result<WadoType, String> {
+    fn lower_name(&self, name: &str, flow: Flow) -> std::result::Result<WadoType, Reason> {
+        let named = |cause: Cause| Err(Reason::new(cause, format!("`{name}`")));
+        let is_a =
+            |cause: Cause, what: &str| Err(Reason::new(cause, format!("`{name}` is {what}")));
         Ok(match name {
             "boolean" => WadoType::Bool,
             "byte" => WadoType::I8,
@@ -863,15 +1232,26 @@ impl Lowering<'_> {
             "float" | "unrestricted float" => WadoType::F32,
             "double" | "unrestricted double" => WadoType::F64,
             "DOMString" | "USVString" | "ByteString" => WadoType::String,
-            "undefined" => return Err("`undefined` outside a return type".to_string()),
+            "undefined" => return Err(Reason::of(Cause::Undefined)),
+            "any" => return named(Cause::Any),
+            "object" => return named(Cause::Object),
+            "bigint" => return named(Cause::BigInt),
+            "ArrayBuffer" | "SharedArrayBuffer" | "DataView" | "Int8Array" | "Int16Array"
+            | "Int32Array" | "Uint8Array" | "Uint16Array" | "Uint32Array" | "Uint8ClampedArray"
+            | "BigInt64Array" | "BigUint64Array" | "Float16Array" | "Float32Array"
+            | "Float64Array" => return is_a(Cause::Buffer, "a buffer"),
             _ if self.slice.contains(name) => WadoType::Named(to_upper_camel_case(name)),
+            _ if self.dictionaries.contains(name) => {
+                return is_a(Cause::Dictionary, "a dictionary");
+            }
+            _ if self.enums.contains(name) => return is_a(Cause::Enum, "an enum"),
             _ => {
                 if let Some(target) = self.typedefs.get(name) {
                     return self.lower_type(target, flow);
                 }
                 return match self.callbacks.get(name) {
                     Some(signature) => self.lower_callback(signature.clone()?, flow),
-                    None => Err(format!("`{name}` is outside the slice")),
+                    None => is_a(Cause::OutsideSlice, "outside the slice"),
                 };
             }
         })
@@ -883,30 +1263,29 @@ impl Lowering<'_> {
         &self,
         (return_type, arguments): (&IdlType, &[Argument]),
         flow: Flow,
-    ) -> std::result::Result<WadoType, String> {
+    ) -> std::result::Result<WadoType, Reason> {
         if flow == Flow::Out {
-            return Err("a callback in a result".to_string());
+            return Err(Reason::of(Cause::CallbackResult));
         }
+        let uncallable = |why: String| Err(Reason::new(Cause::Callback, why));
         if !is_undefined(return_type) {
-            return Err("a callback returning a value".to_string());
+            return uncallable("a callback returning a value".to_string());
         }
         let params = arguments
             .iter()
             .map(|arg| {
+                let argument = |what: &str| format!("callback argument `{}`: {what}", arg.name);
                 if arg.variadic {
-                    return Err(format!("callback argument `{}`: variadic", arg.name));
+                    return uncallable(argument("variadic"));
                 }
                 if arg.optional {
-                    return Err(format!("callback argument `{}`: optional", arg.name));
+                    return uncallable(argument("optional"));
                 }
                 let ty = self.lower_type(&arg.idl_type, Flow::Out)?;
                 if ty.callback_argument_word().is_some() {
                     return Ok(ty);
                 }
-                Err(format!(
-                    "callback argument `{}`: neither a scalar nor a handle",
-                    arg.name
-                ))
+                uncallable(argument("neither a scalar nor a handle"))
             })
             .collect::<std::result::Result<_, _>>()?;
         Ok(WadoType::Callback {
@@ -968,6 +1347,17 @@ impl Lowering<'_> {
             }
         }
         Ok(Some(bindings))
+    }
+}
+
+impl Bound {
+    /// A binding that leaves no argument out.
+    fn whole(function: WadoFunction, member: JsMember) -> Lowered {
+        Ok(Self {
+            function,
+            js: member.into(),
+            dropped: None,
+        })
     }
 }
 

@@ -1,0 +1,23 @@
+// The call the hint suggests writes the receiver's type where the block's
+// trait reference writes the parameter the receiver fills, and what a bound
+// projects off it: only the parameter left open stays a name.
+
+trait Source<A> with () { fn first(&self) -> A; }
+trait Shape with () { type Side; }
+trait Tag<S, P, A> with () { fn tag(&self) -> A; }
+
+impl<A, P, T: Source<A> + Shape<Side = P>> Tag<List<T>, P, A> for T {
+    fn tag(&self) -> A { return self.first(); }
+}
+
+struct One { n: i32 }
+impl Source<i32> for One { fn first(&self) -> i32 { return self.n; } }
+impl Shape for One { type Side = bool; }
+
+export fn run() {
+    let one = One { n: 7 };
+    let _: i32 = one.tag();
+}
+
+__DATA__
+{"compile_error": "does not settle 'A': write 'Tag::<List<One>, bool, A>::tag(…)', naming 'A'"}

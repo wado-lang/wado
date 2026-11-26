@@ -1,0 +1,6 @@
+pub trait Source<A> with () { fn first(&self) -> A; }
+pub trait Tag<K, A> with () { fn tag(&self) -> A; }
+
+impl<A, T: Source<A>> Tag<i32, List<A>> for T {
+    fn tag(&self) -> List<A> { return [self.first()]; }
+}

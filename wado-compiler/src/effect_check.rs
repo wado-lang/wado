@@ -14,6 +14,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::{Lints, demanded_imports};
 
 use crate::component_model::{CmInterfaceRegistry, Demand};
+use crate::graph::Reachability;
 use crate::module_source::ModuleSource;
 use crate::name::{
     DeclaredHead, FqTraitName, FqTypeName, TypeHead, is_wasi_fq, mangle_local_method,
@@ -665,15 +666,7 @@ fn run_effect_checks(
                         .collect();
                     let mentioned: Option<Vec<EffectRef>> = trait_key
                         .and_then(|key| index.interfaces.get(&key))
-                        .map(|(effect, _)| {
-                            index
-                                .mentions
-                                .get(effect)
-                                .into_iter()
-                                .flatten()
-                                .cloned()
-                                .collect()
-                        });
+                        .map(|(effect, _)| index.mentions.implied(effect).cloned().collect());
                     for method in &impl_block.methods {
                         let inherits_ambient = trait_key.is_some_and(|key| {
                             index
@@ -1087,8 +1080,8 @@ pub(crate) struct OwnedEffectData {
     forwarding_blocks: IndexSet<DefId>,
     resources: IndexSet<EffectRef>,
     drop_is_an_operation: IndexSet<DefId>,
-    closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
-    mentions: IndexMap<EffectRef, IndexSet<EffectRef>>,
+    closure: Propagation,
+    mentions: Propagation,
     waiting: IndexSet<EffectRef>,
     /// Each interface and resource declaration's effect and `#[cm]` FQ.
     interfaces: IndexMap<DefId, (EffectRef, Option<String>)>,
@@ -1357,7 +1350,7 @@ impl OwnedEffectData {
                     .effect_decl(def)
                     .expect("an interface or resource is an effect");
                 if answers_cm_fq
-                    && closure.contains_key(&key)
+                    && closure.declares(&key)
                     && let Some(fq) = &cm_fq
                 {
                     effect_by_cm_fq.entry(fq.clone()).or_insert(key.clone());
@@ -1490,10 +1483,10 @@ struct EffectIndex<'a> {
     /// operation rather than the release.
     drop_is_an_operation: &'a IndexSet<DefId>,
     /// Effect → implied resources propagation closure.
-    closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
+    closure: &'a Propagation,
     /// The same closure through what operations mention alone, leaving out
     /// the `extends` families: what a handler holds.
-    mentions: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
+    mentions: &'a Propagation,
     /// What waiting on an `AsyncCall` demands, held where the call starts.
     waiting: &'a IndexSet<EffectRef>,
     /// Interface or resource declaration → its effect and `#[cm]` FQ.
@@ -1562,7 +1555,7 @@ fn binding_granted_effects(
             .effects
             .iter()
             .map(|entry| EffectRef::Concrete(entry.effect.clone()))
-            .filter(|effect| index.closure.contains_key(effect))
+            .filter(|effect| index.closure.declares(effect))
             .collect();
         granted = Some(match granted {
             None => walk,
@@ -2070,7 +2063,7 @@ fn build_propagation_closure_sem(
     state: &AnnotateState,
     members: &MemberTables,
     families: Families,
-) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
+) -> Propagation {
     let resolutions = &*state.tysys.resolutions;
     let scan = ResourceScan {
         tt: types,
@@ -2127,38 +2120,62 @@ fn build_propagation_closure_sem(
         }
     }
 
-    // Transitive closure to a fixpoint.
-    loop {
-        let mut changed = false;
-        let keys: Vec<EffectRef> = direct.keys().cloned().collect();
-        for key in &keys {
-            let cur = direct.get(key).cloned().unwrap_or_default();
-            let mut merged = cur.clone();
-            for eff in &cur {
-                if matches!(eff, EffectRef::Concrete(_))
-                    && let Some(child) = direct.get(eff).cloned()
-                {
-                    for e in &child {
-                        if merged.insert(e.clone()) {
-                            changed = true;
-                        }
-                    }
-                }
-            }
-            if merged.len() != cur.len() {
-                direct.insert(key.clone(), merged);
-            }
-        }
-        if !changed {
-            break;
+    Propagation::closing(&direct)
+}
+
+/// What each effect implies, transitively. An `extends` family is a cycle whose
+/// every member implies every other, so the sets are held per component of the
+/// graph and never one per effect.
+struct Propagation {
+    /// The declarations that imply, then what only they imply.
+    effects: IndexSet<EffectRef>,
+    /// How many of `effects` are declarations.
+    declared: usize,
+    reach: Reachability,
+}
+
+impl Propagation {
+    fn closing(direct: &IndexMap<EffectRef, IndexSet<EffectRef>>) -> Self {
+        assert!(
+            direct
+                .keys()
+                .all(|effect| matches!(effect, EffectRef::Concrete(_))),
+            "a declaration's effect is concrete"
+        );
+        let mut effects: IndexSet<EffectRef> = direct.keys().cloned().collect();
+        let mut successors: Vec<Vec<usize>> = direct
+            .values()
+            .map(|implied| {
+                let nodes = implied
+                    .iter()
+                    .map(|effect| effects.insert_full(effect.clone()).0);
+                nodes.collect()
+            })
+            .collect();
+        successors.resize(effects.len(), Vec::new());
+        Self {
+            declared: direct.len(),
+            reach: Reachability::new(&successors),
+            effects,
         }
     }
-    // A family's cycle leads each member back to itself, and what an effect
-    // implies is what it is not.
-    for (key, implied) in &mut direct {
-        implied.shift_remove(key);
+
+    /// Whether `effect` is a declaration this closure was built over.
+    fn declares(&self, effect: &EffectRef) -> bool {
+        self.effects
+            .get_index_of(effect)
+            .is_some_and(|node| node < self.declared)
     }
-    direct
+
+    /// What holding `effect` implies. A family's cycle leads each member back
+    /// to itself, and what an effect implies is what it is not.
+    fn implied<'a>(&'a self, effect: &EffectRef) -> impl Iterator<Item = &'a EffectRef> + use<'a> {
+        let node = self.effects.get_index_of(effect);
+        node.into_iter().flat_map(move |node| {
+            let reached = self.reach.reached_from(node).filter(move |&n| n != node);
+            reached.map(|n| &self.effects[n])
+        })
+    }
 }
 
 /// The effect an attribute argument written in `module` refers to. It has no
@@ -2175,18 +2192,12 @@ fn effect_named_in(name: &str, module: &ModuleSource, index: &EffectIndex) -> Op
 /// Expand an effect set through the propagation closure.
 fn expand_through_closure(
     effects: &IndexSet<EffectRef>,
-    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
+    closure: &Propagation,
 ) -> IndexSet<EffectRef> {
     let mut out: IndexSet<EffectRef> = IndexSet::default();
     for effect in effects {
         out.insert(effect.clone());
-        if matches!(effect, EffectRef::Concrete(_))
-            && let Some(extra) = closure.get(effect)
-        {
-            for e in extra {
-                out.insert(e.clone());
-            }
-        }
+        out.extend(closure.implied(effect).cloned());
     }
     out
 }

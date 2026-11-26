@@ -22,5 +22,7 @@ to the others by theirs. `src/lib.wado` is the facade `wado-lang:web` names.
   Never edit either by hand.
 - A name a wider slice generates must be added to `src/lib.wado`; a test fails
   until it is.
+- `mise run report-webidl-coverage` counts, by cause, what the generator leaves
+  unbound over the whole platform. [TODO.md](./TODO.md) holds its table.
 - `mise run test-web-glue` runs the glue on Node against jsdom
   (`glue/dom.test.mjs`).
