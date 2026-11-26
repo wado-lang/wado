@@ -753,6 +753,24 @@ test {
 
 The bound's subject is not itself determined this way: `A: Eq` says what `A` must satisfy, not what `A` is.
 
+A call that names no trait arguments leaves a parameter only the trait reference names to inference, as it leaves a generic function's. The expected type or a later use settles it, and a bound that reads it is checked at the type it settles to. Where nothing settles it the call is an error, even where only one type would meet the bound ([Qualified Calls](#qualified-calls)).
+
+<!-- {"fixture":"spec_traits_impl_param_by_call.wado"} -->
+
+```wado
+impl<A, T: Source<A>> Tag<A> for T {
+    fn tag(&self) -> A { return self.first(); }
+}
+
+test {
+    let two = Two { n: 7 };
+    let n: i32 = two.tag();          // `A` is `i32`, so `Two: Source<i32>`
+    let s: String = Tag::tag(&two);  // `A` is `String`
+    assert n == 7 && s == "7";
+    assert Tag::<i32>::tag(&two) == 7;
+}
+```
+
 ### Trait Arguments Meet the Trait's Parameter Bounds
 
 A trait reference's arguments must meet the bounds the trait puts on its parameters, with `Self` standing for the implementing or bounded type. This holds of an `impl` header and of a bound alike. As in Rust, nothing implies those bounds onto the arguments: an impl parameter has only the bounds the impl writes, so it restates what the trait needs.
