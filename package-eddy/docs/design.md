@@ -56,10 +56,10 @@ research points. The evidence behind them is in
   - A reviewer's conversation carries the format on every turn. The format is
     part of what the cache keys a conversation by, so adding it on the last
     turn alone bills the whole conversation again at the cache-write price.
-  - The format does not slow generation. Tokens per second are the same with
-    and without it, on the reviewer's model and the reporter's.
-  - The reporter's model thinks more often under a format, and a reply it
-    thought about takes about twice as long.
+  - The format does not slow generation, on the reviewer's model or the
+    reporter's.
+  - The reporter's model thinks more often under a format, and a reply takes
+    longer by what it thought.
 - [x] The thresholds (the outcome window, the expiry, the weights) start as
   guesses and are tuned in operation, on outcomes outside the held-out set.
 - [x] The reproduction agent reads `AGENTS.md` from the base revision, inside

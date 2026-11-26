@@ -4,7 +4,7 @@
 use { Method } from "wasi:http";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
-use { HashMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { to_bytes, from_bytes, from_string } from "core:json";
 use { Serialize, SerializeError, Serializer, Deserialize } from "core:serde";
 use { Value, to_value, from_value } from "core:value";
@@ -64,7 +64,7 @@ fn accepted(schema: Schema) -> Schema {
     return match schema {
         Bool(_) => schema,
         Object(mut s) => {
-            assert s.one_of.is_empty() && s.prefix_items.is_empty() && s.additional_properties matches { null }, "a reply type must hold only structs, lists, options and scalars";
+            assert s.one_of.is_empty() && s.prefix_items.is_empty() && s.additional_properties matches { null } && !s.unique_items, "a reply type must hold only structs, lists, options and scalars";
             if s.type & JsonTypes::Object != JsonTypes::none() {
                 s.additional_properties = Some(Schema::Bool(false));
             }
@@ -103,6 +103,15 @@ test "a format closes every object and bounds no number, however deep" {
     }
     let n = root.defs["Inner"].into_object().properties["n"].into_object();
     assert n.type == JsonTypes::Integer && n.minimum matches { null } && n.maximum matches { null };
+}
+
+#[expect_trap]
+test "a set is no reply type: the API takes no `uniqueItems`" {
+    struct Tagged {
+        tags: HashSet<String>,
+    }
+
+    Format::of::<Tagged>();
 }
 
 /// One block of a reply. Only the fields of the block's `type` are present.
