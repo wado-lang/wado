@@ -40,8 +40,8 @@ test {
     unreachable();
 }
 
-// Custom timeout: override the default 5000ms limit
-#[timeout_ms(30000)]
+// Custom timeout: override the default 5 second limit
+#[timeout(seconds = 30)]
 test "slow computation" {
     let result = expensive_computation();
     assert result == 42;
@@ -64,7 +64,7 @@ test {
 - A test declares no return type and no effects, and may perform any effect. A
   function value it hands on is still bound by the function type it is moved
   into, which holds none of the test's effects
-- Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, [`#[synopsis]`](./spec-attributes.md#synopsis), [`#[workload]`](./spec-attributes.md#workload)) may appear before the `test` keyword
+- Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout(seconds = N)]`, [`#[synopsis]`](./spec-attributes.md#synopsis), [`#[workload]`](./spec-attributes.md#workload)) may appear before the `test` keyword
 
 ## Test Semantics
 
@@ -109,17 +109,18 @@ test "not yet implemented feature" {
 }
 ```
 
-### `#[timeout_ms(N)]` Attribute
+### `#[timeout(seconds = N)]` Attribute
 
-The `#[timeout_ms(N)]` attribute overrides the default test timeout of 5000ms
-for one test. `N` is an integer literal, in milliseconds. A test that runs
-longer is interrupted and fails. Time spent inside `core:eval`'s `eval` does not
-count against it:
+The `#[timeout(seconds = N)]` attribute overrides the default test timeout of 5
+seconds for one test. `N` is an integer literal above zero. `seconds` is the
+only unit, since the runner's clock ticks once a second. A test that runs longer
+is interrupted and fails. Time spent inside `core:eval`'s `eval` does not count
+against it:
 
 <!-- {"fixture":"spec_testing_declaration.wado"} -->
 
 ```wado
-#[timeout_ms(30000)]
+#[timeout(seconds = 30)]
 test "large data processing" {
     let result = process_large_dataset();
     assert result.len() > 0;

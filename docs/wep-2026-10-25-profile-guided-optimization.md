@@ -54,7 +54,7 @@ test "sieve to 200k" {
 
 `wado test` runs a workload like any other test, so a workload that breaks
 fails the suite instead of rotting. The attribute combines with
-`#[timeout_ms]` and `#[synopsis]`. With `#[expect_trap]` or `#[TODO]`, or in a
+`#[timeout]` and `#[synopsis]`. With `#[expect_trap]` or `#[TODO]`, or in a
 module marked `#![TODO]`, it is a compile error: such a test traps by design,
 and a workload that traps fails the recording (below).
 

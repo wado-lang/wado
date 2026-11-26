@@ -1,0 +1,11 @@
+// A test given no time cannot pass, so `#[timeout]` refuses zero.
+
+#[timeout(seconds = 0)]
+test "no time" {
+    assert 1 == 1;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":3:1: error: `timeout` takes `seconds = N`, a whole number of seconds above zero", "compile_error_codes": ["ATTR_MISUSE"]}

@@ -1,7 +1,7 @@
-// A shape the schema fixes is checked centrally: `#[timeout_ms]` takes the
-// number the runner waits, not a string that would parse to one.
+// A shape the schema fixes is checked centrally: `#[timeout]` takes the
+// seconds the runner waits, not a string that would parse to them.
 
-#[timeout_ms("5000")]
+#[timeout(seconds = "5")]
 test "string timeout" {
     assert 1 == 1;
 }
@@ -9,4 +9,4 @@ test "string timeout" {
 export fn run() {}
 
 __DATA__
-{"compile_error": "`timeout_ms` takes one number", "compile_error_codes": ["ATTR_MISUSE"]}
+{"compile_error": "`timeout` takes `seconds = N`, a whole number of seconds above zero", "compile_error_codes": ["ATTR_MISUSE"]}

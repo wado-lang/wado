@@ -3252,7 +3252,7 @@ fn convert_test(test: &TirTest) -> NirTest {
         span: test.span,
         expect_trap: test.expect_trap,
         is_todo: test.is_todo,
-        timeout_ms: test.timeout_ms,
+        timeout_seconds: test.timeout_seconds,
     }
 }
 

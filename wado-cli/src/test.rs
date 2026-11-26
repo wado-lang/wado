@@ -47,7 +47,7 @@ use wado_host::runner::write_guest_profile;
 use wado_host::sync::{joined, lock};
 use wado_host::ticker::Ticker;
 
-const DEFAULT_TIMEOUT_MS: u64 = 5000;
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 // Coarse epoch interval to keep thread wake-ups down. Cost: up to 1s
 // overshoot, which is fine because timeouts only fire on runaway tests.
 const EPOCH_INTERVAL_MS: u64 = 1000;
@@ -791,7 +791,7 @@ struct TestJob {
     display_name: String,
     expect_trap: bool,
     todo: Option<TodoMark>,
-    timeout_ms: u64,
+    timeout: Duration,
 }
 
 /// Regular tests are Pass/Fail. TODO tests live on a separate axis:
@@ -861,7 +861,8 @@ enum TestKind {
 #[derive(Debug, PartialEq, Eq)]
 struct TestExportName {
     kind: TestKind,
-    timeout_ms: Option<u64>,
+    /// What `#[timeout(seconds = N)]` wrote.
+    timeout: Option<Duration>,
     /// Human-readable display: the `name` segment with `-` → `_`,
     /// or `<test {index}>` when no name was provided.
     display: String,
@@ -881,7 +882,7 @@ fn parse_test_export(name: &str) -> Option<TestExportName> {
         (TestKind::Normal, rest)
     };
 
-    let (timeout_ms, rest) = parse_timeout_segment(rest);
+    let (timeout, rest) = parse_timeout_segment(rest);
 
     let display = match rest.find('-') {
         Some(idx) if idx + 1 < rest.len() => rest[idx + 1..].replace('-', "_"),
@@ -894,25 +895,25 @@ fn parse_test_export(name: &str) -> Option<TestExportName> {
 
     Some(TestExportName {
         kind,
-        timeout_ms,
+        timeout,
         display,
     })
 }
 
-/// Strip an optional `tm{N}-` segment, returning the parsed timeout (if any)
-/// and the remainder. A malformed `tm…` (no trailing dash, non-numeric N) is
-/// treated as part of the name rather than a timeout.
-fn parse_timeout_segment(rest: &str) -> (Option<u64>, &str) {
+/// Strip an optional `tm{N}-` segment, returning the timeout of `N` seconds
+/// (if any) and the remainder. A malformed `tm…` (no trailing dash, non-numeric
+/// N) is treated as part of the name rather than a timeout.
+fn parse_timeout_segment(rest: &str) -> (Option<Duration>, &str) {
     let Some(after_tm) = rest.strip_prefix("tm") else {
         return (None, rest);
     };
     let Some(dash) = after_tm.find('-') else {
         return (None, rest);
     };
-    let Ok(n) = after_tm[..dash].parse::<u64>() else {
+    let Ok(seconds) = after_tm[..dash].parse::<u64>() else {
         return (None, rest);
     };
-    (Some(n), &after_tm[dash + 1..])
+    (Some(Duration::from_secs(seconds)), &after_tm[dash + 1..])
 }
 
 /// A `#![TODO]` module that failed to compile.
@@ -1470,7 +1471,7 @@ async fn run_execute_stage(
                 } else {
                     TodoMark::Test
                 }),
-                timeout_ms: t.parsed.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS),
+                timeout: t.parsed.timeout.unwrap_or(DEFAULT_TIMEOUT),
             })
             .collect();
         stream::iter(jobs)
@@ -1485,7 +1486,7 @@ async fn run_execute_stage(
             // outer stream does NOT cancel a running guest wasm
             // function — but `EpochTicker`'s background epoch
             // increments will trap a runaway test at its
-            // `#[timeout_ms]` deadline regardless of polling state,
+            // `#[timeout]` deadline regardless of polling state,
             // so a long-running test still terminates cleanly when
             // the pipeline is torn down. The spawn also breaks the
             // outer-await-pause cycle that the compile and load
@@ -1819,7 +1820,7 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
         // Reaching the deadline grants what is left of the test's own time.
         // It counts from the current epoch, which an `eval` may have carried
         // far past the deadline.
-        let timeout = Duration::from_millis(job.timeout_ms);
+        let timeout = job.timeout;
         let own = Arc::clone(&clock);
         store.epoch_deadline_callback(move |_| {
             let left = timeout.saturating_sub(own.own());
@@ -1875,8 +1876,8 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
                     (
                         TestOutcome::Fail,
                         Some(format!(
-                            "test timed out after {}ms (use #[timeout_ms(N)] to increase)",
-                            job.timeout_ms
+                            "test timed out after {}s (use #[timeout(seconds = N)] to increase)",
+                            job.timeout.as_secs()
                         )),
                     )
                 } else if job.todo.is_some() {
@@ -2711,12 +2712,13 @@ mod tests {
 
     #[test]
     fn parses_timeout() {
-        assert_eq!(parse("test-tm2000-0-slow").timeout_ms, Some(2000));
-        assert_eq!(parse("test-trap-tm500-0-panics").timeout_ms, Some(500));
-        assert_eq!(parse("test-todo-tm3000-1").timeout_ms, Some(3000));
-        assert_eq!(parse("test-0-simple").timeout_ms, None);
-        assert_eq!(parse("test-trap-0-panics").timeout_ms, None);
-        assert_eq!(parse("test-todo-2").timeout_ms, None);
+        let seconds = |n| Some(Duration::from_secs(n));
+        assert_eq!(parse("test-tm20-0-slow").timeout, seconds(20));
+        assert_eq!(parse("test-trap-tm5-0-panics").timeout, seconds(5));
+        assert_eq!(parse("test-todo-tm30-1").timeout, seconds(30));
+        assert_eq!(parse("test-0-simple").timeout, None);
+        assert_eq!(parse("test-trap-0-panics").timeout, None);
+        assert_eq!(parse("test-todo-2").timeout, None);
     }
 
     #[test]
@@ -2742,7 +2744,7 @@ mod tests {
         // `tm` not followed by digits-then-dash should fall through into the
         // index/name branch instead of being silently swallowed as a timeout.
         let parsed = parse("test-tmfoo-0-x");
-        assert_eq!(parsed.timeout_ms, None);
+        assert_eq!(parsed.timeout, None);
         assert_eq!(parsed.display, "0_x");
     }
 

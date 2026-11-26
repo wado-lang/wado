@@ -63,7 +63,7 @@ too.
 ### The reason is mandatory
 
 The reason is a positional string, as `#[compiler_item("option")]`,
-`#[cm("future-write")]`, and `#[timeout_ms(5000)]` take theirs. An empty or
+`#[cm("future-write")]`, and `#[timeout(seconds = 5)]` take theirs. An empty or
 missing string is a compile error: an attribute that omits the sentence is
 worse than no attribute, since it asserts a decision was made while hiding it.
 
