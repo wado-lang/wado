@@ -1,8 +1,8 @@
 // AST definitions for Wado
 
 use crate::attribute::{
-    ALLOW, CM, CM_EXPORT, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS,
-    TODO, UNAVAILABLE, WASM_MODULE, WORKLOAD, timeout_seconds,
+    ALLOW, CM, CM_EXPORT, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TODO,
+    UNAVAILABLE, WASM_MODULE, WORKLOAD, timeout_seconds,
 };
 use std::borrow::Cow;
 use std::fmt;
