@@ -2681,9 +2681,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The type the receiver of a static call is written as, a generic one
-    /// bare until the call settles it: `Type` at its segment, `ns::Type` at
-    /// the segment that wrote the type. `None` where `ns::X` names a trait, an
-    /// interface or a function, which declares no type a static is asked at.
+    /// bare until the call settles it: the type a rewritten `Self::` / `T::`
+    /// prefix stood for, `Type` at its segment, `ns::Type` at the segment that
+    /// wrote the type. `None` where `ns::X` names a trait, an interface or a
+    /// function, which declares no type a static is asked at.
     fn static_receiver_type_as_written(
         &mut self,
         site: PathCall<'_>,
@@ -2697,12 +2698,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         } = site;
         if receivers.prefix_receiver.is_some() {
-            return Some(self.static_receiver_written(
-                receivers.rewritten_prefix_type,
-                receivers.prefix_site,
-                prefix,
-                call.span,
-            ));
+            return Some(
+                match (receivers.rewritten_prefix_type, receivers.prefix_site) {
+                    (Some(receiver), _) => receiver,
+                    (None, Some(site)) => self.resolve_named_type(site, prefix, call.span, false),
+                    (None, None) => {
+                        unreachable!("an unrewritten receiver is written at a segment")
+                    }
+                },
+            );
         }
         let key = receivers.static_method_receiver.as_ref()?.key();
         if key.decl().is_some() && self.type_declared_by(Some(key)).is_none() {
@@ -5827,22 +5831,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.record_generic_instantiation(case.site, type_args, variant_type);
         variant_type
-    }
-
-    /// The type a static call's receiver `prefix` names: the type a rewritten
-    /// `Self::` / `T::` prefix stood for, else what its segment resolves to.
-    fn static_receiver_written(
-        &mut self,
-        rewritten: Option<TypeId>,
-        site: Option<AstId>,
-        prefix: &str,
-        span: Span,
-    ) -> TypeId {
-        match (rewritten, site) {
-            (Some(receiver), _) => receiver,
-            (None, Some(site)) => self.resolve_named_type(site, prefix, span, false),
-            (None, None) => unreachable!("an unrewritten receiver is written at a segment"),
-        }
     }
 
     /// `receiver::suffix` answered by a value blanket's static, indexed under
