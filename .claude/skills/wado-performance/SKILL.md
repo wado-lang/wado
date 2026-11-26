@@ -552,11 +552,16 @@ and restore each arm's before its round.
 ```sh
 set -e  # a failed build would leave an earlier A/B's binary as its arm
 fork=$(mise run benchmark-stdlib-arms)
-trap "git restore --source=HEAD --worktree -- 'benchmark/*.pgo'" EXIT
+# The task refused untracked profiles, so any `clean` removes is the fork's.
+profiles_of() {
+  git restore --source="$1" --worktree -- 'benchmark/*.pgo'
+  git clean -fq -- 'benchmark/*.pgo'
+}
+trap 'profiles_of HEAD' EXIT
 for r in 1 2 3; do
-  git restore --source="$fork" --worktree -- 'benchmark/*.pgo'
+  profiles_of "$fork"
   WADO_BIN="$PWD/scratchpad/wado-base" mise run benchmark-json-catalog
-  git restore --source=HEAD --worktree -- 'benchmark/*.pgo'
+  profiles_of HEAD
   WADO_BIN="$PWD/scratchpad/wado-head" mise run benchmark-json-catalog
 done
 ```

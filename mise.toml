@@ -1002,6 +1002,7 @@ if [ -n "$(git status --porcelain -- wado-compiler/lib 'benchmark/*.pgo')" ]; th
     echo "commit wado-compiler/lib and the benchmark profiles first" >&2
     exit 1
 fi
+git fetch -q origin main
 fork="$(git merge-base origin/main HEAD)"
 mkdir -p scratchpad
 # The fork builds in a worktree of its own, since `stdlib.rs` names every file
