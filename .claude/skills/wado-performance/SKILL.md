@@ -529,28 +529,29 @@ it from disk. `benchmark/wado.sh` falls back to the dev build whenever `WADO_BIN
 is unset, so an arm is a release `dist` binary, which carries its own stdlib
 wherever the tree stands.
 
-Build one binary per arm first, from the same compiler source with `lib/` at the
-branch's fork point and at `HEAD`, so `lib/` is all that differs. `git restore`
-removes a file the source tree lacks, so neither binary embeds a stdlib
-belonging to neither arm. It overwrites uncommitted edits under `lib/`, so
-commit them first.
+`mise run benchmark-stdlib-arms` builds one binary per arm, from the same
+compiler source with `lib/` at the branch's fork point and at `HEAD`, so `lib/`
+is all that differs. It refuses to run over uncommitted edits under `lib/`.
+Toggling `lib/` under the dev build instead (`git stash`) is no A/B, even for a
+quick reading.
+
+Each arm runs under the profiles its own commit records. A profile keys a
+function by its body's hash, so a profile recorded for the other stdlib misses
+every function the change touched, and the arm it runs is neither build. A
+stdlib change read +3.1% that way on json-twitter ser, measured flat with each
+arm's own profiles, and −17% without one. So commit `HEAD`'s profiles first
+(`mise run update-baselines`), restore each arm's before its round, and read
+the `(no-pgo)` rows too.
 
 ```sh
-set -e  # a failed build would leave an earlier A/B's binary as its arm
-rm -f scratchpad/wado-base scratchpad/wado-head
+mise run benchmark-stdlib-arms
 fork=$(git merge-base origin/main HEAD)
-# however the block ends, `lib/` goes back to HEAD rather than stay reverted
-trap 'git restore --source=HEAD --worktree -- wado-compiler/lib' EXIT
-git restore --source="$fork" --worktree -- wado-compiler/lib
-cargo build --release -p wado-cli --features dist --bin wado --quiet
-cp target/release/wado scratchpad/wado-base
-git restore --source=HEAD --worktree -- wado-compiler/lib
-cargo build --release -p wado-cli --features dist --bin wado --quiet
-cp target/release/wado scratchpad/wado-head
+trap "git restore --source=HEAD --worktree -- 'benchmark/*.pgo'" EXIT
 for r in 1 2 3; do
-  for arm in base head; do
-    WADO_BIN="$PWD/scratchpad/wado-$arm" mise run benchmark-json-catalog
-  done
+  git restore --source="$fork" --worktree -- 'benchmark/*.pgo'
+  WADO_BIN="$PWD/scratchpad/wado-base" mise run benchmark-json-catalog
+  git restore --source=HEAD --worktree -- 'benchmark/*.pgo'
+  WADO_BIN="$PWD/scratchpad/wado-head" mise run benchmark-json-catalog
 done
 ```
 

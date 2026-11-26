@@ -990,6 +990,32 @@ fi
 echo "$bin"
 """
 
+[tasks.benchmark-stdlib-arms]
+description = "Build the two `dist` compilers a stdlib A/B compares, `lib/` at the fork point and at HEAD, into scratchpad/wado-{base,head}"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! git diff --quiet HEAD -- wado-compiler/lib; then
+    echo "commit the edits under wado-compiler/lib first: building the base arm overwrites them" >&2
+    exit 1
+fi
+mkdir -p scratchpad
+rm -f scratchpad/wado-base scratchpad/wado-head
+fork="$(git merge-base origin/main HEAD)"
+# Only `dist` embeds the stdlib; any other build reads `lib/` as the tree stands
+# when it runs, so both arms would run one stdlib.
+trap 'git restore --source=HEAD --worktree -- wado-compiler/lib' EXIT
+git restore --source="$fork" --worktree -- wado-compiler/lib
+cargo build --release -q -p wado-cli --features dist --bin wado
+cp target/release/wado scratchpad/wado-base
+git restore --source=HEAD --worktree -- wado-compiler/lib
+cargo build --release -q -p wado-cli --features dist --bin wado
+cp target/release/wado scratchpad/wado-head
+echo "$PWD/scratchpad/wado-base"
+echo "$PWD/scratchpad/wado-head"
+"""
+
 [tasks.benchmark-microgpt]
 description = "Run microgpt benchmark"
 run = "mise run -C benchmark microgpt"
