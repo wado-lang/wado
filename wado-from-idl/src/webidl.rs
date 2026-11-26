@@ -574,13 +574,14 @@ pub struct Generated {
 /// holds two `[Global]` interfaces.
 pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     let merged = merge(snapshot)?;
-    fn names(definitions: &[Named]) -> IndexSet<&str> {
-        definitions.iter().map(|d| d.name.as_str()).collect()
-    }
     let lowering = Lowering {
         package: &snapshot.package,
         slice: merged.keys().copied().collect(),
-        dictionaries: names(&snapshot.dictionaries),
+        dictionaries: snapshot
+            .dictionaries
+            .iter()
+            .map(|d| d.name.as_str())
+            .collect(),
         enums: snapshot
             .enums
             .iter()
