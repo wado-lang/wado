@@ -134,6 +134,10 @@ impl FrameState {
     }
 }
 
+/// An array handle a bound value carries: the path to it inside the value, and
+/// the place it was read from.
+type HandleSource = (Vec<u32>, (u32, Vec<u32>));
+
 /// How control left a statement sequence during compile-time execution.
 ///
 /// `Break` is not loop-specific: a labeled block is the value-producing shape
@@ -405,7 +409,7 @@ impl Interpreter<'_> {
                 if self.binds_unnamed_written_handle(body, index, value) {
                     return Flow::Bail;
                 }
-                let handle_source = self.array_handle_source(body, value);
+                let handle_sources = self.array_handle_sources(body, value);
                 let lattice = match value.as_expr().and_then(|e| self.exec_call_stmt(body, e)) {
                     Some(Flow::Fallthrough(lattice)) => lattice,
                     Some(Flow::Bail | Flow::Return(_) | Flow::Break { .. } | Flow::Continue) => {
@@ -415,7 +419,7 @@ impl Interpreter<'_> {
                 };
                 match lattice {
                     lattice @ Lattice::Const(_) => {
-                        self.bind_handle_copy(index, lattice, handle_source);
+                        self.bind_handle_copy(index, lattice, handle_sources);
                         Flow::Fallthrough(Lattice::Unevaluated)
                     }
                     lattice @ (Lattice::NonConst | Lattice::Unevaluated) => {
@@ -687,12 +691,12 @@ impl Interpreter<'_> {
         if self.binds_unnamed_written_handle(body, root, value) {
             return Flow::Bail;
         }
-        let handle_source = self.array_handle_source(body, value);
+        let handle_sources = self.array_handle_sources(body, value);
         let Lattice::Const(value) = self.eval_operand(body, value) else {
             return Flow::Bail;
         };
         if path.is_empty() {
-            self.bind_handle_copy(root, Lattice::Const(value), handle_source);
+            self.bind_handle_copy(root, Lattice::Const(value), handle_sources);
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
         self.frame.replace_place(root, &path);
@@ -707,31 +711,64 @@ impl Interpreter<'_> {
         {
             return Flow::Bail;
         }
-        if let Some(source) = handle_source {
-            self.frame.handle_twins.push([(root, path), source]);
-        }
+        self.pair_handles(root, &path, handle_sources);
         Flow::Fallthrough(Lattice::Unevaluated)
     }
 
-    /// The place an array-typed `value` reads its handle from, which a binding
-    /// of it leaves shared.
-    fn array_handle_source(&self, body: &Body, value: Operand) -> Option<(u32, Vec<u32>)> {
-        if !self.names_array(body, value) {
-            return None;
+    /// The array handles `value` carries, each with where it sits inside the
+    /// value: `value` itself, or a field of the literal it spells, at any
+    /// depth. A literal built around a handle shares the array as a bare
+    /// binding of it does.
+    fn array_handles(&self, body: &Body, value: Operand) -> Vec<(Vec<u32>, Operand)> {
+        let mut handles = Vec::new();
+        let mut pending = vec![(Vec::new(), value)];
+        while let Some((path, op)) = pending.pop() {
+            if self.names_array(body, op) {
+                handles.push((path, op));
+                continue;
+            }
+            let Some(e) = op.as_expr() else { continue };
+            let fields: Vec<(u32, Operand)> = match &body.exprs[e].kind {
+                ExprKind::StructLiteral { fields, .. } => {
+                    fields.iter().map(|f| (f.field_index, f.value)).collect()
+                }
+                ExprKind::TupleLiteral { elements } => elements
+                    .iter()
+                    .enumerate()
+                    .map(|(i, op)| (u32::try_from(i).expect("tuple arity fits u32"), *op))
+                    .collect(),
+                _ => continue,
+            };
+            for (field, op) in fields {
+                let mut at = path.clone();
+                at.push(field);
+                pending.push((at, op));
+            }
         }
-        self.frame_place_of(body, value)
+        handles
     }
 
-    /// Bind `index` to `lattice`, read off `handle_source` where it names one.
-    fn bind_handle_copy(
-        &mut self,
-        index: u32,
-        lattice: Lattice,
-        handle_source: Option<(u32, Vec<u32>)>,
-    ) {
+    /// The place each of `value`'s [`Self::array_handles`] reads its handle
+    /// from, which a binding of `value` leaves shared.
+    fn array_handle_sources(&self, body: &Body, value: Operand) -> Vec<HandleSource> {
+        self.array_handles(body, value)
+            .into_iter()
+            .filter_map(|(path, op)| Some((path, self.frame_place_of(body, op)?)))
+            .collect()
+    }
+
+    /// Bind `index` to `lattice`, paired with the places its handles read from.
+    fn bind_handle_copy(&mut self, index: u32, lattice: Lattice, sources: Vec<HandleSource>) {
         self.bind_ctfe_local(index, lattice);
-        if let Some(source) = handle_source {
-            self.frame.handle_twins.push([(index, Vec::new()), source]);
+        self.pair_handles(index, &[], sources);
+    }
+
+    /// Pair each handle the value now at `(root, path)` carries with the place
+    /// it was read from.
+    fn pair_handles(&mut self, root: u32, path: &[u32], sources: Vec<HandleSource>) {
+        for (inner, source) in sources {
+            let held = [path, &inner].concat();
+            self.frame.handle_twins.push([(root, held), source]);
         }
     }
 
@@ -1001,17 +1038,20 @@ impl Interpreter<'_> {
     /// the frame holds it by value, so the copy would miss those writes; a
     /// source it can name becomes a [`FrameState::handle_twins`] pair instead.
     fn binds_unnamed_written_handle(&self, body: &Body, index: u32, value: Operand) -> bool {
-        if !self.names_array(body, value) || self.frame_place_of(body, value).is_some() {
+        let unnamed: Vec<u32> = self
+            .array_handles(body, value)
+            .into_iter()
+            .filter(|(_, op)| self.frame_place_of(body, *op).is_none())
+            .filter_map(|(_, op)| write_root_local(body, op))
+            .collect();
+        if unnamed.is_empty() {
             return false;
         }
-        let Some(source_root) = write_root_local(body, value) else {
-            return false;
-        };
         write_targets_under(body, NodeRef::Block(body.root()))
             .into_iter()
             .any(|target| {
-                let target_root = write_root_local(body, target);
-                target_root == Some(index) || target_root == Some(source_root)
+                write_root_local(body, target)
+                    .is_some_and(|root| root == index || unnamed.contains(&root))
             })
     }
 
@@ -1074,7 +1114,12 @@ impl Interpreter<'_> {
             values.push((field, v));
         }
         let type_id = body.exprs[e].type_id;
-        self.bind_ctfe_local(index, Lattice::Const(Value::aggregate(type_id, values)));
+        let handle_sources = self.array_handle_sources(body, value);
+        self.bind_handle_copy(
+            index,
+            Lattice::Const(Value::aggregate(type_id, values)),
+            handle_sources,
+        );
         if !matches!(self.frame.env.get(&index), Some(Lattice::Const(_))) {
             return Some(Flow::Bail);
         }
