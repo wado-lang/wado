@@ -20,6 +20,7 @@ use super::pending_selection::{
 };
 use super::scope::{ParamRef, ScopeParams};
 use super::solver_bridge::Commitment;
+use super::synth::ArgClass;
 use super::trait_query::{SelfBinding, spelled_at};
 use super::type_resolution::ParamSpace;
 use super::types::TypeError;
@@ -75,6 +76,10 @@ pub(crate) struct InferHoleTable {
     /// Whether an equation is being settled, which asks the obligations once
     /// it is.
     equating: bool,
+    /// The variables whose literals are about to take their default, each
+    /// with the class of those literals: a bound's one impl may choose a
+    /// type the class admits first.
+    pub(super) defaulting_literals: Vec<(TypeId, ArgClass)>,
 }
 
 /// A question a variable left undecided. Asked again whenever a variable
@@ -1607,9 +1612,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn equate_open_parts(&mut self, asked: &FqTypeName, offered: TypeId) {
         if let TypeHead::Infer { var, .. } = asked.head() {
             let hole = self.tysys.type_table.borrow_mut().make_infer_var(*var);
-            // A variable a literal waits at is the literal's to settle: the
-            // bound is then asked at the type the literal took.
-            if !self.annotate_ctx.literals_wait_at(hole) {
+            // A literal's type is a default that settles last, so the bound
+            // chooses it first where the literal can take the type. One still
+            // waiting for its call's own arguments is left to them.
+            let root = self.apply_infer_holes(hole);
+            let literal = self
+                .infer_holes
+                .defaulting_literals
+                .iter()
+                .find(|(var, _)| *var == root)
+                .map(|(_, class)| class.clone());
+            let takes = match literal {
+                Some(class) => self.class_admits(offered, &class),
+                None => !self.annotate_ctx.literals_wait_at(hole),
+            };
+            if takes {
                 self.equate(offered, hole);
             }
             return;

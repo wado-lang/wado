@@ -3,7 +3,9 @@
 use super::Elaborator;
 use super::call::DefaultWalk;
 use super::infer::{infer_var_answers, unify};
+use super::instantiate::Instantiated;
 use super::scope::Scope;
+use super::synth::ArgClass;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
@@ -968,7 +970,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expected,
             });
             self.chain_expected_return(&pending.own_vars, ret);
-            self.settle_pending_literals(pending, &[], ret, ctx);
+            self.settle_pending_literals(pending, &[], None, ret, ctx);
         }
         self.apply_infer_holes(projected)
     }
@@ -1006,7 +1008,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             this.resolve_struct_literal(struct_lit, ctx, Some(open))
         });
         self.equate(resolved, open);
-        self.settle_pending_literals(pending, &[], ret, ctx);
+        self.settle_pending_literals(pending, &[], None, ret, ctx);
         Some(self.apply_infer_holes(resolved))
     }
 
@@ -1018,7 +1020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .last_mut()
             .expect("the projection's collection is pushed");
         let pending = std::mem::replace(collection, PendingLiterals::of_call(&[]));
-        self.settle_pending_literals(pending, &[], None, ctx);
+        self.settle_pending_literals(pending, &[], None, None, ctx);
     }
 
     /// [`Scope::awaits_pending_call`] on `ty` with the solved variables
@@ -1050,6 +1052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         pending: PendingLiterals,
         args: &[Expr],
+        inst: Option<&Instantiated>,
         ret: Option<ExpectedReturn>,
         ctx: &mut FunctionContext,
     ) -> IndexMap<AstId, TypeId> {
@@ -1068,6 +1071,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // where its owner's projection leaves it open.
         by_var.sort_by_key(|&var, _| self.projection_answers(var));
         let hints = self.literal_hints(ret);
+        self.infer_holes.defaulting_literals = by_var
+            .iter()
+            .map(|(&var, literals)| {
+                let class = if shared_literal_default(literals) == TypeTable::F64 {
+                    ArgClass::FloatLit
+                } else {
+                    ArgClass::IntLit
+                };
+                (self.apply_infer_holes(var), class)
+            })
+            .collect();
+        self.run_obligations();
+        if let Some(inst) = inst {
+            self.settle_slot_bounds_by_sole_impl(inst);
+        }
+        self.infer_holes.defaulting_literals.clear();
         let is_arg = |expr: &Expr| args.iter().any(|arg| arg.id() == expr.id());
         let mut settled = IndexMap::default();
         for (var, literals) in by_var {

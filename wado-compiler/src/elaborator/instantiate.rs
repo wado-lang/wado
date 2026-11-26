@@ -6,6 +6,7 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
+use crate::name::FqTypeName;
 use crate::tir::{ResolvedType, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -13,7 +14,7 @@ use crate::type_table::TypeTable;
 use super::Elaborator;
 use super::call::slot_names;
 use super::coercion::ExpectedReturn;
-use super::infer_hole::BoundRows;
+use super::infer_hole::{BoundRows, DeclaredBound};
 use super::scope::ParamRef;
 use super::trait_query::{SelfBinding, spelled_at};
 use super::types::{FunctionContext, TypeError};
@@ -405,19 +406,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_args: &[(ParamRef, TypeId)],
         span: Span,
     ) {
-        // A bound naming a sibling slot (`T: Source<A>`) reads that slot's
-        // variable.
         let at_slots = self.tysys.call_site_types(params, &inst.vars, &[]);
         for ((&var, param), &inferred) in inst.vars.iter().zip(params).zip(&inst.inferred) {
             if !inferred {
                 continue;
             }
-            let mut bounds =
-                self.declared_bounds(param, self_binding, impl_args, BoundRows::Unbound);
-            for bound in &mut bounds {
-                bound.trait_ = spelled_at(&bound.trait_, &at_slots);
-            }
+            let bounds = self.slot_bounds(param, self_binding, impl_args, &at_slots);
             self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
+        }
+    }
+
+    /// The bounds `param` declares, one naming a sibling slot
+    /// (`T: Source<A>`) reading that slot's variable, which `at_slots` gives.
+    fn slot_bounds(
+        &mut self,
+        param: &GenericParam,
+        self_binding: Option<SelfBinding>,
+        impl_args: &[(ParamRef, TypeId)],
+        at_slots: &[(FqTypeName, FqTypeName)],
+    ) -> Vec<DeclaredBound> {
+        let mut bounds = self.declared_bounds(param, self_binding, impl_args, BoundRows::Unbound);
+        for bound in &mut bounds {
+            bound.trait_ = spelled_at(&bound.trait_, at_slots);
+        }
+        bounds
+    }
+
+    /// Settle what the bounds of `inst`'s slots leave open, each from the one
+    /// impl its subject has, for a call that asks its bounds only once its
+    /// arguments are typed.
+    pub(super) fn settle_slot_bounds_by_sole_impl(&mut self, inst: &Instantiated) {
+        let Some(links) = &inst.links else {
+            return;
+        };
+        let at_slots = self.tysys.call_site_types(&links.owners, &inst.vars, &[]);
+        for (&var, param) in inst.vars.iter().zip(&links.owners) {
+            for bound in self.slot_bounds(param, links.self_binding, &[], &at_slots) {
+                self.settle_bound_args_by_sole_impl(var, &bound);
+            }
         }
     }
 }

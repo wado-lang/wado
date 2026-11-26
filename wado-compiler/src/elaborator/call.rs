@@ -756,7 +756,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|r| r.expect("every argument is resolved in one of the two passes"))
                 .collect::<Vec<TypeId>>()
         });
-        let settled = self.settle_pending_literals(pending, args, ret, ctx);
+        let settled = self.settle_pending_literals(pending, args, inst, ret, ctx);
         // A `null` answers last, as a literal does.
         if let Some(ret) = ret {
             self.equate(ret.declared, ret.expected);

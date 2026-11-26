@@ -799,10 +799,14 @@ concrete impl answers (`method_call_blankets_form_overload_set.wado`), so the
 expected type selects between them, and one writing its trait arguments wins
 over one leaving them to the call.
 
-A numeric literal argument settles its parameter before a function's bound is
-asked, so `put(&one, 1)` under `fn put<A, T: Sink<A>>(t: &T, a: A)` asks
-`Sink<i32>` where `One` has `Sink<i64>` alone. A method reached through a
-blanket settles the parameter from the one impl first, and takes `1` as `i64`.
+A numeric literal argument takes the one impl's type before its default, as in
+Rust: `put(&one, 1)` under `fn put<A, T: Sink<A>>(t: &T, a: A)` takes `1` as
+`i64` where `One` has `Sink<i64>` alone. A call settles its literals after its
+other arguments, and asks the bounds of its slots just before the default
+(`Elaborator::settle_slot_bounds_by_sole_impl`). Several impls leave the
+default, and so does a literal the type cannot take
+(`bound_several_impls_leave_literal_default.wado`). The cost is Rust's: a
+second impl changes what an existing call's literal is.
 
 - [x] Settle a parameter only the trait reference names, at a method call and a
   static one alike.

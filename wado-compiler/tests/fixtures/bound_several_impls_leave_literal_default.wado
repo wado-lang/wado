@@ -1,0 +1,41 @@
+// Several impls settle nothing, so a literal argument takes its default and
+// the bound is asked there. A literal the one impl's type cannot take keeps
+// its default too.
+
+trait Sink<A> with () {
+    fn sink(&self, a: A) -> i32;
+}
+
+struct Two {}
+
+impl Sink<i64> for Two {
+    fn sink(&self, a: i64) -> i32 {
+        return 64;
+    }
+}
+
+impl Sink<u8> for Two {
+    fn sink(&self, a: u8) -> i32 {
+        return 8;
+    }
+}
+
+struct One {}
+
+impl Sink<i64> for One {
+    fn sink(&self, a: i64) -> i32 {
+        return 64;
+    }
+}
+
+fn put<A, T: Sink<A>>(t: &T, a: A) -> i32 {
+    return t.sink(a);
+}
+
+export fn run() {
+    let _ = put(&Two {}, 1);
+    let _ = put(&One {}, 1.5);
+}
+
+__DATA__
+{"compile_error": ":36:13: analysis error: type 'Two' does not implement trait 'Sink<i32>' required by bound on 'T'"}

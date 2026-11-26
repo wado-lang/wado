@@ -979,8 +979,13 @@ the trait's method on the subject would read them. A blanket that applies
 counts as the subject's own impl does. A subject that is a type parameter has
 the one bound in force on it instead. Where several apply at different
 arguments, the bound settles nothing and the expected type or a later use
-chooses, as among the members of an overload set. A variable a literal waits at
-is the literal's to settle, and the bound is asked at the type it takes.
+chooses, as among the members of an overload set.
+
+A numeric literal's type is a default that settles last, so the one impl
+chooses it first: `put(&one, 1)` under `fn put<A, T: Sink<A>>(t: &T, a: A)`
+takes `1` as `i64` where `One` has `Sink<i64>` alone. Where several impls
+apply, or the literal cannot take the one impl's type, the literal takes its
+default and the bound is asked there.
 
 <!-- {"fixture":"spec_traits_bound_settles_argument.wado"} -->
 

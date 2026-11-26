@@ -88,3 +88,22 @@ test "a method's own parameter" {
     assert `${v}` == "7" && `${s}` == "7" && w == 7;
     assert h.put(&one, 1) == 1;
 }
+
+trait Sink<A> with () {
+    fn sink(&self, a: A) -> i32;
+}
+
+impl Sink<i64> for One {
+    fn sink(&self, a: i64) -> i32 {
+        return 64;
+    }
+}
+
+fn put<A, T: Sink<A>>(t: &T, a: A) -> i32 {
+    return t.sink(a);
+}
+
+test "a literal argument takes the one impl's type" {
+    let one = One { n: 7 };
+    assert put(&one, 1) == 64;
+}
