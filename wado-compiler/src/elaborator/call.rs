@@ -1928,7 +1928,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if receivers.prefix_receiver.is_none()
             && receivers.static_method_receiver.is_some()
             && let Some(owner) = ident.owner_segment()
-            && self.tysys.resolutions.walked(owner.id).is_some()
         {
             self.record_type_name_reference(owner.id);
         }
@@ -5629,8 +5628,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // stands in, which may import another `ns`.
         let at_site = ident.owner_segment().and_then(|seg| self.receiver_at(seg));
         // An interface has no receiver at its site. The importing module
-        // never names `Type` on its own, so the import's `ns$Type` alias is
-        // what reaches it.
+        // never names `Type` on its own, so a bare-name search reaches no impl
+        // on it: the callee then loses its trait segment and names a body
+        // nothing declares, which WIR build reports as an unresolved call.
         #[expect(
             clippy::disallowed_methods,
             reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
