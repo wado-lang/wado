@@ -3,6 +3,8 @@
 
 use { HashMap } from "core:collections";
 use {
+    AddEventListenerOptionsOrBool,
+    BoolOrScrollIntoViewOptions,
     CharacterData,
     Document,
     DocumentReadyState,
@@ -10,11 +12,15 @@ use {
     Dom,
     Element,
     Event,
+    EventInit,
     EventTarget,
+    FullscreenOptions,
+    GetHtmlOptions,
     HtmlElement,
     HtmlInputElement,
     Node,
     Rejection,
+    StringOrElementCreationOptions,
     Text,
     Window,
 } from "./dom.wado";
@@ -616,13 +622,14 @@ impl EventTarget for SurfaceDom {
         this: &EventTarget,
         type: String,
         callback: fn mut(Event) with Dom,
-        options: Option<bool>,
+        options: Option<AddEventListenerOptionsOrBool>,
     ) {
-        self.own(*this).listeners.push(Listener {
-            type,
-            capture: options.unwrap_or(false),
-            callback,
-        });
+        let capture = match options {
+            Some(AsBool(capture)) => capture,
+            Some(AsAddEventListenerOptions(options)) => options.capture.unwrap_or(false),
+            null => false,
+        };
+        self.own(*this).listeners.push(Listener { type, capture, callback });
         resume ();
     }
 
@@ -645,7 +652,7 @@ impl EventTarget for SurfaceDom {
 }
 
 impl Event for SurfaceDom {
-    fn new(&mut self, type: String) -> Event {
+    fn new(&mut self, type: String, event_init_dict: Option<EventInit>) -> Event {
         resume Event::backed_by(SurfaceEvent { type, target: null, path: [] });
     }
 
@@ -665,7 +672,12 @@ impl Event for SurfaceDom {
 }
 
 impl Document for SurfaceDom {
-    fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
+    fn create_element(
+        &mut self,
+        this: &Document,
+        local_name: String,
+        options: Option<StringOrElementCreationOptions>,
+    ) -> Element {
         self.own(*this);
         assert is_valid_element_local_name(&local_name), "InvalidCharacterError: not a valid element name";
         resume self.new_element(local_name.to_ascii_lowercase());
@@ -942,7 +954,7 @@ impl Element for SurfaceDom {
         resume ();
     }
 
-    fn get_html(&mut self, this: &Element) -> String {
+    fn get_html(&mut self, this: &Element, options: Option<GetHtmlOptions>) -> String {
         self.own(*this);
         let mut html = "";
         serialize_children(*this, &mut html);
@@ -950,12 +962,12 @@ impl Element for SurfaceDom {
     }
 
     // Nothing is laid out, so there is nowhere to scroll.
-    fn scroll_into_view(&mut self, this: &Element, arg: Option<bool>) -> Result<(), Rejection> {
+    fn scroll_into_view(&mut self, this: &Element, arg: Option<BoolOrScrollIntoViewOptions>) -> Result<(), Rejection> {
         self.own(*this);
         resume Result::Ok(());
     }
 
-    fn request_fullscreen(&mut self, this: &Element) -> Result<(), Rejection> {
+    fn request_fullscreen(&mut self, this: &Element, options: Option<FullscreenOptions>) -> Result<(), Rejection> {
         self.own(*this);
         resume Result::Err(fullscreen_unsupported());
     }

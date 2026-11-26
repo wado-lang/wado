@@ -1,4 +1,6 @@
 use {
+    AddEventListenerOptions,
+    AddEventListenerOptionsOrBool,
     Document,
     DocumentReadyState,
     DocumentVisibilityState,
@@ -582,8 +584,19 @@ test "an event reaches capturing ancestors first, then the target" {
         body.append_child(button);
         button.add_event_listener("click", |_: Event| order.push("target"));
         body.add_event_listener("click", |_: Event| order.push("body, bubbling"));
-        body.add_event_listener("click", |_: Event| order.push("body"), Option::Some(true));
-        Dom::window().add_event_listener("click", |_: Event| order.push("window"), Option::Some(true));
+        // `capture` is a boolean, or a member of the options.
+        body.add_event_listener(
+            "click",
+            |_: Event| order.push("body"),
+            Option::Some(AddEventListenerOptionsOrBool::AsBool(true)),
+        );
+        Dom::window().add_event_listener(
+            "click",
+            |_: Event| order.push("window"),
+            Option::Some(AddEventListenerOptionsOrBool::AsAddEventListenerOptions(AddEventListenerOptions {
+                capture: Option::Some(true),
+            })),
+        );
         button.add_event_listener("focus", |_: Event| order.push("other type"));
         assert button.dispatch_event(Event::new("click"));
     };

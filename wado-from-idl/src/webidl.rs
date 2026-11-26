@@ -1,6 +1,8 @@
 //! WebIDL-to-IR transformation, over the webidl2 AST `tools/webidl/snapshot.mjs`
 //! writes: one unrestricted resource per interface. See `docs/wep-2026-04-01-web.md`.
 
+use std::cell::RefCell;
+
 use anyhow::{Result, anyhow, bail};
 use indexmap::{IndexMap, IndexSet};
 use serde::Deserialize;
@@ -9,8 +11,9 @@ use wado_compiler::ast::HandleClasses;
 use crate::WadoCodeGenerator;
 use crate::glue;
 use crate::ir::{
-    WadoEnum, WadoEnumVariant, WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource,
-    WadoType, WadoTypeDef,
+    DictionaryField, UnionCase, WadoDictionary, WadoEnum, WadoEnumVariant, WadoField, WadoFunction,
+    WadoInterface, WadoModule, WadoParam, WadoResource, WadoStruct, WadoType, WadoTypeDef,
+    WadoUnion, WadoVariant, WadoVariantCase,
 };
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
@@ -44,18 +47,27 @@ pub struct Snapshot {
     pub typedefs: Vec<Typedef>,
     pub callbacks: Vec<Callback>,
     /// Every `dictionary` (and partial) a member of the slice names.
-    pub dictionaries: Vec<Named>,
+    pub dictionaries: Vec<Dictionary>,
     /// Every `enum` a member of the slice names.
     pub enums: Vec<Enum>,
     /// Every `namespace` (and partial) the snapshot was asked for.
     pub namespaces: Vec<Interface>,
 }
 
-/// A definition the frontend reads only the name of.
 #[derive(Deserialize)]
-pub struct Named {
+pub struct Dictionary {
     pub name: String,
     pub partial: bool,
+    pub inheritance: Option<String>,
+    pub members: Vec<Field>,
+}
+
+#[derive(Deserialize)]
+pub struct Field {
+    pub name: String,
+    #[serde(rename = "idlType")]
+    pub idl_type: IdlType,
+    pub required: bool,
 }
 
 #[derive(Deserialize)]
@@ -294,7 +306,8 @@ pub enum Cause {
     /// A callback the glue cannot call: one returning a value, or taking more
     /// than scalars and handles.
     Callback,
-    /// More parameters than cross as core values, so they cross in memory.
+    /// A callback among more parameters than cross as core values: they cross
+    /// in memory, where a closure does not.
     ParamsInMemory,
     Constant,
     /// `iterable`, `maplike`, `setlike` or `async_iterable`.
@@ -325,7 +338,7 @@ impl std::fmt::Display for Cause {
             Self::Overloads => "overloads",
             Self::CallbackResult => "a callback in a result",
             Self::Callback => "a callback the glue cannot call",
-            Self::ParamsInMemory => "parameters passed through memory",
+            Self::ParamsInMemory => "a callback among parameters passed through memory",
             Self::Constant => "a constant",
             Self::Iteration => "an iteration declaration",
             Self::SpecialOperation => "a special operation",
@@ -580,8 +593,12 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         dictionaries: snapshot
             .dictionaries
             .iter()
-            .map(|d| d.name.as_str())
-            .collect(),
+            .fold(IndexMap::new(), |mut parts, d| {
+                parts.entry(d.name.as_str()).or_default().push(d);
+                parts
+            }),
+        lowered_dictionaries: RefCell::default(),
+        dropped_fields: RefCell::default(),
         enums: snapshot
             .enums
             .iter()
@@ -600,7 +617,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     };
 
     let classes = number_classes(&merged)?;
-    let mut skipped = unbound_definitions(snapshot, &lowering.enums);
+    let mut skipped = lowering.unbound_definitions(snapshot);
     let mut js = IndexMap::new();
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
@@ -652,7 +669,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         }
         module.resources.push(lowering.rejection(&mut js));
     }
-    let enums = lowering.declare_enums(snapshot, &mut module);
+    let enums = lowering.declare_types(snapshot, &mut module);
     Ok(WebIdlOutput {
         module,
         js,
@@ -660,35 +677,6 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         enums,
         skipped,
     })
-}
-
-/// The definitions nothing stands for: each dictionary, each enum with `enums`
-/// naming why, and each member of a namespace.
-fn unbound_definitions(snapshot: &Snapshot, enums: &Enums<'_>) -> Vec<Skip> {
-    let definition = |name: &str, reason: Reason| Skip {
-        item: name.to_string(),
-        lost: Lost::Definition,
-        reason,
-    };
-    let mut skipped: Vec<Skip> = snapshot
-        .dictionaries
-        .iter()
-        .filter(|dictionary| !dictionary.partial)
-        .map(|dictionary| definition(&dictionary.name, Reason::of(Cause::Dictionary)))
-        .collect();
-    for (name, cases) in enums {
-        if let Err(reason) = cases {
-            skipped.push(definition(name, reason.clone()));
-        }
-    }
-    for namespace in &snapshot.namespaces {
-        skipped.extend(namespace.members.iter().map(|member| Skip {
-            item: format!("{}.{}", namespace.name, member.label()),
-            lost: Lost::Member,
-            reason: Reason::of(Cause::Namespace),
-        }));
-    }
-    skipped
 }
 
 /// The functions of `bindings`, their JavaScript halves moved into `js`.
@@ -973,10 +961,17 @@ fn narrows(child: &WadoType, parent: &WadoType, extends: impl Fn(&str, &str) -> 
 /// Each enum's Wado cases, or why it has none, by its `WebIDL` name.
 type Enums<'a> = IndexMap<&'a str, std::result::Result<Vec<String>, Reason>>;
 
+type LoweredDictionary = std::result::Result<WadoDictionary, Reason>;
+
 struct Lowering<'a> {
     package: &'a str,
     slice: IndexSet<&'a str>,
-    dictionaries: IndexSet<&'a str>,
+    /// Each dictionary's definition and partials, by name.
+    dictionaries: IndexMap<&'a str, Vec<&'a Dictionary>>,
+    /// Each dictionary lowered so far; `None` while its members are lowered.
+    lowered_dictionaries: RefCell<IndexMap<&'a str, Option<LoweredDictionary>>>,
+    /// The members a lowered dictionary leaves to the host's default.
+    dropped_fields: RefCell<Vec<Skip>>,
     enums: Enums<'a>,
     typedefs: IndexMap<&'a str, &'a IdlType>,
     callbacks: IndexMap<&'a str, Signature<'a>>,
@@ -990,26 +985,140 @@ impl Lowering<'_> {
         format!("{}/{}", self.package, to_kebab_case(name))
     }
 
-    /// Declares in `module` each enum a function of it names, and answers their
-    /// values as the host spells them, in case order, by Wado name.
-    fn declare_enums(
+    /// The definitions nothing stands for: each dictionary and enum that does
+    /// not lower, each dictionary member left out, and each member of a
+    /// namespace.
+    fn unbound_definitions(&self, snapshot: &Snapshot) -> Vec<Skip> {
+        let definition = |name: &str, reason: Reason| Skip {
+            item: name.to_string(),
+            lost: Lost::Definition,
+            reason,
+        };
+        let mut skipped = Vec::new();
+        for name in self.dictionaries.keys() {
+            let lowered = self.lower_dictionary(name);
+            skipped.append(&mut self.dropped_fields.borrow_mut());
+            if let Err(reason) = lowered {
+                skipped.push(definition(name, reason));
+            }
+        }
+        for (name, cases) in &self.enums {
+            if let Err(reason) = cases {
+                skipped.push(definition(name, reason.clone()));
+            }
+        }
+        for namespace in &snapshot.namespaces {
+            skipped.extend(namespace.members.iter().map(|member| Skip {
+                item: format!("{}.{}", namespace.name, member.label()),
+                lost: Lost::Member,
+                reason: Reason::of(Cause::Namespace),
+            }));
+        }
+        skipped
+    }
+
+    /// The record the dictionary `name` crosses as: its parent's members, then
+    /// its own. A member is as the host may answer it, since one struct serves
+    /// both ways. One that does not lower is left to the host's default,
+    /// unless it is required.
+    fn lower_dictionary(&self, name: &str) -> LoweredDictionary {
+        let (&name, parts) = self
+            .dictionaries
+            .get_key_value(name)
+            .expect("a dictionary of the snapshot");
+        if let Some(lowered) = self.lowered_dictionaries.borrow().get(name) {
+            return lowered.clone().unwrap_or_else(|| {
+                Err(Reason::new(
+                    Cause::Dictionary,
+                    format!("`{name}` holds itself"),
+                ))
+            });
+        }
+        self.lowered_dictionaries.borrow_mut().insert(name, None);
+        let lowered = self.lower_dictionary_parts(name, parts);
+        self.lowered_dictionaries
+            .borrow_mut()
+            .insert(name, Some(lowered.clone()));
+        lowered
+    }
+
+    fn lower_dictionary_parts(&self, name: &str, parts: &[&Dictionary]) -> LoweredDictionary {
+        let mut fields = Vec::new();
+        for parent in parts.iter().filter_map(|part| part.inheritance.as_deref()) {
+            let parent = self
+                .lower_dictionary(parent)
+                .map_err(|reason| reason.reworded(|r| format!("its parent `{parent}`: {r}")))?;
+            fields.extend(parent.fields);
+        }
+        for field in parts.iter().flat_map(|part| &part.members) {
+            match self.lower_type(&field.idl_type, Flow::Out) {
+                Ok(ty) => fields.push(DictionaryField {
+                    host_name: field.name.clone(),
+                    ty: optional(ty, !field.required),
+                }),
+                Err(reason) if field.required => {
+                    return Err(reason.reworded(|r| format!("`{}`: {r}", field.name)));
+                }
+                Err(reason) => self.dropped_fields.borrow_mut().push(Skip {
+                    item: format!("{name}.{}", field.name),
+                    lost: Lost::Member,
+                    reason,
+                }),
+            }
+        }
+        if fields.is_empty() {
+            return Err(Reason::new(
+                Cause::Dictionary,
+                "a dictionary without a member that binds",
+            ));
+        }
+        Ok(WadoDictionary {
+            name: to_upper_camel_case(name),
+            fields,
+        })
+    }
+
+    /// Declares in `module` each enum and dictionary a function of it names,
+    /// and answers each enum's values as the host spells them, in case order,
+    /// by Wado name.
+    fn declare_types(
         &self,
         snapshot: &Snapshot,
         module: &mut WadoModule,
     ) -> IndexMap<String, Vec<String>> {
-        let mut named = IndexSet::new();
+        let mut enums = IndexSet::new();
+        let mut dictionaries = IndexMap::new();
+        let mut unions = IndexMap::new();
         let methods = module.resources.iter().flat_map(|r| &r.methods);
         let functions = module.interfaces.iter().flat_map(|i| &i.functions);
         for function in methods.chain(functions) {
             let params = function.params.iter().map(|p| &p.ty);
             for ty in params.chain(&function.return_type) {
-                ty.string_enums(&mut named);
+                ty.walk(&mut |ty| match ty {
+                    WadoType::StringEnum(name) => {
+                        enums.insert(name.clone());
+                    }
+                    WadoType::Dictionary(dictionary) => {
+                        dictionaries.insert(dictionary.name.clone(), dictionary.clone());
+                    }
+                    WadoType::Union(union) => {
+                        let declared = unions.insert(union.name.clone(), union.clone());
+                        assert!(
+                            declared.is_none_or(|declared| declared == *union),
+                            "two unions are named `{}`",
+                            union.name
+                        );
+                    }
+                    _ => {}
+                });
             }
         }
+        let type_path =
+            |name: &str| format!("{}/{TYPES_INTERFACE}#{}", self.package, to_kebab_case(name));
         let mut values = IndexMap::new();
         for declared in &snapshot.enums {
             let name = to_upper_camel_case(&declared.name);
-            if !named.contains(name.as_str()) {
+            if !enums.contains(&name) {
                 continue;
             }
             let cases = self.enums[declared.name.as_str()]
@@ -1018,11 +1127,7 @@ impl Lowering<'_> {
             module.types.push(WadoTypeDef::Enum(WadoEnum {
                 name: name.clone(),
                 doc_comment: None,
-                cm_attr: Some(format!(
-                    "{}/{TYPES_INTERFACE}#{}",
-                    self.package,
-                    to_kebab_case(&declared.name)
-                )),
+                cm_attr: Some(type_path(&declared.name)),
                 variants: cases
                     .iter()
                     .map(|case| WadoEnumVariant {
@@ -1036,6 +1141,48 @@ impl Lowering<'_> {
                 name,
                 declared.values.iter().map(|v| v.value.clone()).collect(),
             );
+        }
+        for declared in self.dictionaries.keys() {
+            let Some(dictionary) = dictionaries.get(&to_upper_camel_case(declared)) else {
+                continue;
+            };
+            let fields = dictionary
+                .fields
+                .iter()
+                .map(|field| WadoField {
+                    name: to_wado_identifier(&field.host_name),
+                    doc_comment: None,
+                    cm_attr: to_kebab_case(&field.host_name),
+                    default: matches!(field.ty, WadoType::Option(_)).then(|| "null".to_string()),
+                    ty: field.ty.clone(),
+                })
+                .collect();
+            module.types.push(WadoTypeDef::Struct(WadoStruct {
+                name: dictionary.name.clone(),
+                doc_comment: None,
+                cm_attr: Some(type_path(declared)),
+                is_affine: false,
+                fields,
+            }));
+        }
+        unions.sort_keys();
+        for union in unions.into_values() {
+            module.types.push(WadoTypeDef::Variant(WadoVariant {
+                cm_attr: Some(type_path(&union.name)),
+                name: union.name,
+                doc_comment: None,
+                is_affine: false,
+                cases: union
+                    .cases
+                    .into_iter()
+                    .map(|case| WadoVariantCase {
+                        name: case.name,
+                        payload: Some(case.ty),
+                        doc_comment: None,
+                        cm_attr: None,
+                    })
+                    .collect(),
+            }));
         }
         values
     }
@@ -1321,8 +1468,8 @@ impl Lowering<'_> {
                 param.default = None;
             }
         }
-        // No shim reads parameters from memory, so trailing optionals are
-        // left to their WebIDL defaults until the rest cross as core values.
+        // No shim reads a closure from memory, so trailing optionals are left
+        // to their WebIDL defaults until the rest cross as core values.
         while !glue::reads_params(&params) {
             if params.pop().is_none_or(|last| last.default.is_none()) {
                 return skip(Reason::of(Cause::ParamsInMemory));
@@ -1359,10 +1506,32 @@ impl Lowering<'_> {
             IdlTypeInner::Types(constituents) => {
                 let mut expressible = Vec::new();
                 let mut reasons = Vec::new();
+                let mut nullable = ty.nullable || constituents.iter().any(is_undefined);
                 for constituent in constituents.iter().filter(|c| !is_undefined(c)) {
-                    match self.lower_type(constituent, flow) {
-                        Ok(ty) => expressible.push(ty),
-                        Err(reason) => reasons.push(reason),
+                    let lowered = match self.lower_type(constituent, flow) {
+                        Ok(lowered) => lowered,
+                        Err(reason) => {
+                            reasons.push(reason);
+                            continue;
+                        }
+                    };
+                    // A nullable constituent makes the union nullable, and a
+                    // union in a union gives it its constituents.
+                    let lowered = match lowered {
+                        WadoType::Option(inner) => {
+                            nullable = true;
+                            *inner
+                        }
+                        lowered => lowered,
+                    };
+                    let cases = match lowered {
+                        WadoType::Union(union) => union.cases.into_iter().map(|c| c.ty).collect(),
+                        lowered => vec![lowered],
+                    };
+                    for case in cases {
+                        if !expressible.contains(&case) {
+                            expressible.push(case);
+                        }
                     }
                 }
                 let texts = || {
@@ -1384,14 +1553,14 @@ impl Lowering<'_> {
                             format!("union: {}", texts()),
                         ));
                     }
-                    n => {
+                    n if flow == Flow::Out => {
                         return Err(Reason::new(
                             Cause::Union,
-                            format!("union of {n} expressible types"),
+                            format!("union of {n} expressible types in a result"),
                         ));
                     }
+                    _ => return Ok(optional(union_of(expressible)?, nullable)),
                 }
-                let nullable = ty.nullable || constituents.iter().any(is_undefined);
                 (expressible.pop().unwrap(), nullable)
             }
         };
@@ -1448,9 +1617,10 @@ impl Lowering<'_> {
             | "BigInt64Array" | "BigUint64Array" | "Float16Array" | "Float32Array"
             | "Float64Array" => return is_a(Cause::Buffer, "a buffer"),
             _ if self.slice.contains(name) => WadoType::Named(to_upper_camel_case(name)),
-            _ if self.dictionaries.contains(name) => {
-                return is_a(Cause::Dictionary, "a dictionary");
-            }
+            _ if self.dictionaries.contains_key(name) => match self.lower_dictionary(name) {
+                Ok(dictionary) => WadoType::Dictionary(dictionary),
+                Err(_) => return is_a(Cause::Dictionary, "a dictionary without a binding"),
+            },
             _ => {
                 if let Some(cases) = self.enums.get(name) {
                     return match cases {
@@ -1459,7 +1629,19 @@ impl Lowering<'_> {
                     };
                 }
                 if let Some(target) = self.typedefs.get(name) {
-                    return self.lower_type(target, flow);
+                    // A union takes the name its typedef gives it.
+                    let named = |mut union: WadoUnion| {
+                        union.name = to_upper_camel_case(name);
+                        WadoType::Union(union)
+                    };
+                    return Ok(match self.lower_type(target, flow)? {
+                        WadoType::Union(union) => named(union),
+                        WadoType::Option(inner) => WadoType::Option(Box::new(match *inner {
+                            WadoType::Union(union) => named(union),
+                            inner => inner,
+                        })),
+                        lowered => lowered,
+                    });
                 }
                 return match self.callbacks.get(name) {
                     Some(signature) => self.lower_callback(signature.clone()?, flow),
@@ -1597,6 +1779,67 @@ fn self_param(iface: &str) -> WadoParam {
         wit_name: "self".to_string(),
         default: None,
         lends_view: false,
+    }
+}
+
+/// The variant holding one of `types`, named after them: `NodeOrString`, whose
+/// cases are `AsNode` and `AsString`.
+fn union_of(types: Vec<WadoType>) -> std::result::Result<WadoType, Reason> {
+    let cases = types
+        .into_iter()
+        .map(|ty| match union_word(&ty) {
+            Some(word) => Ok((word, ty)),
+            None => Err(Reason::new(
+                Cause::Union,
+                "union of a callback and another type",
+            )),
+        })
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let words: Vec<&str> = cases.iter().map(|(word, _)| word.as_str()).collect();
+    Ok(WadoType::Union(WadoUnion {
+        name: words.join("Or"),
+        cases: cases
+            .iter()
+            .map(|(word, ty)| UnionCase {
+                name: format!("As{word}"),
+                ty: ty.clone(),
+            })
+            .collect(),
+    }))
+}
+
+/// What a union's name calls a constituent of type `ty`; `None` for a
+/// callback, which is no part of a variant.
+fn union_word(ty: &WadoType) -> Option<String> {
+    match ty {
+        WadoType::String => Some("String".to_string()),
+        WadoType::Named(name) | WadoType::StringEnum(name) => Some(name.clone()),
+        WadoType::Dictionary(dictionary) => Some(dictionary.name.clone()),
+        // A union of its own only as a list's element: one in a union is its cases.
+        WadoType::Union(union) => Some(union.name.clone()),
+        WadoType::List(element) => Some(format!("{}List", union_word(element)?)),
+        WadoType::Callback { .. } => None,
+        WadoType::Bool
+        | WadoType::Char
+        | WadoType::I8
+        | WadoType::I16
+        | WadoType::I32
+        | WadoType::I64
+        | WadoType::I128
+        | WadoType::U8
+        | WadoType::U16
+        | WadoType::U32
+        | WadoType::U64
+        | WadoType::U128
+        | WadoType::F32
+        | WadoType::F64 => ty.primitive_name().map(to_upper_camel_case),
+        WadoType::Option(_)
+        | WadoType::Result { .. }
+        | WadoType::HashMap(..)
+        | WadoType::Tuple(_)
+        | WadoType::Stream(_)
+        | WadoType::Future(_)
+        | WadoType::Borrow(_) => unreachable!("a union's constituent lowers to no {ty:?}"),
     }
 }
 

@@ -95,6 +95,9 @@ test("the host answers identity, narrowing and a listener while `run` waits", as
   assert.equal(found.labels, "2 true true");
   assert.equal(found.enum, "DocumentReadyState::Interactive true");
   assert.equal(searched, "down");
+  // Of two events, the one made with `bubbles` reached `<body>`, both were
+  // captured, and the listener added with `once` heard the first.
+  assert.equal(found.records, "1 2 1 true");
 
   const div = document.getElementById("div");
   assert.deepEqual(div.ariaLabelledByElements, [document.getElementById("input"), div]);

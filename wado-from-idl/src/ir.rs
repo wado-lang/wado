@@ -1,6 +1,5 @@
 //! Intermediate representation for Wado code generation
 
-use indexmap::IndexSet;
 use wado_compiler::ast::HandleClasses;
 use wado_compiler::name::CALLBACK_HANDLE_WORD;
 
@@ -143,6 +142,8 @@ pub struct WadoField {
     pub doc_comment: Option<String>,
     /// Original WIT kebab-case name for the `#[cm("...")]` attribute
     pub cm_attr: String,
+    /// What the field is when a literal leaves it out, as written in Wado.
+    pub default: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -303,6 +304,12 @@ pub enum WadoType {
     /// A `WebIDL` enum by its Wado name: a string to the host, and its case's
     /// index across the boundary.
     StringEnum(String),
+    /// A `WebIDL` dictionary: an object to the host, and a record across the
+    /// boundary.
+    Dictionary(WadoDictionary),
+    /// A `WebIDL` union the guest supplies: any one of its cases to the host,
+    /// and a variant across the boundary.
+    Union(WadoUnion),
 
     // References
     Borrow(Box<WadoType>),
@@ -314,33 +321,69 @@ pub enum WadoType {
     },
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct WadoDictionary {
+    /// Its Wado name.
+    pub name: String,
+    pub fields: Vec<DictionaryField>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DictionaryField {
+    /// The member's name on the host's object.
+    pub host_name: String,
+    pub ty: WadoType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WadoUnion {
+    /// Its Wado name.
+    pub name: String,
+    pub cases: Vec<UnionCase>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnionCase {
+    pub name: String,
+    pub ty: WadoType,
+}
+
 impl WadoType {
-    /// Adds to `names` each `WebIDL` enum this type names.
-    pub fn string_enums<'a>(&'a self, names: &mut IndexSet<&'a str>) {
+    /// Visits this type and each type it is made of, itself first.
+    pub fn walk<'a>(&'a self, visit: &mut impl FnMut(&'a WadoType)) {
+        visit(self);
         match self {
-            Self::StringEnum(name) => {
-                names.insert(name);
-            }
             Self::Option(inner)
             | Self::List(inner)
             | Self::Stream(inner)
             | Self::Future(inner)
-            | Self::Borrow(inner) => inner.string_enums(names),
+            | Self::Borrow(inner) => inner.walk(visit),
             Self::HashMap(key, value) => {
-                key.string_enums(names);
-                value.string_enums(names);
+                key.walk(visit);
+                value.walk(visit);
             }
             Self::Result { ok, err } => {
                 for side in [ok, err].into_iter().flatten() {
-                    side.string_enums(names);
+                    side.walk(visit);
                 }
             }
             Self::Tuple(types) | Self::Callback { params: types, .. } => {
                 for ty in types {
-                    ty.string_enums(names);
+                    ty.walk(visit);
                 }
             }
-            Self::Bool
+            Self::Dictionary(dictionary) => {
+                for field in &dictionary.fields {
+                    field.ty.walk(visit);
+                }
+            }
+            Self::Union(union) => {
+                for case in &union.cases {
+                    case.ty.walk(visit);
+                }
+            }
+            Self::StringEnum(_)
+            | Self::Bool
             | Self::Char
             | Self::I8
             | Self::I16
