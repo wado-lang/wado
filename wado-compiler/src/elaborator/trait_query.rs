@@ -255,12 +255,20 @@ fn asked_at(
     frame_binders: &[FqTypeName],
 ) -> Option<FqTraitName> {
     let asked = spelled_at(&trait_, at_call);
-    let undecided = |head: &TypeHead| match head {
-        TypeHead::Infer { .. } | TypeHead::Unresolved(_) => true,
-        TypeHead::Binder { .. } => !frame_binders.iter().any(|binder| binder.head() == head),
-        _ => false,
+    let undecided = |head: &TypeHead| {
+        matches!(head, TypeHead::Infer { .. }) || names_nothing_here(head, frame_binders)
     };
     (!asked.args().iter().any(|arg| arg.mentions(&undecided))).then_some(asked)
+}
+
+/// Whether `head` is a type already reported, or a binder that is none of
+/// `frame_binders`.
+fn names_nothing_here(head: &TypeHead, frame_binders: &[FqTypeName]) -> bool {
+    match head {
+        TypeHead::Unresolved(_) => true,
+        TypeHead::Binder { .. } => !frame_binders.iter().any(|binder| binder.head() == head),
+        _ => false,
+    }
 }
 
 /// Whether the one thing keeping `trait_` from being asked at the site
@@ -278,11 +286,7 @@ fn reads_open_slot(
             .any(|arg| arg.mentions(&|head| pred(head)))
     };
     mentions(&|head| matches!(head, TypeHead::Infer { .. }))
-        && !mentions(&|head| match head {
-            TypeHead::Unresolved(_) => true,
-            TypeHead::Binder { .. } => !frame_binders.iter().any(|binder| binder.head() == head),
-            _ => false,
-        })
+        && !mentions(&|head| names_nothing_here(head, frame_binders))
 }
 
 /// `trait_` with each binder `at` settles replaced by what it settles it to.

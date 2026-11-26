@@ -948,6 +948,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ref_kind =
             RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone());
         let inherent = self.lookup_method_info(receiver, method);
+        // A reference blanket's `&self` method answers behind the referent.
+        let mut behind_referent = None;
         if let Some(ref_kind) = ref_kind
             && inherent.as_ref().is_none_or(|info| {
                 let link = self.inherent_link(base, info.owner);
@@ -965,11 +967,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 self.decide_now(lookup, base, method, span).found()
             }
-            && found.answers_reference_receiver(self.tysys.type_table.borrow().ref_depth(receiver))
         {
+            let ref_depth = self.tysys.type_table.borrow().ref_depth(receiver);
             let owner = found.owner_for(base, &self.tysys.type_table.borrow());
-            let info = found.method_info;
-            return Some(self.return_type_for_receiver(info.return_type, owner, receiver));
+            let return_type = found.method_info.return_type;
+            if found.answers_reference_receiver(ref_depth) {
+                return Some(self.return_type_for_receiver(return_type, owner, receiver));
+            }
+            if ref_depth == 1 {
+                behind_referent = Some((return_type, owner));
+            }
         }
         if let Some(info) = inherent {
             return Some(self.return_type_for_receiver(info.return_type, info.owner, receiver));
@@ -984,9 +991,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None,
             None,
         );
-        let found = self.decide_now(lookup, base, method, span).found()?;
-        let info = found.method_info;
-        Some(self.return_type_for_receiver(info.return_type, info.owner, receiver))
+        let (return_type, owner) = match self.decide_now(lookup, base, method, span).found() {
+            Some(found) => (found.method_info.return_type, found.method_info.owner),
+            None => behind_referent?,
+        };
+        Some(self.return_type_for_receiver(return_type, owner, receiver))
     }
 
     /// A method inherited through a newtype returns the newtype, not the base
