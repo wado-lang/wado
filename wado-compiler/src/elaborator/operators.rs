@@ -2408,7 +2408,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if access == IndexAccess::Mutable && item == CompilerItem::IndexRef {
                 let stores_back = self.bounds_declare(&operand, CompilerItem::IndexAssign);
                 let element = self.tysys.through_ref(output);
-                self.refuse_mut_element_of_read_only_view(container, stores_back, element, index.span);
+                self.refuse_mut_element_of_read_only_view(
+                    container,
+                    stores_back,
+                    element,
+                    index.span,
+                );
             }
             self.sem
                 .types
