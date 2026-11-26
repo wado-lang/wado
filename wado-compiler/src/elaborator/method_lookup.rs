@@ -41,7 +41,6 @@ use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess, OpaqueReason};
 use super::trait_env::{
     BlanketParamSource, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written,
-    written_type_source,
 };
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
@@ -1143,9 +1142,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return None;
             }
             // The call is the caller's to write: the trait by the name its
-            // import gives it, at every argument the block writes.
-            let trait_ref = header.trait_.as_ref()?;
-            let trait_def = trait_ref.def?;
+            // import gives it, at every argument the block writes, with what
+            // the receiver settles filled in.
+            let trait_def = header.trait_def()?;
             let trait_name = self
                 .tysys
                 .resolutions
@@ -1155,14 +1154,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     || self.tysys.type_table.borrow().decl_name(trait_def).to_string(),
                     unalias_namespace_member,
                 );
-            let written_args = match &trait_ref.ty {
-                ast::Type::Generic(written_ref) => &written_ref.args,
-                ast::Type::NamespacedGeneric(written_ref) => &written_ref.args,
-                other => unreachable!(
-                    "a trait reference writing a parameter takes arguments, not {other:?}"
-                ),
-            };
-            let args: Vec<String> = written_args.iter().map(written_type_source).collect();
+            let mut table = self.tysys.type_table.borrow_mut();
+            let mut settled: TypeArgMap = env
+                .blanket_param_sources(blanket)
+                .iter()
+                .zip(0..)
+                .filter(|(source, _)| matches!(source, BlanketParamSource::Receiver))
+                .map(|(_, index)| {
+                    let slot = TypeParamId {
+                        owner: blanket.def,
+                        index,
+                    };
+                    (slot, subject)
+                })
+                .collect();
+            table.project_impl_slots(blanket.def, &mut settled);
+            let args: Vec<String> = table
+                .impl_trait_args(blanket.def)
+                .to_vec()
+                .into_iter()
+                .map(|arg| {
+                    let arg = table.substitute_type_params(arg, &settled);
+                    table.name(arg)
+                })
+                .collect();
             let open = &open.name;
             Some(format!(
                 "'{}' declares it, and a method call does not settle '{open}': write '{trait_name}::<{}>::{method_name}(…)', naming '{open}'",
