@@ -558,7 +558,7 @@ pub(super) fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool
 /// Whether `op` is `>= 0` because it holds some length, if not the current one:
 /// [`is_seq_length`], or a local bound once to a length. A write after the
 /// `let` leaves [`Binds`] without the local but its value still a length.
-pub(super) fn is_length_valued(engine: &mut Engine, binds: &Binds, op: Operand) -> bool {
+fn is_length_valued(engine: &mut Engine, binds: &Binds, op: Operand) -> bool {
     if is_seq_length(engine, binds, op) {
         return true;
     }
@@ -570,6 +570,12 @@ pub(super) fn is_length_valued(engine: &mut Engine, binds: &Binds, op: Operand) 
             matches!(engine.body.stmts[def].kind, StmtKind::Let { value: Some(v), .. }
                 if is_seq_length(engine, binds, v))
         })
+}
+
+/// Whether `op` is `>= 0`: [`is_length_valued`], or a constant that is.
+pub(super) fn is_non_negative(engine: &mut Engine, binds: &Binds, op: Operand) -> bool {
+    is_length_valued(engine, binds, op)
+        || parse_const_i64(engine, binds, op).is_some_and(|c| c >= 0)
 }
 
 /// Parse an operand (through copy temps) as a constant `i64`. Constants live in
@@ -757,11 +763,6 @@ pub(super) fn parse_cmp(
     Some((var, off, bound, op))
 }
 
-/// The loop-guard head both structural BCE and loop versioning recognise:
-/// after any leading `let`s, the first statement is `if !<cond> { break }` with
-/// a single-statement break then-block. Returns the guard's statement index and
-/// the (still-negated) condition operand. One shared definition keeps the two
-/// passes from drifting on what a loop guard looks like.
 /// The block whose head holds `loop_body`'s guard: `loop_body`, or the labeled
 /// block opening it, innermost first. An inlined `Iterator::next` leaves its
 /// range guard there, and the statements past a guard are past it whichever
@@ -785,6 +786,11 @@ fn writes_in(engine: &Engine, block: BlockId, var: u32) -> usize {
         .sum()
 }
 
+/// The loop-guard head both structural BCE and loop versioning recognise:
+/// after any leading `let`s, the first statement is `if !<cond> { break }` with
+/// a single-statement break then-block. Returns the guard's statement index and
+/// the (still-negated) condition operand. One shared definition keeps the two
+/// passes from drifting on what a loop guard looks like.
 pub(super) fn parse_break_guard_head(
     engine: &Engine,
     loop_body: BlockId,
@@ -1166,9 +1172,9 @@ fn structural_loop_guard(
     let floor = (goff == 0
         && (alone || matches!(strategy, GuardStrategy::LeLocal(_)))
         && writes_in(engine, loop_body, var) == writes_in(engine, head, var))
-        .then(|| induction_entry(engine, binds, parent, loop_stmt, head, var))
-        .flatten()
-        .map(|lo| Floor { var, lo, alone, hi });
+    .then(|| induction_entry(engine, binds, parent, loop_stmt, head, var))
+    .flatten()
+    .map(|lo| Floor { var, lo, alone, hi });
     // A `let c = var` under the guard holds what the guard proved of `var` for
     // as long as `c` is unwritten, past a later write to `var`: a range loop
     // reads its index from such a copy after stepping the counter.
@@ -2217,7 +2223,7 @@ fn check_comparisons(engine: &Engine, cond: Operand) -> Vec<ExprId> {
 
 /// Record a site for each upper half of the check `cond` just passed. A `var`
 /// index needs its sum proven unwrapped, the `Ceil` [`learn_conjuncts`] leaves,
-/// and a bound `bound - d` cannot wrap below: a length or a constant `>= 0`.
+/// and a bound `bound - d` cannot wrap below: one [`is_non_negative`].
 fn record_sites(engine: &mut Engine, binds: &Binds, cond: Operand, facts: &mut Vec<Fact>) {
     for cmp in check_comparisons(engine, cond) {
         let ExprKind::Binary { left, right, .. } = engine.body.exprs[cmp].kind else {
@@ -2236,9 +2242,7 @@ fn record_sites(engine: &mut Engine, binds: &Binds, cond: Operand, facts: &mut V
                     matches!(*f, Fact::Ceil { var: Some(v), bound: b, c }
                         if v == var && b == bound && c == j)
                 });
-                let floored = is_length_valued(engine, binds, right)
-                    || parse_const_i64(engine, binds, right).is_some_and(|b| b >= 0);
-                if !unwrapped || !floored {
+                if !unwrapped || !is_non_negative(engine, binds, right) {
                     continue;
                 }
                 (Some(var), j)

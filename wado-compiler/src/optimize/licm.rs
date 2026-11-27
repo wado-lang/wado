@@ -671,14 +671,16 @@ fn share_preheader_reads(engine: &mut Engine, ahead: &[StmtId]) -> bool {
         else {
             continue;
         };
-        let value = ahead.iter().find_map(|&s| match &engine.body.stmts[s].kind {
-            StmtKind::Let {
-                local_index,
-                value: Some(value),
-                ..
-            } if *local_index == later.new_local_index => value.as_expr(),
-            _ => None,
-        });
+        let value = ahead
+            .iter()
+            .find_map(|&s| match &engine.body.stmts[s].kind {
+                StmtKind::Let {
+                    local_index,
+                    value: Some(value),
+                    ..
+                } if *local_index == later.new_local_index => value.as_expr(),
+                _ => None,
+            });
         let value = value.expect("a held read is a let of the run");
         engine.replace_expr_kind(
             value,

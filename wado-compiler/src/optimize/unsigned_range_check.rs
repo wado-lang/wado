@@ -18,7 +18,7 @@ use crate::type_table::TypeTable;
 
 use super::arena_query::{binary_parts, is_pure_nontrapping_operand_typed};
 use super::condition_implication::{
-    Binds, build_copy_bindings, is_length_valued, operand_same, parse_const_i64,
+    Binds, build_copy_bindings, is_non_negative, operand_same, parse_const_i64,
 };
 
 pub fn fuse_unsigned_range_checks(project: &mut NirPackage, exec: &Executor) -> bool {
@@ -90,13 +90,8 @@ impl UnsignedRangeCheckRule {
             Shape::Inside => (left, right),
             Shape::Outside => (right, left),
         };
-        (operand_same(engine, &self.binds, index, x) && self.non_negative(engine, bound))
+        (operand_same(engine, &self.binds, index, x) && is_non_negative(engine, &self.binds, bound))
             .then_some((left, kind, right))
-    }
-
-    fn non_negative(&self, engine: &mut Engine, op: Operand) -> bool {
-        is_length_valued(engine, &self.binds, op)
-            || parse_const_i64(engine, &self.binds, op).is_some_and(|c| c >= 0)
     }
 
     /// The comparison `id` fuses into: its halves, each in either order.
