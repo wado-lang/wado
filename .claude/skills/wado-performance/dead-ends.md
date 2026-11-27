@@ -18,6 +18,43 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Keeping loads across a cold call where a local holds them anyway (2026-11-27)
+
+`reuse_loads` forgets every load at a call in a cold arm, the trade-off recorded
+in `trade-offs.md`. That entry guessed a narrower rule would win both rows:
+keep a load across a cold call when its value is live there regardless. Two
+changes to `wir_optimize/reuse_loads.rs` tried it on microgpt's `Graph::value`,
+which reloads `self.nodes` and `.used` after the cold `List::grow`:
+
+- **Aliases:** a local set to what a temp holds names the temp, and a chain
+  whose prefix a temp holds is keyed off that temp. `self.nodes.used` and
+  `self_9.used` became one load.
+- **Cold arms:** a call in a cold arm forgets only the fields `CalleeWrites`
+  says it writes. At the arm's end, a load survives only where a local holding
+  it is read next past the `If`.
+
+Together they cut microgpt infer fuel 2.4%, and `Graph::value` read
+`self.nodes` and `.used` once. Release, `mise run all-wado`, each against the
+compiler without either change: aliases alone over four rotating rounds, both
+over three alternating ones. Rows that moved 1% or less are left out.
+
+| Row             | Aliases only | Aliases + cold arms |
+| --------------- | ------------ | ------------------- |
+| microgpt infer  | noise        | +0.6%               |
+| microgpt train  | noise        | +0.7%               |
+| zlib compress   | **−2.5%**    | **−2.4%**           |
+| json_canada de  | noise        | **−2.4%**           |
+| cbor_canada ser | +0.9%        | **−2.7%**           |
+
+Against aliases alone, the cold-arm rule measured json_canada de −4.1% and
+cbor_canada ser −3.7%, with microgpt infer +1.3%.
+
+In json_canada the cold-arm rule kept `input.repr` and `input.start` live into
+the number scanner's cold calls, at no fuel cost.
+"Live there regardless" read off a local's next access is not the register
+the hot path pays for: a value can be read past the `If` and still have sat in
+memory until then.
+
 ## Sizing the JSON output buffer up front (2026-11-23)
 
 `String::grow` and the zero-fill it pays read as about 13% of json-twitter
