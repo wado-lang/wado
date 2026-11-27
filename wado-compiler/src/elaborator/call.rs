@@ -2252,6 +2252,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.convert_without_impl(call.id, receiver_type, arg_type, true)
         {
             self.record_prefix_receiver_reference(site, prefix);
+            if self.reject_surplus_turbofish(method_name, 0, call.type_args.len(), call.span) {
+                return ControlFlow::Break(TypeTable::ERROR);
+            }
             return ControlFlow::Break(converted);
         }
         // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
@@ -2450,6 +2453,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return TypeTable::ERROR;
         }
+        // The same argument the selection above read: without it this
+        // resolution answers a different declaration than the call was
+        // mangled to.
+        let typed = receiver.at_type(Some(receiver_type));
+        let resolved = self.resolve_static_callee(StaticQuery {
+            arg_types: args,
+            receiver_args: &receiver_args,
+            expected_return: expected_type,
+            ..StaticQuery::of(&typed, suffix)
+        });
+        // A blanket whose bound holds at the receiver itself outranks the
+        // static a newtype inherits a link below, and the blanket resolver
+        // instantiates it. Before the turbofish is counted, since it names
+        // the blanket's parameters and not the inherited static's.
+        if matches!(resolved, StaticLookup::Blanket(_))
+            && let Some(return_type) = self.resolve_named_type_blanket_static(
+                &typed,
+                suffix,
+                call.id,
+                ident.segments.last().map(|segment| segment.id),
+                type_args,
+                args,
+                &call.args,
+                expected_type,
+                call.span,
+                ctx,
+            )
+        {
+            return return_type;
+        }
         // An omitted turbofish infers both levels; a partial one keeps
         // what it named and infers only its `_` slots. The call's own
         // `type_args` stay as written.
@@ -2496,35 +2529,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_args: method_type_args,
             ..
         } = static_args;
-        // The same argument the selection above read: without it this
-        // resolution answers a different declaration than the call was
-        // mangled to.
-        let typed = receiver.at_type(Some(receiver_type));
-        let resolved = self.resolve_static_callee(StaticQuery {
-            arg_types: args,
-            receiver_args: &receiver_args,
-            expected_return: expected_type,
-            ..StaticQuery::of(&typed, suffix)
-        });
-        // A blanket whose bound holds at the receiver itself outranks the
-        // static a newtype inherits a link below, and the blanket resolver
-        // instantiates it.
-        if matches!(resolved, StaticLookup::Blanket(_))
-            && let Some(return_type) = self.resolve_named_type_blanket_static(
-                &typed,
-                suffix,
-                call.id,
-                ident.segments.last().map(|segment| segment.id),
-                &method_type_args,
-                args,
-                &call.args,
-                expected_type,
-                call.span,
-                ctx,
-            )
-        {
-            return return_type;
-        }
         // Impls of one trait neither the arguments nor the receiver tell
         // apart may be told apart by the instance a later use settles. A
         // receiver spelled without its arguments is the instance at the

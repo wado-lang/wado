@@ -4336,10 +4336,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A qualified spelling names a trait, so another trait's impl is
             // not a candidate to weigh against: the same rule the resolution
             // applies, asked where the arguments are surveyed.
-            if recv
-                .required_trait
-                .is_some_and(|required| required != trait_decl)
-            {
+            let answers = match recv.required_trait {
+                Some(required) => required == trait_decl,
+                // A trait's declarations answer only where the trait is in
+                // scope, as the resolution reads them.
+                None => self
+                    .tysys
+                    .resolutions
+                    .decl_in_scope(self.frame_module(), trait_decl),
+            };
+            if !answers {
                 continue;
             }
             if !recv.required_args.is_empty()

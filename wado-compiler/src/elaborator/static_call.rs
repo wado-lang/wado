@@ -821,7 +821,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let def = key.decl().expect("a newtype is a declaration");
-        let receiver = ReceiverId::of_decl(self.tysys.resolutions.defs(), def, None);
+        // At the type the newtype declares: a blanket whose bound holds there
+        // owns the static, and no blanket is asked of a receiver without one.
+        let declared = self.declared_self_type(def);
+        let receiver = ReceiverId::of_decl(self.tysys.resolutions.defs(), def, declared);
         let owner = self.static_owner(&StaticQuery::of(&receiver, method_name));
         (owner.receiver.key != *key).then_some(owner.receiver.key)
     }
