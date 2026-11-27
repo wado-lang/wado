@@ -260,19 +260,27 @@ pub fn use_items(text: &str) -> Vec<UseItem> {
     items
 }
 
-/// The byte ranges of the blocks of `code` (as `code_only` leaves it) that a
-/// `use` of their own binds `name` in.
-pub fn blocks_importing(code: &str, name: &str) -> Vec<Range<usize>> {
+/// How a block's own `use` items bind a name, the stronger last.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BlockImport {
+    /// A glob, which binds it only if its module has one.
+    Glob,
+    Name,
+}
+
+/// The byte ranges of the blocks of `code` (as `code_only` leaves it) whose
+/// own `use` items may bind `name`, and how.
+pub fn blocks_importing(code: &str, name: &str) -> Vec<(Range<usize>, BlockImport)> {
     let mut uses = identifiers(code)
         .into_iter()
         .filter(|(_, word)| *word == "use")
         .map(|(at, _)| at)
         .peekable();
-    let mut open: Vec<(usize, bool)> = Vec::new();
+    let mut open: Vec<(usize, Option<BlockImport>)> = Vec::new();
     let mut found = Vec::new();
     for (at, c) in code.char_indices() {
         if uses.next_if_eq(&at).is_some()
-            && let Some((_, binds)) = open.last_mut()
+            && let Some((_, import)) = open.last_mut()
         {
             let tree_start = at + "use".len();
             let tree_len = code[tree_start..]
@@ -290,13 +298,20 @@ pub fn blocks_importing(code: &str, name: &str) -> Vec<Range<usize>> {
                 &code[tree_start..tree_start + tree_len],
                 &mut item,
             );
-            *binds |= item.bindings.iter().any(|b| b.name == name);
+            let this = if item.bindings.iter().any(|b| b.name == name) {
+                Some(BlockImport::Name)
+            } else if !item.globs.is_empty() {
+                Some(BlockImport::Glob)
+            } else {
+                None
+            };
+            *import = (*import).max(this);
         }
         match c {
-            '{' => open.push((at, false)),
+            '{' => open.push((at, None)),
             '}' => {
-                if let Some((start, true)) = open.pop() {
-                    found.push(start..at + 1);
+                if let Some((start, Some(import))) = open.pop() {
+                    found.push((start..at + 1, import));
                 }
             }
             _ => {}
@@ -438,12 +453,24 @@ mod tests {
                     use b::max as top;\n    max(1, 2)\n}\nfn g() {\n    use c::*;\n}\n";
         let inner = code.find("{ use").unwrap();
         let inner_end = code.find("2) }").unwrap() + "2) }".len();
-        assert_eq!(blocks_importing(code, "max"), vec![inner..inner_end]);
         let f = code.find("{\n    {").unwrap();
         let f_end = code.find("}\nfn g").unwrap() + 1;
-        assert_eq!(blocks_importing(code, "top"), vec![f..f_end]);
-        assert_eq!(blocks_importing(code, "min"), vec![inner..inner_end]);
-        assert_eq!(blocks_importing(code, "c"), Vec::<Range<usize>>::new());
+        let g = code.find("{\n    use c").unwrap();
+        let g_end = code.len() - 1;
+        let glob = (g..g_end, BlockImport::Glob);
+        assert_eq!(
+            blocks_importing(code, "max"),
+            [(inner..inner_end, BlockImport::Name), glob.clone()]
+        );
+        assert_eq!(
+            blocks_importing(code, "top"),
+            [(f..f_end, BlockImport::Name), glob.clone()]
+        );
+        assert_eq!(
+            blocks_importing(code, "min"),
+            [(inner..inner_end, BlockImport::Name), glob.clone()]
+        );
+        assert_eq!(blocks_importing(code, "c"), [glob]);
     }
 
     #[test]
