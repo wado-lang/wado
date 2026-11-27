@@ -698,6 +698,16 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         );
     }
     settle_overrides(&merged, &mut resources, &mut js, &mut skipped);
+    for (name, resource) in &resources {
+        let mut declared = IndexSet::new();
+        let names = resource.methods.iter().map(|m| &m.name);
+        if let Some(twice) = names
+            .chain(resource.unavailable.iter().map(|a| &a.name))
+            .find(|n| !declared.insert(*n))
+        {
+            bail!("`{name}` declares `{twice}` twice");
+        }
+    }
 
     let mut module = WadoModule::new(snapshot.module.clone(), snapshot.webref.clone());
     if let Some(bindings) = lowering.global_bindings(&merged, &resources)? {
@@ -1031,8 +1041,9 @@ fn alternatives(names: &[String]) -> String {
 /// resource extending the parent's, which a type pattern narrows. Otherwise the
 /// parent's would answer with the wrong type, and the child's binds under its
 /// interface's name (`svg_element_class_name`), as does a setter restored
-/// below a read-only redeclaration. Either way the child declares unavailable
-/// every name the chain above binds that member under, and so does a child
+/// below a read-only redeclaration, or one an overload above shares a member
+/// with. Either way the child declares unavailable every name the chain above
+/// binds that member under that it does not redeclare alike, and so does a child
 /// redeclaring an attribute read-only, for its setter. Statics (`new` above
 /// all) are not inherited.
 fn settle_overrides<'a>(
@@ -1075,9 +1086,32 @@ fn settle_overrides<'a>(
             )
         })
         .collect();
+    let reserved: IndexMap<&str, Vec<String>> = resources
+        .iter()
+        .map(|(name, r)| {
+            (
+                *name,
+                r.unavailable.iter().map(|a| a.name.clone()).collect(),
+            )
+        })
+        .collect();
+    let members: IndexMap<&str, Vec<JsMember>> = declared
+        .iter()
+        .map(|(name, bound)| {
+            (
+                *name,
+                bound
+                    .values()
+                    .map(|m| js[&m.cm_attr].member.clone())
+                    .collect(),
+            )
+        })
+        .collect();
     // The JavaScript members each interface takes from the bindings above it,
     // with the reason a call of one reports.
     let mut taken: IndexMap<&str, Vec<(JsMember, String)>> = IndexMap::new();
+    // The inherited bindings each interface redeclares alike, which stay.
+    let mut served: IndexMap<&str, Vec<String>> = IndexMap::new();
     for (name, iface) in merged {
         let taken = taken.entry(*name).or_default();
         // An attribute is one accessor in JavaScript, so redeclared read-only
@@ -1086,31 +1120,52 @@ fn settle_overrides<'a>(
             let reason = format!("`{name}` redeclares `{attribute}` as read-only");
             (JsMember::Set(attribute.to_string()), reason)
         }));
+        let served = served.entry(*name).or_default();
         resources[name].methods.retain_mut(|method| {
             if !has_receiver(method) {
                 return true;
             }
-            let Some((parent, inherited)) = ancestors(name)
-                .find_map(|parent| Some((parent, declared[parent].get(&method.name)?)))
-            else {
-                return true;
-            };
-            let member = &js[&method.cm_attr].member;
+            let member = js[&method.cm_attr].member.clone();
             let hides_setter = |between: &&str| {
-                matches!(member, JsMember::Set(attribute)
+                matches!(&member, JsMember::Set(attribute)
                     if read_only_attributes(&merged[*between]).any(|a| a == attribute))
             };
-            let why = if serves(method, inherited) {
-                ancestors(name)
-                    .take_while(|between| *between != parent)
-                    .find(hides_setter)
-                    .map(|between| format!("restores the setter `{between}` hides"))
-            } else {
-                Some("redeclares it with another type".to_string())
+            let why = match ancestors(name)
+                .find_map(|parent| Some((parent, declared[parent].get(&method.name)?)))
+            {
+                Some((parent, inherited)) if serves(method, inherited) => {
+                    let restored = ancestors(name)
+                        .take_while(|between| *between != parent)
+                        .find(hides_setter);
+                    let Some(between) = restored else {
+                        js.shift_remove(&method.cm_attr)
+                            .expect("every function has a JavaScript half");
+                        skipped.push(Skip {
+                            item: format!("{name}.{}", method.name),
+                            lost: Lost::Member,
+                            reason: Reason::new(
+                                Cause::Override,
+                                format!("redeclares a method inherited from `{parent}`"),
+                            ),
+                        });
+                        served.push(method.name.clone());
+                        return false;
+                    };
+                    format!("restores the setter `{between}` hides")
+                }
+                Some(_) => "redeclares it with another type".to_string(),
+                // An overload above, bound under a name of its own.
+                None if ancestors(name).any(|above| members[above].contains(&member)) => {
+                    "redeclares it".to_string()
+                }
+                None => return true,
             };
-            if let Some(why) = why {
+            let inherited = |above: &str| {
+                declared[above].contains_key(&method.name) || reserved[above].contains(&method.name)
+            };
+            if ancestors(name).any(inherited) {
                 let interface = to_snake_case(name);
-                let own = match member {
+                let own = match &member {
                     JsMember::Set(_) => {
                         method
                             .name
@@ -1123,31 +1178,23 @@ fn settle_overrides<'a>(
                     "`{name}` must not declare `{own}` beside the `{}` it redeclares",
                     method.name
                 );
-                taken.push((member.clone(), format!("`{name}` {why}; use `{own}`")));
                 method.name = own;
-                return true;
             }
-            js.shift_remove(&method.cm_attr)
-                .expect("every function has a JavaScript half");
-            skipped.push(Skip {
-                item: format!("{name}.{}", method.name),
-                lost: Lost::Member,
-                reason: Reason::new(
-                    Cause::Override,
-                    format!("redeclares a method inherited from `{parent}`"),
-                ),
-            });
-            false
+            taken.push((member, format!("`{name}` {why}; use `{}`", method.name)));
+            true
         });
     }
     let js = &*js;
     for (name, taken) in taken {
+        let served = &served[name];
         let hidden: Vec<WadoUnavailable> = taken
             .iter()
             .flat_map(|(member, reason)| {
                 ancestors(name)
                     .flat_map(|above| &resources[above].methods)
-                    .filter(move |bound| js[&bound.cm_attr].member == *member)
+                    .filter(move |bound| {
+                        js[&bound.cm_attr].member == *member && !served.contains(&bound.name)
+                    })
                     .map(move |bound| WadoUnavailable {
                         name: bound.name.clone(),
                         instance: true,
@@ -1545,9 +1592,6 @@ impl Lowering<'_> {
                         js,
                         dropped,
                     }) => {
-                        if methods.iter().any(|(m, _)| m.name == function.name) {
-                            bail!("`{iface}` binds `{}` twice", function.name);
-                        }
                         let name = function.name.clone();
                         methods.push((function, js));
                         let Some(reason) = dropped else {

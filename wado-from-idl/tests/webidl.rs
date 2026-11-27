@@ -544,7 +544,28 @@ fn two_members_binding_one_name_stop_the_generator() {
     ));
     let err = transform(&defs.build()).expect_err("one name bound twice is an error");
     assert!(
-        err.to_string().contains("`Element` binds `json` twice"),
+        err.to_string().contains("`Element` declares `json` twice"),
+        "{err}"
+    );
+}
+
+/// The bare name static overloads reserve is the name of a regular operation
+/// too, which binds it.
+#[test]
+fn a_reserved_name_another_member_binds_stops_the_generator() {
+    let data = |ty: &str| argument("data", &plain(ty), false, "null");
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation("read", &plain("undefined"), &[], ""),
+            operation("read", &plain("undefined"), &[data("DOMString")], "static"),
+            operation("read", &plain("undefined"), &[data("Node")], "static"),
+        ],
+    ));
+    let err = transform(&defs.build()).expect_err("one name declared twice is an error");
+    assert!(
+        err.to_string().contains("`Element` declares `read` twice"),
         "{err}"
     );
 }
@@ -1849,6 +1870,74 @@ fn a_redeclaration_hides_every_binding_above_it() {
         assert!(element.contains(declaration), "{declaration}\n{code}");
     }
     assert!(!element.contains("fn node_label(&self);"), "{code}");
+}
+
+/// A child's operation replaces the parent's whole overload set in JavaScript,
+/// so each overload the child does not redeclare would call the child's. The
+/// parent reserves the bare name, which the child may not declare.
+#[test]
+fn a_redeclaration_hides_each_overload_it_does_not_redeclare() {
+    let mut defs = chain();
+    let value = argument("value", &plain("DOMString"), false, "null");
+    let node = argument("node", &plain("Node"), false, "null");
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            operation(
+                "pick",
+                &plain("undefined"),
+                std::slice::from_ref(&value),
+                "",
+            ),
+            operation("pick", &plain("undefined"), &[node], ""),
+        ],
+    ));
+    defs.interfaces.push(partial(
+        "Element",
+        &[operation("pick", &plain("undefined"), &[value], "")],
+    ));
+    let (code, _) = defs.generate();
+    let element = code
+        .split("pub resource Element")
+        .nth(1)
+        .expect("Element is bound");
+    let element = &element[..element.find("\n}").expect("the resource closes")];
+    for declaration in [
+        "fn element_pick(&self, value: String);",
+        "#[unavailable(\"`Element` redeclares it; use `element_pick`\")]\n    fn pick_with_value(&self);",
+        "#[unavailable(\"`Element` redeclares it; use `element_pick`\")]\n    fn pick_with_node(&self);",
+    ] {
+        assert!(element.contains(declaration), "{declaration}\n{code}");
+    }
+}
+
+/// What `HTMLSelectElement.remove` is beside `Element.remove`: the overload the
+/// child redeclares alike stays the parent's.
+#[test]
+fn an_overload_redeclared_alike_stays_available() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[operation("remove", &plain("undefined"), &[], "")],
+    ));
+    let index = argument("index", &plain("long"), false, "null");
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation("remove", &plain("undefined"), &[], ""),
+            operation("remove", &plain("undefined"), &[index], ""),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert_eq!(
+        skipped,
+        ["Element.remove: redeclares a method inherited from `EventTarget`"]
+    );
+    assert!(
+        code.contains("fn remove_with_index(&self, index: i32);"),
+        "{code}"
+    );
+    assert!(!code.contains("unavailable"), "{code}");
 }
 
 /// A child may make writable again what its parent redeclared read-only. The
