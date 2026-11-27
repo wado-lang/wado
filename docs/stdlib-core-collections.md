@@ -575,7 +575,10 @@ key and never the key. The caller hashes a key and says which row equals
 it. It keeps no order and removes nothing but everything.
 
 A hash is the caller's, used as it comes: its top bits pick the slot, so
-they must differ between keys. A multiplicative hash's do.
+they must differ between keys. A multiply carries a difference only
+upward, so a hash built of them alone leaves its top bits blind to the low
+bits of the last word; fold the high half into the low and multiply once
+more.
 
 _Fields are private._
 

@@ -1623,11 +1623,6 @@ impl ClosureCallSiteLowerer<'_> {
             .then(|| &self.functor_infos[self.local_to_closure[&index] as usize])
     }
 
-    /// `arg_offset` is the count of leading `args` that are not value
-    /// arguments — 1 for a trait-qualified `Call` carrying its receiver in
-    /// `args[0]`, 0 for a free call and for
-    /// free / static callees. Key indices are value-argument indices, so the
-    /// scan skips the receiver and records positions relative to it.
     /// Retypes an argument naming a functor type to that functor, through the
     /// blocks [`yielded`] reads past: a closure literal becomes the struct it
     /// builds, and a forwarded functor param passes as the functor it holds.
@@ -1666,6 +1661,11 @@ impl ClosureCallSiteLowerer<'_> {
         ref_type_id
     }
 
+    /// `arg_offset` is the count of leading `args` that are not value
+    /// arguments — 1 for a trait-qualified `Call` carrying its receiver in
+    /// `args[0]`, 0 for a free call and for
+    /// free / static callees. Key indices are value-argument indices, so the
+    /// scan skips the receiver and records positions relative to it.
     fn try_redirect_to_specialized_callee(
         &mut self,
         func: &mut FunctionRef,

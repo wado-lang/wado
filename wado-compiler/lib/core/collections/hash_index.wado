@@ -9,7 +9,10 @@ global SPARSE_TABLE: i32 = 16;
 /// it. It keeps no order and removes nothing but everything.
 ///
 /// A hash is the caller's, used as it comes: its top bits pick the slot, so
-/// they must differ between keys. A multiplicative hash's do.
+/// they must differ between keys. A multiply carries a difference only
+/// upward, so a hash built of them alone leaves its top bits blind to the low
+/// bits of the last word; fold the high half into the low and multiply once
+/// more.
 pub struct HashIndex {
     /// A row under the top half of its key's hash, `EMPTY` where there is
     /// none; a power of two long, at least twice the row count.

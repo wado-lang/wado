@@ -861,15 +861,21 @@ fn has_safepoint(
     }
     impl Walk<'_> {
         fn block(&self, block: BlockId) -> bool {
-            for &stmt in self.cold.hot(self.body, block) {
+            self.run(self.cold.hot(self.body, block)) == Some(true)
+        }
+
+        /// Whether `stmts` reach a safepoint before one of them diverges, or
+        /// `None` where they do neither and run on.
+        fn run(&self, stmts: &[StmtId]) -> Option<bool> {
+            for &stmt in stmts {
                 if self.node(NodeRef::Stmt(stmt)) {
-                    return true;
+                    return Some(true);
                 }
                 if stmt_diverges(self.body, stmt, self.type_table) {
-                    break;
+                    return Some(false);
                 }
             }
-            false
+            None
         }
 
         fn node(&self, node: NodeRef) -> bool {
@@ -917,25 +923,16 @@ fn has_safepoint(
 
         fn returned_by(&self, arm: BlockId) -> bool {
             let hot = self.cold.hot(self.body, arm);
-            let stmts = &self.body.blocks[arm].stmts;
+            let whole = hot.len() == self.body.blocks[arm].stmts.len();
             let (tail, lead) = match hot.split_last() {
-                Some((&last, lead)) if hot.len() == stmts.len() => {
-                    match self.body.stmts[last].kind {
-                        StmtKind::Expr(Operand::Expr(e)) => (Some(e), lead),
-                        _ => (None, hot),
-                    }
-                }
+                Some((&last, lead)) if whole => match self.body.stmts[last].kind {
+                    StmtKind::Expr(Operand::Expr(e)) => (Some(e), lead),
+                    _ => (None, hot),
+                },
                 _ => (None, hot),
             };
-            for &stmt in lead {
-                if self.node(NodeRef::Stmt(stmt)) {
-                    return true;
-                }
-                if stmt_diverges(self.body, stmt, self.type_table) {
-                    return false;
-                }
-            }
-            tail.is_some_and(|e| self.returned(e))
+            self.run(lead)
+                .unwrap_or_else(|| tail.is_some_and(|e| self.returned(e)))
         }
 
         fn operand(&self, op: Operand) -> bool {
