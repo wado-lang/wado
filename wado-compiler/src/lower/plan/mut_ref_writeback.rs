@@ -3,7 +3,9 @@
 //! hid from the reference site. See
 //! `docs/wep-2026-06-13-reference-representation.md`.
 
+use super::value_copy::analyze::for_each_pattern_binding_place;
 use super::value_copy::callgraph::CallGraph;
+use super::value_copy::place::PlaceKind;
 use super::value_copy::reach::ClosureCaptures;
 use super::value_copy::retention::{CallRetention, FunctorRows, RefCarrying};
 use super::whole_value_writes::{self, WholeValueWrites};
@@ -14,8 +16,8 @@ use crate::logger::{Bail, ErrorSink};
 use crate::name::minted_name;
 use crate::synthesis::common::{handle_identical, not_expr};
 use crate::tir::{
-    LetStorage, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId,
+    LetStorage, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirPattern,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
@@ -223,6 +225,39 @@ impl WriteBack<'_> {
                 .iter()
                 .find_map(|arm| self.detached_in_value_position(&arm.body)),
             _ => None,
+        }
+    }
+
+    /// Note the bindings of `pattern` that hold a detached reference. A `&mut`
+    /// scrutinee binds each field, element and payload by reference, and one of
+    /// a replace type is read into a fresh box. A binding of the scrutinee
+    /// whole is the scrutinee's own reference.
+    fn bind_pattern(&mut self, pattern: &TirPattern, scrutinee: &TirExpr, span: Span) {
+        let whole_is_detached = self.detached_in_value_position(scrutinee).is_some();
+        let mut bindings = Vec::new();
+        for_each_pattern_binding_place(pattern, &mut |local, type_id, kind| {
+            bindings.push((local, type_id, kind));
+        });
+        for (local, type_id, kind) in bindings {
+            let detached = match kind {
+                PlaceKind::Storage => whole_is_detached,
+                PlaceKind::Field | PlaceKind::Value => matches!(
+                    self.type_table.get(type_id),
+                    ResolvedType::MutRef(pointee)
+                        if self.type_table.is_boxed_reference_target(*pointee)
+                            && !self.type_table.boxes_slot(*pointee)
+                ),
+            };
+            if !detached {
+                continue;
+            }
+            if self.replaced_locals.contains(&local) {
+                self.refuse(
+                    span,
+                    "a pattern binding holds it past the reference".to_string(),
+                );
+            }
+            self.detached_locals.insert(local);
         }
     }
 
@@ -745,6 +780,9 @@ impl TirOptVisitor for WriteBack<'_> {
                     self.detached_locals.insert(local_index);
                 }
             }
+            TirStmtKind::LetDestructure { pattern, value } => {
+                self.bind_pattern(pattern, value, stmt.span);
+            }
             TirStmtKind::Return { value: Some(value) } => {
                 self.refuse_stored(value, "the returned value");
             }
@@ -785,6 +823,11 @@ impl TirOptVisitor for WriteBack<'_> {
                 }
             }
             TirExprKind::Assign { value, .. } => self.refuse_stored(value, "a place"),
+            TirExprKind::Match { expr: scrutinee, arms } => {
+                for arm in arms {
+                    self.bind_pattern(&arm.pattern, scrutinee, arm.span);
+                }
+            }
             _ => {}
         }
         let changed = opt_walk_expr(self, expr);
