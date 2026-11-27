@@ -68,13 +68,26 @@ impl HashIndex {
             }
             s = s + 1 & mask;
         }
+        self.put(s, tag << 32 | row as i64);
+        return row;
+    }
+
+    /// Indexes `row` under `hash`. No row indexed there may equal it.
+    pub fn insert(&mut self, hash: u64, row: i32)
+        contract row >= 0
+    {
+        let slot = (hash >> 32 << 32) as i64 | row as i64;
+        self.put(self.empty_slot(slot), slot);
+    }
+
+    fn put(&mut self, empty: i32, slot: i64) {
+        let mut s = empty;
         if (self.count + 1) * 2 > self.slots.len() {
             self.resize(self.slots.len() * 2);
-            s = self.empty_slot(tag << 32);
+            s = self.empty_slot(slot);
         }
-        self.slots[s] = tag << 32 | row as i64;
+        self.slots[s] = slot;
         self.count += 1;
-        return row;
     }
 
     fn empty_slot(&self, slot: i64) -> i32 {
