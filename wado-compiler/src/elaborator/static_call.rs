@@ -76,7 +76,8 @@ impl ReceiverId {
         &self.key
     }
 
-    /// The type the call knows the receiver at; `None` for a bare spelling.
+    /// The type the call knows the receiver at; `None` for a bare spelling of
+    /// a generic declaration, whose arguments the call has yet to settle.
     pub(super) fn ty(&self) -> Option<TypeId> {
         self.ty
     }
