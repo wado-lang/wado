@@ -609,6 +609,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and the referent's is the direct one. A `&mut self` one is not
         // adopted: it would write to a copy of the reference.
         let mut behind_referent = None;
+        // The same of a choice among such methods the lookup left undecided:
+        // the call waits for it only where the referent has no method.
+        let mut undecided_behind_referent = None;
         if let Some(ref_kind) = subject_ref_kind
             && trait_answers_nearer(self, Some(ref_kind == RefKind::Mut))
         {
@@ -622,6 +625,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ArgSource::Exprs(&mut probe)),
             );
             let subject = subject.expect("a reference kind is read off the subject");
+            let ref_depth = self.tysys.type_table.borrow().ref_depth(subject);
+            let result = if ref_depth == 1 && self.undecided_behind_referent(&result, method_name)
+            {
+                undecided_behind_referent = Some((ref_kind, subject, result));
+                TraitLookup::Missing
+            } else {
+                result
+            };
             let result = match self.wait_or_decide(
                 result,
                 can_wait,
@@ -642,7 +653,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             reported |= matches!(result, TraitLookup::Reported);
             if let Some(trait_match) = result.found() {
-                let ref_depth = self.tysys.type_table.borrow().ref_depth(subject);
                 if trait_match.answers_reference_receiver(ref_depth) {
                     let adopted = self.adopt_ref_match(trait_match, base_type_id);
                     matched_impl_decl = adopted.matched_impl_decl;
@@ -652,8 +662,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info = Some(adopted.info);
                     trait_impl_module_source = adopted.trait_impl_module_source;
                     blanket_binder = adopted.blanket_binder;
-                } else if ref_depth == 1 && trait_match.method_info.self_kind == ast::SelfKind::Ref
-                {
+                } else if ref_depth == 1 && trait_match.answers_behind_referent() {
                     behind_referent = Some((ref_kind, trait_match));
                 }
             }
@@ -776,6 +785,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_info = Some(adopted.info);
             trait_impl_module_source = adopted.trait_impl_module_source;
             blanket_binder = adopted.blanket_binder;
+        }
+        if method_info.is_none()
+            && !reported
+            && let Some((ref_kind, subject, lookup)) = undecided_behind_referent
+        {
+            match self.wait_or_decide(lookup, can_wait, subject, base_type_id, method_name, span) {
+                Ok((declared, mut info)) => {
+                    waits_for_selection = true;
+                    info.is_ref_impl = true;
+                    trait_name = Some(declared);
+                    matched_ref_kind = Some(ref_kind);
+                    method_info = Some(info);
+                }
+                Err(decided) => {
+                    assert!(
+                        matches!(decided, TraitLookup::Reported),
+                        "an undecided lookup that cannot wait is reported"
+                    );
+                    reported = true;
+                }
+            }
         }
 
         // Selection is over; the classes come out of the probe so the arguments
@@ -1491,39 +1521,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_blanket: false,
             })
         } else if let Some(binder) = blanket_binder {
-            // The template is named by the blanket's binder, the call site by
-            // the concrete receiver; monomorph_info maps one to the other.
-            let generic_name = MethodName::format_local(&binder, trait_name.as_ref(), method_name);
-            // Keyed by its parameters in order, where a trait argument settles
-            // one the receiver does not.
-            let impl_type_args = match dispatched_impl_block {
-                Some(block) if self.tysys.type_table.borrow().impl_trait_sets_params(block) => {
-                    let trait_env = Arc::clone(&self.tysys.trait_env);
-                    let blanket = trait_env
-                        .blanket_of_block(block)
-                        .expect("a match through a blanket names its block");
-                    let args = blanket_impl_args(
-                        &trait_env,
-                        blanket,
-                        base_type_id,
-                        &trait_args,
-                        &mut self.tysys.type_table.borrow_mut(),
-                    );
-                    if let Some(args) = args {
-                        args
-                    } else {
-                        self.close_open_trait_args(&trait_args);
-                        Vec::new()
-                    }
-                }
-                _ => vec![base_type_id],
-            };
-            Some(MonomorphInfo {
-                generic_name,
-                impl_type_args,
-                method_type_args: method_type_args.clone(),
-                is_blanket: true,
-            })
+            Some(self.blanket_monomorph_info(
+                MethodName::format_local(&binder, trait_name.as_ref(), method_name),
+                dispatched_impl_block,
+                base_type_id,
+                &trait_args,
+                method_type_args.clone(),
+            ))
         } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
             let generic_name = MethodName::format_local(&base_struct_name, None, method_name);
             Some(MonomorphInfo {
@@ -2422,6 +2426,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         self.answer_frame_projections_in(param_types);
+    }
+
+    /// The instance a call on `receiver` reaches through the blanket `block`,
+    /// whose template `generic_name` names by the blanket's binder where the
+    /// call site names the concrete receiver. It is keyed by the receiver, or
+    /// by the block's parameters in order where a trait argument settles one
+    /// the receiver does not.
+    pub(super) fn blanket_monomorph_info(
+        &mut self,
+        generic_name: String,
+        block: Option<DefId>,
+        receiver: TypeId,
+        trait_args: &[TypeId],
+        method_type_args: Vec<TypeId>,
+    ) -> MonomorphInfo {
+        let impl_type_args = match block {
+            Some(block) if self.tysys.type_table.borrow().impl_trait_sets_params(block) => {
+                let trait_env = Arc::clone(&self.tysys.trait_env);
+                let blanket = trait_env
+                    .blanket_of_block(block)
+                    .expect("a match through a blanket names its block");
+                let args = blanket_impl_args(
+                    &trait_env,
+                    blanket,
+                    receiver,
+                    trait_args,
+                    &mut self.tysys.type_table.borrow_mut(),
+                );
+                if let Some(args) = args {
+                    args
+                } else {
+                    self.close_open_trait_args(trait_args);
+                    Vec::new()
+                }
+            }
+            _ => vec![receiver],
+        };
+        MonomorphInfo {
+            generic_name,
+            impl_type_args,
+            method_type_args,
+            is_blanket: true,
+        }
     }
 
     /// The type parameters of the block `declaring_impl` as the static's

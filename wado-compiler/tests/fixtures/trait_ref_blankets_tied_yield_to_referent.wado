@@ -1,7 +1,9 @@
 // Tied reference blankets do not stand in the way of the referent's own
 // `&self` method: between two traits, between two blankets of one trait, and
 // between two of one trait at different arguments, whether the call's
-// arguments admit both or neither.
+// arguments admit both or neither, or only a closure's row would choose.
+
+use { println, Stdout } from "core:cli";
 
 trait Near with () {
     fn near() -> i32;
@@ -132,4 +134,46 @@ test "two blankets of one trait at different arguments" {
     let p = Point { x: 1 };
     assert (&p).read() == "plain";
     assert (&p).take("x") == 3;
+}
+
+trait Each<F> with _ {
+    fn each(&self, f: F) -> i32;
+}
+
+trait Walk with () {
+    fn each(&self, f: fn(i32)) -> i32;
+}
+
+impl<T: Near> Each<fn(i32)> for &T {
+    fn each(&self, _f: fn(i32)) -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Near> Each<fn(i32) with Stdout> for &T {
+    fn each(&self, _f: fn(i32) with Stdout) -> i32 {
+        return 2;
+    }
+}
+
+impl Walk for Point {
+    fn each(&self, _f: fn(i32)) -> i32 {
+        return 3;
+    }
+}
+
+struct Bare {}
+
+impl Near for Bare {
+    fn near() -> i32 {
+        return 1;
+    }
+}
+
+test "two blankets apart only in a closure's row" {
+    let p = Point { x: 1 };
+    assert (&p).each(|_x| {}) == 3;
+    let bare = Bare {};
+    assert (&bare).each(|_x| {}) == 1;
+    assert (&bare).each(|x| { println(`${x}`); }) == 2;
 }

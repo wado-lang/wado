@@ -11,7 +11,7 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, RefKind};
 use crate::tir::{
-    EffectRows, FunctionRef, SlotProjections, TypeArgMap, TypeId, TypeParamId, slots_from_impl_args,
+    EffectRows, FunctionRef, SlotProjections, TypeArgMap, TypeId, TypeParamId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -608,10 +608,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
         // As an immediate call asks: the impls written for the reference
-        // first, then those for the value it points at.
+        // first, then those for the value it points at, which answers ahead
+        // of a reference blanket's `&self` method.
         let (lookup, ref_kind) = match call.ref_kind {
             Some(kind) => match lookup_at(self, &ImplTargetKey::Ref(kind)) {
                 TraitLookup::Missing => (lookup_at(self, &value_target), None),
+                TraitLookup::Found(found) if found.answers_behind_referent() => {
+                    match lookup_at(self, &value_target) {
+                        TraitLookup::Missing => {
+                            for tie in &found.tie_behind_referent {
+                                let _ = self.emit(tie.clone());
+                            }
+                            (TraitLookup::Found(found), Some(kind))
+                        }
+                        at_value => (at_value, None),
+                    }
+                }
                 lookup => (lookup, Some(kind)),
             },
             None => (lookup_at(self, &value_target), None),
@@ -721,9 +733,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = frame.to_newtype(&self.tysys, return_type);
         }
         if let Some(block) = info.impl_block {
+            let given = self.receiver_slots(block, &info.impl_slot_args, receiver);
             self.settle_trait_arg_slots(
                 block,
-                &slots_from_impl_args(block, &info.impl_slot_args),
+                &given,
                 &info.inferred_impl_slots,
                 &mut param_types,
                 args,

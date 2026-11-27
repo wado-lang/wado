@@ -121,3 +121,14 @@ test "a receiver a generic call returns" {
     let xs = [Bx { inner: One { n: 7 } }];
     assert `${v}` == "7" && `${xs[0].unbox()}` == "7";
 }
+
+trait Edit<A> with () { fn edit(&mut self, a: A) -> i32; }
+impl<A, T: Source<A>> Edit<A> for T {
+    fn edit(&mut self, _a: A) -> i32 { return 1; }
+}
+
+test "a `&mut self` method on a subscript receiver" {
+    let mut ones: List<One> = [One { n: 7 }];
+    let mut twos: List<Two> = [Two { n: 7 }];
+    assert ones[0].edit(1) == 1 && twos[0].edit("s") == 1;
+}

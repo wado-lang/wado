@@ -121,6 +121,16 @@ struct ImplBlockRef(DefId);
 
 /// The header of the impl block `r` points at, borrowed from the caller's
 /// `TraitEnv` handle so it outlives the `&mut self` calls a lookup makes.
+/// Whether `header` is `impl<T: Bound> Trait for &T`: a reference to one of
+/// its own type parameters.
+fn is_blanket_ref_impl(header: &ImplHeader) -> bool {
+    let (Type::Reference(inner) | Type::MutReference(inner)) = &header.ty else {
+        return false;
+    };
+    matches!(inner.as_ref(), Type::Named(named)
+        if header.type_params.iter().any(|tp| tp.name == named.name))
+}
+
 fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader {
     &trait_env.impl_headers[&r.0]
 }
@@ -2621,6 +2631,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TraitLookup::Reported
     }
 
+    /// Whether `lookup` leaves undecided a choice among reference blankets'
+    /// `&self` methods of one trait, which answer only where the referent has
+    /// no method of the name.
+    pub(super) fn undecided_behind_referent(&self, lookup: &TraitLookup, method_name: &str) -> bool {
+        let live = match lookup {
+            TraitLookup::Undecided(live) | TraitLookup::AwaitsClosureRow { live, .. } => live,
+            TraitLookup::Found(_) | TraitLookup::Missing | TraitLookup::Reported => return false,
+        };
+        let env = &self.tysys.trait_env;
+        let headers: Option<Vec<&ImplHeader>> = live
+            .iter()
+            .map(|def| def.map(|def| &env.impl_headers[&def]))
+            .collect();
+        let Some([first, rest @ ..]) = headers.as_deref() else {
+            return false;
+        };
+        let Some(decl) = first.trait_def() else {
+            return false;
+        };
+        is_blanket_ref_impl(first)
+            && rest
+                .iter()
+                .all(|h| h.trait_def() == Some(decl) && is_blanket_ref_impl(h))
+            && self
+                .trait_method_of(&decl, method_name)
+                .is_some_and(|(sig, _)| sig.self_kind == ast::SelfKind::Ref)
+    }
+
     /// The trait's declaration a call waiting on `lookup` is typed by, with
     /// `Self` as `declared_self`, where `lookup` leaves the impl undecided and
     /// the call `can_wait`; otherwise `lookup`, decided now.
@@ -3040,19 +3078,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         });
 
-        // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
-        // is a type parameter.
-        let is_blanket_ref_impl = match &header.ty {
-            Type::Reference(inner) | Type::MutReference(inner) => {
-                if let Type::Named(named) = inner.as_ref() {
-                    // Inner is a bare name — check if it's a type parameter
-                    header.type_params.iter().any(|tp| tp.name == named.name)
-                } else {
-                    false
-                }
-            }
-            _ => false,
-        };
+        let is_blanket_ref_impl = is_blanket_ref_impl(header);
         let ref_impl_target = match &header.ty {
             Type::Reference(inner) | Type::MutReference(inner) if !is_blanket_ref_impl => {
                 Some(scope.resolve_type(inner))
@@ -3210,10 +3236,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `&self` method: those answer only where the referent has no method of
     /// the name, and the selection fails only there.
     fn report_tie_where_it_answers(&self, found: &mut [TraitMethodMatch], ties: Vec<TypeError>) {
-        let behind_referent = found
-            .iter()
-            .all(|m| m.is_blanket_ref_impl && m.method_info.self_kind == ast::SelfKind::Ref);
-        if behind_referent {
+        if found.iter().all(TraitMethodMatch::answers_behind_referent) {
             for m in found {
                 m.tie_behind_referent.extend(ties.iter().cloned());
             }
@@ -4564,6 +4587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_info = self.lookup_method_info(output_type, &method_call.method);
         let mut method_trait_name: Option<FqTraitName> = None;
         let mut method_trait_impl_source: Option<ModuleSource> = None;
+        let mut blanket_binder: Option<FqTypeName> = None;
 
         // This lookup commits the call's resolution (the desugared call is
         // built from it), so argument-directed selection applies here exactly
@@ -4584,6 +4608,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_trait_name = Some(trait_match.trait_name);
                     method_info = Some(trait_match.method_info);
                     method_trait_impl_source = Some(trait_match.impl_module_source);
+                    blanket_binder = trait_match.blanket_binder;
                 }
                 TraitLookup::Missing => {}
                 TraitLookup::Reported => return Some(TypeTable::ERROR),
@@ -4615,7 +4640,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_type_bindings,
             inferred_impl_slots,
             impl_slot_args,
-            trait_args: _,
+            trait_args,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
@@ -4739,9 +4764,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = self.substitute_map_in_frame(&subst, return_type);
         }
         if let Some(block) = impl_block {
+            let given = self.receiver_slots(block, &impl_slot_args, output_base_type_id);
             self.settle_trait_arg_slots(
                 block,
-                &slots_from_impl_args(block, &impl_slot_args),
+                &given,
                 &inferred_impl_slots,
                 &mut param_types,
                 &args,
@@ -4783,6 +4809,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let output_fq = self
             .tysys
             .fq_receiver_of_impl(output_base_type_id, from_concrete_impl);
+        // The receiver's arguments key the instance by themselves unless the
+        // block's slots or a blanket's trait arguments must.
+        let blanket_template = blanket_binder
+            .filter(|_| {
+                impl_block.is_some_and(|block| {
+                    self.tysys.type_table.borrow().impl_trait_sets_params(block)
+                })
+            })
+            .map(|binder| {
+                MethodName::format_local(&binder, method_trait_name.as_ref(), &method_call.method)
+            });
         let method_info =
             LocalMethodName::new(output_fq, method_trait_name, method_call.method.clone());
 
@@ -4792,14 +4829,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_call_module_source =
             method_trait_impl_source.unwrap_or_else(|| output_module_source.clone());
 
-        // The receiver's arguments key the instance by themselves unless the
-        // block's slots must.
-        let monomorph_info = (!impl_slot_args.is_empty()).then(|| MonomorphInfo {
-            generic_name: method_info.to_mangled_name(),
-            impl_type_args: self.apply_infer_holes_each(&impl_slot_args),
-            method_type_args: type_args.clone(),
-            is_blanket: false,
-        });
+        let monomorph_info = if !impl_slot_args.is_empty() {
+            Some(MonomorphInfo {
+                generic_name: method_info.to_mangled_name(),
+                impl_type_args: self.apply_infer_holes_each(&impl_slot_args),
+                method_type_args: type_args.clone(),
+                is_blanket: false,
+            })
+        } else {
+            blanket_template.map(|generic_name| {
+                let trait_args = self.apply_infer_holes_each(&trait_args);
+                self.blanket_monomorph_info(
+                    generic_name,
+                    impl_block,
+                    output_base_type_id,
+                    &trait_args,
+                    type_args.clone(),
+                )
+            })
+        };
         let func = FunctionRef {
             module_source: method_call_module_source,
             name: method_info.to_mangled_name(),

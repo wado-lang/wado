@@ -974,7 +974,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if found.answers_reference_receiver(ref_depth) {
                 return Some(self.return_type_for_receiver(return_type, owner, receiver));
             }
-            if ref_depth == 1 && found.method_info.self_kind == ast::SelfKind::Ref {
+            if ref_depth == 1 && found.answers_behind_referent() {
                 behind_referent = Some((return_type, owner));
             }
         }
