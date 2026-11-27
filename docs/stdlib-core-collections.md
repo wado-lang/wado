@@ -575,16 +575,23 @@ key and never the key. The caller hashes a key and says which row equals
 it. It keeps no order and removes nothing but everything.
 
 A hash is the caller's, used as it comes: its top bits pick the slot, so
-they must differ between keys. A multiply carries a difference only
-upward, so a hash built of them alone leaves its top bits blind to the low
-bits of the last word; fold the high half into the low and multiply once
-more.
+they must differ between keys. `HashIndex::spread` makes them, of a hash
+whose bits differ anywhere.
 
 _Fields are private._
 
 #### `pub fn new() -> HashIndex`
 
 An empty index.
+
+#### `pub fn spread(hash: u64) -> u64`
+
+`hash` with a difference in any bit carried into the top ones. A
+multiply carries a difference only upward, so a hash built of
+multiplies alone, as FNV is, leaves its top bits blind to the low bits
+of the last word and its low bits blind to the high bits of every
+word. Folding the high half into the low and multiplying once more
+closes both.
 
 #### `pub fn len(&self) -> i32`
 

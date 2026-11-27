@@ -1,8 +1,13 @@
 use { HashIndex } from "core:collections";
 
 fn spread(key: i64) -> u64 {
-    let h = key * -7046029254386353131;
-    return ((h ^ (h as u64 >> 32) as i64) * -4658895280553007687) as u64;
+    return HashIndex::spread(key as u64);
+}
+
+test "spread carries a low bit and a high bit into the top ones" {
+    assert HashIndex::spread(1) >> 56 != HashIndex::spread(2) >> 56;
+    assert HashIndex::spread(1 << 62) >> 56 != HashIndex::spread(1 << 63) >> 56;
+    assert HashIndex::spread(1 << 62) as u32 != HashIndex::spread(1 << 63) as u32;
 }
 
 struct Names {

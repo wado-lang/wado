@@ -994,8 +994,8 @@ default heap.
 `HashIndex` uses the hash as it comes, and its top bits pick the slot. FNV's
 multiply carries a difference only upward, so two keys that differ in an
 edge's high bits differ only in the hash's top few bits, and two that differ in
-a small state number do not differ there at all. `hash_from` therefore folds
-the high half into the low and multiplies once more. Without that a
+a small state number do not differ there at all. `hash_from` therefore ends
+in `HashIndex::spread`. Without that a
 lookup walks a run of full slots, and the TypeScript benchmark no longer
 finishes an iteration in the time a whole run took.
 

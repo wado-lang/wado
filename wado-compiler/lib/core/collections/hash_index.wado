@@ -9,10 +9,8 @@ global SPARSE_TABLE: i32 = 16;
 /// it. It keeps no order and removes nothing but everything.
 ///
 /// A hash is the caller's, used as it comes: its top bits pick the slot, so
-/// they must differ between keys. A multiply carries a difference only
-/// upward, so a hash built of them alone leaves its top bits blind to the low
-/// bits of the last word; fold the high half into the low and multiply once
-/// more.
+/// they must differ between keys. `HashIndex::spread` makes them, of a hash
+/// whose bits differ anywhere.
 pub struct HashIndex {
     /// A row under the top half of its key's hash, `EMPTY` where there is
     /// none; a power of two long, at least twice the row count.
@@ -34,6 +32,16 @@ impl HashIndex {
             count: 0,
             shift: shift_for(MIN_SLOTS),
         };
+    }
+
+    /// `hash` with a difference in any bit carried into the top ones. A
+    /// multiply carries a difference only upward, so a hash built of
+    /// multiplies alone, as FNV is, leaves its top bits blind to the low bits
+    /// of the last word and its low bits blind to the high bits of every
+    /// word. Folding the high half into the low and multiplying once more
+    /// closes both.
+    pub fn spread(hash: u64) -> u64 {
+        return (hash ^ hash >> 32) * 0x9E3779B97F4A7C15;
     }
 
     /// The number of rows indexed.
