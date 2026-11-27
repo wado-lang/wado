@@ -201,6 +201,9 @@ impl Interpreter<'_> {
         }
         let mut values = Vec::with_capacity(elements.len());
         for op in elements {
+            if self.holds_written_storage(body, *op) {
+                return Lattice::NonConst;
+            }
             match self.operand_to_lattice(body, *op) {
                 Lattice::Const(v) => values.push(v),
                 Lattice::NonConst => return Lattice::NonConst,
@@ -208,6 +211,13 @@ impl Interpreter<'_> {
             }
         }
         Value::seq(type_id, values).map_or(Lattice::NonConst, Lattice::Const)
+    }
+
+    /// Whether `op` is a `&mut`: storage its holder shares with every copy of
+    /// itself, so what the holder was built with says nothing of what a later
+    /// read through it finds.
+    fn holds_written_storage(&self, body: &Body, op: Operand) -> bool {
+        operand_type(body, op).is_some_and(|ty| self.type_table.is_mut_ref(ty))
     }
 
     /// The lattice of a struct / tuple literal: `Const` only when every field
@@ -222,6 +232,10 @@ impl Interpreter<'_> {
         let mut values = Vec::new();
         let mut has_non_const = false;
         for (field_index, op) in fields {
+            if self.holds_written_storage(body, op) {
+                has_non_const = true;
+                continue;
+            }
             match self.operand_to_lattice(body, op) {
                 Lattice::Const(v) => values.push((field_index, v)),
                 Lattice::NonConst => has_non_const = true,
@@ -244,6 +258,9 @@ impl Interpreter<'_> {
         case_index: u32,
         payload: Operand,
     ) -> Lattice {
+        if self.holds_written_storage(body, payload) {
+            return Lattice::NonConst;
+        }
         match self.operand_to_lattice(body, payload) {
             Lattice::Const(v) => Lattice::Const(Value::Variant {
                 type_id,

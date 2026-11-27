@@ -1,0 +1,50 @@
+// A struct holding a `&mut` to storage no local names: a copy of the struct
+// writes what the struct reads. Folding the read from the literal the struct
+// was built with lost the write.
+
+struct Slot {
+    held: &mut Option<i32>,
+}
+
+fn fresh() -> &mut Option<i32> {
+    let mut held: Option<i32> = null;
+    return &mut held;
+}
+
+impl Slot {
+    fn get(&self) -> i32 {
+        let Some(value) = *self.held else {
+            return -1;
+        };
+        return value;
+    }
+
+    fn setter(&self, v: i32) -> fn() {
+        let target = *self;
+        return || { *target.held = Option::Some(v); };
+    }
+}
+
+fn store(target: Slot, v: i32) {
+    *target.held = Option::Some(v);
+}
+
+test "a write through a closure holding a copy is read back" {
+    let slot = Slot { held: fresh() };
+    let set = slot.setter(3);
+    set();
+    assert slot.get() == 3;
+}
+
+test "a write through a copy passed by value is read back" {
+    let slot = Slot { held: fresh() };
+    store(slot, 4);
+    assert slot.get() == 4;
+}
+
+test "a write through a tuple holding the reference is read back" {
+    let pair = [fresh(), 1];
+    let copy = pair;
+    *copy.0 = Option::Some(5);
+    assert (*pair.0).unwrap() == 5;
+}
