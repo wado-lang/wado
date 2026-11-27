@@ -541,8 +541,10 @@ impl Move {
         }
         // A glob or the prelude binds it without naming it, and an explicit
         // import would outrank either: what the destination's own code reads
-        // by the bare name says.
-        let bare_use = destination.identifiers.iter().find(|(at, written)| {
+        // by the bare name says. Every use, since a `use` inside a function
+        // binds the name there alone: the import changes nothing only where
+        // they all mean one thing.
+        let bare_uses = destination.identifiers.iter().filter(|(at, written)| {
             let before = destination.lines[at.line][..at.column].trim_end();
             written == name
                 && !self
@@ -552,13 +554,11 @@ impl Move {
                 && !before.ends_with('.')
                 && !before.ends_with("::")
         });
-        if let Some((at, _)) = bare_use {
-            let meaning = destination.definitions(client, *at)?;
-            if !meaning.is_empty() {
-                return Ok(Some(meaning));
-            }
+        let mut meaning = Meaning::new();
+        for (at, _) in bare_uses {
+            meaning.extend(destination.definitions(client, *at)?);
         }
-        Ok(None)
+        Ok((!meaning.is_empty()).then_some(meaning))
     }
 
     /// Reports `name`, which the moved code reads as one thing and the
@@ -1444,15 +1444,16 @@ fn helper(n: usize) -> i32 {
         let (dir, report) = a_to_b(
             "use std::cmp::max;\n\npub fn largest() -> i32 {\n    max(1, 2)\n}\n",
             "use inner::*;\n\nmod inner {\n    pub fn max(a: i32, _b: i32) -> i32 {\n        a\n    }\n}\n\n\
+             pub fn local() -> i32 {\n    use std::cmp::max;\n    max(1, 2)\n}\n\n\
              pub fn first() -> i32 {\n    max(1, 2)\n}\n",
-            "a::largest(); b::first()",
+            "a::largest(); b::local(); b::first()",
             &["probe::a::largest"],
         );
         assert!(
             report.contains("by hand: `max` means one thing"),
             "{report}"
         );
-        assert!(!read(&dir, "src/b.rs").contains("use std::cmp::max;"));
+        assert!(!read(&dir, "src/b.rs").contains("\nuse std::cmp::max;"));
     }
 
     #[test]
