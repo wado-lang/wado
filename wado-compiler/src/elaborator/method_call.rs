@@ -3531,7 +3531,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         if let Some(method_def) = declaration.or_else(|| {
-            let owner = self.static_owner_key(receiver.key(), &static_call.method);
+            let owner = self.static_owner_key(&receiver, &static_call.method);
             self.qualified_method_decl_id(&owner, &static_call.method)
         }) && self.record_reference_to_decl(static_call.method_id, method_def, static_call.span)
         {
@@ -4198,7 +4198,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         // A newtype inheriting the static answers with the impls of the link
         // that owns it, as the resolution does, so the survey reads them there.
-        if let Some(owner_key) = self.newtype_static_target(recv.receiver.key(), method_name) {
+        if let Some(owner_key) = self.newtype_static_target(recv.receiver, method_name) {
             let (owner_type, owner_arg_types) =
                 self.at_owner_link(recv.receiver.ty(), &owner_key, arg_types);
             let owner = ReceiverId::keyed(owner_key, owner_type);

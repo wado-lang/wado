@@ -824,35 +824,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((link, owner.receiver.key))
     }
 
-    /// The link below the newtype `key` its static named `method_name`
-    /// belongs to. `None` where `key` is no newtype, where it owns the static
-    /// itself, or where no link answers the name.
+    /// The link below the newtype `receiver` its static named `method_name`
+    /// belongs to. `None` where `receiver` is no newtype, where it owns the
+    /// static itself, or where no link answers the name.
     pub(super) fn newtype_static_target(
         &mut self,
-        key: &ImplTargetKey,
+        receiver: &ReceiverId,
         method_name: &str,
     ) -> Option<ImplTargetKey> {
+        let key = &receiver.key;
         if !self.is_newtype_key(key) {
             return None;
         }
         let def = key.decl().expect("a newtype is a declaration");
-        // At the type the newtype declares: a blanket whose bound holds there
-        // owns the static, and no blanket is asked of a receiver without one.
-        let declared = self.declared_self_type(def);
-        let receiver = ReceiverId::of_decl(self.tysys.resolutions.defs(), def, declared);
-        let owner = self.static_owner(&StaticQuery::of(&receiver, method_name));
+        // At the instance the call knows, else the one the newtype declares: a
+        // blanket whose bound holds there owns the static, and no blanket is
+        // asked of a receiver without a type.
+        let at = receiver.at_type(receiver.ty.or_else(|| self.declared_self_type(def)));
+        let owner = self.static_owner(&StaticQuery::of(&at, method_name));
         (owner.receiver.key != *key).then_some(owner.receiver.key)
     }
 
-    /// The key of the link a static named `method_name` on `key` belongs to:
-    /// `key` itself, unless it is a newtype inheriting the static.
+    /// The key of the link a static named `method_name` on `receiver` belongs
+    /// to: its own, unless it is a newtype inheriting the static.
     pub(super) fn static_owner_key(
         &mut self,
-        key: &ImplTargetKey,
+        receiver: &ReceiverId,
         method_name: &str,
     ) -> ImplTargetKey {
-        self.newtype_static_target(key, method_name)
-            .unwrap_or_else(|| key.clone())
+        self.newtype_static_target(receiver, method_name)
+            .unwrap_or_else(|| receiver.key.clone())
     }
 
     /// The link of the newtype `head`'s chain that `owner` declares, and

@@ -2093,7 +2093,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // whichever path names the newtype.
         let expected_at_owner = match static_method_receiver.as_ref().map(static_method) {
             Some((receiver, method_name)) => {
-                let owner = self.static_owner_key(receiver.key(), method_name);
+                let owner = self.static_owner_key(receiver, method_name);
                 let newtype = (&owner != receiver.key())
                     .then(|| receiver.key().decl())
                     .flatten();
@@ -2466,7 +2466,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .found()
             .and_then(|callee| callee.method_ref.method_id);
         let method_def = selection.or_else(|| {
-            let owner = self.static_owner_key(receiver.key(), suffix);
+            let owner = self.static_owner_key(receiver, suffix);
             self.qualified_method_decl_id(&owner, suffix)
         });
         let own_from = method_def.is_some_and(|def| self.declares_own_from(def));
@@ -2607,7 +2607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .found()
             .and_then(|callee| self.tysys.block_of(&callee.method_ref));
         // A derivation has no block: its slots are the owning link's.
-        let owner = self.static_owner_key(receiver.key(), suffix);
+        let owner = self.static_owner_key(receiver, suffix);
         let impl_owners: Vec<DefId> = block.into_iter().chain(owner.decl()).collect();
         let mut substituted = self.static_param_types_at(
             raw_param_types,
@@ -3129,7 +3129,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return Some(sig);
                 }
                 let key = receiver.key();
-                let owner = self.static_owner_key(key, method_name);
+                let owner = self.static_owner_key(receiver, method_name);
                 if let Some(sig) = self.unique_qualified_method_sig(&owner, method_name) {
                     let slot_decls = self.sig_slots(&sig);
                     return Some(CalleeSignature::of_method(&sig, slot_decls));
@@ -4051,7 +4051,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
-        let sig = self.owner_static_sig(static_receiver.key(), suffix, SigChoice::Unique, &[]);
+        let sig = self.owner_static_sig(static_receiver, suffix, SigChoice::Unique, &[]);
         let Some(sig) = sig else {
             self.report_uninferred_derived_type_args(static_receiver, suffix, impl_type_args, span);
             return;
@@ -4760,7 +4760,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.expected_receiver_args(callee.receiver, callee.method_name, expected_type);
         let (method_def, [declaring_slots, own_slots], effect_rows) = self
             .owner_static_sig(
-                callee.receiver.key(),
+                callee.receiver,
                 callee.method_name,
                 SigChoice::Any,
                 &expected_args,
@@ -4937,7 +4937,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return (expected_args, vec![]);
         }
         let key = receiver.key();
-        if let Some(owner) = self.newtype_static_target(key, method_name) {
+        if let Some(owner) = self.newtype_static_target(receiver, method_name) {
             return self.infer_through_newtype(
                 key,
                 owner,
@@ -5436,7 +5436,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // At the link the resolution reaches: checking the spelled receiver
         // alone found an empty bucket, so `type Q = P` passed a call the same
         // call through `P` is rejected for.
-        let owner = self.static_owner_key(receiver.key(), method_name);
+        let owner = self.static_owner_key(receiver, method_name);
         let Some(entry) = self.static_method_entry(&owner, method_name) else {
             return;
         };
@@ -5515,12 +5515,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// spell the receiver.
     fn owner_static_sig(
         &mut self,
-        key: &ImplTargetKey,
+        receiver: &ReceiverId,
         method_name: &str,
         choice: SigChoice,
         receiver_args: &[TypeId],
     ) -> Option<MethodSig> {
-        match self.newtype_static_target(key, method_name) {
+        let key = receiver.key();
+        match self.newtype_static_target(receiver, method_name) {
             Some(owner) => self.static_call_sig_or_inherited(&owner, method_name, choice, &[]),
             None => self.static_call_sig_or_inherited(key, method_name, choice, receiver_args),
         }

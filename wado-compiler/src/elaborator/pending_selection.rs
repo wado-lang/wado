@@ -423,7 +423,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|&a| self.apply_infer_holes(a))
             .collect();
-        let owner = self.static_owner_key(pending.receiver.key(), &pending.method_name);
+        let owner = self.static_owner_key(&pending.receiver, &pending.method_name);
         let inherited = self.inherited_static(pending.receiver.key(), &owner, &impl_args);
         let answered = self.resolve_static_method_call_from_qualified(
             &pending.receiver,
