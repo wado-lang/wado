@@ -122,7 +122,11 @@ definition as `Array<T>` is: `pub type Shared<T>;`.
   wants one writes it, hashing what it holds, as `StrSlice` writes its own over
   the text it views. Such a hash agrees with `==`, since one cell holds one
   value.
-- `T` is not affine.
+- `T` is not affine. An affine value has one owner, which drops it, and a cell
+  every copy shares has none. Counting the copies would find the last one, and
+  [Affine Types](./wep-2026-10-17-affine-types.md#why-not-reference-counting)
+  declined to count. Code that shares an affine value keeps it in one owner and
+  hands a `&mut` down, or lets a closure refer to it inside the owner's scope.
 
 It is a type and not a `struct`, because a `struct` is a value: its copy is
 deep, an assignment to it writes field by field, and `Eq`, `Serialize` and the
@@ -231,11 +235,6 @@ unspecified. Wado defines it, and warns where one body shows both writes.
   spelling stays.
 
 ## Known gaps
-
-### A cell of an affine value
-
-`Shared<T>` takes no affine `T`: a cell has no one owner to drop what it
-holds. Callbacks that share one stream have no spelling.
 
 ### The overwritten write has no lint name
 
