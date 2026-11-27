@@ -1545,11 +1545,9 @@ impl Lowering<'_> {
                         js,
                         dropped,
                     }) => {
-                        assert!(
-                            methods.iter().all(|(m, _)| m.name != function.name),
-                            "`{iface}` must bind `{}` once",
-                            function.name
-                        );
+                        if methods.iter().any(|(m, _)| m.name == function.name) {
+                            bail!("`{iface}` binds `{}` twice", function.name);
+                        }
                         let name = function.name.clone();
                         methods.push((function, js));
                         let Some(reason) = dropped else {

@@ -530,6 +530,25 @@ fn a_member_declared_twice_is_one_member() {
     assert_eq!(skipped, Vec::<String>::new());
 }
 
+/// `WebIDL` keeps a static operation apart from a regular one of its name, as
+/// Fetch's `Response.json` is both; a resource has one namespace for the two.
+#[test]
+fn two_members_binding_one_name_stop_the_generator() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation("json", &plain("undefined"), &[], ""),
+            operation("json", &plain("undefined"), &[], "static"),
+        ],
+    ));
+    let err = transform(&defs.build()).expect_err("one name bound twice is an error");
+    assert!(
+        err.to_string().contains("`Element` binds `json` twice"),
+        "{err}"
+    );
+}
+
 /// Each overload is named by the arguments that tell it apart, after those
 /// every overload shares; the bare name is the overload taking none, and
 /// unavailable where there is none.
