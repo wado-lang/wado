@@ -1,0 +1,44 @@
+// A call to a function with a `contract` binds each argument to a local, so
+// the clauses read what the call passes. A closure literal bound that way
+// reached the callee as a local, and the fn-param specializer, which takes a
+// literal, kept the canonical closure.
+
+use { println, Stdout } from "core:cli";
+
+fn first(limit: i32, accepts: fn(i32) -> bool) -> i32
+    contract limit >= 0
+{
+    for let row of 0..<limit {
+        if accepts(row) {
+            return row;
+        }
+    }
+    return -1;
+}
+
+fn first_after(accepts: fn(i32) -> bool, from: i32) -> i32
+    contract from >= 0
+{
+    for let row of from..<3 {
+        if accepts(row) {
+            return row;
+        }
+    }
+    return -1;
+}
+
+fn lookup(keys: &List<i64>, key: i64) -> i32 {
+    return first(3, |row| keys[row] == key) + first_after(|row| keys[row] == key, 0);
+}
+
+export fn run() with Stdout {
+    let keys: List<i64> = [5, 6, 7];
+    println(`${lookup(&keys, builtin::black_box(6 as i64))}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "wir_expect:O0": ["/first$unchecked$$Closure_{}\"(", "/first_after$unchecked$$Closure_{}\"("],
+    "wir_not_expect:O0": ["call_ref"]
+}
