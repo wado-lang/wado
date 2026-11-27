@@ -80,9 +80,12 @@ fn hold(path: &String) -> Result<Option<Child>, String> with Process {
 test "a run holds the tree until it lets go" {
     fs::create_dir_all("build").unwrap();
     let path = "build/hold-test.lock";
-    let first = hold(&path).unwrap();
+    let first = hold(&path).unwrap().unwrap();
     assert hold(&path).unwrap_err().contains("another run");
-    builtin::drop(first);
+    // Dropping the child kills `flock` without waiting, and the lock goes
+    // only once it has exited.
+    first.kill();
+    first.wait().unwrap();
     assert hold(&path).is_ok();
 }
 
