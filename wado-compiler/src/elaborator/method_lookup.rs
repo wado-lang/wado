@@ -119,8 +119,6 @@ pub(super) fn replace_on_assign_place() -> String {
 /// the impl AST at all.
 struct ImplBlockRef(DefId);
 
-/// The header of the impl block `r` points at, borrowed from the caller's
-/// `TraitEnv` handle so it outlives the `&mut self` calls a lookup makes.
 /// Whether `header` is `impl<T: Bound> Trait for &T`: a reference to one of
 /// its own type parameters.
 fn is_blanket_ref_impl(header: &ImplHeader) -> bool {
@@ -131,6 +129,8 @@ fn is_blanket_ref_impl(header: &ImplHeader) -> bool {
         if header.type_params.iter().any(|tp| tp.name == named.name))
 }
 
+/// The header of the impl block `r` points at, borrowed from the caller's
+/// `TraitEnv` handle so it outlives the `&mut self` calls a lookup makes.
 fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader {
     &trait_env.impl_headers[&r.0]
 }
@@ -2634,7 +2634,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `lookup` leaves undecided a choice among reference blankets'
     /// `&self` methods of one trait, which answer only where the referent has
     /// no method of the name.
-    pub(super) fn undecided_behind_referent(&self, lookup: &TraitLookup, method_name: &str) -> bool {
+    pub(super) fn undecided_behind_referent(
+        &self,
+        lookup: &TraitLookup,
+        method_name: &str,
+    ) -> bool {
         let live = match lookup {
             TraitLookup::Undecided(live) | TraitLookup::AwaitsClosureRow { live, .. } => live,
             TraitLookup::Found(_) | TraitLookup::Missing | TraitLookup::Reported => return false,

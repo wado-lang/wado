@@ -10,9 +10,7 @@ use crate::defs::DefId;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, RefKind};
-use crate::tir::{
-    EffectRows, FunctionRef, SlotProjections, TypeArgMap, TypeId, TypeParamId,
-};
+use crate::tir::{EffectRows, FunctionRef, SlotProjections, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 

@@ -626,8 +626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             let subject = subject.expect("a reference kind is read off the subject");
             let ref_depth = self.tysys.type_table.borrow().ref_depth(subject);
-            let result = if ref_depth == 1 && self.undecided_behind_referent(&result, method_name)
-            {
+            let result = if ref_depth == 1 && self.undecided_behind_referent(&result, method_name) {
                 undecided_behind_referent = Some((ref_kind, subject, result));
                 TraitLookup::Missing
             } else {
