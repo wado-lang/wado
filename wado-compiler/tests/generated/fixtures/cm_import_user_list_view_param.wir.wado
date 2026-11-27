@@ -223,10 +223,9 @@ fn "cm_import_user_list_view_param.wado/run"() with Sink {
     let bytes: ref null "core:linear//LinearArray<u8>";
     let $temp_2: ref null "core:linear//ListView<u8>";
     let $v_3: i32;
-    let ptr_17: i32;
-    let released_21: ref "core:prelude//$Cell<bool>";
+    let i: i32;
     let w: i64;
-    let $sroa_list_repr_52: ref Array<u8>;
+    let $sroa_list_repr_54: ref Array<u8>;
     $v_3 = 2147483647 / 1;
     if @unlikely(4 > $v_3) {
         cold_path;
@@ -236,47 +235,43 @@ fn "cm_import_user_list_view_param.wado/run"() with Sink {
     let $mv_block_1: ref null "core:linear//Block";
     multivalue_bind [$mv_block_1, $v_3] = "core:linear/core:linear/LinearArray<u8>::filled$unchecked$dae[len,value]"();
     bytes = struct.new "core:linear//LinearArray<u8>" { block: $mv_block_1, len: $v_3 };
-    ptr_17 = $mv_block_1.ptr;
-    released_21 = struct.new "core:prelude//$Cell<bool>" { value: 0 };
-    drop("cm_import_user_list_view_param.wado/$cm_binding__wasi:demo/sink@0.1.0#put"(local.tee $temp_2(struct.new "core:linear//ListView<u8>" { ptr: ptr_17, len: $v_3, owned_bytes: 0, released: released_21 })));
+    drop("cm_import_user_list_view_param.wado/$cm_binding__wasi:demo/sink@0.1.0#put"(local.tee $temp_2(struct.new "core:linear//ListView<u8>" { ptr: $mv_block_1.ptr, len: $v_3, owned_bytes: 0, released: struct.new "core:prelude//$Cell<bool>" { value: 0 } })));
     if ref.is_null($temp_2) == 0 {
         $temp_2.released.value = 1;
         if local.tee $v_3($temp_2.owned_bytes) > 0 {
             drop("mem/realloc"($temp_2.ptr, $v_3, 1, 0));
         }
     }
-    $sroa_list_repr_52 = array.new_fixed<u8>(1, 2);
-    $v_3 = builtin::i32_wrap_i64($v_3 = "mem/realloc"(0, 0, 1, 2); ptr_17 = 0; b3: block {
+    $sroa_list_repr_54 = array.new_fixed<u8>(1, 2);
+    drop("cm_import_user_list_view_param.wado/$cm_binding__wasi:demo/sink@0.1.0#put"(local.tee $temp_2(struct.new "core:linear//ListView<u8>" { ptr: builtin::i32_wrap_i64($v_3 = "mem/realloc"(0, 0, 1, 2); i = 0; b3: block {
         l4: loop {
-            break_if b3 ptr_17 > -6;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_52, ptr_17)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_52, ptr_17 + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_52, ptr_17 + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_52, ptr_17 + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_52, ptr_17 + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_52, ptr_17 + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_52, ptr_17 + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_52, ptr_17 + 7)) << 56_i64);
-            builtin::store_i64($v_3 + ptr_17, w);
-            ptr_17 = ptr_17 + 8;
+            break_if b3 i > -6;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_54, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_54, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_54, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_54, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_54, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_54, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_54, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($sroa_list_repr_54, i + 7)) << 56_i64);
+            builtin::store_i64($v_3 + i, w);
+            i = i + 8;
             continue l4;
         };
     }; b5: block {
         l6: loop {
-            break_if b5 (builtin::i64_extend_i32_s(ptr_17) + 3_i64) >= builtin::i64_extend_i32_s(2);
-            builtin::store_u8($v_3 + ptr_17, builtin::array_get_value_u8($sroa_list_repr_52, ptr_17));
-            ptr_17 = ptr_17 + 1;
-            builtin::store_u8($v_3 + ptr_17, builtin::array_get_value_u8($sroa_list_repr_52, ptr_17));
-            ptr_17 = ptr_17 + 1;
-            builtin::store_u8($v_3 + ptr_17, builtin::array_get_value_u8($sroa_list_repr_52, ptr_17));
-            ptr_17 = ptr_17 + 1;
-            builtin::store_u8($v_3 + ptr_17, builtin::array_get_value_u8($sroa_list_repr_52, ptr_17));
-            ptr_17 = ptr_17 + 1;
+            break_if b5 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(2);
+            builtin::store_u8($v_3 + i, builtin::array_get_value_u8($sroa_list_repr_54, i));
+            i = i + 1;
+            builtin::store_u8($v_3 + i, builtin::array_get_value_u8($sroa_list_repr_54, i));
+            i = i + 1;
+            builtin::store_u8($v_3 + i, builtin::array_get_value_u8($sroa_list_repr_54, i));
+            i = i + 1;
+            builtin::store_u8($v_3 + i, builtin::array_get_value_u8($sroa_list_repr_54, i));
+            i = i + 1;
             continue l6;
         };
     }; b7: block {
         l8: loop {
-            break_if b7 ptr_17 >= 2;
-            builtin::store_u8($v_3 + ptr_17, builtin::array_get_value_u8($sroa_list_repr_52, ptr_17));
-            ptr_17 = ptr_17 + 1;
+            break_if b7 i >= 2;
+            builtin::store_u8($v_3 + i, builtin::array_get_value_u8($sroa_list_repr_54, i));
+            i = i + 1;
             continue l8;
         };
-    }; builtin::i64_extend_i32_u($v_3) | 8589934592_i64);
-    released_21 = struct.new "core:prelude//$Cell<bool>" { value: 0 };
-    drop("cm_import_user_list_view_param.wado/$cm_binding__wasi:demo/sink@0.1.0#put"(local.tee $temp_2(struct.new "core:linear//ListView<u8>" { ptr: $v_3, len: 2, owned_bytes: 2, released: released_21 })));
+    }; builtin::i64_extend_i32_u($v_3) | 8589934592_i64), len: 2, owned_bytes: 2, released: struct.new "core:prelude//$Cell<bool>" { value: 0 } })));
     if ref.is_null($temp_2) == 0 {
         $temp_2.released.value = 1;
         if local.tee $v_3($temp_2.owned_bytes) > 0 {
