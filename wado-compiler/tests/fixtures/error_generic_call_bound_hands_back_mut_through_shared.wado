@@ -1,0 +1,22 @@
+// `T` reaches the `&` parameter only through `B`'s bound, so whether a call
+// hands back a `&mut` read through that `&` is judged on the instantiated
+// types, not on which parameters the signature names.
+
+struct S { f: i32 }
+
+fn first<T, B: IndexValue<i32, Output = T>>(xs: &B) -> T {
+    return xs[0];
+}
+
+fn poke(xs: &List<&mut S>) {
+    first::<&mut S, List<&mut S>>(xs).f = 2;
+}
+
+export fn run() {
+    let mut s = S { f: 1 };
+    let xs: List<&mut S> = [&mut s];
+    poke(&xs);
+}
+
+__DATA__
+{"compile_error": ":12:5: analysis error: cannot call `first` with `T = &mut S` behind a `&`"}

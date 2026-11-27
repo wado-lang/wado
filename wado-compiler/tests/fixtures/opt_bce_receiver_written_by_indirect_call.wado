@@ -1,0 +1,31 @@
+// `apply` writes nothing through `self` itself, but hands it to a closure that
+// empties the list. The guard `i < b.xs.len()` therefore no longer bounds
+// `b.xs[i]` after the call, and the index check must trap.
+
+struct Buf {
+    xs: List<i32>,
+}
+
+impl Buf {
+    #[inline(never)]
+    fn apply(&mut self, f: fn(&mut Buf)) {
+        f(self);
+    }
+}
+
+#[inline(never)]
+fn read_after(i: i32) -> i32 {
+    let mut b = Buf { xs: [1, 2, 3] };
+    if i < b.xs.len() {
+        b.apply(|x: &mut Buf| { x.xs.truncate(0); });
+        return b.xs[i];
+    }
+    return -1;
+}
+
+export fn run() {
+    read_after(builtin::black_box(2));
+}
+
+__DATA__
+{"stderr_contains": ["index < self.len()"], "trapped": true}

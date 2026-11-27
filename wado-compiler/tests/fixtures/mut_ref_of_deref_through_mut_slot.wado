@@ -1,0 +1,19 @@
+// `*slot` crosses only `slot`'s own reference: through a `&mut &S` it names
+// the stored `&S`, which a `&mut` may replace. The `&` it holds is not crossed.
+
+struct S {
+    v: i32,
+}
+
+fn swap_in(slot: &mut &S, other: &S) {
+    let r = &mut *slot;
+    *r = other;
+}
+
+test {
+    let a = S { v: 1 };
+    let b = S { v: 2 };
+    let mut slot = &a;
+    swap_in(&mut slot, &b);
+    assert slot.v == 2;
+}

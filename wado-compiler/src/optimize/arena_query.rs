@@ -1638,10 +1638,9 @@ pub(super) fn for_each_mutated_root(
     });
 }
 
-/// Every mutation of a local root anywhere in the subtree at `node` — the
-/// consolidation query for pass-local "loop write" / "modifies" scans.
-// `condition_implication`'s `node_modifies` is such a scan still to migrate
-// onto it.
+/// Every mutation of a local root anywhere in the subtree at `node`, on any
+/// path. [`super::writes::Summaries`] answers the other question: what a
+/// subtree may change for the code after it.
 pub(super) fn for_each_mutation_under(
     body: &Body,
     node: NodeRef,

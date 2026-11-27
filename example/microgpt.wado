@@ -146,7 +146,7 @@ impl Graph {
     }
 
     // `sum(xs)` starts at 0, so Python's graph carries that leaf too.
-    fn sum(&mut self, xs: &List<&mut Value>) -> &mut Value {
+    fn sum(&mut self, xs: &mut List<&mut Value>) -> &mut Value {
         let mut acc = self.leaf(0.0);
         for let mut i = 0; i < xs.len(); i += 1 {
             acc = self.add(acc, xs[i]);
@@ -283,27 +283,27 @@ impl StateDict {
     }
 
     // Flatten every matrix into a single list of parameters.
-    fn params(&self) -> List<&mut Value> {
+    fn params(&mut self) -> List<&mut Value> {
         let mut out: List<&mut Value> = [];
-        flatten_into(&mut out, &self.wte);
-        flatten_into(&mut out, &self.wpe);
-        flatten_into(&mut out, &self.lm_head);
+        flatten_into(&mut out, &mut self.wte);
+        flatten_into(&mut out, &mut self.wpe);
+        flatten_into(&mut out, &mut self.lm_head);
         for let mut i = 0; i < self.layers.len(); i += 1 {
-            let layer = &self.layers[i];
-            flatten_into(&mut out, &layer.attn_wq);
-            flatten_into(&mut out, &layer.attn_wk);
-            flatten_into(&mut out, &layer.attn_wv);
-            flatten_into(&mut out, &layer.attn_wo);
-            flatten_into(&mut out, &layer.mlp_fc1);
-            flatten_into(&mut out, &layer.mlp_fc2);
+            let layer = &mut self.layers[i];
+            flatten_into(&mut out, &mut layer.attn_wq);
+            flatten_into(&mut out, &mut layer.attn_wk);
+            flatten_into(&mut out, &mut layer.attn_wv);
+            flatten_into(&mut out, &mut layer.attn_wo);
+            flatten_into(&mut out, &mut layer.mlp_fc1);
+            flatten_into(&mut out, &mut layer.mlp_fc2);
         }
         return out;
     }
 }
 
-fn flatten_into(out: &mut List<&mut Value>, m: &List<List<&mut Value>>) {
+fn flatten_into(out: &mut List<&mut Value>, m: &mut List<List<&mut Value>>) {
     for let mut r = 0; r < m.len(); r += 1 {
-        let row = &m[r];
+        let row = &mut m[r];
         for let mut c = 0; c < row.len(); c += 1 {
             out.push(row[c]);
         }
@@ -313,103 +313,106 @@ fn flatten_into(out: &mut List<&mut Value>, m: &List<List<&mut Value>>) {
 // Define the model architecture: a function mapping tokens and parameters to
 // logits over what comes next. Follow GPT-2, blessed among the GPTs, with minor
 // differences: layernorm -> rmsnorm, no biases, GeLU -> ReLU.
-fn linear(g: &mut Graph, x: &List<&mut Value>, w: &List<List<&mut Value>>) -> List<&mut Value> {
+fn linear(g: &mut Graph, x: &mut List<&mut Value>, w: &mut List<List<&mut Value>>) -> List<&mut Value> {
     let mut out: List<&mut Value> = [];
     for let mut o = 0; o < w.len(); o += 1 {
-        let row = &w[o];
-        let terms: List<&mut Value> = (0..<row.len()).into_iter().map(|i| g.mul(row[i], x[i])).collect();
-        out.push(g.sum(&terms));
+        let row = &mut w[o];
+        let mut terms: List<&mut Value> = (0..<row.len()).into_iter().map(|i| g.mul(row[i], x[i])).collect();
+        out.push(g.sum(&mut terms));
     }
     return out;
 }
 
-fn softmax(g: &mut Graph, logits: &List<&mut Value>) -> List<&mut Value> {
+fn softmax(g: &mut Graph, logits: &mut List<&mut Value>) -> List<&mut Value> {
     let max_val = logits.into_iter().fold(f64::NEG_INFINITY, |acc, val| f64::max(acc, val.data));
-    let exps: List<&mut Value> = (0..<logits.len()).into_iter().map(|i| {
+    let mut exps: List<&mut Value> = (0..<logits.len()).into_iter().map(|i| {
         let shifted = g.sub_num(logits[i], max_val);
         return g.exp(shifted);
     }).collect();
-    let total = g.sum(&exps);
+    let total = g.sum(&mut exps);
     return (0..<exps.len()).into_iter().map(|i| g.div(exps[i], total)).collect();
 }
 
-fn rmsnorm(g: &mut Graph, x: &List<&mut Value>) -> List<&mut Value> {
-    let squares: List<&mut Value> = (0..<x.len()).into_iter().map(|i| g.mul(x[i], x[i])).collect();
-    let sum_sq = g.sum(&squares);
+fn rmsnorm(g: &mut Graph, x: &mut List<&mut Value>) -> List<&mut Value> {
+    let mut squares: List<&mut Value> = (0..<x.len()).into_iter().map(|i| g.mul(x[i], x[i])).collect();
+    let sum_sq = g.sum(&mut squares);
     let ms = g.div_num(sum_sq, x.len() as f64);
     let shifted = g.add_num(ms, 1e-5);
     let scale = g.pow(shifted, -0.5);
     return (0..<x.len()).into_iter().map(|i| g.mul(x[i], scale)).collect();
 }
 
-fn add_vec(g: &mut Graph, a: &List<&mut Value>, b: &List<&mut Value>) -> List<&mut Value> {
+fn add_vec(g: &mut Graph, a: &mut List<&mut Value>, b: &mut List<&mut Value>) -> List<&mut Value> {
     assert a.len() == b.len();
     return (0..<a.len()).into_iter().map(|i| g.add(a[i], b[i])).collect();
 }
 
 fn gpt(
     g: &mut Graph,
-    state: &StateDict,
+    state: &mut StateDict,
     token_id: i32,
     pos_id: i32,
     keys: &mut List<List<List<&mut Value>>>,
     values: &mut List<List<List<&mut Value>>>,
 ) -> List<&mut Value> {
-    let tok_emb = &state.wte[token_id];
-    let pos_emb = &state.wpe[pos_id];
+    let tok_emb = &mut state.wte[token_id];
+    let pos_emb = &mut state.wpe[pos_id];
     let mut x = add_vec(g, tok_emb, pos_emb);
     // Not redundant: the backward pass reaches here via the residual connection.
-    x = rmsnorm(g, &x);
+    x = rmsnorm(g, &mut x);
 
     for let li of 0..<N_LAYER {
-        let layer = &state.layers[li];
+        let layer = &mut state.layers[li];
 
         // 1) Multi-head Attention block
-        let x_residual = x;
-        x = rmsnorm(g, &x);
-        let q = linear(g, &x, &layer.attn_wq);
-        let k = linear(g, &x, &layer.attn_wk);
-        let v = linear(g, &x, &layer.attn_wv);
+        let mut x_residual = x;
+        x = rmsnorm(g, &mut x);
+        let q = linear(g, &mut x, &mut layer.attn_wq);
+        let k = linear(g, &mut x, &mut layer.attn_wk);
+        let v = linear(g, &mut x, &mut layer.attn_wv);
         keys[li].push(k);
         values[li].push(v);
 
         let mut x_attn: List<&mut Value> = [];
         for let h of 0..<N_HEAD {
             let hs = h * HEAD_DIM;
-            let layer_keys = &keys[li];
-            let layer_values = &values[li];
+            let layer_keys = &mut keys[li];
+            let layer_values = &mut values[li];
 
             let mut attn_logits: List<&mut Value> = [];
             for let mut t = 0; t < layer_keys.len(); t += 1 {
-                let kt = &layer_keys[t];
-                let terms: List<&mut Value> = (0..<HEAD_DIM).into_iter().map(|j| g.mul(q[hs + j], kt[hs + j])).collect();
-                let score = g.sum(&terms);
+                let kt = &mut layer_keys[t];
+                let mut terms: List<&mut Value> = (0..<HEAD_DIM)
+                    .into_iter()
+                    .map(|j| g.mul(q[hs + j], kt[hs + j]))
+                    .collect();
+                let score = g.sum(&mut terms);
                 attn_logits.push(g.div_num(score, f64::pow(HEAD_DIM as f64, 0.5)));
             }
-            let attn_weights = softmax(g, &attn_logits);
+            let attn_weights = softmax(g, &mut attn_logits);
 
             for let mut j = 0; j < HEAD_DIM; j += 1 {
                 let mut terms: List<&mut Value> = [];
                 for let mut t = 0; t < layer_values.len(); t += 1 {
-                    let vt = &layer_values[t];
+                    let vt = &mut layer_values[t];
                     terms.push(g.mul(attn_weights[t], vt[hs + j]));
                 }
-                x_attn.push(g.sum(&terms));
+                x_attn.push(g.sum(&mut terms));
             }
         }
-        x = linear(g, &x_attn, &layer.attn_wo);
-        x = add_vec(g, &x, &x_residual);
+        x = linear(g, &mut x_attn, &mut layer.attn_wo);
+        x = add_vec(g, &mut x, &mut x_residual);
 
         // 2) MLP block
-        let mlp_residual = x;
-        x = rmsnorm(g, &x);
-        x = linear(g, &x, &layer.mlp_fc1);
-        let activated: List<&mut Value> = x.into_iter().map(|xi| g.relu(xi)).collect();
-        x = linear(g, &activated, &layer.mlp_fc2);
-        x = add_vec(g, &x, &mlp_residual);
+        let mut mlp_residual = x;
+        x = rmsnorm(g, &mut x);
+        x = linear(g, &mut x, &mut layer.mlp_fc1);
+        let mut activated: List<&mut Value> = x.into_iter().map(|xi| g.relu(xi)).collect();
+        x = linear(g, &mut activated, &mut layer.mlp_fc2);
+        x = add_vec(g, &mut x, &mut mlp_residual);
     }
 
-    return linear(g, &x, &state.lm_head);
+    return linear(g, &mut x, &mut state.lm_head);
 }
 
 fn empty_cache() -> List<List<List<&mut Value>>> {
@@ -418,20 +421,20 @@ fn empty_cache() -> List<List<List<&mut Value>>> {
 
 // Forward the token sequence through the model, building up the computation
 // graph all the way to the loss.
-fn forward_loss(g: &mut Graph, state: &StateDict, tokens: &List<i32>) -> &mut Value {
+fn forward_loss(g: &mut Graph, state: &mut StateDict, tokens: &List<i32>) -> &mut Value {
     let n = i32::min(BLOCK_SIZE, tokens.len() - 1);
     let mut keys = empty_cache();
     let mut values = empty_cache();
 
     let mut losses: List<&mut Value> = [];
     for let pos_id of 0..<n {
-        let logits = gpt(g, state, tokens[pos_id], pos_id, &mut keys, &mut values);
-        let probs = softmax(g, &logits);
+        let mut logits = gpt(g, state, tokens[pos_id], pos_id, &mut keys, &mut values);
+        let probs = softmax(g, &mut logits);
         let log_prob = g.log(probs[tokens[pos_id + 1]]);
         losses.push(g.neg(log_prob));
     }
     // The average loss over the document sequence. May yours be low.
-    let total = g.sum(&losses);
+    let total = g.sum(&mut losses);
     return g.mul_num(total, 1.0 / n as f64);
 }
 
@@ -474,7 +477,7 @@ global TEMPERATURE: f64 = 0.5;
 global NUM_SAMPLES: i32 = 20;
 
 // Repeat in sequence.
-fn train(g: &mut Graph, state: &StateDict, tok: &Tokenizer, docs: &List<String>, num_steps: i32) with Stdout {
+fn train(g: &mut Graph, state: &mut StateDict, tok: &Tokenizer, docs: &List<String>, num_steps: i32) with Stdout {
     let n_params = g.len();
     let mut params = state.params();
     let mut adam = Adam::new(params.len());
@@ -498,7 +501,7 @@ fn train(g: &mut Graph, state: &StateDict, tok: &Tokenizer, docs: &List<String>,
 }
 
 // Inference: may the model babble back to us.
-fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Sampler) -> String {
+fn generate(g: &mut Graph, state: &mut StateDict, tok: &Tokenizer, rng: &mut Sampler) -> String {
     let n_params = g.len();
     let mut keys = empty_cache();
     let mut values = empty_cache();
@@ -507,8 +510,8 @@ fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Sampler
     let mut sample = String::with_capacity(BLOCK_SIZE);
     for let pos_id of 0..<BLOCK_SIZE {
         let logits = gpt(g, state, token_id, pos_id, &mut keys, &mut values);
-        let scaled: List<&mut Value> = logits.into_iter().map(|l| g.div_num(l, TEMPERATURE)).collect();
-        let probs = softmax(g, &scaled);
+        let mut scaled: List<&mut Value> = logits.into_iter().map(|l| g.div_num(l, TEMPERATURE)).collect();
+        let probs = softmax(g, &mut scaled);
         let weights: List<f64> = probs.into_iter().map(|p| p.data).collect();
         token_id = rng.choice(&weights);
         if token_id == tok.bos {
@@ -572,14 +575,14 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
     println(`vocab size: ${tok.vocab_size}`);
 
     let mut g = Graph::new();
-    let state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
+    let mut state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
     println(`num params: ${g.len()}`);
 
-    train(&mut g, &state, &tok, &docs, num_steps);
+    train(&mut g, &mut state, &tok, &docs, num_steps);
 
     println("--- inference (new, hallucinated names) ---");
     for let i of 0..<NUM_SAMPLES {
-        let sample = generate(&mut g, &state, &tok, &mut rng);
+        let sample = generate(&mut g, &mut state, &tok, &mut rng);
         println(`sample ${i + 1:>2}: ${sample}`);
     }
 }
@@ -632,14 +635,14 @@ test "softmax is a distribution and rmsnorm has unit mean square" {
         logits.push(g.leaf(v as f64));
     }
 
-    let probs = softmax(&mut g, &logits);
+    let probs = softmax(&mut g, &mut logits);
     let mut total = 0.0;
     for let mut i = 0; i < probs.len(); i += 1 {
         total += probs[i].data;
     }
     assert f64::abs(total - 1.0) < 1e-12;
 
-    let normed = rmsnorm(&mut g, &logits);
+    let normed = rmsnorm(&mut g, &mut logits);
     let mut sum_sq = 0.0;
     for let mut i = 0; i < normed.len(); i += 1 {
         sum_sq += normed[i].data * normed[i].data;
@@ -682,16 +685,16 @@ test "training drives the loss down" {
     let tok = Tokenizer::new(&docs);
     let mut rng = Sampler::new();
     let mut g = Graph::new();
-    let state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
+    let mut state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
 
     let n_params = g.len();
     let tokens = tok.encode(&docs[0]);
-    let start = forward_loss(&mut g, &state, &tokens).data;
+    let start = forward_loss(&mut g, &mut state, &tokens).data;
     g.rewind(n_params);
 
-    train(&mut g, &state, &tok, &docs, 20);
+    train(&mut g, &mut state, &tok, &docs, 20);
 
-    let end = forward_loss(&mut g, &state, &tokens).data;
+    let end = forward_loss(&mut g, &mut state, &tokens).data;
     assert end < start;
 }
 

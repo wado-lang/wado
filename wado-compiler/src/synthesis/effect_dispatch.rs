@@ -427,9 +427,11 @@ fn synthesize_dispatch_struct(
         struct_type_id = tt.make_struct(struct_head);
         inner_ref_type_id = tt.make_ref(struct_type_id);
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
+        // A `fn mut`, since a handler whose method takes `&mut self` writes
+        // what its closure holds; a `fn` closure fits one as well.
         for op in &meta.operations {
             let param_types: Vec<TypeId> = op.params.iter().map(|p| p.type_id).collect();
-            let op_func_type = tt.make_function(param_types, op.return_type, vec![]);
+            let op_func_type = tt.make_function_with_mut(true, param_types, op.return_type, vec![]);
             op_field_types.push(op_func_type);
         }
     }
@@ -2346,9 +2348,13 @@ fn build_handler_op_closure(
     };
 
     let param_types: Vec<TypeId> = closure_params.iter().map(|p| p.type_id).collect();
-    let func_type = type_table
-        .borrow_mut()
-        .make_function(param_types, closure_ret, vec![]);
+    // A `&mut self` handler method writes the handler the closure holds.
+    let func_type = type_table.borrow_mut().make_function_with_mut(
+        target.takes_mut_self,
+        param_types,
+        closure_ret,
+        vec![],
+    );
 
     TirExpr::new(
         TirExprKind::Closure {
@@ -3135,6 +3141,7 @@ struct HandlerMethodTarget {
     method_info: LocalMethodName,
     template: Option<TemplateId>,
     takes_self: bool,
+    takes_mut_self: bool,
 }
 
 /// Every `impl` block of an effect or resource in `effect_index`, with the
@@ -3182,6 +3189,13 @@ fn build_handler_impl_index(
             let Some(entry) = out.get_mut(&block) else {
                 continue;
             };
+            let takes_mut_self = func.params.first().is_some_and(|p| {
+                p.is_self()
+                    && matches!(
+                        module.type_table.borrow().get(p.type_id),
+                        ResolvedType::MutRef(_)
+                    )
+            });
             entry.methods.insert(
                 method_info.method_name.clone(),
                 HandlerMethodTarget {
@@ -3189,6 +3203,7 @@ fn build_handler_impl_index(
                     method_info: method_info.clone(),
                     template: func.template_id(),
                     takes_self: func.takes_self(),
+                    takes_mut_self,
                 },
             );
         }

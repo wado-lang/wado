@@ -2,9 +2,8 @@
 // an operator does through its operator trait's bound, whether the parameter
 // is held by value or by reference: a read through `IndexValue`, or through
 // `IndexRef` where only that bound is written, and a write through
-// `IndexAssign`. A `&mut` subscript goes through `IndexRefMut`, or through
-// `IndexRef` where only that bound is written, as on a concrete container, and
-// a shared one with only `IndexValue` written refers to a copy. The bound's key
+// `IndexAssign`. A `&mut` subscript goes through `IndexRefMut`, and a shared
+// one with only `IndexValue` written refers to a copy. The bound's key
 // type types the key, so a literal key takes `i64` where the bound names it.
 struct Squares {}
 
@@ -50,11 +49,6 @@ fn grow<B: IndexRefMut<i32, Output = String>>(names: &mut B) {
     name.push_str("bc");
 }
 
-fn first_len<B: IndexRef<i32, Output = String>>(names: &mut B) -> i32 {
-    let name = &mut names[0];
-    return name.len();
-}
-
 test {
     let mut xs: List<u8> = [7, 8, 9];
     assert first(&xs) == 7;
@@ -67,4 +61,4 @@ test {
     assert peek(&names) == "a";
     grow(&mut names);
     assert names[0] == "abc";
-    assert first_len(&mut names) == 3;}
+}

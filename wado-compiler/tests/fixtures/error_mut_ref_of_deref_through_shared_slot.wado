@@ -1,0 +1,18 @@
+// `**slot` crosses the `&S` a `&mut &S` holds, which grants reading alone.
+
+struct S {
+    v: i32,
+}
+
+fn bad(slot: &mut &S) -> &mut S {
+    return &mut **slot;
+}
+
+export fn run() {
+    let a = S { v: 1 };
+    let mut slot = &a;
+    let _ = bad(&mut slot);
+}
+
+__DATA__
+{"compile_error": ":8:12: analysis error: cannot take &mut through immutable reference"}

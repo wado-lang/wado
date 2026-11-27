@@ -620,12 +620,17 @@ pub fn unwrap_async_call_if_async(
     }
 }
 
-/// Preserves acronym casing from the WIT source (e.g., `DNS-timeout`, `TLS-protocol-error`).
-/// Panics if no `#[cm]` attribute is present — all CM names must be metadata-driven.
+/// The CM name of a type the registry admitted, which its `#[cm]` writes.
 fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
-    attrs
-        .iter()
-        .find_map(|a| match &a.cm_boundary {
+    written_cm_name(attrs)
+        .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
+}
+
+/// The CM name `#[cm]` writes, which preserves acronym casing from the WIT
+/// source (e.g., `DNS-timeout`, `TLS-protocol-error`).
+fn written_cm_name(attrs: &[Attribute]) -> Option<String> {
+    attrs.iter().find_map(|a| {
+        match &a.cm_boundary {
             // Type-level CM imports use the function fragment (after `#`)
             // as the CM name. If the path has no function fragment, fall
             // back to the whole interface path to preserve the previous
@@ -637,8 +642,8 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
             // the CM-side identifier.
             Some(CmBoundary::Name(s)) => Some(s.clone()),
             Some(CmBoundary::Canonical { .. } | CmBoundary::WorldImport(_)) | None => None,
-        })
-        .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
+        }
+    })
 }
 
 /// The base an extern handle registers as a newtype of: what it is in linear
@@ -1167,6 +1172,14 @@ impl CmDeclScope {
             }
             Self::CmAttributed => to_cm_name(param),
         }
+    }
+
+    /// The CM name of a field, a case or a flag of a registered type.
+    fn member_name(&self, attrs: &[Attribute], member: &str) -> String {
+        written_cm_name(attrs).unwrap_or_else(|| match self {
+            Self::Module => panic!("missing #[cm] attribute for CM name: {member}"),
+            Self::CmAttributed => to_cm_name(member),
+        })
     }
 }
 
@@ -2285,7 +2298,7 @@ impl CmInterfaceRegistry {
                 let fields: Vec<(String, Type)> = struct_def
                     .fields
                     .iter()
-                    .map(|f| (cm_attr_cm_name(&f.attrs, &f.name), f.ty.clone()))
+                    .map(|f| (scope.member_name(&f.attrs, &f.name), f.ty.clone()))
                     .collect();
                 let wado_fields: Vec<(String, String, Type)> = struct_def
                     .fields
@@ -2293,7 +2306,7 @@ impl CmInterfaceRegistry {
                     .map(|f| {
                         (
                             f.name.clone(),
-                            cm_attr_cm_name(&f.attrs, &f.name),
+                            scope.member_name(&f.attrs, &f.name),
                             f.ty.clone(),
                         )
                     })
@@ -2322,7 +2335,7 @@ impl CmInterfaceRegistry {
                 let member_names: Vec<String> = flags_def
                     .flags
                     .iter()
-                    .map(|m| cm_attr_cm_name(&m.attrs, &m.name))
+                    .map(|m| scope.member_name(&m.attrs, &m.name))
                     .collect();
                 register_unique(
                     &mut self.flags,
@@ -2348,7 +2361,7 @@ impl CmInterfaceRegistry {
                 let variant_names: Vec<String> = enum_def
                     .cases
                     .iter()
-                    .map(|c| cm_attr_cm_name(&c.attrs, &c.name))
+                    .map(|c| scope.member_name(&c.attrs, &c.name))
                     .collect();
                 register_unique(
                     &mut self.enums,
@@ -2374,7 +2387,7 @@ impl CmInterfaceRegistry {
                     .cases
                     .iter()
                     .map(|c| CmVariantCase {
-                        cm_name: cm_attr_cm_name(&c.attrs, &c.name),
+                        cm_name: scope.member_name(&c.attrs, &c.name),
                         wado_name: c.name.clone(),
                         payload: c.payload.clone(),
                     })

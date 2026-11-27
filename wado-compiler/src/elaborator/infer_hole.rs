@@ -19,7 +19,8 @@ use super::pending_selection::{
     ElementHome, PendingSelection, SelectedDispatch, Undecided, Waiting,
 };
 use super::scope::{ParamRef, ScopeParams};
-use super::solver_bridge::Commitment;
+use super::solver_bridge::{BoundImpls, Commitment};
+use super::synth::ArgClass;
 use super::trait_query::{SelfBinding, spelled_at};
 use super::type_resolution::ParamSpace;
 use super::types::TypeError;
@@ -34,7 +35,7 @@ use crate::elaborator::sem::types::{
 use crate::elaborator::typecheck::{
     MeetRules, Meetings, NeverMeets, TypeMismatchPayload, meetings,
 };
-use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name};
+use crate::name::{FqTraitName, FqTypeName, RefKind, TypeHead, mangle_generic_name};
 use crate::tir;
 
 /// One body's inference variables and what is owed once they settle.
@@ -75,6 +76,10 @@ pub(crate) struct InferHoleTable {
     /// Whether an equation is being settled, which asks the obligations once
     /// it is.
     equating: bool,
+    /// The variables whose literals are about to take their default, each
+    /// with the class of those literals: a bound's one impl may choose a
+    /// type the class admits first.
+    pub(super) defaulting_literals: Vec<(TypeId, ArgClass)>,
 }
 
 /// A question a variable left undecided. Asked again whenever a variable
@@ -1438,6 +1443,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             } => {
                 let Some(bound) = self.settled_bound(var, &bound) else {
+                    self.settle_bound_args_by_sole_impl(var, &bound);
                     return Some(Obligation::Bound {
                         var,
                         param,
@@ -1551,6 +1557,142 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             written: bound.written.clone(),
             each_element: bound.each_element,
         })
+    }
+
+    /// Settle the variables `bound`'s own arguments hold from the one impl of
+    /// its trait that `var`'s answer has: with `impl Source<i32> for One`
+    /// alone, `One: Source<?A>` says `?A` is `i32`, as `one.first()` says.
+    /// Several impls leave them to the rest of the body.
+    pub(super) fn settle_bound_args_by_sole_impl(&mut self, var: TypeId, bound: &DeclaredBound) {
+        let subject = self.apply_infer_holes(var);
+        if bound.each_element || !self.is_settled(subject) {
+            return;
+        }
+        // A parameter has what its bounds in force say, and no block.
+        let in_force: Vec<_> = self
+            .carried_bounds(subject)
+            .into_iter()
+            .filter(|carried| self.trait_decl_of(carried) == bound.trait_.canonical())
+            .collect();
+        let impls = self.tysys.solver().bound_impls_at_any_args(
+            &self.tysys,
+            &self.annotate_ctx,
+            subject,
+            &bound.trait_,
+        );
+        // A bound in force and an impl are each an answer, so one of either
+        // beside any of the other settles nothing.
+        let offered: Vec<Option<TypeId>> =
+            if let ([carried], BoundImpls::None) = (&in_force[..], &impls) {
+                self.bound_args_where_written(carried, &ParamSpace::new())
+                    .into_iter()
+                    .map(Some)
+                    .collect()
+            } else if let ([], &BoundImpls::One(block)) = (&in_force[..], &impls) {
+                let mut table = self.tysys.type_table.borrow_mut();
+                let slots = table.impl_receiver_slots(block, subject);
+                table
+                    .impl_trait_args(block)
+                    .to_vec()
+                    .into_iter()
+                    .map(|arg| {
+                        let arg = table.substitute_type_params(arg, &slots);
+                        // What the block leaves to its own parameters says nothing.
+                        (!table.contains_type_param(arg)).then_some(arg)
+                    })
+                    .collect()
+            } else {
+                return;
+            };
+        for (asked, offered) in bound.trait_.args().iter().zip(offered) {
+            if let Some(offered) = offered {
+                self.equate_open_parts(asked, offered);
+            }
+        }
+    }
+
+    /// Equate each variable `asked` writes with the part of `offered` at its
+    /// position, where the two agree on every head above it.
+    fn equate_open_parts(&mut self, asked: &FqTypeName, offered: TypeId) {
+        let mut offered = offered;
+        for kind in asked.references() {
+            let ((ResolvedType::Ref(behind), RefKind::Shared)
+            | (ResolvedType::MutRef(behind), RefKind::Mut)) =
+                (self.tysys.type_table.borrow().get(offered).clone(), kind)
+            else {
+                return;
+            };
+            offered = behind;
+        }
+        if let TypeHead::Infer { var, .. } = asked.head() {
+            let hole = self.tysys.type_table.borrow_mut().make_infer_var(*var);
+            // A literal's type is a default that settles last, so the bound
+            // chooses it first where the literal can take the type. One still
+            // waiting for its call's own arguments is left to them.
+            let root = self.apply_infer_holes(hole);
+            let literal = self
+                .infer_holes
+                .defaulting_literals
+                .iter()
+                .find(|(var, _)| *var == root)
+                .map(|(_, class)| class.clone());
+            let takes = match literal {
+                Some(class) => self.class_admits(offered, &class),
+                None => !self.annotate_ctx.literals_wait_at(hole),
+            };
+            if takes {
+                self.equate(offered, hole);
+            }
+            return;
+        }
+        let (name, parts) = {
+            let table = self.tysys.type_table.borrow();
+            let parts = if let ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } = table.get(offered)
+            {
+                params.iter().copied().chain([*return_type]).collect()
+            } else if let Some(elems) = table.as_tuple(offered) {
+                elems
+            } else {
+                table.nominal_type_args(offered).unwrap_or_default()
+            };
+            (table.fq_type_name(offered), parts)
+        };
+        if !name.references().is_empty() {
+            return;
+        }
+        // A function type's head is its whole signature, which is where its
+        // variables are, so two of them agree on the rest of it.
+        let asked_parts = if let (
+            TypeHead::Function {
+                is_mut,
+                signature,
+                effects,
+            },
+            TypeHead::Function {
+                is_mut: offered_mut,
+                effects: offered_effects,
+                ..
+            },
+        ) = (asked.head(), name.head())
+        {
+            if is_mut != offered_mut || effects != offered_effects {
+                return;
+            }
+            &signature[..]
+        } else if name.head() == asked.head() {
+            asked.args()
+        } else {
+            return;
+        };
+        if asked_parts.len() == parts.len() {
+            for (asked, part) in asked_parts.iter().zip(parts) {
+                self.equate_open_parts(asked, part);
+            }
+        }
     }
 
     /// Whether `link` is decided: its owner answered, and the link settled

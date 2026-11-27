@@ -10,18 +10,15 @@ use std::cell::Cell;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FuncParts, FuncWriteGuard};
+use crate::nir::{FuncParts, FuncWriteGuard};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
 use crate::niri::{CtfeBuiltinMap, build_ctfe_builtin_map};
-use crate::optimize::alias::{
-    CallImmutability, FirstParamTypes, builder_alias_sets, first_param_types,
-};
 use crate::optimize::extract::{extract_const, is_place_read};
 use crate::optimize::gate::{FunctionGate, GatedPass};
-use crate::type_table::TypeTable;
+use crate::optimize::writes::EngineFacts;
 
 /// Forwards stores to loads in the functions `gate` still holds. The only pass
 /// after `field_scalarize`, so its shadow inits (`$hfs_x = obj.f`) fold here.
@@ -31,23 +28,12 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
         return false;
     }
     let type_table = project.type_table.borrow();
-    let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
-    let pure_builtin_callees = project.pure_builtin_callee_ids();
+    let facts = EngineFacts::new(project, &type_table, gate.exec());
     let ctfe_builtins = build_ctfe_builtin_map(project);
-    let type_table = &*type_table;
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::StoreLoadForward, len, |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
-        forward_one(
-            &mut func,
-            buffers,
-            type_table,
-            &first_param_types,
-            &call_immutability,
-            &pure_builtin_callees,
-            &ctfe_builtins,
-        )
+        forward_one(&mut func, buffers, &facts, &ctfe_builtins)
     })
 }
 
@@ -56,10 +42,7 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
 fn forward_one(
     func: &mut FuncWriteGuard<'_>,
     buffers: &mut EngineBuffers,
-    type_table: &TypeTable,
-    first_param_types: &FirstParamTypes,
-    call_immutability: &CallImmutability,
-    pure_builtin_callees: &IndexSet<FuncId>,
+    facts: &EngineFacts,
     ctfe_builtins: &CtfeBuiltinMap,
 ) -> bool {
     if func.body.is_none() {
@@ -82,17 +65,7 @@ fn forward_one(
         ..
     } = func.parts();
     let body = body.expect("checked above");
-    let alias = builder_alias_sets(
-        body,
-        locals,
-        address_taken_locals,
-        type_table,
-        first_param_types,
-        call_immutability,
-    );
-    let mut engine = Engine::new(body, buffers, locals, params, type_table);
-    engine.set_alias_sets(alias);
-    engine.set_pure_builtin_callees(pure_builtin_callees);
+    let mut engine = facts.engine(body, buffers, locals, params, address_taken_locals);
     engine.set_ctfe_builtins(ctfe_builtins);
     if is_cm_export {
         engine.seed_params();

@@ -7334,7 +7334,6 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
     let $licm_depth_24: i32;
     let $licm_max_depth_25: i32;
     let $licm_arith_26: bool;
-    let $av_27: i32;
     $licm_depth_24 = self.depth;
     $licm_max_depth_25 = self.max_depth;
     $licm_arith_26 = local.tee $licm_depth_24($licm_depth_24 + 1) > $licm_max_depth_25;
@@ -7357,13 +7356,12 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
             arg = $pattern_temp_0.2;
             indef = $pattern_temp_0.3;
             continue_if l972 ($mv$$vr_14$0 == 6) & (arg == 55799_i64);
-            $av_27 = self.pos;
             if @unlikely($mv$$vr_14$0 != 5) {
                 cold_path;
-                return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type<&core:prelude/string.wado/String>"(expected, builtin::i64_extend_i32_s($av_27));
+                return 1, ref.null none, "core:serde/core:serde/DeserializeError::unexpected_type<&core:prelude/string.wado/String>"(expected, builtin::i64_extend_i32_s(self.pos));
             }
             $inline_deeper_sroa_return__1: block {
-                offset = builtin::i64_extend_i32_s($av_27);
+                offset = builtin::i64_extend_i32_s(self.pos);
                 if @unlikely($licm_arith_26) {
                     cold_path;
                     $licm_arith_26 = 1;

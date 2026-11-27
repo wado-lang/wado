@@ -1,0 +1,31 @@
+// `touch` takes its receiver by value, but the copy holds `&mut x`, and the
+// method writes `x.f` through it. The `1` stored before the call must not be
+// forwarded past it.
+
+use { println, Stdout } from "core:cli";
+
+struct S {
+    f: i32,
+}
+
+struct Holder {
+    r: &mut S,
+}
+
+impl Holder {
+    #[inline(never)]
+    #[allow(self_by_value)]
+    fn touch(self) {
+        self.r.f = 2;
+    }
+}
+
+export fn run() with Stdout {
+    let mut x = S { f: 1 };
+    let h = Holder { r: &mut x };
+    h.touch();
+    println(`${x.f}`);
+}
+
+__DATA__
+{"stdout": "2\n"}

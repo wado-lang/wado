@@ -1,0 +1,51 @@
+// A member of a `#[cm]` type that writes no `#[cm("name")]` of its own crosses
+// under its Wado name in kebab case, as a parameter without `#[cm_params]` does.
+
+#[cm("wasi:demo/gfx@0.1.0#mode")]
+enum Mode {
+    Cors,
+    NoCors,
+}
+
+#[cm("wasi:demo/gfx@0.1.0#access")]
+flags Access {
+    Read,
+    WriteAll,
+}
+
+#[cm("wasi:demo/gfx@0.1.0#size")]
+struct Size {
+    width: u32,
+    max_height: u32,
+}
+
+#[cm("wasi:demo/gfx@0.1.0#shape")]
+variant Shape {
+    Circle(u32),
+    RoundRect(u32),
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#draw")]
+    fn draw(mode: Mode, access: Access, size: Size, shape: Shape);
+}
+
+export fn run() with Gfx {
+    Gfx::draw(
+        Mode::NoCors,
+        Access::Read | Access::WriteAll,
+        Size { width: 1, max_height: 2 },
+        Shape::RoundRect(3),
+    );
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(enum \"cors\" \"no-cors\")"], "count": 1 },
+    { "contains": ["(flags \"read\" \"write-all\")"], "count": 1 },
+    { "contains": ["(field \"width\" u32) (field \"max-height\" u32)"], "count": 1 },
+    { "contains": ["(case \"circle\" u32) (case \"round-rect\" u32)"], "count": 1 }
+  ]
+}

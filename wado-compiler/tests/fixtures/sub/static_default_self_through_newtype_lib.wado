@@ -1,0 +1,30 @@
+pub struct Pt { pub x: i32 }
+
+impl Pt {
+    pub fn origin() -> Pt { return Pt { x: 7 }; }
+    pub fn dflt(a: i32, b: Pt = Self::origin()) -> i32 { return a + b.x; }
+}
+
+pub type Loc = Pt;
+
+pub struct W<T> { pub v: T }
+
+impl<T: Default> W<T> {
+    pub fn base() -> W<T> { return W { v: T::default() }; }
+    pub fn mk(n: i32 = 1, o: Self = Self::base()) -> W<T> { return o; }
+}
+
+pub type WI = W<i32>;
+
+pub trait Build with () {
+    fn build(n: i32) -> Self;
+    fn twin(o: Self = Self::build(2)) -> Self { return o; }
+}
+
+pub struct IntBox { pub n: i32 }
+
+impl Build for IntBox {
+    fn build(n: i32) -> IntBox { return IntBox { n }; }
+}
+
+pub type IB = IntBox;

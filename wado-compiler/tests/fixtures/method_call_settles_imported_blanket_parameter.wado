@@ -1,0 +1,29 @@
+// A blanket another module declares settles its open parameter the same way,
+// nested in an argument or named through a namespace.
+
+use { Source, Tag as LocalTag } from "./sub/open_parameter_blanket.wado";
+use ns from "./sub/open_parameter_traits.wado";
+
+impl<A, T: ns::Source<A>> ns::Tag<A> for T {
+    fn tag(&self) -> A { return self.first(); }
+}
+
+struct One { n: i32 }
+impl Source<i32> for One { fn first(&self) -> i32 { return self.n; } }
+
+struct Other { n: i32 }
+impl ns::Source<i32> for Other { fn first(&self) -> i32 { return self.n; } }
+
+test "nested in a trait argument" {
+    let one = One { n: 7 };
+    let v = one.tag();
+    assert v.len() == 1 && v[0] == 7;
+    let named = LocalTag::<i32, List<i32>>::tag(&one);
+    assert named[0] == 7;
+}
+
+test "through a namespace" {
+    let other = Other { n: 7 };
+    let v: i32 = other.tag();
+    assert v == 7;
+}
