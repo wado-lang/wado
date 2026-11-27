@@ -240,9 +240,14 @@ impl WriteBack<'_> {
             kind: PlaceKind::Storage,
         };
         let mut bindings = Vec::new();
-        for_each_pattern_binding_in(pattern, whole, self.carrying, &mut |local, type_id, slot| {
-            bindings.push((local, type_id, slot));
-        });
+        for_each_pattern_binding_in(
+            pattern,
+            whole,
+            self.carrying,
+            &mut |local, type_id, slot| {
+                bindings.push((local, type_id, slot));
+            },
+        );
         for (local, type_id, slot) in bindings {
             let detached = match slot.kind {
                 PlaceKind::Storage => whole_is_detached,
@@ -829,7 +834,10 @@ impl TirOptVisitor for WriteBack<'_> {
                 }
             }
             TirExprKind::Assign { value, .. } => self.refuse_stored(value, "a place"),
-            TirExprKind::Match { expr: scrutinee, arms } => {
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
                 for arm in arms {
                     self.bind_pattern(&arm.pattern, scrutinee, arm.span);
                 }
