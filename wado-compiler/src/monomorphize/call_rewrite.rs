@@ -133,15 +133,16 @@ impl Monomorphizer {
             }
             _ => unreachable!("only a call or a function reference reaches an instance"),
         }
+        let Some(template) = key.template.as_ref().and_then(|t| templates.get(t)) else {
+            return;
+        };
         if let ResolvedType::TypeParam { id, .. } = *type_table.get(expr.type_id)
-            && let Some(template) = key.template.as_ref().and_then(|t| templates.get(t))
             && let Some(concrete) = instance_arg(&template.borrow(), &key, id)
         {
             expr.type_id = concrete;
         }
         if let Some(module_source) = judged
             && let TirExprKind::Call { args, .. } = &expr.kind
-            && let Some(template) = key.template.as_ref().and_then(|t| templates.get(t))
             && let Some((param, arg)) =
                 mut_leaked_through_shared(&template.borrow(), &key, args, expr.type_id, type_table)
         {
@@ -201,12 +202,6 @@ fn mut_leaked_through_shared(
     if !hands_back {
         return None;
     }
-    let type_params = || {
-        template
-            .impl_type_params
-            .iter()
-            .chain(&template.type_params)
-    };
     template
         .params
         .iter()
@@ -217,7 +212,11 @@ fn mut_leaked_through_shared(
         .flat_map(|(p, _)| tt.type_params_in(p.type_id))
         .find_map(|id| {
             let arg = instance_arg(template, key, id)?;
-            let param = type_params().find(|p| p.id == id)?;
+            let param = template
+                .impl_type_params
+                .iter()
+                .chain(&template.type_params)
+                .find(|p| p.id == id)?;
             tt.reaches_mut_ref(arg).then(|| (param.name.clone(), arg))
         })
 }
