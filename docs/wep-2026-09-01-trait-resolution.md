@@ -824,6 +824,14 @@ literal the type cannot take
 (`bound_one_impl_leaves_unfit_literal_default.wado`). The cost is Rust's: a
 second impl changes what an existing call's literal is.
 
+A bare bound is not met through such a blanket. Under
+`impl<A, T: Source<A>> Tag<A> for T`, `T: Tag` refuses a type with one
+`Source` impl, though some `Tag<A>` holds for it: the solver asks the blanket's
+bound at a variable only for selection (`OpenArguments::OwedByTheCall`), where
+the call settles the variable and owes the bound. A bound has nobody to settle
+it, and bounds sharing the parameter may agree on no argument
+(`bound_bare_through_open_blanket.wado`).
+
 A bound's argument holding a pack (`T: Source<[..P]>`) is settled from the one
 impl only where the impl's tuple has one element. A longer one leaves the pack
 empty, and the bound is then refused at `Source<[]>`.

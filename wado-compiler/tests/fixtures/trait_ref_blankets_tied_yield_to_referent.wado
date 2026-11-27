@@ -1,0 +1,87 @@
+// Tied reference blankets do not stand in the way of the referent's own
+// `&self` method: between two traits, and between two blankets of one trait.
+
+trait Near with () {
+    fn near() -> i32;
+}
+
+trait Far with () {
+    fn far() -> i32;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Near for Point {
+    fn near() -> i32 {
+        return 1;
+    }
+}
+
+impl Far for Point {
+    fn far() -> i32 {
+        return 2;
+    }
+}
+
+trait NameA with () {
+    fn name(&self) -> String;
+}
+
+trait NameB with () {
+    fn name(&self) -> String;
+}
+
+trait Label with () {
+    fn label(&self) -> String;
+}
+
+trait Base with () {
+    fn name(&self) -> String;
+    fn label(&self) -> String;
+}
+
+impl<T: Near> NameA for &T {
+    fn name(&self) -> String {
+        return "a";
+    }
+}
+
+impl<T: Near> NameB for &T {
+    fn name(&self) -> String {
+        return "b";
+    }
+}
+
+impl<T: Near> Label for &T {
+    fn label(&self) -> String {
+        return "near";
+    }
+}
+
+impl<T: Far> Label for &T {
+    fn label(&self) -> String {
+        return "far";
+    }
+}
+
+impl Base for Point {
+    fn name(&self) -> String {
+        return "base";
+    }
+
+    fn label(&self) -> String {
+        return `point ${self.x}`;
+    }
+}
+
+test "two traits tied" {
+    let p = Point { x: 1 };
+    assert (&p).name() == "base";
+}
+
+test "two blankets of one trait tied" {
+    let p = Point { x: 1 };
+    assert (&p).label() == "point 1";
+}

@@ -419,7 +419,7 @@ impl Query<'_> {
             // A default reads `Self` as the type asked about, which a newtype
             // inheriting this impl is.
             let asked = program.args_at(trait_, args, subject.unwrap_or(ty));
-            answer = match self.impl_answers(id, def, ty, &asked) {
+            answer = match self.impl_answers(id, def, ty, &asked, OpenArguments::Unbound) {
                 // The bound's arguments are what the impl must answer at.
                 // Selection asks without this gate.
                 Verdict::Holds(answer) => {
@@ -472,6 +472,7 @@ impl Query<'_> {
         def: &ImplDef,
         ty: &SolverType,
         asked: &[Option<SolverType>],
+        open_arguments: OpenArguments,
     ) -> Verdict<Answer> {
         let program = self.program;
         let Some(implemented) = def.trait_ else {
@@ -629,7 +630,10 @@ impl Query<'_> {
                                         let own =
                                             bindings[i as usize].as_ref().map(Binding::as_type);
                                         own.or_else(|| {
-                                            left_to_the_call[i as usize].then(|| {
+                                            let owed = open_arguments
+                                                == OpenArguments::OwedByTheCall
+                                                && left_to_the_call[i as usize];
+                                            owed.then(|| {
                                                 asks_call_var.set(true);
                                                 unifier.mint(i)
                                             })
@@ -1172,6 +1176,17 @@ fn comparison_row_at(program: &Program, ty: &SolverType) -> Verdict<(TraitDeclId
     }
 }
 
+/// How an impl's bound is asked where it reads a parameter that only a trait
+/// argument the question left open would bind.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OpenArguments {
+    /// At the parameter, which no impl answers: a bound has nobody to settle
+    /// the argument, and the impl's bounds may agree on none.
+    Unbound,
+    /// At a variable the call settles and owes, so the impl stays a candidate.
+    OwedByTheCall,
+}
+
 /// One impl applying to one type. `holds` reads the bound it answers; selection
 /// reads the arguments it answers at.
 struct Answer {
@@ -1204,7 +1219,7 @@ pub(super) fn impl_applies(
         at_itself: Some(ty.clone()),
         following: Vec::new(),
     }
-    .impl_answers(id, def, ty, asked)
+    .impl_answers(id, def, ty, asked, OpenArguments::OwedByTheCall)
     .map(|answer| answer.trait_args)
 }
 
