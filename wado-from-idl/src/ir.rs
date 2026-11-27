@@ -196,7 +196,7 @@ pub struct WadoResource {
 }
 
 /// A name declared absent, with the reason its `#[unavailable]` gives.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct WadoUnavailable {
     pub name: String,
     /// An instance method's name, reserved with `self`, rather than a static's.
