@@ -1,0 +1,43 @@
+// The four reads of `xs[i..i + 4]` check once, `i < n - 3`, against a length
+// local read again after `note` may have changed `xs`. That read leaves the
+// local no copy of `xs.len()`, but it still holds a length, which is all
+// `n - 3` needs to stay clear of the wrap.
+
+#[inline(never)]
+fn note(xs: &mut List<u8>, i: i32) -> bool {
+    xs[i] = 1;
+    return i > 100;
+}
+
+#[inline(never)]
+fn scan(xs: &mut List<u8>) -> i32 {
+    let n = xs.len();
+    let mut i = 0;
+    while i + 4 <= n {
+        let quad = xs[i] as u32 | xs[i + 1] as u32 << 8 | xs[i + 2] as u32 << 16 | xs[i + 3] as u32 << 24;
+        if quad & 0x80808080 != 0 {
+            break;
+        }
+        i += 4;
+    }
+    while i < n {
+        if note(xs, i) {
+            return i;
+        }
+        i += 1;
+    }
+    return n;
+}
+
+export fn run() {
+    let mut xs: List<u8> = [1, 2, 3, 4, 5, 6];
+    assert scan(&mut builtin::black_box(xs)) == 6;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/cond_impl_post_promote"]},
+    "wir_scope": "opt_bce_merge_stale_length.wado/scan",
+    "wir_not_expect:O2": ["(i + 1) >="]
+}

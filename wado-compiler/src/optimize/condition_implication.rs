@@ -555,6 +555,23 @@ pub(super) fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool
         && receiver_type.is_some_and(|t| types.is_seq_container(types.peel_refs(t)))
 }
 
+/// Whether `op` is `>= 0` because it holds some length, if not the current one:
+/// [`is_seq_length`], or a local bound once to a length. A write after the
+/// `let` leaves [`Binds`] without the local but its value still a length.
+pub(super) fn is_length_valued(engine: &mut Engine, binds: &Binds, op: Operand) -> bool {
+    if is_seq_length(engine, binds, op) {
+        return true;
+    }
+    let Some(local) = operand_local(engine.body, op) else {
+        return false;
+    };
+    engine.local_has_one_version(local)
+        && engine.local_def(local).is_some_and(|def| {
+            matches!(engine.body.stmts[def].kind, StmtKind::Let { value: Some(v), .. }
+                if is_seq_length(engine, binds, v))
+        })
+}
+
 /// Parse an operand (through copy temps) as a constant `i64`. Constants live in
 /// the value **pool** as `Operand::Value(Int)`.
 pub(super) fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
@@ -2201,7 +2218,7 @@ fn check_comparisons(engine: &Engine, cond: Operand) -> Vec<ExprId> {
 /// Record a site for each upper half of the check `cond` just passed. A `var`
 /// index needs its sum proven unwrapped, the `Ceil` [`learn_conjuncts`] leaves,
 /// and a bound `bound - d` cannot wrap below: a length or a constant `>= 0`.
-fn record_sites(engine: &Engine, binds: &Binds, cond: Operand, facts: &mut Vec<Fact>) {
+fn record_sites(engine: &mut Engine, binds: &Binds, cond: Operand, facts: &mut Vec<Fact>) {
     for cmp in check_comparisons(engine, cond) {
         let ExprKind::Binary { left, right, .. } = engine.body.exprs[cmp].kind else {
             unreachable!("a check comparison is binary");
@@ -2219,7 +2236,7 @@ fn record_sites(engine: &Engine, binds: &Binds, cond: Operand, facts: &mut Vec<F
                     matches!(*f, Fact::Ceil { var: Some(v), bound: b, c }
                         if v == var && b == bound && c == j)
                 });
-                let floored = is_seq_length(engine, binds, right)
+                let floored = is_length_valued(engine, binds, right)
                     || parse_const_i64(engine, binds, right).is_some_and(|b| b >= 0);
                 if !unwrapped || !floored {
                     continue;
@@ -2506,7 +2523,7 @@ fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i6
 /// The facts a `let idx = <seq>.len() - k` (k >= 1) proves, as in the
 /// `arr.last()` idiom: `idx + k - 1 < len`, and `idx >= lo - k` where `len >= lo`
 /// is proven, `0` being always.
-fn push_len_minus_facts(engine: &Engine, binds: &Binds, node: NodeRef, facts: &mut Vec<Fact>) {
+fn push_len_minus_facts(engine: &mut Engine, binds: &Binds, node: NodeRef, facts: &mut Vec<Fact>) {
     let Some((idx, k, bound)) = len_minus_fact(engine, binds, node) else {
         return;
     };
@@ -2524,7 +2541,11 @@ fn push_len_minus_facts(engine: &Engine, binds: &Binds, node: NodeRef, facts: &m
 
 /// The `(idx, k, len)` of a `let idx = <seq>.len() - k` with `k >= 1`. A length
 /// is in `0..2^31`, so the difference does not wrap.
-fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<(u32, i64, BoundKey)> {
+fn len_minus_fact(
+    engine: &mut Engine,
+    binds: &Binds,
+    node: NodeRef,
+) -> Option<(u32, i64, BoundKey)> {
     let NodeRef::Stmt(s) = node else {
         return None;
     };
@@ -2542,7 +2563,7 @@ fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<(u32,
         return None;
     }
     let bound = parse_bound(engine, binds, minuend)?;
-    is_seq_length(engine, binds, minuend).then_some((local_index, k, bound))
+    is_length_valued(engine, binds, minuend).then_some((local_index, k, bound))
 }
 
 /// The constant a `+ 1` counting loop's variable enters at, when the enclosing

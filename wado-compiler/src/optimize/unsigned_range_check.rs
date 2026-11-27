@@ -18,7 +18,7 @@ use crate::type_table::TypeTable;
 
 use super::arena_query::{binary_parts, is_pure_nontrapping_operand_typed};
 use super::condition_implication::{
-    Binds, build_copy_bindings, is_seq_length, operand_same, parse_const_i64,
+    Binds, build_copy_bindings, is_length_valued, operand_same, parse_const_i64,
 };
 
 pub fn fuse_unsigned_range_checks(project: &mut NirPackage, exec: &Executor) -> bool {
@@ -80,7 +80,7 @@ impl UnsignedRangeCheckRule {
     /// known non-negative.
     fn bound_side(
         &self,
-        engine: &Engine,
+        engine: &mut Engine,
         op: Operand,
         x: Operand,
         shape: Shape,
@@ -94,13 +94,13 @@ impl UnsignedRangeCheckRule {
             .then_some((left, kind, right))
     }
 
-    fn non_negative(&self, engine: &Engine, op: Operand) -> bool {
-        is_seq_length(engine, &self.binds, op)
+    fn non_negative(&self, engine: &mut Engine, op: Operand) -> bool {
+        is_length_valued(engine, &self.binds, op)
             || parse_const_i64(engine, &self.binds, op).is_some_and(|c| c >= 0)
     }
 
     /// The comparison `id` fuses into: its halves, each in either order.
-    fn fused(&self, engine: &Engine, id: ExprId) -> Option<(Operand, NirBinaryOp, Operand)> {
+    fn fused(&self, engine: &mut Engine, id: ExprId) -> Option<(Operand, NirBinaryOp, Operand)> {
         let ExprKind::Binary { left, op, right } = engine.body.exprs[id].kind else {
             return None;
         };
