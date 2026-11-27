@@ -27,7 +27,6 @@ use text::{UseItem, identifiers, is_keyword, use_items};
 const MODULE_KIND: u64 = 2;
 const FIELD_KIND: u64 = 8;
 const ENUM_MEMBER_KIND: u64 = 22;
-const TYPE_PARAMETER_KIND: u64 = 26;
 
 const USAGE: &str = "usage: rust-move [--workspace DIR] [--dry-run] --to FILE LOCATOR...";
 
@@ -456,7 +455,10 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
                 continue;
             };
             let kind = helper["kind"].as_u64();
-            if matches!(kind, Some(ENUM_MEMBER_KIND | TYPE_PARAMETER_KIND)) {
+            // A variant is as visible as its enum. A type alias is no
+            // exception to the rest, though the server reports one under the
+            // kind of a type parameter.
+            if kind == Some(ENUM_MEMBER_KIND) {
                 continue;
             }
             let name = symbol_name(helper);
@@ -492,13 +494,21 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
                     display_path(&destination.path)
                 )),
             }
+            // A field is read off a value, so the moved code may never name
+            // the type holding it; the type is needed all the same.
+            let holder = parent
+                .filter(|parent| kind == Some(FIELD_KIND) && !is_impl(parent))
+                .map(|parent| name_position(parent).line);
             let widened = widenings.entry(item.source.clone()).or_default();
-            if !declares_visibility(&source.lines[line]) && !widened.iter().any(|w| w.line == line)
-            {
-                widened.push(Widening {
-                    line,
-                    visibility: visibility_reaching(&source.path, [&destination.path]),
-                });
+            for line in [line].into_iter().chain(holder) {
+                if !declares_visibility(&source.lines[line])
+                    && !widened.iter().any(|w| w.line == line)
+                {
+                    widened.push(Widening {
+                        line,
+                        visibility: visibility_reaching(&source.path, [&destination.path]),
+                    });
+                }
             }
         }
     }
@@ -816,7 +826,9 @@ fn render(
         });
         let mut block: Vec<String> = imports.iter().cloned().collect();
         if after_uses.is_none() {
-            block.insert(0, String::new());
+            if at > 0 {
+                block.insert(0, String::new());
+            }
             if lines.get(at).is_some_and(|below| !below.is_empty()) {
                 block.push(String::new());
             }
@@ -1009,6 +1021,28 @@ fn helper(n: usize) -> i32 {
             "{report}"
         );
         assert!(report.contains("`area`"), "{report}");
+    }
+
+    #[test]
+    fn a_type_alias_the_moved_code_reads_follows_it() {
+        let dir = probe(&[
+            ("src/main.rs", "mod a;\nmod b;\nfn main() { a::pair(); }\n"),
+            (
+                "src/a.rs",
+                "type Pair = (i32, i32);\n\npub fn pair() -> i32 {\n    make().0\n}\n\n\
+                 fn make() -> Pair {\n    (1, 2)\n}\n",
+            ),
+            ("src/b.rs", ""),
+        ]);
+        move_items(
+            dir.path(),
+            &locators(&["probe::a::make"]),
+            &dir.path().join("src/b.rs"),
+            Mode::Apply,
+        )
+        .unwrap();
+        assert!(read(&dir, "src/a.rs").starts_with("use super::b::make;\n\npub(super) type Pair"));
+        assert!(read(&dir, "src/b.rs").contains("use super::a::Pair;"));
     }
 
     #[test]
