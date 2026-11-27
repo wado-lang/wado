@@ -131,6 +131,21 @@ across the corpus, a keyword would need an expression form and its precedence,
 and every other compiler-known type (`List<T>`, `Option<T>`, `String`) is a
 name.
 
+### A closure stays copyable, and `&T` stops at one
+
+A closure captures variables, and a variable two copies of a closure share is
+a cell in all but name. A `fn` closure may also capture a `Shared<T>` and write
+it. So what `&T` promises stops at a closure as it stops at a cell, whichever
+of `fn` and `fn mut` it is, and making `fn mut` affine would restore nothing.
+`fn mut` keeps its meaning: the closure writes a variable it captured, and
+calling it needs a `mut` root.
+
+A closure that captures a `&mut` refers into an affine local, so the rule that
+already holds such a closure inside the local's scope
+([Affine Types](./spec-affine.md#references-into-affine-values)) holds this
+one. That covers a binding a pattern scopes too: a closure cannot carry it past
+the arm that stores it back.
+
 ### `&` of a type replaced on assignment is its value
 
 A primitive, `enum`, `flags`, `variant`, `fn` or reference has no storage a
@@ -221,11 +236,6 @@ So a cell is no key of a `HashMap`, and neither is a struct holding one.
 
 `Shared<T>` takes no affine `T`: a cell has no one owner to drop what it
 holds. Callbacks that share one stream have no spelling.
-
-### `fn mut` closures
-
-A `fn mut` closure holds the `&mut` it captured, so a copyable one is the same
-escape. Rill keeps such closures in lists and calls them later.
 
 ### The overwritten write has no lint name
 
