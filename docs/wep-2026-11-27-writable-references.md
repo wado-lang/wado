@@ -215,6 +215,18 @@ need no rule at all. It was declined for its cost: `Option<String>` stops being
 a nullable reference, and every `variant` field and element gains an
 allocation.
 
+A function cannot hand such a `&mut` back, and nothing is added to make one.
+The scoped forms work because the place is written where it is used: the
+compiler reads `map[k]`, and stores to `map[k]` after. A function's result is a
+value with no place attached. An index and a field cover every container, on
+`IndexValue` and `IndexAssign`, which `List`, `HashMap` and `TreeMap` implement
+for every element. `IndexRefMut` keeps its `Output: RefMut`, and no other
+standard library function returns a `&mut`. A named accessor is written one of
+three ways: return the in-place object that holds the place, move the value out
+and back, or take a closure the accessor calls between its read and its store.
+An accessor that yields a scoped place, as Swift's `_modify` and Hylo's
+subscripts do, waits for a need the three do not meet.
+
 A write to the place by another route inside the scope is overwritten when the
 scope stores back: `if let Some(n) = &mut self.count { self.count = null; *n += 1 }`
 leaves `Some`. Swift forbids the overlap with exclusivity and Ada leaves it
@@ -240,12 +252,6 @@ unspecified. Wado defines it, and warns where one body shows both writes.
 
 The warning for a write a scope's store-back overwrites is decided, and its
 name is not.
-
-### An API that hands out `&mut` to a `variant`
-
-A map whose values are `Option`s cannot return a `&mut` to one from `get_mut`,
-and `IndexRefMut` keeps refusing a `variant` output. What such an API offers
-instead is not designed.
 
 ### An affine `variant` keeps its slot object
 
