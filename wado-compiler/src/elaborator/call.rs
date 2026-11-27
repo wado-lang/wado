@@ -25,9 +25,7 @@ use super::expr::BareCase;
 use super::infer::unify;
 use super::infer_hole::{BoundRows, uninferable_type_param};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation, SlotLinks, static_slot_owner};
-use super::method_call::{
-    PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver, UnappliedStatic,
-};
+use super::method_call::{PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver};
 use super::pending_selection::{PendingStatic, Undecided};
 use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
 use super::sem::types::{BodyFacts, IndirectCallee, ListViewConversion, StaticMethodDispatch};
@@ -150,17 +148,17 @@ pub(super) struct CallSolve<'a> {
 /// A callee's signature in its declaration's own frame, as a call site reads it.
 #[derive(Default)]
 pub(super) struct CalleeSignature {
-    param_types: Vec<TypeId>,
+    pub(super) param_types: Vec<TypeId>,
     /// The slots the types mention, for the call site to instantiate.
-    slots: Vec<TypeId>,
+    pub(super) slots: Vec<TypeId>,
     /// How many of `slots` the declaring block's are, ahead of the method's
     /// own, which a turbofish names.
-    declaring_slot_count: usize,
+    pub(super) declaring_slot_count: usize,
     /// `None` when the declaration declares no return type.
-    return_type: Option<TypeId>,
+    pub(super) return_type: Option<TypeId>,
     /// The names and declarations of `slots`, whose bounds' associated-type
     /// equalities the call links before its arguments resolve.
-    slot_decls: (Vec<ParamRef>, Vec<ast::GenericParam>),
+    pub(super) slot_decls: (Vec<ParamRef>, Vec<ast::GenericParam>),
 }
 
 impl CalleeSignature {
@@ -3165,37 +3163,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.function_signature(self.tysys.free_function_at(callee_site?)?)
     }
 
-    /// The signature of the static the resolution hands a value blanket, read
-    /// at `receiver`: the blanket's own parameter is the receiver, which leaves
-    /// the method's slots for the call site to instantiate.
-    fn blanket_static_signature(
-        &mut self,
-        receiver: &ReceiverId,
-        method_name: &str,
-    ) -> Option<CalleeSignature> {
-        let receiver_type = receiver.ty()?;
-        let blanket = self
-            .resolve_static_callee(StaticQuery::of(receiver, method_name))
-            .blanket()?;
-        let (param_types, return_type) =
-            self.picked_blanket_static_at(blanket, method_name, receiver_type);
-        let sig = self
-            .tysys
-            .declared_method(blanket, method_name)
-            .and_then(|method| self.tysys.signatures.method_sig(method))
-            .expect("the decl pass records every impl-declared method's signature");
-        Some(CalleeSignature {
-            param_types,
-            slots: sig.own_type_param_ids(),
-            declaring_slot_count: 0,
-            return_type: Some(return_type),
-            slot_decls: (
-                slot_names(&sig.own_params, &self.tysys.resolutions),
-                sig.own_params.clone(),
-            ),
-        })
-    }
-
     fn function_signature(&self, def: DefId) -> Option<CalleeSignature> {
         let sig = self.tysys.signatures.function_sig(def)?;
         let callee = CalleeRef::declared(self.tysys.resolutions.defs(), def);
@@ -5840,147 +5807,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.record_generic_instantiation(case.site, type_args, variant_type);
         variant_type
-    }
-
-    /// `receiver::suffix` answered by a value blanket's static, indexed under
-    /// the blanket's receiver param, or the diagnostic for a name reaching no
-    /// function. `receiver` carries the type the call resolved it to.
-    fn blanket_static_or_unknown(
-        &mut self,
-        receiver: &ReceiverId,
-        suffix: &str,
-        ident: &ast::IdentExpr,
-        call: &ast::CallExpr,
-        args: &[TypeId],
-        expected_type: Option<TypeId>,
-        ctx: &mut FunctionContext,
-    ) -> TypeId {
-        let method_id = ident.segments.last().map(|seg| seg.id);
-        let method_type_args = self.resolve_turbofish_args(&call.type_args);
-        if let Some(return_type) = self.resolve_named_type_blanket_static(
-            receiver,
-            suffix,
-            call.id,
-            method_id,
-            &method_type_args,
-            args,
-            &call.args,
-            expected_type,
-            call.span,
-            ctx,
-        ) {
-            return return_type;
-        }
-        let prefix = receiver.spelled(self.tysys.resolutions.defs());
-        let _ = self.emit(TypeError::UnknownFunction {
-            name: format!("{prefix}::{suffix}"),
-            span: call.span,
-        });
-        TypeTable::ERROR
-    }
-
-    pub(super) fn resolve_named_type_blanket_static(
-        &mut self,
-        receiver: &ReceiverId,
-        method: &str,
-        call_id: AstId,
-        method_id: Option<AstId>,
-        method_type_args: &[TypeId],
-        args: &[TypeId],
-        raw_args: &[Expr],
-        expected_type: Option<TypeId>,
-        span: Span,
-        ctx: &mut FunctionContext,
-    ) -> Option<TypeId> {
-        // A generic type spelled without its arguments names no instance, so
-        // the call's context settles one before the rules are asked.
-        let unapplied = self.receiver_generic_arity(receiver);
-        let instance = match unapplied {
-            Some(_) => self.unapplied_static_instance(receiver, method, args, expected_type),
-            None => UnappliedStatic::AsSpelled,
-        };
-        let settled;
-        let receiver = match instance {
-            UnappliedStatic::Settled(instance) => {
-                settled = receiver.at_type(Some(instance));
-                &settled
-            }
-            UnappliedStatic::AsSpelled | UnappliedStatic::Open => receiver,
-        };
-        let receiver_ty = receiver
-            .ty()
-            .expect("a blanket static is asked at the type the call resolved");
-        // The rules first, since a blanket is a candidate among the rest: two
-        // traits blanketing one receiver supply the name and separate nothing,
-        // which is the ambiguity every other spelling of that shape reports.
-        let ranked = self.resolve_static_callee(StaticQuery {
-            arg_types: args,
-            expected_return: expected_type,
-            ..StaticQuery::of(receiver, method)
-        });
-        // Impls of one trait no argument separates may be told apart by the
-        // instance the call settles, which the static call's own resolution
-        // waits for, and reports where it cannot.
-        if matches!(instance, UnappliedStatic::Open)
-            && matches!(ranked, StaticLookup::Overloaded { .. })
-        {
-            return None;
-        }
-        if self.report_unresolved_static(&ranked, method, args, span) {
-            return Some(TypeTable::ERROR);
-        }
-        let Some(blanket) = ranked.blanket() else {
-            if !matches!(instance, UnappliedStatic::Open) {
-                return None;
-            }
-            let prefix = receiver.spelled(self.tysys.resolutions.defs()).to_string();
-            let declared = receiver
-                .key()
-                .decl()
-                .and_then(|def| self.declared_self_type(def));
-            let params = declared
-                .and_then(|ty| self.tysys.type_table.borrow().nominal_type_args(ty))
-                .expect("an unapplied generic declares its parameters");
-            let names: Vec<String> = params
-                .iter()
-                .map(|&param| self.tysys.type_id_to_string(param))
-                .collect();
-            let _ = self.emit(TypeError::CannotInferType {
-                message: TypeError::receiver_args_uninferred_message(&names, &prefix, method),
-                span,
-            });
-            return Some(TypeTable::ERROR);
-        };
-        // The blanket would key on the argument-less head, which carries no
-        // layout (a generic variant never becomes its own declaration, WEP
-        // 2026-02-09) and reaches WIR build unregistered.
-        if let Some(expected) = unapplied
-            && !matches!(instance, UnappliedStatic::Settled(_))
-        {
-            let _ = self.emit(TypeError::MissingTypeArguments {
-                name: receiver.spelled(self.tysys.resolutions.defs()).to_string(),
-                expected,
-                span,
-            });
-            return Some(TypeTable::ERROR);
-        }
-        // Built here rather than on the caller's hot path: only a call that
-        // actually reaches a blanket static needs the per-argument sites.
-        let arg_sites = self.arg_sites_of(call_id, raw_args, args.len(), span);
-        self.resolve_blanket_static_method(
-            receiver_ty,
-            method,
-            blanket,
-            call_id,
-            method_id,
-            method_type_args,
-            raw_args,
-            args,
-            &arg_sites,
-            expected_type,
-            span,
-            ctx,
-        )
     }
 }
 
