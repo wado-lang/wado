@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795759462044,
+  "lastUpdate": 1795772226546,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82865,6 +82865,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7505662101e9950b63703f403caa669725923f8d"
         },
         "date": 1795759460922,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b652d36b619b392b47c1d78c2242908f9cec439e",
+          "message": "Merge pull request #2782 from wado-lang/ccr-06ec82c2-nz18ok\n\nfeat(web): bind WebIDL constants, on resources and callback interfaces",
+          "timestamp": "2026-11-27T18:23:31+09:00",
+          "tree_id": "125baf4b2ccbd4af6044364f4fd3a00cf92ed897",
+          "url": "https://github.com/wado-lang/wado/commit/b652d36b619b392b47c1d78c2242908f9cec439e"
+        },
+        "date": 1795772226216,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
