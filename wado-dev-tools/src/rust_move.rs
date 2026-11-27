@@ -21,11 +21,13 @@ use crate::rust_rename::edit::{self, Position};
 use crate::rust_rename::lsp::{Client, file_uri, uri_path};
 use crate::rust_rename::symbol::Location;
 use crate::rust_rename::{Locator, Mode, await_workspace, display_path, start_server};
-use text::{UseItem, identifiers, is_keyword, use_items};
+use text::{Binding, UseItem, identifiers, is_keyword, use_items};
 
 /// `SymbolKind` values of the LSP specification.
 const MODULE_KIND: u64 = 2;
 const FIELD_KIND: u64 = 8;
+/// What the server reports an `impl` block as.
+const OBJECT_KIND: u64 = 19;
 const ENUM_MEMBER_KIND: u64 = 22;
 
 const USAGE: &str = "usage: rust-move [--workspace DIR] [--dry-run] --to FILE LOCATOR...";
@@ -166,14 +168,42 @@ impl Document {
         (!matches!(stem, "mod" | "lib" | "main")).then_some(stem)
     }
 
-    /// The names its top level already gives a meaning.
-    fn bound_names(&self, uses: &[UseItem]) -> BTreeSet<String> {
-        uses.iter()
-            .flat_map(|item| item.bindings.iter().map(|b| b.name.clone()))
-            .chain(self.symbols.iter().map(|s| symbol_name(s).to_string()))
-            .collect()
+    /// The declarations the name written at `position` resolves to.
+    fn definitions(&self, client: &mut Client, position: Position) -> Result<Meaning, String> {
+        let definition = client.request(
+            "textDocument/definition",
+            json!({
+                "textDocument": { "uri": self.uri },
+                "position": position.to_lsp(),
+            }),
+        )?;
+        Ok(locations(&definition)
+            .into_iter()
+            .map(|target| (target.uri, target.position.line, target.position.column))
+            .collect())
+    }
+
+    /// What `binding` of the `use` item `item` imports.
+    fn imported(
+        &self,
+        client: &mut Client,
+        item: &UseItem,
+        binding: &Binding,
+    ) -> Result<Meaning, String> {
+        let (position, _) = self
+            .identifiers
+            .iter()
+            .rfind(|(position, name)| {
+                item.lines.contains(&position.line) && name == binding.last_segment()
+            })
+            .expect("a `use` item writes the path it binds");
+        self.definitions(client, *position)
     }
 }
+
+/// What a name means where it is written: each declaration it resolves to, by
+/// file, line and column.
+type Meaning = BTreeSet<(String, usize, usize)>;
 
 fn symbol_name(symbol: &Value) -> &str {
     symbol["name"]
@@ -197,7 +227,7 @@ fn children(symbol: &Value) -> &[Value] {
 }
 
 fn is_impl(symbol: &Value) -> bool {
-    symbol_name(symbol).starts_with("impl")
+    symbol["kind"].as_u64() == Some(OBJECT_KIND)
 }
 
 fn is_trait_impl(symbol: &Value) -> bool {
@@ -227,6 +257,12 @@ fn impl_header_range(document: &Document, block: &Value) -> Range<usize> {
             .find('{')
             .expect("an impl block opens a brace");
     start..brace
+}
+
+/// The line an `impl` block's opening brace is on.
+fn impl_header_line(document: &Document, block: &Value) -> usize {
+    let brace = impl_header_range(document, block).end;
+    document.text[..brace].matches('\n').count()
 }
 
 /// An `impl` block's text up to its opening brace, its comments left out: what
@@ -347,29 +383,16 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
     }
     mark_emptied_blocks(&sources, &mut moved);
 
-    let destination_uses = use_items(&destination.text);
-    // A top-level item that moves is the destination's own from here on.
-    let destination_names: BTreeSet<String> = destination
-        .bound_names(&destination_uses)
-        .into_iter()
-        .chain(
-            moved
-                .iter()
-                .filter(|item| item.header.is_none())
-                .map(|item| item.name.clone()),
-        )
-        .collect();
     let the_move = Move {
+        destination_uses: use_items(&destination.text),
         destination,
-        destination_uses,
-        destination_names,
         sources,
         moved,
     };
     let mut fixes = Fixes::default();
     the_move.keep_moved_items_in_reach(client, &mut fixes)?;
     the_move.keep_source_items_in_reach(client, &mut fixes)?;
-    the_move.repeat_imports(&mut fixes);
+    the_move.repeat_imports(client, &mut fixes)?;
     Ok(the_move.write(fixes))
 }
 
@@ -412,14 +435,55 @@ impl Fixes {
 struct Move {
     destination: Document,
     destination_uses: Vec<UseItem>,
-    /// The names the destination's top level gives a meaning once the items
-    /// have landed.
-    destination_names: BTreeSet<String>,
     sources: BTreeMap<PathBuf, Document>,
     moved: Vec<Moved>,
 }
 
 impl Move {
+    /// What the destination's top level means by `name` once the items have
+    /// landed; `None` where it binds no such name.
+    fn destination_meaning(
+        &self,
+        client: &mut Client,
+        name: &str,
+    ) -> Result<Option<Meaning>, String> {
+        let destination = &self.destination;
+        // A top-level item that moves is the destination's own from here on.
+        if let Some(item) = self
+            .moved
+            .iter()
+            .find(|item| item.header.is_none() && item.name == name)
+        {
+            let uri = self.sources[&item.source].uri.clone();
+            let Position { line, column } = item.name_position;
+            return Ok(Some(Meaning::from([(uri, line, column)])));
+        }
+        if let Some(symbol) = destination.symbols.iter().find(|s| symbol_name(s) == name) {
+            let Position { line, column } = name_position(symbol);
+            return Ok(Some(Meaning::from([(
+                destination.uri.clone(),
+                line,
+                column,
+            )])));
+        }
+        for item in &self.destination_uses {
+            if let Some(binding) = item.bindings.iter().find(|b| b.name == name) {
+                return destination.imported(client, item, binding).map(Some);
+            }
+        }
+        Ok(None)
+    }
+
+    /// Reports `name`, which the moved code reads as one thing and the
+    /// destination binds as another.
+    fn report_rebinding(&self, fixes: &mut Fixes, name: &str, source: &Document) {
+        fixes.by_hand(format!(
+            "`{name}` means one thing in {} and another in {}, where the moved code now reads it",
+            display_path(&source.path),
+            display_path(&self.destination.path)
+        ));
+    }
+
     fn is_moved(&self, path: &Path, line: usize) -> bool {
         self.moved
             .iter()
@@ -496,18 +560,9 @@ impl Move {
                 if is_keyword(name) {
                     continue;
                 }
-                let definition = client.request(
-                    "textDocument/definition",
-                    json!({
-                        "textDocument": { "uri": source.uri },
-                        "position": position.to_lsp(),
-                    }),
-                )?;
-                for target in locations(&definition) {
-                    if target.uri == source.uri
-                        && !self.is_moved(&source.path, target.position.line)
-                    {
-                        read.insert((target.position.line, target.position.column));
+                for (uri, line, column) in source.definitions(client, *position)? {
+                    if uri == source.uri && !self.is_moved(&source.path, line) {
+                        read.insert((line, column));
                     }
                 }
             }
@@ -525,7 +580,26 @@ impl Move {
                     continue;
                 }
                 let name = symbol_name(symbol);
+                // A macro takes no visibility, and is reached by textual scope
+                // or `#[macro_export]`.
+                if source.lines[line].trim_start().starts_with("macro_rules!") {
+                    fixes.by_hand(format!(
+                        "the macro `{name}` of {} is invoked by the moved code",
+                        display_path(&source.path)
+                    ));
+                    continue;
+                }
                 match parent {
+                    // A variant's field is as visible as the enum, which the
+                    // moved code may reach through `Self` without naming it.
+                    Some(variant) if variant["kind"].as_u64() == Some(ENUM_MEMBER_KIND) => {
+                        let (_, holder) =
+                            find_symbol(&source.symbols, name_position(variant), None)
+                                .expect("the variant was found under its enum");
+                        let holder = holder.expect("a variant is a member of an enum");
+                        fixes.widen(source, name_position(holder).line, visibility);
+                        continue;
+                    }
                     // A trait's member is as visible as the trait.
                     Some(parent)
                         if is_trait_impl(parent)
@@ -548,8 +622,11 @@ impl Move {
                     }
                     Some(_) => {}
                     None if are_siblings(source, destination) => {
-                        if !self.destination_names.contains(name) {
-                            fixes.import_from_sibling(destination, source, name);
+                        let here = Meaning::from([(source.uri.clone(), line, column)]);
+                        match self.destination_meaning(client, name)? {
+                            None => fixes.import_from_sibling(destination, source, name),
+                            Some(there) if there == here => {}
+                            Some(_) => self.report_rebinding(fixes, name, source),
                         }
                     }
                     None => fixes.by_hand(format!(
@@ -565,7 +642,7 @@ impl Move {
     }
 
     /// The imports the moved code reads by name.
-    fn repeat_imports(&self, fixes: &mut Fixes) {
+    fn repeat_imports(&self, client: &mut Client, fixes: &mut Fixes) -> Result<(), String> {
         let destination = &self.destination;
         for source in self.sources.values() {
             let mentioned: BTreeSet<&str> = self
@@ -577,12 +654,22 @@ impl Move {
                 .collect();
             for item in use_items(&source.text).iter().filter(|item| item.plain) {
                 for binding in &item.bindings {
-                    if !mentioned.contains(binding.name.as_str())
-                        || self.destination_names.contains(&binding.name)
-                    {
+                    if !mentioned.contains(binding.name.as_str()) {
                         continue;
                     }
-                    if binding.is_relative() && !are_siblings(source, destination) {
+                    if let Some(there) = self.destination_meaning(client, &binding.name)? {
+                        if there != source.imported(client, item, binding)? {
+                            self.report_rebinding(fixes, &binding.name, source);
+                        }
+                        continue;
+                    }
+                    // `self` and a child module name the source file itself,
+                    // and `super` the parent only a sibling shares.
+                    let first = binding.first_segment();
+                    let relative = first == "self"
+                        || source.symbols.iter().any(|s| symbol_name(s) == first)
+                        || (first == "super" && !are_siblings(source, destination));
+                    if relative {
                         fixes.by_hand(format!(
                             "`{}` of {} is relative to it",
                             binding.item(),
@@ -607,6 +694,7 @@ impl Move {
                 }
             }
         }
+        Ok(())
     }
 
     /// The new text of each file, and the account of what changed.
@@ -740,11 +828,7 @@ fn moved_item(source: &Document, position: Position) -> Result<Moved, String> {
         name: symbol_name(symbol).to_string(),
         name_position: position,
         header: block.map(|block| impl_header(source, block)),
-        header_span: block.map(|block| {
-            let range = impl_header_range(source, block);
-            let line_of = |at: usize| source.text[..at].matches('\n').count();
-            line_of(range.start)..line_of(range.end) + 1
-        }),
+        header_span: block.map(|block| line_span(block).start..impl_header_line(source, block) + 1),
         emptied_block: None,
     })
 }
@@ -754,17 +838,22 @@ fn moved_item(source: &Document, position: Position) -> Result<Moved, String> {
 fn mark_emptied_blocks(sources: &BTreeMap<PathBuf, Document>, moved: &mut [Moved]) {
     for source in sources.values() {
         for block in source.symbols.iter().filter(|s| is_impl(s)) {
-            let members = children(block);
-            let all_move = !members.is_empty()
-                && members.iter().all(|member| {
-                    moved
-                        .iter()
-                        .any(|item| item.source == source.path && item.span == line_span(member))
-                });
+            let block_span = line_span(block);
+            let leaves = |line: usize| {
+                moved
+                    .iter()
+                    .any(|item| item.source == source.path && item.span.contains(&line))
+            };
+            // Not by its symbols alone: the server lists neither a comment nor
+            // a macro invocation, and the block keeps what does not move.
+            let body = impl_header_line(source, block) + 1..block_span.end - 1;
+            let all_move = !children(block).is_empty()
+                && body
+                    .into_iter()
+                    .all(|line| leaves(line) || source.lines[line].trim().is_empty());
             if !all_move {
                 continue;
             }
-            let block_span = line_span(block);
             for item in moved
                 .iter_mut()
                 .filter(|item| item.source == source.path && block_span.contains(&item.span.start))
@@ -1109,6 +1198,110 @@ fn helper(n: usize) -> i32 {
         .unwrap();
         assert!(read(&dir, "src/a.rs").starts_with("use super::b::make;\n\npub(super) type Pair"));
         assert!(read(&dir, "src/b.rs").contains("use super::a::Pair;"));
+    }
+
+    /// Moves `names` out of `a` into `b`, two sibling modules of a crate whose
+    /// `main` reads `uses`, and returns the workspace and the report.
+    fn a_to_b(a: &str, b: &str, uses: &str, names: &[&str]) -> (TempDir, String) {
+        let main = format!("mod a;\nmod b;\nfn main() {{ {uses}; }}\n");
+        let dir = probe(&[("src/main.rs", &main), ("src/a.rs", a), ("src/b.rs", b)]);
+        let report = move_items(
+            dir.path(),
+            &locators(names),
+            &dir.path().join("src/b.rs"),
+            Mode::Apply,
+        )
+        .unwrap();
+        (dir, report.join("\n"))
+    }
+
+    #[test]
+    fn a_name_the_destination_binds_otherwise_is_reported() {
+        let (dir, report) = a_to_b(
+            "use std::collections::BTreeMap as Map;\nuse std::collections::BTreeSet;\n\n\
+             pub fn compute(n: i32) -> i32 {\n    let m: Map<i32, BTreeSet<i32>> = Map::new();\n    \
+             scale(n) + m.len() as i32\n}\n\nfn scale(n: i32) -> i32 {\n    n * 2\n}\n",
+            "use std::collections::HashMap as Map;\nuse std::collections::{BTreeSet};\n\n\
+             pub fn other() -> usize {\n    let seen: BTreeSet<i32> = BTreeSet::new();\n    \
+             Map::<i32, i32>::new().len() + seen.len() + scale(1) as usize\n}\n\n\
+             fn scale(n: i32) -> i32 {\n    n * 100\n}\n",
+            "a::compute(1); b::other()",
+            &["probe::a::compute"],
+        );
+        assert!(
+            report.contains("by hand: `scale` means one thing"),
+            "{report}"
+        );
+        assert!(
+            report.contains("by hand: `Map` means one thing"),
+            "{report}"
+        );
+        assert!(!report.contains("`BTreeSet`"), "{report}");
+        let b = read(&dir, "src/b.rs");
+        assert!(!b.contains("use super::a::scale;"), "{b}");
+        assert!(!b.contains("BTreeMap"), "{b}");
+    }
+
+    #[test]
+    fn what_takes_no_visibility_is_not_widened() {
+        let (dir, report) = a_to_b(
+            "enum Shape {\n    Circle { radius: i32 },\n    Dot,\n}\n\n\
+             macro_rules! twice {\n    ($e:expr) => {\n        $e * 2\n    };\n}\n\n\
+             pub fn run() -> i32 {\n    area(&Shape::Circle { radius: 1 }) + area(&Shape::Dot)\n}\n\n\
+             fn area(shape: &Shape) -> i32 {\n    match shape {\n        \
+             Shape::Circle { radius } => twice!(*radius),\n        Shape::Dot => 0,\n    }\n}\n",
+            "",
+            "a::run()",
+            &["probe::a::area"],
+        );
+        let a = read(&dir, "src/a.rs");
+        assert!(
+            a.contains("pub(super) enum Shape {\n    Circle { radius: i32 },"),
+            "{a}"
+        );
+        assert!(a.contains("\nmacro_rules! twice {"), "{a}");
+        assert!(report.contains("by hand: the macro `twice`"), "{report}");
+        assert!(!read(&dir, "src/b.rs").contains("twice;"));
+    }
+
+    #[test]
+    fn a_block_keeps_what_does_not_move() {
+        let (dir, _) = a_to_b(
+            "pub struct S;\n\nimpl S {\n    pub fn one(&self) -> i32 {\n        1\n    }\n\n    \
+             // A note the block keeps.\n}\n",
+            "",
+            "a::S.one()",
+            &["probe::a::S::one"],
+        );
+        let a = read(&dir, "src/a.rs");
+        assert!(
+            a.contains("impl S {\n    // A note the block keeps.\n}"),
+            "{a}"
+        );
+    }
+
+    #[test]
+    fn an_import_through_a_child_module_is_not_repeated() {
+        let dir = probe(&[
+            ("src/main.rs", "mod a;\nmod b;\nfn main() { a::make(); }\n"),
+            (
+                "src/a.rs",
+                "mod inner;\n\nuse inner::Thing;\n\npub fn keep() -> Thing {\n    Thing\n}\n\n\
+                 pub fn make() -> Thing {\n    Thing\n}\n",
+            ),
+            ("src/a/inner.rs", "pub struct Thing;\n"),
+            ("src/b.rs", ""),
+        ]);
+        let report = move_items(
+            dir.path(),
+            &locators(&["probe::a::make"]),
+            &dir.path().join("src/b.rs"),
+            Mode::Apply,
+        )
+        .unwrap()
+        .join("\n");
+        assert!(report.contains("by hand: `use inner::Thing;`"), "{report}");
+        assert!(!read(&dir, "src/b.rs").contains("use inner::Thing;"));
     }
 
     #[test]

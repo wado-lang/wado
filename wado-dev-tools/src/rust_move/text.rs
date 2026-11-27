@@ -140,12 +140,23 @@ pub struct Binding {
 }
 
 impl Binding {
-    pub fn is_relative(&self) -> bool {
-        self.path.starts_with("super::") || self.path.starts_with("self::")
+    pub fn first_segment(&self) -> &str {
+        self.path
+            .split("::")
+            .next()
+            .expect("split yields a first part")
+    }
+
+    /// The segment naming the item, which an alias does not change.
+    pub fn last_segment(&self) -> &str {
+        self.path
+            .rsplit("::")
+            .next()
+            .expect("split yields a first part")
     }
 
     pub fn item(&self) -> String {
-        if self.path.rsplit("::").next() == Some(&self.name) {
+        if self.last_segment() == self.name {
             format!("use {};", self.path)
         } else {
             format!("use {} as {};", self.path, self.name)
@@ -201,13 +212,19 @@ pub fn use_items(text: &str) -> Vec<UseItem> {
 
 /// Where the tree of a top-level `use` on `line` starts.
 fn use_keyword_end(line: &str) -> Option<usize> {
-    if line.starts_with("use ") {
-        return Some(4);
-    }
-    if !line.starts_with("pub") {
-        return None;
-    }
-    line.find(" use ").map(|at| at + 5)
+    let after_visibility = match line.strip_prefix("pub") {
+        Some(rest) => {
+            let rest = match rest.strip_prefix('(') {
+                Some(scope) => &scope[scope.find(')')? + 1..],
+                None => rest,
+            };
+            rest.strip_prefix(' ')?
+        }
+        None => line,
+    };
+    after_visibility
+        .starts_with("use ")
+        .then(|| line.len() - after_visibility.len() + 4)
 }
 
 fn flatten_use_tree(prefix: &str, tree: &str, out: &mut UseItem) {
@@ -346,5 +363,12 @@ mod tests {
             (&["super::all".to_string()][..], false)
         );
         assert!(!items[3].plain);
+    }
+
+    #[test]
+    fn use_items_are_items_and_not_the_word() {
+        let text = "pub const USAGE: &str = \"we use this\";\n\
+                    pub fn last() -> i32 { // callers use this\n    1\n}\n";
+        assert_eq!(use_items(text), []);
     }
 }
