@@ -102,10 +102,11 @@ the struct holding it becomes affine.
 
 ### `&` of a type replaced on assignment is its value
 
-A primitive, `enum`, `flags`, `fn` or reference has no storage a reference
-could share. A `&P` of one is a copy of the value, wherever it is taken from: a
-local, a field or an element. An assignment to the place afterwards does not
-reach it.
+A primitive, `enum`, `flags`, `variant`, `fn` or reference has no storage a
+reference could share. A `&P` of one is a copy of the value, wherever it is
+taken from: a local, a field or an element. An assignment to the place
+afterwards does not reach it, and for a `variant` neither does a write to its
+payload.
 
 Today a `&i32` of a local sees a later assignment and one of a field does not.
 Making every `&P` see it is not open: Wasm GC has no pointer into a struct or
@@ -129,6 +130,40 @@ the reference, the assignment and the later read are in one body, and the type
 is known to be replaced on assignment. It stays silent in a body generic over
 the type, and across a call. The warning is best effort and promises to find
 nothing, so no program is refused over it.
+
+### `&mut` of a type replaced on assignment lasts for a scope
+
+A `&mut P` of such a type is taken only where the syntax fixes the point its
+value goes back to the place:
+
+- A call argument or a receiver: `f(&mut place)`, `place.take()`. The value is
+  copied in before the call and copied out after it.
+- The scrutinee of a pattern: `if let Some(p) = &mut place { … }`. A binding of
+  an in-place type is the object the place holds. A binding of a type replaced
+  on assignment holds the value for the arm, and the arm's end rebuilds what
+  was matched around it and stores that back.
+- A `for let v of &mut xs`, where one turn of the loop is the scope.
+
+Binding one to a variable, storing one in a value and returning one are errors,
+and a shared cell is what such code wants. The rule is by type alone: a local,
+a field and an element take the same `&mut`, so a local no longer becomes a
+heap cell for a reference to keep.
+
+A generic body that only uses a `p: &mut T` takes every `T`. One that stores or
+returns a `&mut T` needs `T: RefMut`, as `IndexRefMut::Output` already does.
+
+A `variant` falls under this rule whole, and is no case of its own. Its payload
+of an in-place type is reached through a pattern, which is the one thing a
+`variant` adds to a primitive. Giving every `variant` slot an object of its
+own, as an affine `variant` has, would make it an aggregate like a `struct` and
+need no rule at all. It was declined for its cost: `Option<String>` stops being
+a nullable reference, and every `variant` field and element gains an
+allocation.
+
+A write to the place by another route inside the scope is overwritten when the
+scope stores back: `if let Some(n) = &mut self.count { self.count = null; *n += 1 }`
+leaves `Some`. Swift forbids the overlap with exclusivity and Ada leaves it
+unspecified. Wado defines it, and warns where one body shows both writes.
 
 ### Declined
 
@@ -172,42 +207,29 @@ the second by hand with `ref_eq`.
 A `fn mut` closure holds the `&mut` it captured, so a copyable one is the same
 escape. Rill keeps such closures in lists and calls them later.
 
-### `&mut` of a type replaced on assignment
+### The overwritten write has no lint name
 
-A primitive, `enum`, `flags`, `fn` or reference has nothing a write could
-reach in place. Two mechanisms stand behind `&mut` of one today, and the place
-decides which
-([Reference Representation](./wep-2026-06-13-reference-representation.md)):
+The warning for a write a scope's store-back overwrites is decided, and its
+name is not.
 
-| Taken from         | Kept past the call            | Used within the call            |
-| ------------------ | ----------------------------- | ------------------------------- |
-| A local            | the local becomes a heap cell | the local becomes a heap cell   |
-| A field or element | an error                      | a temporary, written back after |
+### An API that hands out `&mut` to a `variant`
 
-The first row is a shared cell and the second is copy-in, copy-out. A generic
-body meets the difference as a `RefMut` bound. `core:value`'s
-`ValueSerializer { out: &mut v }` depends on the first row.
+A map whose values are `Option`s cannot return a `&mut` to one from `get_mut`,
+and `IndexRefMut` keeps refusing a `variant` output. What such an API offers
+instead is not designed.
 
-Ada passes an elementary type by copy for `in out` and a composite one
-possibly by reference, a split by kind of type. Swift defines `inout` as
-copy-in, copy-out for every type, and exclusivity keeps the difference
-unobservable. Without exclusivity it is observable: a read of the place by
-another path during the call sees the old value.
+### An affine `variant` keeps its slot object
 
-### `variant`
-
-A `variant` is replaced on assignment, yet its payload is written in place.
-Much of the corpus writes `if let Some(e) = &mut self.f` and depends on that.
-It fits neither row above.
-
-### Whether `stale_reference` covers a `variant`
-
-It waits on the gap above.
+An affine `variant` is held in an object of its own, so `&mut` of one is a
+place. Whether it takes the scoped rule too, moving in and out where a copyable
+one copies, is not examined.
 
 ### Migration
 
 Every copyable struct holding a `&mut` either becomes affine or moves to a
-cell. How many there are is not measured.
+cell, and every `&mut` to a type replaced on assignment that a variable, a
+value or a `return` holds moves to a cell. `core:value`'s
+`ValueSerializer { out: &mut v }` is one. How many there are is not measured.
 
 ## References
 
