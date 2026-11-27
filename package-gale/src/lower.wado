@@ -2579,6 +2579,7 @@ fn lower_header(rule: &ParserRule) -> RuleHeader {
         type_name: rule.type_name,
         visibility: rule.visibility,
         case_names: case_names_for_rule(&rule.alternatives),
+        alt_labels: rule.alternatives.iter_ref().map(|a| a.label).collect(),
     };
 }
 

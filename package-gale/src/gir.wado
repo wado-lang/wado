@@ -314,6 +314,15 @@ pub struct RuleHeader {
     /// Cached `case_names_for_rule(&rule.alternatives)`. Empty for
     /// `Simple`. Indexed by alt position in the original rule body.
     pub case_names: List<String>,
+    /// Each alternative's `# Label`, in source order.
+    pub alt_labels: List<Option<String>>,
+}
+
+impl RuleHeader {
+    /// Every alternative carries a `# Label`, so the CST names them by it.
+    pub fn alts_labeled(&self) -> bool {
+        return !self.alt_labels.is_empty() && self.alt_labels.iter_ref().all(|l| l matches { Some(_) });
+    }
 }
 
 /// Single-alternative rule. The body is emitted directly inside

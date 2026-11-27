@@ -350,10 +350,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         &mode_use,
     );
     gen_node_kinds(&mut w, &lowered.parser_rules);
-    gen_alt_enums(&mut w, grammar);
+    gen_alt_enums(&mut w, &lowered.parser_rules);
     gen_parser(&mut w, grammar, &lowered, &parser_members, &mut ctx);
     warn_lexer_rules(grammar, &ctx.settings, &latn.atn_class_rules, &mut ctx.diagnostics);
-    gen_string_tree_helper(&mut w, grammar, &lit_tokens);
+    gen_string_tree_helper(&mut w, &lowered);
     if let Some(query) = &options.highlight_query {
         gen_highlight(&mut w, grammar, &lit_tokens, query, &ctx.settings, &mut ctx.diagnostics);
     }
