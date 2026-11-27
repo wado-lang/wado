@@ -43,6 +43,7 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::resolve::TraitHeads;
 use crate::symbol::SymbolTable;
+use crate::syntax::BUILTIN_NAMESPACE;
 use crate::token::Span;
 
 /// The builtin each written-out `From` marker calls.
@@ -254,7 +255,7 @@ fn from_method(module: &mut Module, source: &Type, span: Span) -> Function {
         source.refreshed(&mut fresh),
     ];
     let return_type = named_type(fresh(), "Self", span);
-    let callee = path(&mut fresh, ["builtin", WRAP_IN_CASE], span);
+    let callee = path(&mut fresh, [BUILTIN_NAMESPACE, WRAP_IN_CASE], span);
     let value_name = "$value".to_string();
     let call = Expr::Call(Box::new(CallExpr {
         id: fresh(),

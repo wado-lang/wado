@@ -1373,16 +1373,16 @@ const TEST_PREFIX: &str = "$test";
 
 /// Build a test block's exported name: `$test_{index}[_{snake}]`, with the
 /// prefix encoding attributes — `$test_trap_…` for `#[expect_trap]`,
-/// `$test_todo_…` for `#[TODO]`, `$test_tm{ms}_…` for `#[timeout_ms]`, and
-/// combinations such as `$test_trap_tm{ms}_…`. Both the annotate walk and reify
-/// call here, so the two cannot drift.
+/// `$test_todo_…` for `#[TODO]`, `$test_tm{seconds}_…` for `#[timeout]`, and
+/// combinations such as `$test_trap_tm{seconds}_…`. Both the annotate walk and
+/// reify call here, so the two cannot drift.
 pub fn test_function_name(meta: &TestMetadata, test_index: usize, name: Option<&str>) -> String {
-    let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_ms) {
-        (true, _, Some(ms)) => format!("{TEST_PREFIX}_todo_tm{ms}"),
+    let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_seconds) {
+        (true, _, Some(seconds)) => format!("{TEST_PREFIX}_todo_tm{seconds}"),
         (true, _, None) => format!("{TEST_PREFIX}_todo"),
-        (_, true, Some(ms)) => format!("{TEST_PREFIX}_trap_tm{ms}"),
+        (_, true, Some(seconds)) => format!("{TEST_PREFIX}_trap_tm{seconds}"),
         (_, true, None) => format!("{TEST_PREFIX}_trap"),
-        (_, _, Some(ms)) => format!("{TEST_PREFIX}_tm{ms}"),
+        (_, _, Some(seconds)) => format!("{TEST_PREFIX}_tm{seconds}"),
         (_, _, None) => TEST_PREFIX.to_string(),
     };
     match name {

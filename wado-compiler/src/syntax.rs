@@ -264,6 +264,23 @@ pub fn statement_keyword_name_message(name: &str) -> String {
     format!("`{name}` cannot be a name: it is the keyword that begins `{name} value;`")
 }
 
+/// The prefix that reaches `core:builtin` from every module, with no `use`.
+pub const BUILTIN_NAMESPACE: &str = "builtin";
+
+/// Why a module can neither declare nor import `name`, where it cannot.
+#[must_use]
+pub fn undeclarable_name_message(name: &str) -> Option<String> {
+    if is_statement_keyword(name) {
+        Some(statement_keyword_name_message(name))
+    } else if name == BUILTIN_NAMESPACE {
+        Some(format!(
+            "`{name}` cannot be declared or imported: `{name}::` reaches the compiler's intrinsics"
+        ))
+    } else {
+        None
+    }
+}
+
 /// Keywords the parser also accepts as a name (`let type = 1`), which
 /// [`crate::token::TokenKind::as_ident_name`] decides and
 /// `contextual_name_keywords_match_the_registry` holds to this list. A *member*

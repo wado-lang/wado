@@ -1029,7 +1029,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// arguments — its target's concrete positions must match, and its type
     /// parameters' bounds must hold.
     fn inherent_impl_applies(
-        &mut self,
+        &self,
         def: DefId,
         receiver: TypeId,
         receiver_type_args: Option<&[TypeId]>,
@@ -1722,7 +1722,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether a match's trait arguments and `pinned`, the open slots of each
     /// solved against the other, are one list. Judged before anything is
     /// solved, since a variable the receiver holds is shared by every match.
-    fn trait_args_settle_to(&mut self, trait_args: &[TypeId], pinned: &[TypeId]) -> bool {
+    fn trait_args_settle_to(&self, trait_args: &[TypeId], pinned: &[TypeId]) -> bool {
         if trait_args.len() != pinned.len() {
             return false;
         }
@@ -2243,7 +2243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// non-place receiver (call result, literal) stays legal — mutating an
     /// owned temporary is well-defined.
     pub(super) fn check_mut_receiver(
-        &mut self,
+        &self,
         receiver: TypeId,
         receiver_ast: Option<&ast::Expr>,
         method_name: &str,
@@ -3226,7 +3226,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (`docs/wep-2026-09-01-trait-resolution.md`), naming value blankets by
     /// their bounds and every other impl, a variadic one included, by its header.
     pub(super) fn report_tied_impls(
-        &mut self,
+        &self,
         tied: &[Option<DefId>],
         trait_: &FqTraitName,
         receiver: TypeId,
@@ -3251,7 +3251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// admit its arguments (`impl<T: A> Put<T> for X` beside `impl<T: B>
     /// Put<T> for X`), naming the trait at what the call passes.
     fn report_impls_tied_at_call(
-        &mut self,
+        &self,
         found: &[TraitMethodMatch],
         tied: &[usize],
         receiver: TypeId,
@@ -3268,7 +3268,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report impl `blocks` of one trait, each leaving a slot to the call, as
     /// all reaching it at `trait_args` on `receiver`.
     pub(super) fn report_blocks_tied(
-        &mut self,
+        &self,
         blocks: &[DefId],
         trait_args: &[TypeId],
         receiver: &str,

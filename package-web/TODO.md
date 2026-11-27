@@ -21,39 +21,42 @@ left before the slice can be everything:
 
 | Cause                                           | Definitions | Members | Overloads | Arguments |
 | ----------------------------------------------- | ----------- | ------- | --------- | --------- |
-| a dictionary                                    | 776         | 261     | 7         | 396       |
 | a constant                                      | 0           | 1261    | 0         | 0         |
-| a callback in a result                          | 0           | 932     | 0         | 0         |
-| an enum                                         | 357         | 283     | 1         | 6         |
-| a type outside the slice                        | 0           | 263     | 1         | 2         |
-| a union                                         | 0           | 196     | 7         | 16        |
-| `any`                                           | 0           | 128     | 0         | 32        |
-| a buffer                                        | 0           | 126     | 20        | 2         |
+| a callback in a result                          | 5           | 954     | 0         | 0         |
+| a type outside the slice                        | 2           | 281     | 1         | 2         |
+| a union                                         | 15          | 200     | 0         | 0         |
+| `any`                                           | 3           | 150     | 0         | 34        |
+| a buffer                                        | 15          | 144     | 16        | 5         |
 | a namespace member                              | 0           | 133     | 0         | 0         |
+| a dictionary                                    | 34          | 67      | 0         | 15        |
 | a special operation                             | 0           | 81      | 0         | 0         |
+| `object`                                        | 4           | 66      | 1         | 7         |
 | `[HTMLConstructor]`                             | 0           | 76      | 0         | 0         |
+| overloads                                       | 0           | 63      | 0         | 0         |
 | a redeclared inherited method                   | 0           | 55      | 0         | 0         |
-| `object`                                        | 0           | 54      | 1         | 6         |
-| overloads                                       | 0           | 44      | 0         | 0         |
 | an iteration declaration                        | 0           | 41      | 0         | 0         |
-| `Promise<…>`                                    | 0           | 29      | 0         | 1         |
-| a callback the glue cannot call                 | 0           | 19      | 0         | 8         |
+| an enum                                         | 19          | 21      | 0         | 0         |
+| `Promise<…>`                                    | 0           | 31      | 0         | 1         |
+| a callback the glue cannot call                 | 0           | 22      | 2         | 7         |
+| `record<…>`                                     | 0           | 15      | 0         | 0         |
+| a list of a list, a nullable type or a callback | 4           | 7       | 0         | 1         |
 | a static attribute                              | 0           | 7       | 0         | 0         |
-| `record<…>`                                     | 0           | 6       | 0         | 0         |
-| a list of a list, a nullable type or a callback | 0           | 3       | 0         | 1         |
 | `ObservableArray<…>`                            | 0           | 4       | 0         | 0         |
-| parameters passed through memory                | 0           | 1       | 0         | 2         |
-| `bigint`                                        | 0           | 1       | 0         | 0         |
+| `bigint`                                        | 0           | 2       | 0         | 0         |
 | `async_sequence<…>`                             | 0           | 1       | 0         | 0         |
-| Total                                           | 1133        | 4005    | 37        | 472       |
+| Total                                           | 101         | 3682    | 20        | 72        |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
 
 - A cause is what would have to lower for the item to. A list of dictionaries
   counts under the dictionary.
+- A definition is a dictionary or an enum with no binding. A dictionary counts
+  under what stops a required member of it, and under the dictionary itself
+  where no member binds or it holds itself.
 - A member is counted once, by the first thing that stops it. Lowering that
-  cause may move it to another row rather than bind it.
+  cause may move it to another row rather than bind it. A dictionary's member
+  left out of its struct is a member too.
 - An overload is one overload of a member another overload binds. An argument
   is a trailing optional argument a bound member leaves out, with each one
   after it.
@@ -62,6 +65,8 @@ read the table:
 - A type outside the slice is a name no snapshot definition declares. Over the
   whole platform those are `CSSOMString`, `WindowProxy`, the legacy aliases
   `SVGPoint`, `SVGRect` and `SVGMatrix`, and an interface only a worker reaches.
+- An enum is one with a value Wado cannot spell as a case: the empty string, as
+  in `ReferrerPolicy`, or one starting with a digit, as in `"2d"`.
 - A redeclared inherited method is not lost: the parent's method serves the
   child, since it has the same types or differs only in a result that is a
   resource extending the parent's. One redeclared with any other type binds
@@ -96,8 +101,11 @@ lower is then available to each interface the slice adds.
 
 - [ ] Merge overloads into one member where they differ by trailing optional
   arguments (`Window.alert()` and `alert(message)`)
-- [ ] Lower a union of two or more typable constituents to a `variant`, named
-  after its typedef where it has one (`(Node or DOMString)`)
+- [x] Lower a union of two or more typable constituents to a `variant` where
+  the guest supplies it, named after its typedef where it has one
+  (`(Node or DOMString)`)
+- [ ] Lower such a union in a result, which takes telling the host's value
+  apart
 
 ### 4. Promises
 
@@ -108,7 +116,16 @@ lower is then available to each interface the slice adds.
   `exit_fullscreen`
 - [ ] `fetch` and `Response` join the slice, with an effect of their own
 
-### 5. A wider slice
+### 5. Enums, dictionaries and constants
+
+- [x] Lower an `enum` to a Wado `enum`, in the bindings and in the glue
+- [x] `SurfaceDom` answers `ready_state` and `visibility_state`
+- [ ] Name a case for the empty string and for a value starting with a digit
+- [x] Lower a `dictionary` to a `struct`, in the bindings and in the glue
+- [x] Read parameters that cross in memory, as more than sixteen core values do
+- [ ] Bind a constant
+
+### 6. A wider slice
 
 - [x] Tree: `Text` and `CharacterData`; `SurfaceDom` answers `create_text_node`,
   `data` and `insert_before`
@@ -130,8 +147,28 @@ lower is then available to each interface the slice adds.
   `mise run report-webidl-coverage` writes those bindings to
   `scratchpad/webidl-all/dom.wado`.
 - A union collapsed to its one typable constituent in an argument is not
-  reported, though the other constituents cannot be passed.
+  reported, though the other constituents cannot be passed. Nor is a variant
+  that leaves a constituent out.
+- A union's type changes as the slice grows: `set_attribute` takes a `String`
+  until `TrustedHTML` joins the slice, and a variant from then on.
+- A dictionary's member is typed as a result is, so a callback or a union of
+  several types is left out of it even where the dictionary is only an
+  argument.
+- An optional member of a nullable type cannot be passed as `null`: its `None`
+  is the member left out, for which the host reads the WebIDL default.
+- Two unions that differ take one name where a typedef's name is another
+  union's generated one, or where two constituents take one word, as
+  `sequence<Node>` and `NodeList` do. The generator stops on it.
+- A union that makes a second overload of a member typable takes the member
+  out, until overloads are merged.
+- No member of the slice takes more than sixteen core values, so no test runs
+  parameters read from memory against a host.
+- `SurfaceDom` takes the options of what it does not model and ignores them:
+  `passive`, since no event is cancelled, the `is` of `create_element`, and
+  those of `get_html`, `scroll_into_view` and `request_fullscreen`.
 - A program cannot recover from a DOM exception: it traps.
+- A host answering an enum value the snapshot does not declare traps the
+  program: jsdom's `document.visibilityState` is `"prerender"`.
 - CI runs the glue on jsdom only, never in a browser.
 - jco 1.30.0 fails an export that a listener reenters during
   `dispatch_event`.

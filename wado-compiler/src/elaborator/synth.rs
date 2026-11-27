@@ -627,7 +627,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn synth_literal(&mut self, lit: &ast::Literal) -> ArgClass {
+    fn synth_literal(&self, lit: &ast::Literal) -> ArgClass {
         match lit {
             ast::Literal::Number(raw) => {
                 if defaults_to_float(raw) {
@@ -653,7 +653,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Locals, captures, globals and associated constants have a declared
     /// type. A function reference and a generic case do not: their type args
     /// come from the expected type.
-    fn synth_ident(&mut self, id: &ast::IdentExpr, scope: &SynthScope<'_>) -> ArgClass {
+    fn synth_ident(&self, id: &ast::IdentExpr, scope: &SynthScope<'_>) -> ArgClass {
         if scope.shadows(&id.name) {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
@@ -697,7 +697,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// A function reference's type, which `resolve_func_ref_ident` builds from
     /// the signature alone where nothing is left to the expected type.
-    fn synth_func_ref(&mut self, id: &ast::IdentExpr) -> ArgClass {
+    fn synth_func_ref(&self, id: &ast::IdentExpr) -> ArgClass {
         let Some((sig, _, _)) = self.tysys.lookup_func_sig_for_ref(id) else {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };
@@ -716,7 +716,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// The qualifier is a path segment the resolve walk answered for, so which
     /// `Color` it names comes off that site rather than off the spelling.
-    fn synth_qualified_case(&mut self, id: &ast::IdentExpr, name: &str) -> ArgClass {
+    fn synth_qualified_case(&self, id: &ast::IdentExpr, name: &str) -> ArgClass {
         // The last `::`, so the split names the same segment `owner` does:
         // in `ns::Color::Red` that is `Color`, not the `ns` prefix.
         let Some(pos) = name.rfind("::") else {
@@ -993,7 +993,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// its `impl` was written against. Elaboration substitutes the same way, so
     /// reading the declaration alone would under-approximate the class.
     fn return_type_for_receiver(
-        &mut self,
+        &self,
         return_type: TypeId,
         owner: MethodOwner,
         receiver: TypeId,

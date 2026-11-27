@@ -1000,7 +1000,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// literal cannot be, reported as a mismatch, or a variable a call's
     /// inference answers and then re-coerces the literal to, checking the range
     /// against the type it lands on.
-    pub(super) fn check_default_int_literal(&mut self, repr: &str, negated: bool, span: Span) {
+    pub(super) fn check_default_int_literal(&self, repr: &str, negated: bool, span: Span) {
         let Some(value) = self.check_int_literal_parses(repr, span) else {
             return;
         };
@@ -1043,7 +1043,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Parse an integer literal, reporting a malformed or wider-than-`u128`
     /// one. Always this walk's job: nothing downstream reports it, and reify
     /// reads such a literal as `0`.
-    pub(super) fn check_int_literal_parses(&mut self, repr: &str, span: Span) -> Option<u128> {
+    pub(super) fn check_int_literal_parses(&self, repr: &str, span: Span) -> Option<u128> {
         match util::parse_u128_literal(repr) {
             Ok(value) => Some(value),
             Err(message) => {
@@ -1054,7 +1054,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_literal(
-        &mut self,
+        &self,
         lit: &ast::LiteralExpr,
         expected_type: Option<TypeId>,
     ) -> TypeId {
@@ -1391,7 +1391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `ty`, or ERROR once a turbofish on `ident` is reported: the value it
     /// names has no type parameters to take one.
-    fn value_without_turbofish(&mut self, ident: &ast::IdentExpr, ty: TypeId) -> TypeId {
+    fn value_without_turbofish(&self, ident: &ast::IdentExpr, ty: TypeId) -> TypeId {
         if self.reject_surplus_turbofish(&ident.name, 0, ident.type_args.len(), ident.span) {
             return TypeTable::ERROR;
         }
@@ -1402,7 +1402,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// which is what gives a travelled expression its author's module-private
     /// globals and functions. Supports globals and function refs.
     fn resolve_ident_in_module(
-        &mut self,
+        &self,
         ident: &ast::IdentExpr,
         home: &ModuleSource,
     ) -> Option<TypeId> {
@@ -1459,7 +1459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A turbofish on a case path (`Maybe::<i32>::Nothing`, `Maybe::Just::<i32>`)
     /// must name exactly the declaring type's parameters; an enum or a flags type declares none.
     pub(super) fn check_case_turbofish_arity(
-        &mut self,
+        &self,
         found: usize,
         type_name: &str,
         expected: usize,
@@ -1571,11 +1571,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// What the bare `ident` is as a case: a type name may be omitted only
     /// where the expected type supplies it.
-    pub(super) fn bare_case(
-        &mut self,
-        ident: &ast::IdentExpr,
-        expected: Option<TypeId>,
-    ) -> BareCase {
+    pub(super) fn bare_case(&self, ident: &ast::IdentExpr, expected: Option<TypeId>) -> BareCase {
         if let Some((owner, spelled)) = self.bare_case_in(expected, ident.case_name()) {
             return BareCase::Of { owner, spelled };
         }
@@ -1629,7 +1625,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// non-generic); a non-empty `type_args` substitutes the signature's
     /// `TypeParam` slots positionally.
     pub(super) fn compute_func_ref_type_from_sig(
-        &mut self,
+        &self,
         sig: &FunctionSig,
         type_args: &[TypeId],
     ) -> Option<TypeId> {
@@ -1782,7 +1778,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// effects that type's rows meet it with, and none where they meet it
     /// with nothing.
     fn settle_own_effects(
-        &mut self,
+        &self,
         ident: &ast::IdentExpr,
         sig: &FunctionSig,
         type_id: TypeId,
@@ -2137,12 +2133,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report an access to a field the struct does not declare. Answering
     /// `Unknown` instead lets the access reach codegen with no type to lower
     /// from, and silently turns any pattern matched against it irrefutable.
-    fn field_not_found(
-        &mut self,
-        struct_name: &str,
-        field_name: &str,
-        span: Span,
-    ) -> (u32, TypeId) {
+    fn field_not_found(&self, struct_name: &str, field_name: &str, span: Span) -> (u32, TypeId) {
         let _ = self.emit(TypeError::ExtraField {
             struct_name: struct_name.to_string(),
             field_name: field_name.to_string(),
@@ -2164,7 +2155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `owner` names the declaring type, resolved only to fill a diagnostic.
     /// `visibility` is `None` where the member does not decide its own reach.
     pub(super) fn check_inherent_member_visibility(
-        &mut self,
+        &self,
         visibility: Option<Visibility>,
         impl_module: Option<&ModuleSource>,
         owner: MemberOwner<'_>,
@@ -2422,7 +2413,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find(|&item| self.selection_waits(base, item, Some(key)))
     }
 
-    fn report_not_indexable(&mut self, receiver: TypeId, span: Span) -> TypeId {
+    fn report_not_indexable(&self, receiver: TypeId, span: Span) -> TypeId {
         if receiver == TypeTable::ERROR {
             return TypeTable::ERROR;
         }
@@ -2844,7 +2835,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// branch construct's resolved (non-`Option`) result type. `null` is an
     /// `Option`, so against e.g. `i32` it is a type mismatch — surfaced here
     /// because `check_assignable` treats the still-`UNKNOWN` `null` leniently.
-    fn report_unresolved_nulls(&mut self, unresolved: &[Span], result_type: TypeId) {
+    fn report_unresolved_nulls(&self, unresolved: &[Span], result_type: TypeId) {
         for &span in unresolved {
             let expected = self.tysys.type_table.borrow().name(result_type);
             let _ = self.emit(TypeError::TypeMismatch {
@@ -2860,11 +2851,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `patch_unresolved_null_in_block` + `report_unresolved_nulls` pass).
     /// A `null` tail is an `Option`, so when `result_type` is itself an
     /// `Option` every tail fits and nothing is reported.
-    fn report_unresolved_null_tails_in_blocks(
-        &mut self,
-        result_type: TypeId,
-        blocks: &[&ast::Block],
-    ) {
+    fn report_unresolved_null_tails_in_blocks(&self, result_type: TypeId, blocks: &[&ast::Block]) {
         if self
             .tysys
             .type_table
@@ -2885,11 +2872,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report each unresolved-`null` arm body of `match_expr` against a
     /// resolved non-`Option` `result_type` (AST replacement for the
     /// per-arm `patch_unresolved_null` + `report_unresolved_nulls` pass).
-    fn report_unresolved_null_match_arms(
-        &mut self,
-        result_type: TypeId,
-        match_expr: &ast::MatchExpr,
-    ) {
+    fn report_unresolved_null_match_arms(&self, result_type: TypeId, match_expr: &ast::MatchExpr) {
         if self
             .tysys
             .type_table
@@ -2910,12 +2893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report each `break <label>: null` value inside `block` against a
     /// resolved non-`Option` `result_type` (AST replacement for the
     /// `NullBreakPatcher` pass).
-    fn report_unresolved_null_breaks(
-        &mut self,
-        result_type: TypeId,
-        block: &ast::Block,
-        label: &str,
-    ) {
+    fn report_unresolved_null_breaks(&self, result_type: TypeId, block: &ast::Block, label: &str) {
         if self
             .tysys
             .type_table
@@ -3627,7 +3605,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A literal, float or range pattern as coverage reads it. `None` for one
     /// that names no value of `scrutinee_type`, reported where it resolved.
     fn exh_instance_pattern(
-        &mut self,
+        &self,
         pattern: &InstancePattern,
         scrutinee_type: TypeId,
     ) -> Option<Pat> {
@@ -3637,12 +3615,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_empty()
                 .then_some(Pat::Opaque);
         }
-        let settled = util::settle_instance_pattern(
-            pattern,
-            scrutinee_type,
-            &mut self.tysys.type_table.borrow_mut(),
-        )
-        .ok()?;
+        let settled =
+            util::settle_instance_pattern(pattern, scrutinee_type, &self.tysys.type_table.borrow())
+                .ok()?;
         if let util::SettledPattern::Literal(TirLiteralPattern::Bool(b)) = settled {
             return Some(Pat::Bool(b));
         }
@@ -3771,7 +3746,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn exh_range(
-        &mut self,
+        &self,
         start: &ast::Pattern,
         end: &ast::Pattern,
         kind: ast::RangeKind,
@@ -4734,7 +4709,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// overwritten by a later member is dead, and a spread may not read a field
     /// unreachable across a module boundary. Called only from the resolve pass.
     fn check_union_composition(
-        &mut self,
+        &self,
         struct_lit: &ast::StructLiteralExpr,
         base_types: &[TypeId],
         base_info: &[BaseSpreadInfo],
@@ -5278,7 +5253,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// site reports its own, and answer it with `error` so no later use
     /// reports the declaration's own parameter a second time.
     fn report_uninferred_struct_type_args(
-        &mut self,
+        &self,
         struct_info: &StructFieldInfo,
         inferred: &mut [TypeId],
         span: Span,
@@ -5552,7 +5527,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `Result<u, F>`. `None` when there is no payload or the return type is not
     /// an Option/Result (a `?`-misuse `resolve_question_mark` reports).
     fn question_mark_operand_expected(
-        &mut self,
+        &self,
         expected_payload: Option<TypeId>,
         return_type: TypeId,
     ) -> Option<TypeId> {
@@ -5647,7 +5622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn resolve_question_mark_option(
-        &mut self,
+        &self,
         inner_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> TypeId {

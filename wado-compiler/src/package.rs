@@ -271,7 +271,7 @@ mod tests {
             span: Span::default(),
             expect_trap: false,
             is_todo: false,
-            timeout_ms: None,
+            timeout_seconds: None,
             is_synopsis: false,
             is_workload,
         }

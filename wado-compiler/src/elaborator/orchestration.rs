@@ -558,79 +558,42 @@ pub(crate) struct AnnotateState {
     pub(crate) marks: Option<MarkMap>,
 }
 
-impl<'a, H: CompilerHost> Elaborator<'a, H> {
-    /// Annotate phase: collect decl-level type information and intern every
-    /// declaration in the shared [`TypeTable`]. Produces an [`AnnotateState`]
-    /// that downstream phases (`build_tir`, LSP queries) consume read-mostly
-    /// via `Rc`.
-    pub(crate) fn annotate_modules(
-        symbols: &'a SymbolTable,
-        modules: &'a IndexMap<ModuleSource, Module>,
-        entry_module_source: &ModuleSource,
-        logger: &'a Logger<'a, H>,
-        included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
-        invocations: InvocationIndex,
-        interner: Rc<RefCell<ModuleSourceInterner>>,
-        cm_source_interfaces: &SourceInterfaceBatch,
-        snapshot: Option<&Semantics>,
-    ) -> Result<AnnotateState, Bail> {
-        let invocations = Rc::new(invocations);
-        // The modules the snapshot serves. The per-module passes below skip
-        // these — their decl info is already present in the seeded maps.
-        let served: IndexSet<ModuleSource> = snapshot.map(snapshot_sources).unwrap_or_default();
-        // Seed the shared type table from the snapshot when available so
-        // served `TypeId`s occupy the same indices as in cached `TirModule`s.
-        let type_table = Rc::new(RefCell::new(
-            snapshot.map_or_else(TypeTable::new, |s| s.types.clone()),
-        ));
-        let snapshot_state =
-            snapshot.map(|s| s.state.as_ref().expect("a snapshot is built complete"));
+/// The passes of [`Elaborator::annotate_modules`] that collect and check the
+/// program's declarations, over what they all read.
+struct DeclPasses<'p, 'a, H: CompilerHost> {
+    modules: &'p IndexMap<ModuleSource, Module>,
+    /// The modules the snapshot serves. A collection pass skips these: their
+    /// decl info is already present in the seeded maps.
+    served: &'p IndexSet<ModuleSource>,
+    type_table: &'p Rc<RefCell<TypeTable>>,
+    resolutions: &'p Resolutions,
+    trait_env: &'p TraitEnv,
+    interner: &'p RefCell<ModuleSourceInterner>,
+    entry_module_source: &'p ModuleSource,
+    invocations: &'p InvocationIndex,
+    logger: &'a Logger<'a, H>,
+}
 
-        // Resolve every reference site once, from the module that wrote it,
-        // before anything asks what a name means — the type-collection passes
-        // below are the first to ask.
-        let resolutions = {
-            let _span = logger.span("elaborate/resolutions");
-            // Continue the snapshot's table: an `ImplSig` cached there
-            // carries `DefId`s, and they only read back as the same
-            // declarations if the identities are the same ones.
-            let seed = snapshot_state.map(|s| s.tysys.resolutions.defs().as_ref());
-            let defs = std::sync::Arc::new(DefTable::build_seeded(seed, modules, symbols));
-            // The type table renders a nominal type's head out of the
-            // declaration it carries, so it reads the same identities.
-            type_table.borrow_mut().attach_defs(defs.clone());
-            Rc::new(Resolutions::build(modules, symbols, defs))
-        };
-        for redeclaration in resolutions.redeclarations() {
-            let _ = logger.error_in(&redeclaration.module, redeclaration);
-        }
-
-        // Ahead of the type-collection passes, which resolve `T::Assoc` in a
-        // declaration and need the trait declaring it to name the projection.
-        let (trait_env, orphan_violations) = {
-            let _span = logger.span("elaborate/trait_env");
-            TraitEnv::build(
-                modules,
-                &mut interner.borrow_mut(),
-                Some(entry_module_source),
-                &invocations,
-                &resolutions,
-            )
-        };
-
-        // Keyed by the declaration, not by a spelling a module has to be
-        // standing in to resolve. `TypeLookup` reaches an entry through
-        // `Resolutions`, which is the only thing that turns a name into one.
-        let mut data: DataDecls = snapshot_state
-            .map(|s| (*s.tysys.data).clone())
-            .unwrap_or_default();
-        // The collection passes run ahead of any walk, so no walk adds to them.
-        let no_walk = ModuleDecls::default();
-
+impl<H: CompilerHost> DeclPasses<'_, '_, H> {
+    /// Declares every struct, variant, enum and resource by name, its members
+    /// still unresolved, so that a member's type may refer forward. Answers
+    /// each resource's `extends` clause and instance method names, for
+    /// [`resolve_resource_extends`].
+    fn declare_nominal_types(
+        &self,
+        data: &mut DataDecls,
+    ) -> (Vec<PendingExtends>, ResourceMethodNames) {
+        let Self {
+            modules,
+            served,
+            type_table,
+            resolutions,
+            logger,
+            ..
+        } = *self;
         let mut pending_extends: Vec<PendingExtends> = Vec::new();
         let mut resource_method_names: ResourceMethodNames = IndexMap::default();
 
-        // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
             if served.contains(module_source) {
                 // Already covered by the snapshot seed above.
@@ -655,7 +618,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             ),
                         );
                         register_type_compiler_item(
-                            &type_table,
+                            type_table,
                             CompilerItemKind::Struct,
                             &struct_decl.attrs,
                             struct_decl.id,
@@ -682,7 +645,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             ),
                         );
                         register_variant_compiler_items(
-                            &type_table,
+                            type_table,
                             variant_decl,
                             module_source,
                             logger,
@@ -693,7 +656,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             resolutions.defs().def_at(enum_decl.id),
                             EnumInfo::of_decl(module_source.clone(), enum_decl),
                         );
-                        register_enum_compiler_items(&type_table, enum_decl, module_source, logger);
+                        register_enum_compiler_items(type_table, enum_decl, module_source, logger);
                     }
                     Item::Resource(resource_decl) => {
                         let def = resolutions.defs().def_at(resource_decl.id);
@@ -741,7 +704,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             });
                         }
                         register_type_compiler_item(
-                            &type_table,
+                            type_table,
                             CompilerItemKind::Resource,
                             &resource_decl.attrs,
                             resource_decl.id,
@@ -753,7 +716,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Trait(trait_decl) => {
                         register_trait_compiler_item(
-                            &type_table,
+                            type_table,
                             &trait_decl.attrs,
                             trait_decl.id,
                             &trait_decl.name,
@@ -766,7 +729,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::TupleTypeDecl(decl) => {
                         register_tuple_compiler_item(
-                            &type_table,
+                            type_table,
                             &decl.attrs,
                             decl.id,
                             module_source,
@@ -776,7 +739,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::BuiltinTypeDecl(decl) => {
                         register_type_compiler_item(
-                            &type_table,
+                            type_table,
                             CompilerItemKind::BuiltinType,
                             &decl.attrs,
                             decl.id,
@@ -788,7 +751,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Newtype(decl) => {
                         register_type_compiler_item(
-                            &type_table,
+                            type_table,
                             CompilerItemKind::Newtype,
                             &decl.attrs,
                             decl.id,
@@ -802,13 +765,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
         }
+        (pending_extends, resource_method_names)
+    }
 
-        // Newtype pre-pass, before any struct field is resolved. Unlike structs
-        // and variants, newtypes are not name-registered in the first pass, so a
-        // field referencing one from a module processed later would resolve to
-        // `unknown`. Newtype bases name primitives or structs, already
-        // registered; a cross-module newtype→newtype chain resolves by repeating
-        // to a fixpoint.
+    /// Resolves every newtype's base, before any struct field is resolved.
+    /// Unlike structs and variants, newtypes are not declared by
+    /// [`Self::declare_nominal_types`], so a field referencing one from a
+    /// module processed later would resolve to `unknown`. Newtype bases name
+    /// primitives or structs, already declared; a cross-module
+    /// newtype→newtype chain resolves by repeating to a fixpoint.
+    fn resolve_newtype_bases_to_fixpoint(&self, data: &mut DataDecls) {
+        let Self {
+            modules,
+            served,
+            type_table,
+            resolutions,
+            trait_env,
+            interner,
+            entry_module_source,
+            invocations,
+            ..
+        } = *self;
+        // The collection passes run ahead of any walk, so no walk adds to them.
+        let no_walk = ModuleDecls::default();
         loop {
             let mut newly_resolved = false;
             for (module_source, module) in modules {
@@ -820,7 +799,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     module,
                     module_source,
                     Some(entry_module_source),
-                    &invocations,
+                    invocations,
                 );
                 for item in &module.items {
                     let Item::Newtype(newtype_decl) = item else {
@@ -838,15 +817,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             continue;
                         }
                         let lookup = TypeLookup {
-                            resolutions: &resolutions,
+                            resolutions,
                             namespace_imports: &namespace_imports,
-                            program: &data,
+                            program: data,
                             walk: &no_walk,
-                            decls: &trait_env,
+                            decls: trait_env,
                         };
                         let base_type_id =
                             lookup.resolve(&newtype_decl.ty, &mut type_table.borrow_mut());
-                        data.declare_newtype(&type_table, def, newtype_decl.id, base_type_id);
+                        data.declare_newtype(type_table, def, newtype_decl.id, base_type_id);
                         newly_resolved = true;
                     } else if !data.generic_newtypes.contains_key(&def) {
                         data.generic_newtypes
@@ -859,10 +838,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 break;
             }
         }
+    }
 
-        // Second sub-pass: resolve struct fields and newtypes.
-        // Each module's lookup goes directly through the in-progress shared
-        // tables via [`TypeLookup`] — no per-module flat-map cloning.
+    /// Resolves the members [`Self::declare_nominal_types`] left open: struct
+    /// fields, variant payloads, flags, and the newtypes not yet declared.
+    /// Each module's lookup goes directly through the in-progress shared
+    /// tables via [`TypeLookup`] — no per-module flat-map cloning.
+    fn resolve_declared_members(&self, data: &mut DataDecls) -> Result<(), Bail> {
+        let Self {
+            modules,
+            served,
+            type_table,
+            resolutions,
+            trait_env,
+            interner,
+            entry_module_source,
+            invocations,
+            logger,
+        } = *self;
+        // The collection passes run ahead of any walk, so no walk adds to them.
+        let no_walk = ModuleDecls::default();
         for (module_source, module) in modules {
             if served.contains(module_source) {
                 // Served fields are already resolved in the seeded maps.
@@ -873,17 +868,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 module,
                 module_source,
                 Some(entry_module_source),
-                &invocations,
+                invocations,
             );
 
             for item in &module.items {
                 // Rebuilt per item: the tables it borrows grow between items.
                 let lookup = TypeLookup {
-                    resolutions: &resolutions,
+                    resolutions,
                     namespace_imports: &namespace_imports,
-                    program: &data,
+                    program: data,
                     walk: &no_walk,
-                    decls: &trait_env,
+                    decls: trait_env,
                 };
                 match item {
                     Item::Struct(struct_decl) => {
@@ -921,7 +916,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         let base_type_id =
                             lookup.resolve(&newtype_decl.ty, &mut type_table.borrow_mut());
                         let def = resolutions.defs().def_at(newtype_decl.id);
-                        data.declare_newtype(&type_table, def, newtype_decl.id, base_type_id);
+                        data.declare_newtype(type_table, def, newtype_decl.id, base_type_id);
                     }
                     Item::Variant(variant_decl) => {
                         let def = resolutions.defs().def_at(variant_decl.id);
@@ -957,68 +952,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             )?;
                         }
                         let def = resolutions.defs().def_at(flags_decl.id);
-                        data.declare_flags(&type_table, def, module_source.clone(), flags_decl);
+                        data.declare_flags(type_table, def, module_source.clone(), flags_decl);
                     }
                     _ => {}
                 }
             }
         }
-        for (module, error) in newtype_cycles(modules, &resolutions) {
-            logger.error_in(&module, error)?;
-        }
+        Ok(())
+    }
 
-        let sorted_sources = Self::sorted_module_sources(modules);
-
-        let (cm_interface_registry, world_registry) = {
-            let _span = logger.span("elaborate/cm_interface_registry");
-            let (mut cm_interface_registry, world_registry) =
-                CmInterfaceRegistry::build_from_stdlib();
-            // `build_from_stdlib` hands back a process-wide cached `Arc`, and
-            // this compilation answers reference sites into the registry's
-            // interior-mutable table. Take a private copy before anything can
-            // write, or one compilation's answers become every later one's.
-            let _ = Arc::make_mut(&mut cm_interface_registry);
-            // Only the WIT importer knows a component reference's precise
-            // owning interface, so its answers are carried here rather than
-            // re-derived from the binding module's own interface FQ. They must
-            // land before the decls are registered: registration resolves a
-            // parameter's newtype through the interface its reference names.
-            cm_interface_registry.extend_source_interfaces(cm_source_interfaces.clone());
-            Arc::make_mut(&mut cm_interface_registry).bind_program_types(modules, &resolutions);
-            // Resolve `Interface::method` calls into CM components during
-            // annotate — the same role build_from_stdlib plays for WASI.
-            fold_component_interfaces(&mut cm_interface_registry, modules)
-                .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
-            (cm_interface_registry, world_registry)
-        };
-        let builtin_registry = {
-            let _span = logger.span("elaborate/builtin_registry");
-            let mut registry = if let Some(snap_state) = snapshot_state {
-                // The snapshot's registry is bound to the snapshot's
-                // `TypeTable`, whose entries we cloned into `type_table`
-                // above — so the registered `TypeId`s remain valid.
-                (*snap_state.tysys.builtin_registry).clone()
-            } else {
-                BuiltinRegistry::build(&modules[&ModuleSource::builtin()], &type_table)
-            };
-            // Served wasm assets (e.g. `core:libm.wat`) are already in
-            // `snapshot.state.tysys.builtin_registry`.
-            for (ms, module) in modules {
-                if ms.is_wasm_asset() && !served.contains(ms) {
-                    registry.register_wasm_module(ms, module, &type_table);
-                }
-            }
-            registry
-        };
-
-        for (module_source, violation) in orphan_violations {
-            let _ = logger.error_in(&module_source, violation);
-        }
-
-        for (module_source, violation) in signature_reach::violations(modules, &resolutions) {
-            let _ = logger.error_in(&module_source, violation);
-        }
-
+    /// Reports each user impl of a trait only the compiler implements.
+    fn report_impls_of_sealed_traits(&self) {
+        let Self {
+            type_table,
+            resolutions,
+            trait_env,
+            logger,
+            ..
+        } = *self;
         for sealed_item in CompilerItem::REFLECT_KINDS.into_iter().chain([
             CompilerItem::Member,
             CompilerItem::Ref,
@@ -1049,17 +1000,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
         }
+    }
 
-        // A bound binding an associated type (`I: Iterator<Item = u8>`) names
-        // one its trait declares, and one taking no parameters: a family is no
-        // type until a projection gives it arguments, so nothing could hold it.
+    /// Reports each bound whose associated-type binding is invalid. A bound
+    /// binding one (`I: Iterator<Item = u8>`) names one its trait declares,
+    /// and one taking no parameters: a family is no type until a projection
+    /// gives it arguments, so nothing could hold it.
+    fn report_invalid_assoc_type_bindings(&self) {
+        let Self {
+            modules,
+            resolutions,
+            trait_env,
+            logger,
+            ..
+        } = *self;
         for (module_source, module) in modules {
             if !is_user_local(module_source) {
                 continue;
             }
             let mut checked = BoundBindingsChecked {
-                resolutions: &resolutions,
-                trait_env: &trait_env,
+                resolutions,
+                trait_env,
                 errors: Vec::new(),
             };
             for item in &module.items {
@@ -1069,13 +1030,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let _ = logger.error_in(module_source, error);
             }
         }
+    }
 
-        // Nothing downstream rejects an impl that disagrees with its trait: an
-        // unbound associated type reaches codegen unsubstituted, a wrong arity
-        // only fails Wasm validation.
-        //
-        // The trait is the one the impl's header resolved to, so a module
-        // implementing its own `Encode` is never checked against another's.
+    /// Reports each user impl that disagrees with its trait. Nothing
+    /// downstream rejects one: an unbound associated type reaches codegen
+    /// unsubstituted, a wrong arity only fails Wasm validation.
+    ///
+    /// The trait is the one the impl's header resolved to, so a module
+    /// implementing its own `Encode` is never checked against another's.
+    fn report_impls_disagreeing_with_trait(&self) {
+        let Self {
+            resolutions,
+            trait_env,
+            logger,
+            ..
+        } = *self;
         for header in trait_env.impl_headers.values() {
             if !is_user_local(&header.module) {
                 continue;
@@ -1233,6 +1202,147 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
         }
+    }
+}
+
+impl<'a, H: CompilerHost> Elaborator<'a, H> {
+    /// Annotate phase: collect decl-level type information and intern every
+    /// declaration in the shared [`TypeTable`]. Produces an [`AnnotateState`]
+    /// that downstream phases (`build_tir`, LSP queries) consume read-mostly
+    /// via `Rc`.
+    pub(crate) fn annotate_modules(
+        symbols: &'a SymbolTable,
+        modules: &'a IndexMap<ModuleSource, Module>,
+        entry_module_source: &ModuleSource,
+        logger: &'a Logger<'a, H>,
+        included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
+        invocations: InvocationIndex,
+        interner: Rc<RefCell<ModuleSourceInterner>>,
+        cm_source_interfaces: &SourceInterfaceBatch,
+        snapshot: Option<&Semantics>,
+    ) -> Result<AnnotateState, Bail> {
+        let invocations = Rc::new(invocations);
+        let served: IndexSet<ModuleSource> = snapshot.map(snapshot_sources).unwrap_or_default();
+        // Seed the shared type table from the snapshot when available so
+        // served `TypeId`s occupy the same indices as in cached `TirModule`s.
+        let type_table = Rc::new(RefCell::new(
+            snapshot.map_or_else(TypeTable::new, |s| s.types.clone()),
+        ));
+        let snapshot_state =
+            snapshot.map(|s| s.state.as_ref().expect("a snapshot is built complete"));
+
+        // Resolve every reference site once, from the module that wrote it,
+        // before anything asks what a name means — the collection passes
+        // below are the first to ask.
+        let resolutions = {
+            let _span = logger.span("elaborate/resolutions");
+            // Continue the snapshot's table: an `ImplSig` cached there
+            // carries `DefId`s, and they only read back as the same
+            // declarations if the identities are the same ones.
+            let seed = snapshot_state.map(|s| s.tysys.resolutions.defs().as_ref());
+            let defs = std::sync::Arc::new(DefTable::build_seeded(seed, modules, symbols));
+            // The type table renders a nominal type's head out of the
+            // declaration it carries, so it reads the same identities.
+            type_table.borrow_mut().attach_defs(defs.clone());
+            Rc::new(Resolutions::build(modules, symbols, defs))
+        };
+        for redeclaration in resolutions.redeclarations() {
+            let _ = logger.error_in(&redeclaration.module, redeclaration);
+        }
+
+        // Ahead of the collection passes, which resolve `T::Assoc` in a
+        // declaration and need the trait declaring it to name the projection.
+        let (trait_env, orphan_violations) = {
+            let _span = logger.span("elaborate/trait_env");
+            TraitEnv::build(
+                modules,
+                &mut interner.borrow_mut(),
+                Some(entry_module_source),
+                &invocations,
+                &resolutions,
+            )
+        };
+
+        // Keyed by the declaration, not by a spelling a module has to be
+        // standing in to resolve. `TypeLookup` reaches an entry through
+        // `Resolutions`, which is the only thing that turns a name into one.
+        let mut data: DataDecls = snapshot_state
+            .map(|s| (*s.tysys.data).clone())
+            .unwrap_or_default();
+
+        let passes = DeclPasses {
+            modules,
+            served: &served,
+            type_table: &type_table,
+            resolutions: &resolutions,
+            trait_env: &trait_env,
+            interner: &interner,
+            entry_module_source,
+            invocations: &invocations,
+            logger,
+        };
+        let (pending_extends, resource_method_names) = passes.declare_nominal_types(&mut data);
+        passes.resolve_newtype_bases_to_fixpoint(&mut data);
+        passes.resolve_declared_members(&mut data)?;
+        for (module, error) in newtype_cycles(modules, &resolutions) {
+            logger.error_in(&module, error)?;
+        }
+
+        let sorted_sources = Self::sorted_module_sources(modules);
+
+        let (cm_interface_registry, world_registry) = {
+            let _span = logger.span("elaborate/cm_interface_registry");
+            let (mut cm_interface_registry, world_registry) =
+                CmInterfaceRegistry::build_from_stdlib();
+            // `build_from_stdlib` hands back a process-wide cached `Arc`, and
+            // this compilation answers reference sites into the registry's
+            // interior-mutable table. Take a private copy before anything can
+            // write, or one compilation's answers become every later one's.
+            let _ = Arc::make_mut(&mut cm_interface_registry);
+            // Only the WIT importer knows a component reference's precise
+            // owning interface, so its answers are carried here rather than
+            // re-derived from the binding module's own interface FQ. They must
+            // land before the decls are registered: registration resolves a
+            // parameter's newtype through the interface its reference names.
+            cm_interface_registry.extend_source_interfaces(cm_source_interfaces.clone());
+            Arc::make_mut(&mut cm_interface_registry).bind_program_types(modules, &resolutions);
+            // Resolve `Interface::method` calls into CM components during
+            // annotate — the same role build_from_stdlib plays for WASI.
+            fold_component_interfaces(&mut cm_interface_registry, modules)
+                .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
+            (cm_interface_registry, world_registry)
+        };
+        let builtin_registry = {
+            let _span = logger.span("elaborate/builtin_registry");
+            let mut registry = if let Some(snap_state) = snapshot_state {
+                // The snapshot's registry is bound to the snapshot's
+                // `TypeTable`, whose entries we cloned into `type_table`
+                // above — so the registered `TypeId`s remain valid.
+                (*snap_state.tysys.builtin_registry).clone()
+            } else {
+                BuiltinRegistry::build(&modules[&ModuleSource::builtin()], &type_table)
+            };
+            // Served wasm assets (e.g. `core:libm.wat`) are already in
+            // `snapshot.state.tysys.builtin_registry`.
+            for (ms, module) in modules {
+                if ms.is_wasm_asset() && !served.contains(ms) {
+                    registry.register_wasm_module(ms, module, &type_table);
+                }
+            }
+            registry
+        };
+
+        for (module_source, violation) in orphan_violations {
+            let _ = logger.error_in(&module_source, violation);
+        }
+
+        for (module_source, violation) in signature_reach::violations(modules, &resolutions) {
+            let _ = logger.error_in(&module_source, violation);
+        }
+
+        passes.report_impls_of_sealed_traits();
+        passes.report_invalid_assoc_type_bindings();
+        passes.report_impls_disagreeing_with_trait();
 
         resolve_resource_extends(
             &pending_extends,

@@ -454,7 +454,9 @@ fn resolve(program: &str, cwd: &File) -> io::Result<PathBuf> {
     find_program(program).ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))
 }
 
-/// The baseline variables, then the guest's, which override them.
+/// The baseline variables, then the guest's, which override them. A name is
+/// there once, with the value given last: programs disagree on which entry of
+/// a repeated name they read.
 fn child_env(
     env: &[(String, String)],
     scratch: &Scratch,
@@ -468,8 +470,10 @@ fn child_env(
         .collect();
     vars.push(("HOME".into(), scratch.home().into()));
     vars.push(("TMPDIR".into(), scratch.tmp().into()));
-    vars.retain(|(key, _)| !env.iter().any(|(guest, _)| key == guest.as_str()));
-    vars.extend(env.iter().map(|(key, value)| (key.into(), value.into())));
+    for (key, value) in env {
+        vars.retain(|(set, _)| set != key.as_str());
+        vars.push((key.into(), value.into()));
+    }
     vars
 }
 

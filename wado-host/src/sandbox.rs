@@ -25,6 +25,8 @@ use terminal::{Reservation, Terminal};
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
+mod vfork;
+#[cfg(target_os = "linux")]
 use linux as backend;
 
 #[cfg(target_os = "macos")]

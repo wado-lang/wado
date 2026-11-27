@@ -359,7 +359,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Queue `pending`, which records its dispatch once it selects.
-    pub(super) fn wait_for_operator(&mut self, pending: PendingOperator) {
+    pub(super) fn wait_for_operator(&self, pending: PendingOperator) {
         self.infer_holes
             .require_pending(PendingSelection::Operator(pending));
     }
@@ -381,7 +381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Queue `pending`, which records its dispatch once it selects.
-    pub(super) fn wait_for_static(&mut self, pending: PendingStatic) {
+    pub(super) fn wait_for_static(&self, pending: PendingStatic) {
         self.infer_holes
             .require_pending(PendingSelection::Static(Box::new(pending)));
     }

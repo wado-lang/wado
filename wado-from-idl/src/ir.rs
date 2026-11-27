@@ -142,6 +142,8 @@ pub struct WadoField {
     pub doc_comment: Option<String>,
     /// Original WIT kebab-case name for the `#[cm("...")]` attribute
     pub cm_attr: String,
+    /// What the field is when a literal leaves it out, as written in Wado.
+    pub default: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -299,6 +301,15 @@ pub enum WadoType {
 
     // Named types
     Named(String),
+    /// A `WebIDL` enum by its Wado name: a string to the host, and its case's
+    /// index across the boundary.
+    StringEnum(String),
+    /// A `WebIDL` dictionary: an object to the host, and a record across the
+    /// boundary.
+    Dictionary(WadoDictionary),
+    /// A `WebIDL` union the guest supplies: any one of its cases to the host,
+    /// and a variant across the boundary.
+    Union(WadoUnion),
 
     // References
     Borrow(Box<WadoType>),
@@ -310,7 +321,89 @@ pub enum WadoType {
     },
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct WadoDictionary {
+    /// Its Wado name.
+    pub name: String,
+    pub fields: Vec<DictionaryField>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DictionaryField {
+    /// The member's name on the host's object.
+    pub host_name: String,
+    pub ty: WadoType,
+    /// Whether the host refuses an object without it.
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WadoUnion {
+    /// Its Wado name.
+    pub name: String,
+    pub cases: Vec<UnionCase>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnionCase {
+    pub name: String,
+    pub ty: WadoType,
+}
+
 impl WadoType {
+    /// Visits this type and each type it is made of, itself first.
+    pub fn walk<'a>(&'a self, visit: &mut impl FnMut(&'a WadoType)) {
+        visit(self);
+        match self {
+            Self::Option(inner)
+            | Self::List(inner)
+            | Self::Stream(inner)
+            | Self::Future(inner)
+            | Self::Borrow(inner) => inner.walk(visit),
+            Self::HashMap(key, value) => {
+                key.walk(visit);
+                value.walk(visit);
+            }
+            Self::Result { ok, err } => {
+                for side in [ok, err].into_iter().flatten() {
+                    side.walk(visit);
+                }
+            }
+            Self::Tuple(types) | Self::Callback { params: types, .. } => {
+                for ty in types {
+                    ty.walk(visit);
+                }
+            }
+            Self::Dictionary(dictionary) => {
+                for field in &dictionary.fields {
+                    field.ty.walk(visit);
+                }
+            }
+            Self::Union(union) => {
+                for case in &union.cases {
+                    case.ty.walk(visit);
+                }
+            }
+            Self::StringEnum(_)
+            | Self::Bool
+            | Self::Char
+            | Self::I8
+            | Self::I16
+            | Self::I32
+            | Self::I64
+            | Self::I128
+            | Self::U8
+            | Self::U16
+            | Self::U32
+            | Self::U64
+            | Self::U128
+            | Self::F32
+            | Self::F64
+            | Self::String
+            | Self::Named(_) => {}
+        }
+    }
+
     /// What a callback export's name calls an argument of this type; `None`
     /// where the host cannot call a closure back with one.
     pub fn callback_argument_word(&self) -> Option<&'static str> {

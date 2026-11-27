@@ -845,7 +845,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     /// Reject `impl From<source> for target` where the language provides the
     /// conversion (WEP: Conversion Traits).
-    fn reject_provided_from(&mut self, target: TypeId, source: TypeId, span: Span) {
+    fn reject_provided_from(&self, target: TypeId, source: TypeId, span: Span) {
         let (provided, header) = {
             let tt = self.tysys.type_table.borrow();
             if !tt.converts_without_impl(target, source) {
@@ -908,7 +908,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// and trait arguments alone, so one they never mention has no value to be
     /// given (Rust's E0207). A bound's arguments count as mentions, its subject
     /// does not; an effect parameter is bound by the handler.
-    fn check_impl_params_constrained(&mut self, impl_block: &ast::ImplBlock) {
+    fn check_impl_params_constrained(&self, impl_block: &ast::ImplBlock) {
         let mut named: Vec<String> = Vec::new();
         impl_block.ty.mentioned_names(&mut named);
         if let Some(trait_type) = &impl_block.trait_type {
@@ -950,7 +950,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     /// Require that an `impl` header's trait position names a trait, an
     /// `interface` or a resource, at the header's own reference site.
-    fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
+    fn check_impl_trait_resolves(&self, impl_block: &ast::ImplBlock, trait_type: &Type) {
         if self.impl_trait_decl(trait_type).is_some() {
             return;
         }
@@ -960,7 +960,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         });
     }
 
-    fn reject_second_effect_param(&mut self, type_params: &[ast::GenericParam]) {
+    fn reject_second_effect_param(&self, type_params: &[ast::GenericParam]) {
         if let Some(second) = type_params.iter().filter(|p| p.is_effect).nth(1) {
             let _ = self.emit(TypeError::SecondEffectParam { span: second.span });
         }
@@ -1206,7 +1206,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// type parameter. A projection supplies one type per parameter, so a pack,
     /// an effect or a default has nothing to take.
     pub(super) fn reject_unsupported_assoc_params(
-        &mut self,
+        &self,
         assoc_name: &str,
         params: &[ast::GenericParam],
     ) {
@@ -1487,7 +1487,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Reject a resource no other component can hold, anywhere within
     /// `type_id`, the type of `position` in the `export` `func`.
     fn check_export_resources(
-        &mut self,
+        &self,
         func: &ast::Function,
         position: String,
         type_id: TypeId,
@@ -1560,13 +1560,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Diagnose the first type in `position` of the `export fn` `function`
     /// that [`Self::unpublished_within`] finds.
-    fn check_published(
-        &mut self,
-        function: &Function,
-        position: &str,
-        type_id: TypeId,
-        span: Span,
-    ) {
+    fn check_published(&self, function: &Function, position: &str, type_id: TypeId, span: Span) {
         let module = self
             .tysys
             .resolutions
@@ -1698,7 +1692,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Diagnose a closure in parameter `param` of the import `function`. A bare
     /// closure crosses as a callback, which the host calls with scalars and handles.
     pub(super) fn check_import_param_closure(
-        &mut self,
+        &self,
         function: &str,
         param: &str,
         type_id: TypeId,
@@ -2402,7 +2396,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// declaration says only what the language delivers. Each row pairs the
     /// offending shape with the message explaining why it cannot work.
     pub(super) fn reject_unsupported_operation_clauses(
-        &mut self,
+        &self,
         owner: &str,
         methods: &[ast::Function],
         kind: OperationOwner,
@@ -2495,7 +2489,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// is reported as any function with a body is: here, because a default no
     /// impl takes is walked nowhere else.
     pub(super) fn reject_declaration_attrs_on_requirement(
-        &mut self,
+        &self,
         owner: &str,
         method: &ast::Function,
     ) {

@@ -260,7 +260,7 @@ fn orphaned() -> bool {
 /// background may do so only with `SIGTTOU` blocked, as a shell does. A
 /// terminal that refuses, as one that hung up does, stays as it was, and a
 /// child in the background stops at its first use of it. Async-signal-safe,
-/// so a child may call it between `fork` and `exec`.
+/// so a child may call it before its `exec`.
 pub(super) fn give_terminal(fd: RawFd, group: libc::pid_t) {
     // SAFETY: plain calls on signal sets that live on this stack.
     unsafe {

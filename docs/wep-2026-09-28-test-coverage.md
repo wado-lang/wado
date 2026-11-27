@@ -214,7 +214,7 @@ Coverage is therefore counted from source, and it does not depend on `-O`. The
 test suite checks that invariant (see Testing). The price is speed: an
 instrumented build runs slower than the plain one, most of all when the
 standard library is measured and every prelude call holds a probe. Timeouts
-stay as declared, so a test near its limit may need a larger `#[timeout_ms]`
+stay as declared, so a test near its limit may need a larger `#[timeout]`
 under coverage.
 
 ### A probe tells the host once, the first time it runs
