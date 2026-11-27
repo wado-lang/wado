@@ -1,14 +1,11 @@
 #![no_prelude]
 #![stdlib("core:prelude/shared.wado")]
-// The shared cell: one object under every copy, which any path may write.
-// See WEP 2026-11-27.
 
 use { Default, Eq, Inspect } from "core:prelude/traits.wado";
 use { Formatter } from "core:prelude/format.wado";
 
 /// A value that is one object under every copy. `*c` is the place it holds,
-/// written through a `&` and without `mut`. Declared definition-less: the
-/// compiler stores it as it stores a `&mut T`.
+/// written through a `&` and without `mut`.
 #[compiler_item("shared")]
 pub type Shared<T>;
 

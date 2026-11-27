@@ -1505,8 +1505,7 @@ addressable cell, so a write through the reference would be lost.
 ### `pub type Shared<T>`
 
 A value that is one object under every copy. `*c` is the place it holds,
-written through a `&` and without `mut`. Declared definition-less: the
-compiler stores it as it stores a `&mut T`.
+written through a `&` and without `mut`.
 
 #### `pub fn new(value: T) -> Shared<T>`
 

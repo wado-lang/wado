@@ -888,7 +888,10 @@ fn joined_elements(parts: &List<Known>) -> Result<Elements, String> {
             a.extend(b);
             continue;
         }
-        let [Some(l), Some(r)] = [integer_polys(&joined), integer_polys(more)] else {
+        let [Some(l), Some(r)] = [
+            integer_polys(&joined),
+            integer_polys(more),
+        ] else {
             return Result::Err("the operands are not one element type");
         };
         let mut values = l;
