@@ -122,6 +122,18 @@ impl Signatures {
         self.associated_constants.get(&(owner, name.to_string()))
     }
 
+    /// The constant `ancestors` hand down as `name`, with the resource
+    /// declaring it. A trait impl is not inherited, so its constant is not.
+    pub(crate) fn inherited_constant(
+        &self,
+        ancestors: impl Iterator<Item = DefId>,
+        name: &str,
+    ) -> Option<(DefId, &AssocConstSig)> {
+        ancestors
+            .filter_map(|ancestor| Some((ancestor, self.associated_constant(ancestor, name)?)))
+            .find(|(_, constant)| constant.inherent_visibility.is_some())
+    }
+
     /// The `__DATA__` section of `module`, if it declares one.
     pub(crate) fn data_section(&self, module: &ModuleSource) -> Option<&str> {
         self.data_sections.get(module).map(String::as_str)

@@ -2326,11 +2326,14 @@ impl TypeSystem {
         owner: DefId,
         name: &str,
     ) -> Option<sig::AssocConstSig> {
-        self.type_table
-            .borrow()
-            .resource_chain(owner)
-            .find_map(|holder| self.signatures.associated_constant(holder, name))
-            .cloned()
+        let own = self.signatures.associated_constant(owner, name);
+        own.or_else(|| {
+            let type_table = self.type_table.borrow();
+            let ancestors = type_table.resource_chain(owner).skip(1);
+            let (_, constant) = self.signatures.inherited_constant(ancestors, name)?;
+            Some(constant)
+        })
+        .cloned()
     }
 
     /// [`Self::associated_constant_of`] for a qualified path in expression

@@ -18,6 +18,22 @@ impl Element {
     pub const OWN: i32 = 7;
 }
 
+trait Named {
+    fn name() -> String;
+}
+
+// A trait impl is not inherited, so neither is its constant: each of these
+// is the constant of its own impl.
+impl Named for Node {
+    const NAME: String = "node";
+    fn name() -> String { return Node::NAME; }
+}
+
+impl Named for Element {
+    const NAME: String = "element";
+    fn name() -> String { return Element::NAME; }
+}
+
 fn kind(n: u16) -> String {
     return match n {
         HtmlElement::ELEMENT_NODE => "element",
@@ -31,6 +47,11 @@ test "a constant is read through a resource extending its owner" {
     assert Element::ELEMENT_NODE == 1;
     assert HtmlElement::TEXT_NODE == 3;
     assert HtmlElement::OWN == 7;
+}
+
+test "a trait impl's constant stays with its impl" {
+    assert Node::name() == "node";
+    assert Element::name() == "element";
 }
 
 test "a pattern names one through a child too" {

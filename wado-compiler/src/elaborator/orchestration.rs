@@ -490,11 +490,8 @@ fn reject_constant_overrides<H: CompilerHost>(
     let type_table = tysys.type_table.borrow();
     let defs = tysys.resolutions.defs();
     for ((owner, name), constant) in &signatures.associated_constants {
-        let declaring = type_table
-            .resource_chain(*owner)
-            .skip(1)
-            .find(|ancestor| signatures.associated_constant(*ancestor, name).is_some());
-        if let Some(ancestor) = declaring {
+        let ancestors = type_table.resource_chain(*owner).skip(1);
+        if let Some((ancestor, _)) = signatures.inherited_constant(ancestors, name) {
             let _ = logger.error_in(
                 &constant.module,
                 TypeError::ResourceExtends {
