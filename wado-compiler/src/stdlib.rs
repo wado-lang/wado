@@ -125,7 +125,6 @@ stdlib_table! {
     "core:collections" => "core/collections.wado",
     "core:collections/entries.wado" => "core/collections/entries.wado",
     "core:collections/hashmap.wado" => "core/collections/hashmap.wado",
-    "core:collections/hash_index.wado" => "core/collections/hash_index.wado",
     "core:collections/treemap.wado" => "core/collections/treemap.wado",
     "core:rt" => "core/rt.wado",
     "core:prelude" => "core/prelude.wado",
