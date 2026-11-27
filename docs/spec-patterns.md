@@ -524,7 +524,9 @@ become references. Matching `&Option<T>` with `Some(x)` gives `x: &T`, not
 Under a `&mut` scrutinee, a payload of a replace-on-assign type (a primitive,
 `enum`, `flags`, `fn` or reference) cannot bind at all, even to be read: matching
 `&mut Option<i32>` with `Some(x)` is an error. Match `*r` to bind the payload
-by value, or a `&` to the value to bind a `&i32`. See
+by value, or a `&` to the value to bind a `&i32`. A `variant` payload, field
+or element does bind, and a mutation of what it holds lands. Replacing it whole
+through the binding is an error. See
 [Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements).
 
 A destructuring `let` or `for` binding follows the same rule, and so does a reference met below the top of a pattern: `for let [a, b] of &pairs` gives `a: &A`, and `[n, { x, .. }]` against `[i32, &Point]` gives `x: &i32`.

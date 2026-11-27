@@ -306,21 +306,12 @@ pub(crate) fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<
 
 /// Visit every local a pattern binds, with the type it is bound at.
 pub(crate) fn for_each_pattern_binding(pattern: &TirPattern, visit: &mut impl FnMut(u32, TypeId)) {
-    for_each_pattern_binding_place(pattern, &mut |local, ty, _| visit(local, ty));
-}
-
-/// [`for_each_pattern_binding`], with the kind of place each binding reads:
-/// `Storage` for one that binds the scrutinee whole.
-pub(crate) fn for_each_pattern_binding_place(
-    pattern: &TirPattern,
-    visit: &mut impl FnMut(u32, TypeId, PlaceKind),
-) {
     let scrutinee = Slot {
         ty: None,
         kind: PlaceKind::Storage,
     };
-    for_each_pattern_binding_in(pattern, scrutinee, &UnknownSlots, &mut |local, ty, slot| {
-        visit(local, ty, slot.kind);
+    for_each_pattern_binding_in(pattern, scrutinee, &UnknownSlots, &mut |local, ty, _| {
+        visit(local, ty);
     });
 }
 

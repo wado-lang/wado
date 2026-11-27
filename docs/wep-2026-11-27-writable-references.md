@@ -122,7 +122,9 @@ what the variable holds when it runs, as it does today.
 ### A write that leaves a `&P` behind warns
 
 An assignment to a place while a `&P` taken from it is still read is almost
-always a mistake under the rule above. The compiler warns where it is certain:
+always a mistake under the rule above. The lint `stale_reference` warns at the
+read, naming the assignment, and `allow` waives it. It fires where the compiler
+is certain:
 the reference, the assignment and the later read are in one body, and the type
 is known to be replaced on assignment. It stays silent in a body generic over
 the type, and across a call. The warning is best effort and promises to find
@@ -198,10 +200,9 @@ A `variant` is replaced on assignment, yet its payload is written in place.
 Much of the corpus writes `if let Some(e) = &mut self.f` and depends on that.
 It fits neither row above.
 
-### The stale-read warning has no name
+### Whether `stale_reference` covers a `variant`
 
-It is a lint like `shadowed_name`, waived by `allow`. Its name is not chosen,
-and neither is whether a `variant` counts, given the gap above.
+It waits on the gap above.
 
 ### Migration
 

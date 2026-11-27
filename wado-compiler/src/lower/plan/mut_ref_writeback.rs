@@ -3,7 +3,7 @@
 //! hid from the reference site. See
 //! `docs/wep-2026-06-13-reference-representation.md`.
 
-use super::value_copy::analyze::for_each_pattern_binding_place;
+use super::value_copy::analyze::{Slot, for_each_pattern_binding_in};
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::place::PlaceKind;
 use super::value_copy::reach::ClosureCaptures;
@@ -231,20 +231,26 @@ impl WriteBack<'_> {
     /// Note the bindings of `pattern` that hold a detached reference. A `&mut`
     /// scrutinee binds each field, element and payload by reference, and one of
     /// a replace type is read into a fresh box. A binding of the scrutinee
-    /// whole is the scrutinee's own reference.
+    /// whole is the scrutinee's own reference, and one whose slot already
+    /// holds a `&mut` binds that reference by value.
     fn bind_pattern(&mut self, pattern: &TirPattern, scrutinee: &TirExpr, span: Span) {
         let whole_is_detached = self.detached_in_value_position(scrutinee).is_some();
+        let whole = Slot {
+            ty: Some(scrutinee.type_id),
+            kind: PlaceKind::Storage,
+        };
         let mut bindings = Vec::new();
-        for_each_pattern_binding_place(pattern, &mut |local, type_id, kind| {
-            bindings.push((local, type_id, kind));
+        for_each_pattern_binding_in(pattern, whole, self.carrying, &mut |local, type_id, slot| {
+            bindings.push((local, type_id, slot));
         });
-        for (local, type_id, kind) in bindings {
-            let detached = match kind {
+        for (local, type_id, slot) in bindings {
+            let detached = match slot.kind {
                 PlaceKind::Storage => whole_is_detached,
                 PlaceKind::Field | PlaceKind::Value => matches!(
                     self.type_table.get(type_id),
                     ResolvedType::MutRef(pointee)
-                        if self.type_table.is_boxed_reference_target(*pointee)
+                        if slot.ty.is_none_or(|held| held == *pointee)
+                            && self.type_table.is_boxed_reference_target(*pointee)
                             && !self.type_table.boxes_slot(*pointee)
                 ),
             };
