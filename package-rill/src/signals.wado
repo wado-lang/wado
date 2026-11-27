@@ -22,11 +22,11 @@ struct Readers {
     observers: List<Observer>,
     version: i32,
     // The memo whose value this is; `None` for a signal.
-    memo: Option<&mut MemoCore>,
+    memo: Option<Shared<MemoCore>>,
 }
 
 pub struct Dep {
-    readers: &mut Readers,
+    readers: Shared<Readers>,
 }
 
 /// A dependency as a computation read it.
@@ -36,8 +36,8 @@ struct Seen {
 }
 
 variant Observer {
-    Memo(&mut MemoCore),
-    Effect(&mut EffectCore),
+    Memo(Shared<MemoCore>),
+    Effect(Shared<EffectCore>),
 }
 
 enum Freshness {
@@ -67,7 +67,7 @@ struct EffectCore {
 }
 
 global mut NEXT_OBSERVER_ID: i32 = 0;
-global mut QUEUE: List<&mut EffectCore> = [];
+global mut QUEUE: List<Shared<EffectCore>> = [];
 global mut COMPUTING_MEMOS: i32 = 0;
 
 fn next_observer_id() -> i32 {
@@ -76,8 +76,7 @@ fn next_observer_id() -> i32 {
 }
 
 fn new_dep() -> Dep {
-    let mut readers = Readers { observers: [], version: 0, memo: null };
-    return Dep { readers: &mut readers };
+    return Dep { readers: Shared::new(Readers { observers: [], version: 0, memo: null }) };
 }
 
 /// Whether every dependency still holds what was read, bringing each memo
@@ -94,7 +93,7 @@ fn unchanged(deps: &List<Seen>) -> bool {
     return true;
 }
 
-fn refresh(core: &mut MemoCore) {
+fn refresh(core: Shared<MemoCore>) {
     match core.freshness {
         _::Fresh => {
         },
@@ -204,12 +203,11 @@ struct Cell<T> {
 /// A value that tells its readers when it is written. A copy is the same
 /// signal.
 pub struct Signal<T> {
-    cell: &mut Cell<T>,
+    cell: Shared<Cell<T>>,
 }
 
 pub fn signal<T>(initial: T) -> Signal<T> {
-    let mut cell = Cell { value: initial, dep: new_dep() };
-    return Signal { cell: &mut cell };
+    return Signal { cell: Shared::new(Cell { value: initial, dep: new_dep() }) };
 }
 
 impl<T> Signal<T> {
@@ -220,23 +218,21 @@ impl<T> Signal<T> {
 
     pub fn set(&self, value: T) {
         assert COMPUTING_MEMOS == 0, "a memo computes a value and writes nothing";
-        // A `&self` grants reading alone; the copy holds the cell to write.
-        let signal = *self;
-        signal.cell.value = value;
-        signal.cell.dep.readers.version += 1;
-        notify(signal.cell.dep);
+        self.cell.value = value;
+        self.cell.dep.readers.version += 1;
+        notify(self.cell.dep);
     }
 }
 
 /// Two signals are equal when they are the same signal, whatever they hold.
 impl<T> Eq for Signal<T> {
     fn eq(&self, other: &Self) -> bool {
-        return ref_eq(self.cell, other.cell);
+        return self.cell == other.cell;
     }
 }
 
 struct MemoState<T> {
-    core: &mut MemoCore,
+    core: Shared<MemoCore>,
     cached: Option<T>,
     compute: fn mut() -> T with Track,
 }
@@ -247,21 +243,21 @@ struct MemoState<T> {
 /// It stops listening when the computation that made it is disposed of, and
 /// listens again if it is read after that. `compute` writes no signal.
 pub struct Memo<T> {
-    state: &mut MemoState<T>,
+    state: Shared<MemoState<T>>,
 }
 
 pub fn memo<T: Eq>(compute: fn mut() -> T with Track) -> Memo<T> with Track {
-    let mut core = MemoCore {
+    let core = Shared::new(MemoCore {
         id: next_observer_id(),
         freshness: Freshness::Stale,
         dep: new_dep(),
         deps: [],
         recompute: || {
         },
-    };
-    core.dep.readers.memo = Option::Some(&mut core);
-    let mut state = MemoState { core: &mut core, cached: null, compute };
-    core.recompute = || recompute(&mut state);
+    });
+    core.dep.readers.memo = Option::Some(core);
+    let state = Shared::new(MemoState { core, cached: null, compute });
+    core.recompute = || recompute(state);
     // Its readers still read it, and no write reaches them through it now.
     Track::own(|| {
         core.freshness = Freshness::Stale;
@@ -269,10 +265,10 @@ pub fn memo<T: Eq>(compute: fn mut() -> T with Track) -> Memo<T> with Track {
         core.deps = [];
         notify(core.dep);
     });
-    return Memo { state: &mut state };
+    return Memo { state };
 }
 
-fn recompute<T: Eq>(state: &mut MemoState<T>) {
+fn recompute<T: Eq>(state: Shared<MemoState<T>>) {
     let core = state.core;
     unsubscribe_all(core.deps, core.id);
     let mut computation = Computation {
@@ -301,15 +297,13 @@ fn recompute<T: Eq>(state: &mut MemoState<T>) {
 /// Two memos are equal when they are the same memo.
 impl<T> Eq for Memo<T> {
     fn eq(&self, other: &Self) -> bool {
-        return ref_eq(self.state, other.state);
+        return self.state == other.state;
     }
 }
 
 impl<T> Memo<T> {
     pub fn get(&self) -> T with Track {
-        // A `&self` grants reading alone; the copy holds the state to refresh.
-        let memo = *self;
-        let core = memo.state.core;
+        let core = self.state.core;
         refresh(core);
         Track::read(core.dep);
         return self.state.cached.unwrap();
@@ -317,13 +311,13 @@ impl<T> Memo<T> {
 }
 
 /// Lets go of what the effect owns and of what it listens to.
-fn release(watcher: &mut EffectCore) with Dom {
+fn release(watcher: Shared<EffectCore>) with Dom {
     unsubscribe_all(watcher.deps, watcher.id);
     watcher.deps = [];
     dispose_all(&mut watcher.owned);
 }
 
-fn run(watcher: &mut EffectCore) with Dom {
+fn run(watcher: Shared<EffectCore>) with Dom {
     release(watcher);
     // A disposer that ran during the release may have disposed of the effect.
     if watcher.disposed {
@@ -352,18 +346,18 @@ fn run(watcher: &mut EffectCore) with Dom {
 /// written. What `body` owns is disposed before each rerun, and with the
 /// effect itself.
 pub fn observe(body: fn mut() with (Track, Dom)) with (Track, Dom) {
-    let mut watcher = EffectCore {
+    let watcher = Shared::new(EffectCore {
         id: next_observer_id(),
         disposed: false,
         running: false,
         body,
         deps: [],
         owned: [],
-    };
-    run(&mut watcher);
+    });
+    run(watcher);
     Track::own(|| {
         watcher.disposed = true;
-        release(&mut watcher);
+        release(watcher);
     });
 }
 
@@ -395,7 +389,7 @@ pub fn untracked(body: fn mut() with (Track, Dom)) with Dom {
 /// run has kept what it read and made.
 pub fn flush() with Dom {
     assert COMPUTING_MEMOS == 0, "a memo computes a value and flushes nothing";
-    let mut running: List<&mut EffectCore> = [];
+    let mut running: List<Shared<EffectCore>> = [];
     while !QUEUE.is_empty() {
         let batch = QUEUE;
         QUEUE = [];

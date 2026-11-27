@@ -436,12 +436,11 @@ pub fn each<T: Eq>(items: fn mut() -> List<T> with Track, render: fn mut(T) -> V
 /// The element a view hands over once it is built or claimed. A copy is the
 /// same reference.
 pub struct NodeRef {
-    slot: &mut Option<Element>,
+    slot: Shared<Option<Element>>,
 }
 
 pub fn node_ref() -> NodeRef {
-    let mut slot: Option<Element> = null;
-    return NodeRef { slot: &mut slot };
+    return NodeRef { slot: Shared::new(null) };
 }
 
 impl NodeRef {
