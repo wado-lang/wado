@@ -123,8 +123,10 @@ lower is then available to each interface the slice adds.
 - [x] Lower a `dictionary` to a `struct`, in the bindings and in the glue
 - [x] Read parameters that cross in memory, as more than sixteen core values do
 - [x] Bind an interface's constant as an associated constant of its resource
-- [ ] Bind a callback interface's constant, as `NodeFilter.SHOW_ALL` is: no
-  resource stands for one, and the table does not count it
+- [x] Bind a callback interface as a newtype over its closure type, holding
+  its constants: `NodeFilter::SHOW_ALL`
+- [ ] Let a callback return a value, as `NodeFilter`'s does: until then a
+  member taking one is skipped, and only its constants are bound
 
 ### 6. A wider slice
 

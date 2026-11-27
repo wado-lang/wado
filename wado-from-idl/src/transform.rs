@@ -447,6 +447,7 @@ impl<'a> Transformer<'a> {
                 name,
                 cm_attr: Some(cm_attr),
                 target: self.transform_type(*inner)?,
+                constants: Vec::new(),
             }),
             TypeDefKind::Tuple(t) => WadoTypeDef::Newtype(WadoNewtype {
                 name,
@@ -457,11 +458,13 @@ impl<'a> Transformer<'a> {
                         .map(|ty| self.transform_type(*ty))
                         .collect::<Result<Vec<_>>>()?,
                 ),
+                constants: Vec::new(),
             }),
             TypeDefKind::List(inner) => WadoTypeDef::Newtype(WadoNewtype {
                 name,
                 cm_attr: Some(cm_attr),
                 target: WadoType::List(Box::new(self.transform_type(*inner)?)),
+                constants: Vec::new(),
             }),
             _ => return Ok(None),
         };

@@ -1267,7 +1267,16 @@ fn a_callback_is_a_closure_the_host_calls_back_with_scalars_and_handles() {
     ];
     defs.interfaces.push(partial("Element", &members));
     let (code, skipped) = defs.generate();
-    assert!(code.contains("callback: fn mut(Node) with Dom);"), "{code}");
+    assert!(code.contains("callback: EventListener);"), "{code}");
+    assert!(
+        code.contains(
+            "\
+#[cm(\"wado-lang:web/types#event-listener\")]
+pub type EventListener = fn mut(Node) with Dom;
+"
+        ),
+        "{code}"
+    );
     assert!(
         code.contains("callback: fn mut(f64) with Dom) -> u32;"),
         "{code}"
@@ -1279,6 +1288,80 @@ fn a_callback_is_a_closure_the_host_calls_back_with_scalars_and_handles() {
             "Element.on_text: `callback`: callback argument `text`: neither a scalar nor a handle",
             "Element.on_maybe: `callback`: callback argument `count`: optional",
             "Element.current_listener: a callback in a result",
+        ]
+    );
+}
+
+/// A callback interface has no object for a resource to stand for, so its
+/// constants sit on the function type its one operation is.
+#[test]
+fn a_callback_interface_is_a_named_function_type_holding_its_constants() {
+    let number = |value: &str| format!(r#"{{"type": "number", "value": "{value}"}}"#);
+    let interface = |name: &str, members: &[String]| {
+        definition("callback interface", name, "null", "", false, members)
+    };
+    let accept = operation(
+        "acceptNode",
+        &plain("unsigned short"),
+        &[argument("node", &plain("Node"), false, "null")],
+        "",
+    );
+    let mut defs = chain();
+    defs.callbacks = vec![
+        interface(
+            "NodeFilter",
+            &[
+                typed_const("FILTER_ACCEPT", "unsigned short", &number("1")),
+                typed_const("SHOW_ALL", "unsigned long", &number("0xFFFFFFFF")),
+                accept.clone(),
+            ],
+        ),
+        // Nothing names this one, and it holds no constant.
+        interface("Unused", std::slice::from_ref(&accept)),
+        interface(
+            "Uncallable",
+            &[
+                const_member("LEVEL"),
+                operation(
+                    "handle",
+                    &plain("undefined"),
+                    &[argument("text", &plain("DOMString"), false, "null")],
+                    "",
+                ),
+            ],
+        ),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[operation(
+            "walk",
+            &plain("undefined"),
+            &[argument("filter", &plain("NodeFilter"), false, "null")],
+            "",
+        )],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "\
+#[cm(\"wado-lang:web/types#node-filter\")]
+pub type NodeFilter = fn mut(Node) -> u16 with Dom;
+
+impl NodeFilter {
+    pub const FILTER_ACCEPT: u16 = 1;
+    pub const SHOW_ALL: u32 = 0xFFFFFFFF;
+}
+"
+        ),
+        "{code}"
+    );
+    assert!(!code.contains("Unused"), "{code}");
+    assert!(!code.contains("Uncallable"), "{code}");
+    assert_eq!(
+        skipped,
+        [
+            "Element.walk: `filter`: a callback returning a value",
+            "Uncallable.LEVEL: callback argument `text`: neither a scalar nor a handle",
         ]
     );
 }

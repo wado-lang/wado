@@ -1698,14 +1698,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_id: TypeId,
         span: Span,
     ) {
-        let callback = match self.tysys.type_table.borrow().get(type_id) {
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => Some((params.clone(), *return_type)),
-            _ => None,
-        };
+        let callback = self
+            .tysys
+            .type_table
+            .borrow()
+            .function_signature(type_id)
+            .map(|(params, return_type)| (params.to_vec(), return_type));
         let Some((params, return_type)) = callback else {
             if self.type_contains_closure(type_id) {
                 let _ = self.emit(TypeError::ClosureAtCmBoundary {

@@ -137,20 +137,15 @@ fn export_to_host(project: &mut Package, function: Rc<RefCell<TirFunction>>) {
 }
 
 fn closure_params(type_table: &TypeTable, closure: TypeId) -> Vec<TypeId> {
-    let ResolvedType::Function {
-        params,
-        return_type,
-        ..
-    } = type_table.get(closure)
-    else {
-        unreachable!("an import takes a callback as a closure");
-    };
+    let (params, return_type) = type_table
+        .function_signature(closure)
+        .expect("an import takes a callback as a closure");
     assert_eq!(
-        *return_type,
+        return_type,
         TypeTable::UNIT,
         "the elaborator admits only a callback returning nothing"
     );
-    params.clone()
+    params.to_vec()
 }
 
 /// What the export's name calls a closure argument of type `param`. One name

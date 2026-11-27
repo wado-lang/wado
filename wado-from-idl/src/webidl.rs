@@ -12,8 +12,8 @@ use crate::WadoCodeGenerator;
 use crate::glue;
 use crate::ir::{
     DictionaryField, UnionCase, WadoConstant, WadoDictionary, WadoEnum, WadoEnumVariant, WadoField,
-    WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoStruct, WadoType,
-    WadoTypeDef, WadoUnion, WadoVariant, WadoVariantCase,
+    WadoFunction, WadoInterface, WadoModule, WadoNewtype, WadoParam, WadoResource, WadoStruct,
+    WadoType, WadoTypeDef, WadoUnion, WadoVariant, WadoVariantCase,
 };
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
@@ -616,6 +616,14 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
             .map(|t| (t.name.as_str(), &t.idl_type))
             .collect(),
         callbacks: snapshot.callbacks.iter().map(Callback::signature).collect(),
+        callback_interfaces: snapshot
+            .callbacks
+            .iter()
+            .filter_map(|callback| match callback {
+                Callback::Interface { name, members } => Some((name.as_str(), members.as_slice())),
+                Callback::Function { .. } => None,
+            })
+            .collect(),
         global_interface: merged
             .values()
             .any(|iface| iface.global)
@@ -628,7 +636,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
         let path = lowering.interface_path(name);
-        let constants = lowering.constants_of(name, iface, &mut skipped);
+        let constants = lowering.constants(name, iface.members.iter().copied(), &mut skipped);
         let methods = split_js(
             lowering.methods_of(name, &path, iface, &mut skipped),
             &mut js,
@@ -677,7 +685,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         }
         module.resources.push(lowering.rejection(&mut js));
     }
-    let enums = lowering.declare_types(snapshot, &mut module);
+    let enums = lowering.declare_types(snapshot, &mut module, &mut skipped);
     Ok(WebIdlOutput {
         module,
         js,
@@ -983,6 +991,8 @@ struct Lowering<'a> {
     enums: Enums<'a>,
     typedefs: IndexMap<&'a str, &'a IdlType>,
     callbacks: IndexMap<&'a str, Signature<'a>>,
+    /// The members of each callback that is a `callback interface`, by name.
+    callback_interfaces: IndexMap<&'a str, &'a [Member]>,
     /// The interface handing out the first handle, which a callback's body may
     /// perform. `None` without a `[Global]` interface.
     global_interface: Option<String>,
@@ -1093,15 +1103,18 @@ impl Lowering<'_> {
         Ok(fields)
     }
 
-    /// Declares in `module` each enum, dictionary and union a function of it
-    /// names, and answers each enum's values as the host spells them, in case order,
-    /// by Wado name.
+    /// Declares in `module` each enum, dictionary, union and callback
+    /// interface a function of it names, and each callback interface holding a
+    /// constant. Answers each enum's values as the host spells them, in case
+    /// order, by Wado name.
     fn declare_types(
         &self,
         snapshot: &Snapshot,
         module: &mut WadoModule,
+        skipped: &mut Vec<Skip>,
     ) -> IndexMap<String, Vec<String>> {
         let mut enums = IndexSet::new();
+        let mut callbacks = IndexSet::new();
         let mut dictionaries = IndexMap::new();
         let mut unions = IndexMap::new();
         let methods = module.resources.iter().flat_map(|r| &r.methods);
@@ -1123,6 +1136,11 @@ impl Lowering<'_> {
                             "two unions are named `{}`",
                             union.name
                         );
+                    }
+                    WadoType::Callback {
+                        name: Some(name), ..
+                    } => {
+                        callbacks.insert(name.clone());
                     }
                     _ => {}
                 });
@@ -1199,6 +1217,28 @@ impl Lowering<'_> {
                     .collect(),
             }));
         }
+        for (&declared, &members) in &self.callback_interfaces {
+            let name = to_upper_camel_case(declared);
+            let constants = || members.iter().filter(|m| matches!(m, Member::Const { .. }));
+            if !callbacks.contains(&name) && constants().next().is_none() {
+                continue;
+            }
+            let signature = self.callbacks[declared].clone();
+            match signature.and_then(|signature| self.callback_function(None, signature)) {
+                Ok(target) => module.types.push(WadoTypeDef::Newtype(WadoNewtype {
+                    cm_attr: Some(type_path(declared)),
+                    target,
+                    constants: self.constants(declared, members, skipped),
+                    name,
+                })),
+                // Its constants have no type to sit on.
+                Err(reason) => skipped.extend(constants().map(|constant| Skip {
+                    item: format!("{declared}.{}", constant.label()),
+                    lost: Lost::Member,
+                    reason: reason.clone(),
+                })),
+            }
+        }
         values
     }
 
@@ -1237,16 +1277,16 @@ impl Lowering<'_> {
         }
     }
 
-    /// Every constant of `iface` whose value its type can spell, appending to
-    /// `skipped` the ones it cannot.
-    fn constants_of(
+    /// Every constant among the `members` of `iface` whose value its type can
+    /// spell, appending to `skipped` the ones it cannot.
+    fn constants<'m>(
         &self,
         iface: &str,
-        merged: &Merged<'_>,
+        members: impl IntoIterator<Item = &'m Member>,
         skipped: &mut Vec<Skip>,
     ) -> Vec<WadoConstant> {
         let mut constants = Vec::new();
-        for member in &merged.members {
+        for member in members {
             let Member::Const {
                 name,
                 idl_type,
@@ -1451,7 +1491,7 @@ impl Lowering<'_> {
                     None,
                 )]
             }
-            // `constants_of` binds these: a constant is no function.
+            // `constants` binds these: a constant is no function.
             Member::Const { .. } => Vec::new(),
             Member::Iterable | Member::Maplike | Member::Setlike | Member::AsyncIterable => {
                 vec![Err((member.label(), Reason::of(Cause::Iteration)))]
@@ -1705,27 +1745,43 @@ impl Lowering<'_> {
                     });
                 }
                 return match self.callbacks.get(name) {
-                    Some(signature) => self.lower_callback(signature.clone()?, flow),
+                    Some(signature) => {
+                        let named = self.callback_interfaces.contains_key(name);
+                        let name = named.then(|| to_upper_camel_case(name));
+                        self.lower_callback(name, signature.clone()?, flow)
+                    }
                     None => is_a(Cause::OutsideSlice, "outside the slice"),
                 };
             }
         })
     }
 
-    /// A callback crosses only into the host, returns nothing, and takes only
-    /// what the host always calls a closure back with: scalars and handles.
+    /// A callback crosses only into the host and returns nothing. `name` is
+    /// the newtype naming its function type, where one does.
     fn lower_callback(
         &self,
-        (return_type, arguments): (&IdlType, &[Argument]),
+        name: Option<String>,
+        signature: (&IdlType, &[Argument]),
         flow: Flow,
     ) -> std::result::Result<WadoType, Reason> {
         if flow == Flow::Out {
             return Err(Reason::of(Cause::CallbackResult));
         }
-        let uncallable = |why: String| Err(Reason::new(Cause::Callback, why));
-        if !is_undefined(return_type) {
-            return uncallable("a callback returning a value".to_string());
+        if !is_undefined(signature.0) {
+            let why = "a callback returning a value";
+            return Err(Reason::new(Cause::Callback, why));
         }
+        self.callback_function(name, signature)
+    }
+
+    /// The function type a callback is. It takes only what the host always
+    /// calls a closure back with: scalars and handles.
+    fn callback_function(
+        &self,
+        name: Option<String>,
+        (return_type, arguments): (&IdlType, &[Argument]),
+    ) -> std::result::Result<WadoType, Reason> {
+        let uncallable = |why: String| Err(Reason::new(Cause::Callback, why));
         let params = arguments
             .iter()
             .map(|arg| {
@@ -1743,8 +1799,15 @@ impl Lowering<'_> {
                 uncallable(argument("neither a scalar nor a handle"))
             })
             .collect::<std::result::Result<_, _>>()?;
+        let result = if is_undefined(return_type) {
+            None
+        } else {
+            Some(Box::new(self.lower_type(return_type, Flow::In)?))
+        };
         Ok(WadoType::Callback {
+            name,
             params,
+            result,
             effect: self.global_interface.clone(),
         })
     }

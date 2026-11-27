@@ -3162,6 +3162,15 @@ impl CmInterfaceRegistry {
         }
     }
 
+    /// The function type `ty` is, read through the newtypes naming it.
+    fn function_type(&self, ty: &Type) -> Option<Type> {
+        match ty {
+            Type::Function(_) => Some(ty.clone()),
+            Type::Named(named) => self.function_type(self.resolve_newtype_ref(named)?),
+            _ => None,
+        }
+    }
+
     /// The registration source and base type of a newtype the compiled package
     /// declares, which the boundary keeps as a named alias (issue #1456).
     pub fn local_newtype_base(&self, source: Option<&str>, name: &str) -> Option<(&str, &Type)> {
@@ -3607,13 +3616,13 @@ impl CmInterfaceRegistry {
                             .item_type(CompilerItem::List, g.args.clone(), ty.span());
                     return (name, cm_name, self.value_type(&list));
                 }
-                if !matches!(ty, Type::Function(_)) {
+                let Some(function) = self.function_type(&ty) else {
                     return (name, cm_name, self.value_type(&ty));
-                }
+                };
                 let closure =
                     self.type_decls
                         .item_type(CompilerItem::ExternObject, vec![], ty.span());
-                callbacks.push((i, ty));
+                callbacks.push((i, function));
                 (name, cm_name, closure)
             })
             .collect();

@@ -13,6 +13,7 @@ use {
     Element,
     Event,
     EventInit,
+    EventListener,
     EventTarget,
     FullscreenOptions,
     GetHtmlOptions,
@@ -37,7 +38,7 @@ struct Listener {
     type: String,
     capture: bool,
     once: bool,
-    callback: fn mut(Event) with Dom,
+    callback: EventListener,
 }
 
 // Linked as the DOM standard models the tree. A node lives in its handle, and
@@ -516,7 +517,7 @@ impl SurfaceDom {
     fn invoke(&mut self, target: EventTarget, event: Event, capture: bool) {
         let type = &surface_event(event).type;
         let node = surface_node(target);
-        let mut callbacks: List<fn mut(Event) with Dom> = [];
+        let mut callbacks: List<EventListener> = [];
         let mut kept: List<Listener> = [];
         for let listener of node.listeners {
             let heard = listener.capture == capture && listener.type == *type;
@@ -631,7 +632,7 @@ impl EventTarget for SurfaceDom {
         &mut self,
         this: &EventTarget,
         type: String,
-        callback: fn mut(Event) with Dom,
+        callback: EventListener,
         options: Option<AddEventListenerOptionsOrBool>,
     ) {
         let [capture, once] = match options {

@@ -2148,12 +2148,13 @@ impl TypeLookup<'_> {
                     .map(|p| self.resolve_in(p, type_table, frame))
                     .collect();
                 let return_type = self.resolve_in(&func_type.return_type, type_table, frame);
-                type_table.intern(ResolvedType::Function {
-                    is_mut: func_type.is_mut,
-                    params,
-                    return_type,
-                    effects: vec![],
-                })
+                // A name that is no effect is the module walk's to report.
+                let effects = func_type
+                    .effects
+                    .iter()
+                    .filter_map(|effect| self.resolutions.effect_at(effect.id, &effect.name))
+                    .collect();
+                type_table.make_function_with_mut(func_type.is_mut, params, return_type, effects)
             }
             // A variadic type-pack spread `..T` resolves to a `TypePack`
             // keyed by the param's positional index, mirroring the instance

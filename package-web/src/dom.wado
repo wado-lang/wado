@@ -254,16 +254,41 @@ pub variant TogglePopoverOptionsOrBool {
     AsBool(bool),
 }
 
+#[cm("wado-lang:web/types#event-listener")]
+pub type EventListener = fn mut(Event) with Dom;
+
+#[cm("wado-lang:web/types#node-filter")]
+pub type NodeFilter = fn mut(Node) -> u16 with Dom;
+
+impl NodeFilter {
+    pub const FILTER_ACCEPT: u16 = 1;
+    pub const FILTER_REJECT: u16 = 2;
+    pub const FILTER_SKIP: u16 = 3;
+    pub const SHOW_ALL: u32 = 0xFFFFFFFF;
+    pub const SHOW_ELEMENT: u32 = 0x1;
+    pub const SHOW_ATTRIBUTE: u32 = 0x2;
+    pub const SHOW_TEXT: u32 = 0x4;
+    pub const SHOW_CDATA_SECTION: u32 = 0x8;
+    pub const SHOW_ENTITY_REFERENCE: u32 = 0x10;
+    pub const SHOW_ENTITY: u32 = 0x20;
+    pub const SHOW_PROCESSING_INSTRUCTION: u32 = 0x40;
+    pub const SHOW_COMMENT: u32 = 0x80;
+    pub const SHOW_DOCUMENT: u32 = 0x100;
+    pub const SHOW_DOCUMENT_TYPE: u32 = 0x200;
+    pub const SHOW_DOCUMENT_FRAGMENT: u32 = 0x400;
+    pub const SHOW_NOTATION: u32 = 0x800;
+}
+
 #[cm("wado-lang:web/event-target", linearity = "unrestricted", repr = "externref", classes = "0..=8")]
 pub resource EventTarget {
     #[cm("wado-lang:web/event-target#new")]
     fn new() -> EventTarget;
     #[cm("wado-lang:web/event-target#add-event-listener")]
     #[cm_params("self", "type", "callback", "options")]
-    fn add_event_listener(&self, type: String, callback: fn mut(Event) with Dom, options: Option<AddEventListenerOptionsOrBool> = null);
+    fn add_event_listener(&self, type: String, callback: EventListener, options: Option<AddEventListenerOptionsOrBool> = null);
     #[cm("wado-lang:web/event-target#remove-event-listener")]
     #[cm_params("self", "type", "callback", "options")]
-    fn remove_event_listener(&self, type: String, callback: fn mut(Event) with Dom, options: Option<EventListenerOptionsOrBool> = null);
+    fn remove_event_listener(&self, type: String, callback: EventListener, options: Option<EventListenerOptionsOrBool> = null);
     #[cm("wado-lang:web/event-target#dispatch-event")]
     #[cm_params("self", "event")]
     fn dispatch_event(&self, event: Event) -> bool;

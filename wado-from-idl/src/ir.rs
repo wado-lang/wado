@@ -170,6 +170,8 @@ pub struct WadoNewtype {
     pub name: String,
     pub cm_attr: Option<String>,
     pub target: WadoType,
+    /// The constants of the `impl` block following the newtype.
+    pub constants: Vec<WadoConstant>,
 }
 
 #[derive(Debug, Clone)]
@@ -324,9 +326,12 @@ pub enum WadoType {
     // References
     Borrow(Box<WadoType>),
 
-    /// `fn mut(params) with effect`, which the host calls back.
+    /// `fn mut(params) -> result with effect`, which the host calls back.
     Callback {
+        /// The newtype naming the function type, where one does.
+        name: Option<String>,
         params: Vec<WadoType>,
+        result: Option<Box<WadoType>>,
         effect: Option<String>,
     },
 }
@@ -379,8 +384,13 @@ impl WadoType {
                     side.walk(visit);
                 }
             }
-            Self::Tuple(types) | Self::Callback { params: types, .. } => {
+            Self::Tuple(types) => {
                 for ty in types {
+                    ty.walk(visit);
+                }
+            }
+            Self::Callback { params, result, .. } => {
+                for ty in params.iter().chain(result.as_deref()) {
                     ty.walk(visit);
                 }
             }

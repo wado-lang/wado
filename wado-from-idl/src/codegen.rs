@@ -3,9 +3,9 @@
 use std::fmt::Write;
 
 use crate::ir::{
-    WadoEnum, WadoFlags, WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource,
-    WadoStruct, WadoType, WadoTypeDef, WadoVariant, WadoWorld, WadoWorldExport, WadoWorldExportFn,
-    WadoWorldExportInterface, WadoWorldImport,
+    WadoConstant, WadoEnum, WadoFlags, WadoFunction, WadoInterface, WadoModule, WadoParam,
+    WadoResource, WadoStruct, WadoType, WadoTypeDef, WadoVariant, WadoWorld, WadoWorldExport,
+    WadoWorldExportFn, WadoWorldExportInterface, WadoWorldImport,
 };
 
 pub struct WadoCodeGenerator {
@@ -114,6 +114,7 @@ impl WadoCodeGenerator {
                     a.name,
                     Self::format_type(&a.target)
                 ));
+                self.write_constants(&a.name, &a.constants);
             }
         }
     }
@@ -254,21 +255,27 @@ impl WadoCodeGenerator {
             self.writeln("}");
         }
 
-        if !resource.constants.is_empty() {
-            self.writeln("");
-            self.writeln(&format!("impl {} {{", resource.name));
-            self.indent += 1;
-            for constant in &resource.constants {
-                self.writeln(&format!(
-                    "pub const {}: {} = {};",
-                    constant.name,
-                    Self::format_type(&constant.ty),
-                    constant.value
-                ));
-            }
-            self.indent -= 1;
-            self.writeln("}");
+        self.write_constants(&resource.name, &resource.constants);
+    }
+
+    /// The `impl` block giving `owner` its `constants`, after a blank line.
+    fn write_constants(&mut self, owner: &str, constants: &[WadoConstant]) {
+        if constants.is_empty() {
+            return;
         }
+        self.writeln("");
+        self.writeln(&format!("impl {owner} {{"));
+        self.indent += 1;
+        for constant in constants {
+            self.writeln(&format!(
+                "pub const {}: {} = {};",
+                constant.name,
+                Self::format_type(&constant.ty),
+                constant.value
+            ));
+        }
+        self.indent -= 1;
+        self.writeln("}");
     }
 
     fn write_interface(&mut self, effect: &WadoInterface) {
@@ -470,16 +477,27 @@ impl WadoCodeGenerator {
             WadoType::Dictionary(dictionary) => dictionary.name.clone(),
             WadoType::Union(union) => union.name.clone(),
             WadoType::Borrow(inner) => format!("&{}", Self::format_type(inner)),
-            WadoType::Callback { params, effect } => {
+            WadoType::Callback {
+                name: Some(name), ..
+            } => name.clone(),
+            WadoType::Callback {
+                name: None,
+                params,
+                result,
+                effect,
+            } => {
                 let params = params
                     .iter()
                     .map(Self::format_type)
                     .collect::<Vec<_>>()
                     .join(", ");
+                let result = result
+                    .as_ref()
+                    .map_or_else(String::new, |r| format!(" -> {}", Self::format_type(r)));
                 let effect = effect
                     .as_ref()
                     .map_or_else(String::new, |e| format!(" with {e}"));
-                format!("fn mut({params}){effect}")
+                format!("fn mut({params}){result}{effect}")
             }
         }
     }

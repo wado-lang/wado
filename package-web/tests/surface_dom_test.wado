@@ -12,10 +12,17 @@ use {
     HtmlElement,
     HtmlInputElement,
     Node,
+    NodeFilter,
     Text,
     Window,
 } from "../src/dom.wado";
 use { SurfaceDom } from "../src/surface_dom.wado";
+
+test "a callback interface holds its constants" {
+    assert NodeFilter::SHOW_ALL == 0xFFFFFFFF;
+    assert NodeFilter::SHOW_ELEMENT == 1;
+    assert NodeFilter::FILTER_REJECT == 2;
+}
 
 test "a fresh document has a body" {
     let mut dom = SurfaceDom::new();

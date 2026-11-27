@@ -142,6 +142,8 @@ test {
 
 - A callback's parameters are scalars and handles, and it returns nothing. Any
   other function type on a `#[cm]` declaration is a compile error.
+- A newtype over a function type is a callback as the function type is. It is
+  bound to an interface with `#[cm]`, as any type a `#[cm]` declaration names.
 - The closure crosses as itself: one reference the host holds, and the
   collector reclaims the closure once the host lets go of it. An import that
   takes one is a core import of the main module, as an import of an

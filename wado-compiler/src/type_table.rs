@@ -5869,6 +5869,19 @@ impl TypeTable {
         current
     }
 
+    /// The parameters and result of the function type `id` is, read through
+    /// the newtypes naming it. `None` for any other type.
+    pub fn function_signature(&self, id: TypeId) -> Option<(&[TypeId], TypeId)> {
+        match self.get(self.representation_head(id)) {
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => Some((params, *return_type)),
+            _ => None,
+        }
+    }
+
     /// The function type `receiver` is, read through references and newtypes:
     /// what fills the one position a function-type impl target writes, which
     /// is itself. `None` for a receiver of any other shape.
