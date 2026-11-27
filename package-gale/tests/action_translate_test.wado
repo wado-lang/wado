@@ -3,7 +3,6 @@ use {
     translate_wado_action,
     translate_lexer_body,
     LexerAttrEnv,
-    rule_value_channel_ready,
     rule_returns_vals,
     rule_threads_args,
     vals_struct_name,
@@ -193,10 +192,10 @@ r returns [i32 v] : ID { $v = 1; } ;
 multi returns [i32 v] : ID | INT ;
 plain : ID ;
 ").unwrap();
-    assert rule_value_channel_ready(&rule_attrs_table(&g.parser_rules)[0]), "r declares a defaultable channel";
+    assert rule_returns_vals(&rule_attrs_table(&g.parser_rules)[0]), "r declares a defaultable channel";
     assert rule_returns_vals(&rule_attrs_table(&g.parser_rules)[0]), "single-alt r returns vals";
     assert rule_returns_vals(&rule_attrs_table(&g.parser_rules)[1]), "multi-alt non-LR rule returns vals";
-    assert !rule_value_channel_ready(&rule_attrs_table(&g.parser_rules)[2]), "plain has no channel";
+    assert !rule_returns_vals(&rule_attrs_table(&g.parser_rules)[2]), "plain has no channel";
     assert vals_struct_name(&rule_attrs_table(&g.parser_rules)[0]) == "RVals";
 }
 
@@ -204,7 +203,7 @@ test "left-recursive rules expose the value channel (threaded through the loop)"
     let g = parse("grammar T;
 e returns [i32 v] : e '+' e | INT ;
 ").unwrap();
-    assert rule_value_channel_ready(&rule_attrs_table(&g.parser_rules)[0]), "e declares a defaultable channel";
+    assert rule_returns_vals(&rule_attrs_table(&g.parser_rules)[0]), "e declares a defaultable channel";
     assert rule_attrs_table(&g.parser_rules)[0].left_recursive, "e is left-recursive";
     assert rule_returns_vals(&rule_attrs_table(&g.parser_rules)[0]), "LR rule value channel is threaded";
     assert !rule_threads_args(&rule_attrs_table(&g.parser_rules)[0]), "LR rule args stay deferred";
@@ -377,7 +376,7 @@ test "a locals-only rule has a value channel; an argument without a Wado default
 r locals [i32 n] : ID ;
 s[Foo x] : ID ;
 ").unwrap();
-    assert rule_value_channel_ready(&rule_attrs_table(&g.parser_rules)[0]), "locals alone make a channel";
+    assert rule_returns_vals(&rule_attrs_table(&g.parser_rules)[0]), "locals alone make a channel";
     assert !rule_threads_args(&rule_attrs_table(&g.parser_rules)[1]), "Foo has no default to seed the channel with";
 }
 

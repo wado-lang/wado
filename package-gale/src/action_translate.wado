@@ -798,26 +798,12 @@ fn is_arg<S: AsStrSlice>(rule: &RuleAttrs, name: S) -> bool {
 /// Whether a rule exposes a value channel to callers (a defaultable
 /// `returns`/`locals`, or threaded args), so `_parse_<rule>` returns `<Rule>Vals`
 /// and a caller's `$a.v` reads it. Independent of whether the rule's own actions
-/// read the channel — a caller might.
+/// read the channel — a caller might. A field whose type has no Wado default is
+/// left out on its own, so one does not disable the whole channel.
 pub fn rule_returns_vals(rule: &RuleAttrs) -> bool {
-    return rule_value_channel_ready(rule);
-}
-
-/// Whether a rule exposes an emittable value channel: a returns / locals field
-/// whose type has a Wado default, or threaded rule arguments. Unsupported-type
-/// fields are excluded per-field, so one does not disable the whole channel.
-pub fn rule_value_channel_ready(rule: &RuleAttrs) -> bool {
-    for let d of &rule.returns_decls {
-        if wado_type_default(&d.type_text) matches { Some(_) } {
-            return true;
-        }
-    }
-    for let d of &rule.locals_decls {
-        if wado_type_default(&d.type_text) matches { Some(_) } {
-            return true;
-        }
-    }
-    return rule_threads_args(rule);
+    return rule.returns_decls.iter_ref().any(|d| field_in_vals(d))
+        || rule.locals_decls.iter_ref().any(|d| field_in_vals(d))
+        || rule_threads_args(rule);
 }
 
 /// Whether a rule's arguments are threaded as `_parse_<rule>` parameters and

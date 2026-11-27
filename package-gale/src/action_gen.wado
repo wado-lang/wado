@@ -973,21 +973,15 @@ fn translate_body_or_warn(
     };
 }
 
-/// Whether codegen emits the `_rule_start_tok` capture for this rule — its
-/// actions reference a rule-span special (`$text` / `$start` / `$stop`). The
-/// translator keys their substitution on the same predicate, so the local they
-/// read is always in scope, for every rule shape.
-fn rule_captures_span(ctx: &EmitContext) -> bool {
-    return rule_uses_rule_span(ctx.current_rule_attrs(), ctx.analysis.rule_attrs());
-}
-
 /// Emit `let _rule_start_tok = p.pos;` at a rule-body entry (where `p.pos` is
 /// the rule's first token), when the rule references `$text` / `$start` /
-/// `$stop`. Placed at every shape's body entry (single-alt inner, multi-alt
-/// inner, `_alt_<n>` helpers, LR inner/atom), so span specials resolve
-/// uniformly regardless of dispatch.
+/// `$stop`. The translator keys their substitution on the same
+/// `rule_uses_rule_span`, and this is placed at every shape's body entry
+/// (single-alt inner, multi-alt inner, `_alt_<n>` helpers, LR inner/atom), so
+/// the local they read is always in scope.
 pub fn emit_span_capture(w: &mut CodeWriter, ctx: &EmitContext, needed: bool = false) {
-    if ctx.settings.emit_actions && (needed || rule_captures_span(ctx)) {
+    if ctx.settings.emit_actions
+        && (needed || rule_uses_rule_span(ctx.current_rule_attrs(), ctx.analysis.rule_attrs())) {
         w.line(`let ${RULE_START_TOK_LOCAL} = p.pos;`);
     }
 }
