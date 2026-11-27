@@ -308,7 +308,7 @@ own GC struct. The registry in `core:rt` and its `u32` keys go away.
   the closure, so `removeEventListener` receives the function
   `addEventListener` did.
 - The function calls the closure back through a core export of the main module,
-  one per argument shape. The component does not lift these exports, and the
+  one per shape of arguments and result. The component does not lift these exports, and the
   `wado:callback/callback` interface goes away.
 - A listener the page drops takes its closure with it. A closure and an element
   that hold each other are collected together.

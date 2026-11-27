@@ -111,6 +111,20 @@ test "a tree walker moves among children and siblings" {
     };
 }
 
+test "a tree walker never steps back past its root" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = traversal_tree(doc);
+        let div = body.first_child().unwrap();
+        let walker = doc.create_tree_walker(div, NodeFilter::SHOW_ELEMENT, |node| {
+            return if node.node_name() == "DIV" { NodeFilter::FILTER_REJECT } else { NodeFilter::FILTER_ACCEPT };
+        });
+        walker.set_current_node(div.next_sibling().unwrap());
+        assert walker.previous_node() == null;
+    };
+}
+
 test "a node iterator answers the node it passes, either way" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
@@ -140,8 +154,13 @@ test "a filter reentering its traverser traps" {
         let doc = Dom::document();
         let body = traversal_tree(doc);
         let mut walker: Option<TreeWalker> = null;
+        // Once, so a missing guard returns rather than overflowing the stack.
+        let mut reentered = false;
         let reentering = doc.create_tree_walker(body, NodeFilter::SHOW_ALL, |_| {
-            walker.unwrap().next_node();
+            if !reentered {
+                reentered = true;
+                walker.unwrap().next_node();
+            }
             return NodeFilter::FILTER_ACCEPT;
         });
         walker = Option::Some(reentering);

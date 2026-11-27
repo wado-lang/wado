@@ -711,7 +711,7 @@ impl SurfaceDom {
     // a listener does, and reentering its own traverser is an
     // `InvalidStateError`, which traps.
     fn filter(&mut self, traverser: &mut Traverser, node: Node) -> u16 {
-        assert !traverser.active, "InvalidStateError: the filter is running";
+        assert !traverser.active, "InvalidStateError: a filter must not reenter its traverser";
         let shown = traverser.what_to_show >> (node_type(surface_node(node)) - 1) as u32 & 1;
         if shown == 0 {
             return NodeFilter::FILTER_SKIP;
@@ -821,6 +821,9 @@ impl SurfaceDom {
                     return Option::Some(node);
                 }
                 sibling = surface_node(node).previous_sibling;
+            }
+            if node == walker.traverser.root {
+                return null;
             }
             let Some(parent) = surface_node(node).parent else {
                 return null;

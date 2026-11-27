@@ -1,5 +1,5 @@
-//! The core exports a host of the web imports calls: one per argument shape
-//! to call a Wado closure back through, and the pair that reaches the slots of
+//! The core exports a host of the web imports calls: one per shape of
+//! arguments and result to call a Wado closure back through, and the pair that reaches the slots of
 //! extern handles. The component lifts none of them: each takes or answers an
 //! `externref`, which the Component Model cannot carry.
 
@@ -35,8 +35,8 @@ pub(super) struct HostCalls {
     pub extern_slots: bool,
 }
 
-/// Add an export for each argument shape among `callbacks` to the entry
-/// module.
+/// Add an export for each shape of arguments and result among `callbacks` to
+/// the entry module.
 pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Callbacks) {
     let type_table = entry_type_table(project);
     let mut shapes: IndexSet<String> = IndexSet::default();
