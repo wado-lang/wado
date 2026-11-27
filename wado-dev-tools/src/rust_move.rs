@@ -1005,13 +1005,19 @@ fn mark_emptied_blocks(sources: &BTreeMap<PathBuf, Document>, moved: &mut [Moved
                 .lines()
                 .next()
                 .expect("the header line opens the block");
+            let start = Position::from_lsp(&block["range"]["start"]);
+            let before_block = &source.lines[start.line][..start.column];
             let close = Position::from_lsp(&block["range"]["end"]);
             let before_close = &source.lines[close_line][..close.column - '}'.len_utf8()];
+            let after_block = &source.lines[close_line][close.column..];
             let body = header_line + 1..close_line;
+            // The block leaves by whole lines, so they must hold nothing else.
             let all_move = !children(block).is_empty()
                 && header_line < close_line
+                && before_block.trim().is_empty()
                 && after_brace.trim().is_empty()
                 && before_close.trim().is_empty()
+                && after_block.trim().is_empty()
                 && body
                     .into_iter()
                     .all(|line| leaves(line) || source.lines[line].trim().is_empty());
@@ -1642,6 +1648,20 @@ fn helper(n: usize) -> i32 {
         );
         let a = read(&dir, "src/a.rs");
         assert!(a.contains("impl S { extra!(); // {"), "{a}");
+    }
+
+    #[test]
+    fn a_block_keeps_the_items_sharing_its_outer_lines() {
+        let (dir, _) = a_to_b(
+            "pub struct S;\n\npub fn before() {} impl S {\n    \
+             pub fn one(&self) -> i32 {\n        1\n    }\n} pub fn after() {}\n",
+            "",
+            "a::before(); a::after(); a::S.one()",
+            &["probe::a::S::one"],
+        );
+        let a = read(&dir, "src/a.rs");
+        assert!(a.contains("pub fn before() {}"), "{a}");
+        assert!(a.contains("pub fn after() {}"), "{a}");
     }
 
     #[test]
