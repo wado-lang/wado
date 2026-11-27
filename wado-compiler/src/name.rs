@@ -1246,6 +1246,10 @@ pub fn kiln_adapter_path(item: &str) -> String {
     namespace_member_alias(KILN_ADAPTER_NAMESPACE, item)
 }
 
+/// The name a Kiln generator's own `generate` takes once the request adapter
+/// stands in for it on the wire, so the wire parameters stay out of its scope.
+pub const KILN_ADAPTER_GENERATE: &str = "$kiln_generate";
+
 /// Prefix the const-object globalization pass stamps on the globals it hoists
 /// constant aggregates into (`$const_obj_0`, …). It both mints and rescans
 /// these names, so the prefix lives here rather than as a repeated literal.

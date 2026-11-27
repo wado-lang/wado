@@ -68,8 +68,9 @@ single record: a generic cannot be expressed in a fixed WIT world (that is
 why generators do not share one world). The compiler rewrites
 `fn generate(req: Request<T>)` into flat, typed parameters
 `(primary: InputFile, inputs: List<InputFile>, module: String, options: T)` in the
-generator's own synthesized world, then rebinds them into a `Request<T>`
-value so the author's body sees `req` unchanged. `options` crosses as a
+generator's own synthesized world, and calls the author's function with
+them rebound into a `Request<T>`, so its body sees `req` and none of the
+wire parameters. `options` crosses as a
 typed WIT argument, not a serialized blob. The `#[compiler_item("kiln_request")]`
 attribute is that rewrite's lookup anchor. `T` defaults to `NoOptions`, so
 a generator that takes no options writes `fn generate(req: Request)`.
