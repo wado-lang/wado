@@ -2256,22 +2256,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(receiver) = &receivers.static_method_receiver
             && let Some(receiver_type) = self.static_receiver_type_as_written(site, prefix)
         {
-            return ControlFlow::Break(self.blanket_static_or_unknown(
-                &receiver.at_type(Some(receiver_type)),
-                method_name,
-                ident,
-                call,
-                resolved_args
-                    .slot_instantiation
-                    .as_ref()
-                    .map(|inst| GivenSlots {
-                        slots: &resolved_args.callee_slots,
-                        inst,
-                    }),
-                &resolved_args.args,
-                expected_type,
-                ctx,
-            ));
+            return ControlFlow::Break(
+                self.blanket_static_or_unknown(
+                    &receiver.at_type(Some(receiver_type)),
+                    method_name,
+                    ident,
+                    call,
+                    resolved_args
+                        .slot_instantiation
+                        .as_ref()
+                        .map(|inst| GivenSlots {
+                            slots: &resolved_args.callee_slots,
+                            inst,
+                        }),
+                    &resolved_args.args,
+                    expected_type,
+                    ctx,
+                ),
+            );
         }
         // Namespace import: `use ns from "..."` then `ns::Type::method()`
         // or `ns::func()`.

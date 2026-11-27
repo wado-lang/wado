@@ -285,8 +285,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if *slot == blanket_slot {
                         return receiver_type_id;
                     }
-                    let own = slots.iter().zip(&method_type_args);
-                    own.into_iter()
+                    slots
+                        .iter()
+                        .zip(&method_type_args)
                         .find_map(|(own, &answer)| (own == slot).then_some(answer))
                         .unwrap_or(var)
                 })
