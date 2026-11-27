@@ -2313,15 +2313,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 }
 
 impl TypeSystem {
-    /// The impl-associated constant `owner` declares as `name`. `owner` is the
-    /// declaration the use site's qualifier resolved to, never a spelling.
+    /// The impl-associated constant `owner` holds as `name`: its own, or else
+    /// that of the nearest resource it extends. `owner` is the declaration the
+    /// use site's qualifier resolved to, never a spelling.
     pub(super) fn associated_constant_of(
         &self,
         owner: DefId,
         name: &str,
     ) -> Option<sig::AssocConstSig> {
-        // A resource holds the constants of every resource it extends, the
-        // nearest declaration winning.
         self.type_table
             .borrow()
             .resource_chain(owner)
