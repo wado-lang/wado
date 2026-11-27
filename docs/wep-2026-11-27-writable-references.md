@@ -91,6 +91,9 @@ in a row would be a use after a move. Where the expected type is `&mut T`, a
 stays usable. There are no lifetimes, so the reborrow is a second reference to
 the same referent.
 
+Only an expected type reborrows. `let b = a;` moves `a`, and
+`let b: &mut T = a;` reborrows it, as in Rust.
+
 ### A shared cell is its own type
 
 A value that is one object under every copy, and that a `&` may write, is a
@@ -123,6 +126,12 @@ definition as `Array<T>` is: `pub type Shared<T>;`.
   wants one writes it, hashing what it holds, as `StrSlice` writes its own over
   the text it views. Such a hash agrees with `==`, since one cell holds one
   value.
+- `${c:?}` writes what the cell holds as `Shared(…)`. A cell is `Default`
+  where `T` is, as `Shared::new(T::default())`.
+- A cell is not `Serialize` or `Deserialize`, and does not cross a component
+  boundary. Either would copy what it holds, and two holders of one cell would
+  come back holding two. So a struct holding a cell derives neither, and a type
+  that wants one writes it.
 - `T` is not affine. An affine value has one owner, which drops it, and a cell
   every copy shares has none. Counting the copies would find the last one, and
   [Affine Types](./wep-2026-10-17-affine-types.md#why-not-reference-counting)
@@ -186,8 +195,10 @@ always a mistake under the rule above. The lint `stale_reference` warns at the
 read, naming the assignment, and `allow` waives it. It fires where the compiler
 is certain:
 the reference, the assignment and the later read are in one body, and the type
-is known to be replaced on assignment. It stays silent in a body generic over
-the type, and across a call. The warning is best effort and promises to find
+is known to be replaced on assignment. A body generic over the type is checked
+per instance, and the warning names the type argument that made the reference a
+copy: the body reads right for a `struct` and stale for an `i32`, and nothing
+in its source says so. It stays silent across a call. The warning is best effort and promises to find
 nothing, so no program is refused over it.
 
 ### `&mut` of a type replaced on assignment lasts for a scope
@@ -262,6 +273,12 @@ this reaches it.
 - An assignment inside the scope, in the same body, to the scope's place, to a
   place holding it or to a part of it is a compile error. The place is read off
   the syntax, so the loss is certain.
+- So is a second scoped `&mut` of such a place in the same call:
+  `f(&mut x, &mut x)` has two stores to one place and no order to pick between
+  them.
+- So is a call of a `&mut self` method on `xs`, or an assignment to it, inside
+  `for let v of &mut xs`. It may change the length, and the turn's store would
+  land on another element.
 - A write the compiler cannot place warns under the lint `lost_write`, at the
   write: one a callee makes, one through a reference that may name the same
   object, one to an element whose index may be the current one. It is best
@@ -313,11 +330,15 @@ spare a call site. Each step leaves the tree building and its tests passing.
 - [ ] `&mut T` is affine and reborrowed where one is expected, and every
   copyable struct holding one becomes affine.
 
-## Known gaps
+Two items land with the step whose rule they serve:
 
-- Two scoped `&mut` of one place in one call, `f(&mut x, &mut x)` for a scalar
-  `x`, are each stored back after the call, and no rule orders the stores. The
-  value the place ends with is undecided.
+- [ ] Each error a rule above adds names the rewrite: a by-value `match` for a
+  state machine that assigns the place it matched, a shared cell for a `&mut`
+  a variable holds. The error for a scoped `&mut` names `RefMut` as what
+  divides the two kinds.
+- [ ] `HashMap` and `TreeMap` offer an accessor that takes a closure and
+  updates a value in one lookup, for the counter that Rust writes
+  `*map.entry(k).or_insert(0) += 1`.
 
 ## References
 
