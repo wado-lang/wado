@@ -160,11 +160,12 @@ the arm that stores it back.
 
 A primitive, `enum`, `flags`, copyable `variant`, `fn` or `&` reference has no
 storage a reference could share. A `&P` of one is a copy of the value, wherever
-it is taken from: a local, a field or an element. An affine value is never
-copied, a `&mut` and an affine `variant` included, so a `&` of one names its
-place. An assignment to the place
+it is taken from: a local, a field or an element. An assignment to the place
 afterwards does not reach it, and for a `variant` neither does a write to its
 payload.
+
+An affine value is never copied, a `&mut` and an affine `variant` included, so
+a `&` of one names its place and sees what is written there.
 
 Today a `&i32` of a local sees a later assignment and one of a field does not.
 Making every `&P` see it is not open: Wasm GC has no pointer into a struct or
