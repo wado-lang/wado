@@ -1,7 +1,7 @@
-//! The core exports a host of the web imports calls: one per argument shape
-//! to call a Wado closure back through, and the pair that reaches the slots of
-//! extern handles. The component lifts none of them: each takes or answers an
-//! `externref`, which the Component Model cannot carry.
+//! The core exports a host of the web imports calls: one per shape of
+//! arguments and result to call a Wado closure back through, and the pair that
+//! reaches the slots of extern handles. The component lifts none of them: each
+//! takes or answers an `externref`, which the Component Model cannot carry.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -35,18 +35,24 @@ pub(super) struct HostCalls {
     pub extern_slots: bool,
 }
 
-/// Add an export for each argument shape among `callbacks` to the entry
-/// module.
+/// Add an export for each shape of arguments and result among `callbacks` to
+/// the entry module.
 pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Callbacks) {
     let type_table = entry_type_table(project);
     let mut shapes: IndexSet<String> = IndexSet::default();
     for &(closure, extern_object) in callbacks {
-        let params = closure_params(&type_table.borrow(), closure);
-        let shape = callback_export_name(
-            params
-                .iter()
-                .map(|&param| argument_word(&type_table.borrow(), param)),
-        );
+        let (params, result, shape) = {
+            let type_table = type_table.borrow();
+            let (params, result) = type_table
+                .function_signature(closure)
+                .expect("an import takes a callback as a closure");
+            let word = |ty: TypeId| value_word(&type_table, ty);
+            let shape = callback_export_name(
+                params.iter().map(|&param| word(param)),
+                (result != TypeTable::UNIT).then(|| word(result)),
+            );
+            (params.to_vec(), result, shape)
+        };
         if !shapes.insert(shape.clone()) {
             continue;
         }
@@ -68,15 +74,20 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
                 callee: Box::new(callee),
                 args,
             },
-            TypeTable::UNIT,
+            result,
             synth_span(),
         );
+        let body = if result == TypeTable::UNIT {
+            expr_stmt(call)
+        } else {
+            return_stmt(Some(call))
+        };
         let locals = locals_from_params(&tir_params);
         let function = make_binding_function(
             cm_callback_func_name(&shape),
             tir_params,
-            TypeTable::UNIT,
-            block(vec![expr_stmt(call)]),
+            result,
+            block(vec![body]),
             u32::try_from(locals.len()).expect("a closure takes few parameters"),
             locals,
         );
@@ -136,28 +147,16 @@ fn export_to_host(project: &mut Package, function: Rc<RefCell<TirFunction>>) {
         .push(function);
 }
 
-fn closure_params(type_table: &TypeTable, closure: TypeId) -> Vec<TypeId> {
-    let (params, return_type) = type_table
-        .function_signature(closure)
-        .expect("an import takes a callback as a closure");
-    assert_eq!(
-        return_type,
-        TypeTable::UNIT,
-        "the elaborator admits only a callback returning nothing"
-    );
-    params.to_vec()
-}
-
-/// What the export's name calls a closure argument of type `param`. One name
-/// must mean one closure type in the guest, where every extern handle is one
-/// `externref`.
-fn argument_word(type_table: &TypeTable, param: TypeId) -> &'static str {
-    if type_table.is_extern_handle(param) {
+/// What the export's name calls a closure argument or result of type `ty`.
+/// One name must mean one closure type in the guest, where every extern handle
+/// is one `externref`.
+fn value_word(type_table: &TypeTable, ty: TypeId) -> &'static str {
+    if type_table.is_extern_handle(ty) {
         return CALLBACK_HANDLE_WORD;
     }
-    let head = type_table.representation_head(param);
+    let head = type_table.representation_head(ty);
     let ResolvedType::Primitive(primitive) = type_table.get(head) else {
-        unreachable!("the elaborator admits only a scalar callback parameter");
+        unreachable!("the elaborator admits only a scalar or a handle in a callback");
     };
     primitive.as_str()
 }

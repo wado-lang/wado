@@ -10,7 +10,7 @@
 //! to. So a state never waits on one, and a pattern's lookarounds widen each
 //! row of the table by a factor of two apiece.
 
-use { HashMap } from "core:collections";
+use { HashIndex } from "core:collections";
 use { Oracle } from "./oracle.wado";
 use { Direction, Look, LookaroundPrograms, Program } from "./program.wado";
 
@@ -94,8 +94,8 @@ internal struct Dfa {
     /// Whether a state accepts where the scan ends, under each setting of
     /// the bits there: -1 until asked.
     accepts_at_end: List<i32>,
-    /// The state each key names, as a transition holds it.
-    index: HashMap<List<i32>, i32>,
+    /// The state whose key each key is, as its place in `bounds`.
+    index: HashIndex,
     /// `seen[s] == stamp` marks the Pike VM's state `s` taken in the thread
     /// list being built.
     seen: List<i32>,
@@ -153,7 +153,7 @@ impl Dfa {
             keys: [],
             bounds: [0],
             accepts_at_end: [],
-            index: HashMap::<List<i32>, i32>::new(),
+            index: HashIndex::new(),
             seen,
             stamp: 0,
             starts: List::filled(2 << looks, UNKNOWN),
@@ -280,17 +280,24 @@ impl Dfa {
                 accept = accept || self.program.insts[pc] matches { _::Match };
             }
         }
-        if let Some(state) = self.index.get(key) {
-            return state;
-        }
-        let mut state = self.bounds.len() - 1 << 2;
+        let mut flags = 0;
         if accept {
-            state |= ACCEPT;
+            flags |= ACCEPT;
         }
         // With no thread left nothing matches from here on, unless one may
         // start further on that a lookaround kept from starting here.
         if key.len() == 1 && (self.looks == 0 || !self.restarts(found)) {
-            state |= DEAD;
+            flags |= DEAD;
+        }
+        let mut h: i64 = 1469598103934665603;
+        for let k of &key {
+            h = (h ^ *k as i64) * 1099511628211;
+        }
+        let next = self.bounds.len() - 1;
+        let row = unchecked self.index.find_or_insert(HashIndex::spread(h as u64), |row| self.key_is(row, &key), next);
+        let state = row << 2 | flags;
+        if row != next {
+            return state;
         }
         for let k of &key {
             self.keys.push(*k);
@@ -302,8 +309,20 @@ impl Dfa {
         for let _b of 0..<256 << self.looks {
             self.transitions.push(UNKNOWN);
         }
-        self.index.try_insert(key, state);
         return state;
+    }
+
+    fn key_is(&self, row: i32, key: &List<i32>) -> bool {
+        let from = self.bounds[row];
+        if self.bounds[row + 1] - from != key.len() {
+            return false;
+        }
+        for let i of 0..<key.len() {
+            if self.keys[from + i] != key[i] {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// The state a scan starts in, where `bits` is `close`'s.

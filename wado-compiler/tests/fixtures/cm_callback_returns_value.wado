@@ -1,0 +1,60 @@
+// A callback may return a scalar or a handle. The host calls it back through
+// the export of its argument shape and result, which answers the value.
+
+#[cm("example:demo/node", linearity = "unrestricted", repr = "externref")]
+resource Node {}
+
+#[cm("example:demo/walker", linearity = "unrestricted", repr = "externref")]
+resource Walker {
+    #[cm("example:demo/walker#filter")]
+    #[cm_params("self", "filter")]
+    fn filter(&self, filter: fn mut(Node) -> u16) -> u16;
+
+    #[cm("example:demo/walker#double")]
+    #[cm_params("self", "f")]
+    fn double(&self, f: fn mut(i32) -> i32) -> i32;
+
+    #[cm("example:demo/walker#pick")]
+    #[cm_params("self", "f")]
+    fn pick(&self, f: fn mut() -> Node) -> bool;
+}
+
+struct Host {}
+
+impl Walker for Host {
+    fn filter(&mut self, this: &Walker, filter: fn mut(Node) -> u16) -> u16 {
+        let mut f = filter;
+        resume f(Node::backed_by("node"));
+    }
+
+    fn double(&mut self, this: &Walker, f: fn mut(i32) -> i32) -> i32 {
+        let mut f = f;
+        resume f(21);
+    }
+
+    fn pick(&mut self, this: &Walker, f: fn mut() -> Node) -> bool {
+        let mut f = f;
+        let _node = f();
+        resume true;
+    }
+}
+
+export fn run() {
+    let mut host = Host {};
+    let walker = Walker::backed_by("walker");
+    with Walker => &mut host do {
+        assert walker.filter(|_| 3) == 3;
+        assert walker.double(|n| n * 2) == 42;
+        assert walker.pick(|| Node::backed_by("picked"));
+    }
+}
+
+__DATA__
+{
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(export \"$cm_callback__call-handle-to-u16\""], "count": 1 },
+    { "contains": ["(export \"$cm_callback__call-i32-to-i32\""], "count": 1 },
+    { "contains": ["(export \"$cm_callback__call-to-handle\""], "count": 1 }
+  ]
+}

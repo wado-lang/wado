@@ -29,6 +29,8 @@ const SLICE = [
   "HTMLInputElement",
   "Document",
   "Window",
+  "NodeIterator",
+  "TreeWalker",
 ];
 
 const [out, mode] = process.argv.slice(2);
