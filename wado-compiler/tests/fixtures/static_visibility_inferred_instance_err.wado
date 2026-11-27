@@ -1,6 +1,7 @@
 // A generic receiver spelled without its arguments reaches the block the
 // expected type settles, and is held to that block's visibility, whichever
-// block the type's index lists first.
+// block the type's index lists first. The report opens with the first error
+// and lists the second right after it, so the two public calls raise none.
 use { W, V } from "./sub/static_visibility_inferred_instance_lib.wado";
 
 export fn run() {
@@ -12,7 +13,5 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":10:21: analysis error: method `mk` of `V` is private to its defining file",
-  "compile_error_count": 1,
-  "compile_errors_contains": ["method `mk` of `W`"]
+  "compile_error": ".wado:9:21: analysis error: method `mk` of `W` is private to its defining file; mark it `internal` (same package) or `pub` (cross package) to widen access; 11:21: method `mk` of `V` is private to its defining file"
 }

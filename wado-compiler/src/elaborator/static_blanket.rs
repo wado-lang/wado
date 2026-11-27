@@ -162,7 +162,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// receiver, which settles the others through its bounds, `A` in
     /// `impl<A, T: Holder<Item = A>> Trait<A> for T`.
     fn blanket_block_slots(
-        &mut self,
+        &self,
         blanket: DefId,
         blanket_param: &str,
         receiver_type_id: TypeId,
