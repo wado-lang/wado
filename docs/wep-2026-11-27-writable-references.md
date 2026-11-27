@@ -227,10 +227,26 @@ and back, or take a closure the accessor calls between its read and its store.
 An accessor that yields a scoped place, as Swift's `_modify` and Hylo's
 subscripts do, waits for a need the three do not meet.
 
-A write to the place by another route inside the scope is overwritten when the
-scope stores back: `if let Some(n) = &mut self.count { self.count = null; *n += 1 }`
-leaves `Some`. Swift forbids the overlap with exclusivity and Ada leaves it
-unspecified. Wado defines it, and warns where one body shows both writes.
+A scope that stores back does so at every exit, whether or not its binding was
+written. A write to the place by another route inside the scope is therefore
+overwritten: `if let Some(n) = &mut self.count { self.count = null; *n += 1 }`
+leaves `Some`. A binding of an in-place type stores nothing back, so none of
+this reaches it.
+
+- An assignment inside the scope, in the same body, to the scope's place, to a
+  place holding it or to a part of it is a compile error. The place is read off
+  the syntax, so the loss is certain.
+- A write the compiler cannot place warns under the lint `lost_write`, at the
+  write: one a callee makes, one through a reference that may name the same
+  object, one to an element whose index may be the current one. It is best
+  effort, as `stale_reference` is.
+- A read of the place inside the scope sees the value from before the binding
+  was written. It warns where one body shows both, and is no error: a read
+  ahead of any write through the binding is harmless.
+
+Swift splits the same way. An overlap it can prove is a compile error, and the
+rest is checked at run time, which Wado does not do. Ada leaves the overlap
+unspecified.
 
 ### Declined
 
@@ -248,10 +264,10 @@ unspecified. Wado defines it, and warns where one body shows both writes.
 
 ## Known gaps
 
-### The overwritten write has no lint name
+### The stale read of a scoped place has no lint name
 
-The warning for a write a scope's store-back overwrites is decided, and its
-name is not.
+A read of a place inside the scope that will store back to it warns, and the
+lint it warns under is not named.
 
 ### An affine `variant` keeps its slot object
 
