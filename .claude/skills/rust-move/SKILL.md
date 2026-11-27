@@ -61,6 +61,10 @@ The tool reports each of these as a `by hand:` line where it can see one.
 - A name the moved code reads that the destination already binds to something
   else: the moved code would read the destination's.
 - A `macro_rules!` macro of the source file that the moved code invokes.
+- A path in the destination that names a moved top-level item through the file
+  it left.
+- A visibility a declaration already writes that does not reach as far as the
+  move needs (`pub(self)`, or `pub(super)` where `pub(crate)` is needed).
 
 Then format, since the tool appends imports unsorted:
 
@@ -74,3 +78,4 @@ mise run format
 - A member of a trait `impl`, which cannot leave its block.
 - An item inside a function, a trait or a nested module.
 - An item that shares a line with other code.
+- A top-level item the destination already declares one of, by name and kind.

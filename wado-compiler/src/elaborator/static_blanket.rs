@@ -4,8 +4,6 @@
 use std::sync::Arc;
 
 use super::Elaborator;
-use super::sig::MethodSig;
-use super::trait_env::TraitEnv;
 use super::call::ArgSite;
 use super::call::CalleeSignature;
 use super::call::slot_names;
@@ -13,11 +11,13 @@ use super::method_call::UnappliedStatic;
 use super::method_lookup::MethodInferenceInput;
 use super::method_lookup::settled_impl_args;
 use super::sem::types::StaticMethodDispatch;
+use super::sig::MethodSig;
 use super::sig::Param;
 use super::static_call::ReceiverId;
 use super::static_call::StaticLookup;
 use super::static_call::StaticQuery;
 use super::trait_env::ImplTargetKey;
+use super::trait_env::TraitEnv;
 use super::trait_query::SelfBinding;
 use super::types::FunctionContext;
 use super::types::TypeError;
@@ -427,9 +427,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find(|param| param.name == blanket.param)
             .expect("a value blanket declares its receiver parameter")
             .clone();
-        let slot = self
-            .tysys
-            .blanket_param_slot(blanket.def, &blanket.param);
+        let slot = self.tysys.blanket_param_slot(blanket.def, &blanket.param);
         let mut slots = vec![slot];
         slots.extend(sig.own_type_param_ids());
         let mut decls = vec![receiver_param];

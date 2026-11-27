@@ -787,9 +787,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_ref()
             .is_none_or(|(link, _)| *link != target_type_id);
         let declaring = owner.filter(|(link, _)| self.is_declaring_link(*link));
-        let declaring_type = declaring
-            .as_ref()
-            .map_or(target_type_id, |(link, _)| *link);
+        let declaring_type = declaring.as_ref().map_or(target_type_id, |(link, _)| *link);
         let declaring_key = declaring.map(|(_, key)| key);
         let key = declaring_key.or_else(|| self.tysys.static_receiver_key(target_type_id));
         // The head as written names the receiver only where the key is the

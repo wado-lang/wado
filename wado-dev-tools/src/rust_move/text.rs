@@ -23,6 +23,22 @@ fn is_ident_continue(c: char) -> bool {
     c == '_' || c.is_alphanumeric()
 }
 
+/// The length of the comment or the string, character or lifetime `rest`
+/// opens with: what holds no code.
+fn opaque_len(rest: &str) -> Option<usize> {
+    if rest.starts_with("//") {
+        Some(rest.find('\n').unwrap_or(rest.len()))
+    } else if rest.starts_with("/*") {
+        Some(block_comment_len(rest))
+    } else if rest.starts_with('"') {
+        Some(string_len(rest))
+    } else if rest.starts_with('\'') {
+        Some(quote_len(rest))
+    } else {
+        raw_string_len(rest)
+    }
+}
+
 /// Every identifier in `text` with its byte offset, keywords included. A
 /// comment, a string, a character and a lifetime hold none.
 pub fn identifiers(text: &str) -> Vec<(usize, &str)> {
@@ -32,15 +48,7 @@ pub fn identifiers(text: &str) -> Vec<(usize, &str)> {
     while at < bytes.len() {
         let rest = &text[at..];
         let c = rest.chars().next().expect("`at` is on a character");
-        if rest.starts_with("//") {
-            at += rest.find('\n').unwrap_or(rest.len());
-        } else if rest.starts_with("/*") {
-            at += block_comment_len(rest);
-        } else if c == '"' {
-            at += string_len(rest);
-        } else if c == '\'' {
-            at += quote_len(rest);
-        } else if let Some(len) = raw_string_len(rest) {
+        if let Some(len) = opaque_len(rest) {
             at += len;
         } else if is_ident_start(c) {
             let len = rest.find(|c| !is_ident_continue(c)).unwrap_or(rest.len());
@@ -57,6 +65,38 @@ pub fn identifiers(text: &str) -> Vec<(usize, &str)> {
         }
     }
     found
+}
+
+/// `text` with every comment and literal blanked, byte for byte and line for
+/// line: what is left is code, at the offsets it has in `text`.
+fn code_only(text: &str) -> String {
+    let mut code = String::with_capacity(text.len());
+    let mut at = 0;
+    while at < text.len() {
+        let rest = &text[at..];
+        let c = rest.chars().next().expect("`at` is on a character");
+        match opaque_len(rest) {
+            Some(len) => {
+                code.extend(
+                    rest[..len]
+                        .bytes()
+                        .map(|byte| if byte == b'\n' { '\n' } else { ' ' }),
+                );
+                at += len;
+            }
+            // An identifier whole, so its last letter never opens a raw string.
+            None if is_ident_start(c) => {
+                let len = rest.find(|c| !is_ident_continue(c)).unwrap_or(rest.len());
+                code.push_str(&rest[..len]);
+                at += len;
+            }
+            None => {
+                code.push(c);
+                at += c.len_utf8();
+            }
+        }
+    }
+    code
 }
 
 fn block_comment_len(rest: &str) -> usize {
@@ -137,6 +177,9 @@ pub struct Binding {
     /// The path as written, from its first segment (`crate::geo::Point`).
     pub path: String,
     pub name: String,
+    /// The byte offset of the path's last segment, which names the item
+    /// whatever alias binds it.
+    pub at: usize,
 }
 
 impl Binding {
@@ -178,23 +221,30 @@ pub struct UseItem {
 
 /// The top-level `use` items of `text`, in order.
 pub fn use_items(text: &str) -> Vec<UseItem> {
-    let lines: Vec<&str> = text.lines().collect();
+    // A line of a comment or a string may start with `use` too, and a comment
+    // may sit between two leaves.
+    let code = code_only(text);
+    let lines: Vec<&str> = code.lines().collect();
     let mut items = Vec::new();
     let mut at = 0;
+    let mut line_start = 0;
     while at < lines.len() {
         let line = lines[at];
         let Some(tree_at) = use_keyword_end(line) else {
+            line_start += line.len() + 1;
             at += 1;
             continue;
         };
         let start = at;
-        let mut tree = line[tree_at..].to_string();
-        while !tree.contains(';') {
+        let tree_start = line_start + tree_at;
+        let tree_len = code[tree_start..]
+            .find(';')
+            .expect("a `use` item ends in `;`");
+        let tree = &code[tree_start..tree_start + tree_len];
+        while line_start <= tree_start + tree_len {
+            line_start += lines[at].len() + 1;
             at += 1;
-            tree.push_str(lines[at]);
         }
-        at += 1;
-        let tree = tree.split(';').next().expect("split yields a first part");
         let mut item = UseItem {
             lines: start..at,
             bindings: Vec::new(),
@@ -204,7 +254,7 @@ pub fn use_items(text: &str) -> Vec<UseItem> {
                     .checked_sub(1)
                     .is_some_and(|above| lines[above].starts_with("#[")),
         };
-        flatten_use_tree("", tree, &mut item);
+        flatten_use_tree(&code, "", tree, &mut item);
         items.push(item);
     }
     items
@@ -227,7 +277,10 @@ fn use_keyword_end(line: &str) -> Option<usize> {
         .then(|| line.len() - after_visibility.len() + 4)
 }
 
-fn flatten_use_tree(prefix: &str, tree: &str, out: &mut UseItem) {
+/// `tree`, a slice of `code`, as the bindings and globs it writes under
+/// `prefix`.
+fn flatten_use_tree(code: &str, prefix: &str, tree: &str, out: &mut UseItem) {
+    let unspaced = |path: &str| path.split_whitespace().collect::<String>();
     let tree = tree.trim();
     let join = |segment: &str| {
         if prefix.is_empty() {
@@ -242,21 +295,24 @@ fn flatten_use_tree(prefix: &str, tree: &str, out: &mut UseItem) {
         let prefix = if head.is_empty() {
             prefix.to_string()
         } else {
-            join(&head.replace(' ', ""))
+            join(&unspaced(head))
         };
         for part in split_top_level(inner) {
-            flatten_use_tree(&prefix, part, out);
+            flatten_use_tree(code, &prefix, part, out);
         }
         return;
     }
     if tree.is_empty() {
         return;
     }
-    let (path, alias) = match tree.split_once(" as ") {
+    let (written, alias) = match tree.split_once(" as ") {
         Some((path, alias)) => (path.trim(), Some(alias.trim())),
         None => (tree, None),
     };
-    let path = path.replace(' ', "");
+    let last_segment = written.rfind("::").map_or(0, |at| at + 2);
+    // `written` is a slice of `code`, so the two addresses give its offset.
+    let at = written.as_ptr() as usize - code.as_ptr() as usize + last_segment;
+    let path = unspaced(written);
     if let Some(parent) = path.strip_suffix("::*") {
         out.globs.push(join(parent));
         return;
@@ -276,7 +332,7 @@ fn flatten_use_tree(prefix: &str, tree: &str, out: &mut UseItem) {
         .expect("a path has a last segment")
         .to_string();
     if name != "_" {
-        out.bindings.push(Binding { path, name });
+        out.bindings.push(Binding { path, name, at });
     }
 }
 
@@ -368,7 +424,34 @@ mod tests {
     #[test]
     fn use_items_are_items_and_not_the_word() {
         let text = "pub const USAGE: &str = \"we use this\";\n\
-                    pub fn last() -> i32 { // callers use this\n    1\n}\n";
+                    pub fn last() -> i32 { // callers use this\n    1\n}\n\
+                    /*\nuse in::a_comment\n*/\nconst S: &str = \"\nuse in::a_string;\n\";\n";
         assert_eq!(use_items(text), []);
+    }
+
+    #[test]
+    fn a_binding_is_where_its_item_is_named() {
+        let text = "use std::{\n    fmt, // formatter\n    io::Error as IoError,\n    \
+                    fmt::Error as FmtError,\n};\n";
+        let items = use_items(text);
+        let named: Vec<(&str, &str)> = items[0]
+            .bindings
+            .iter()
+            .map(|b| (b.name.as_str(), &text[b.at..b.at + b.last_segment().len()]))
+            .collect();
+        assert_eq!(
+            named,
+            [("fmt", "fmt"), ("IoError", "Error"), ("FmtError", "Error")]
+        );
+        let at = |name: &str| {
+            items[0]
+                .bindings
+                .iter()
+                .find(|b| b.name == name)
+                .unwrap()
+                .at
+        };
+        assert!(at("IoError") < at("FmtError"));
+        assert_eq!(items[0].lines, 0..5);
     }
 }

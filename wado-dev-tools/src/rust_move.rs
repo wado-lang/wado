@@ -183,21 +183,14 @@ impl Document {
             .collect())
     }
 
-    /// What `binding` of the `use` item `item` imports.
-    fn imported(
-        &self,
-        client: &mut Client,
-        item: &UseItem,
-        binding: &Binding,
-    ) -> Result<Meaning, String> {
-        let (position, _) = self
-            .identifiers
-            .iter()
-            .rfind(|(position, name)| {
-                item.lines.contains(&position.line) && name == binding.last_segment()
-            })
-            .expect("a `use` item writes the path it binds");
-        self.definitions(client, *position)
+    /// What `binding` of one of its `use` items imports.
+    fn imported(&self, client: &mut Client, binding: &Binding) -> Result<Meaning, String> {
+        let before = &self.text[..binding.at];
+        let position = Position {
+            line: before.matches('\n').count(),
+            column: binding.at - before.rfind('\n').map_or(0, |at| at + 1),
+        };
+        self.definitions(client, position)
     }
 }
 
@@ -286,6 +279,8 @@ struct Moved {
     source: PathBuf,
     span: Range<usize>,
     name: String,
+    /// Its `SymbolKind`, which tells a type from a value of the same name.
+    kind: Option<u64>,
     name_position: Position,
     /// The header of the `impl` block it is a member of.
     header: Option<String>,
@@ -305,10 +300,15 @@ struct Widening {
     visibility: &'static str,
 }
 
-/// Whether the declaration on `line` already writes a visibility. rustfmt keeps
-/// one on the line of the name it qualifies.
-fn declares_visibility(line: &str) -> bool {
-    line.trim_start().starts_with("pub")
+/// The visibility the declaration on `line` writes (`pub`, `pub(super)`).
+/// rustfmt keeps one on the line of the name it qualifies.
+fn declared_visibility(line: &str) -> Option<&str> {
+    let line = line.trim_start();
+    let rest = line.strip_prefix("pub")?;
+    match rest.strip_prefix('(') {
+        Some(scope) => Some(&line[..="pub(".len() + scope.find(')')?]),
+        None => rest.starts_with(' ').then_some("pub"),
+    }
 }
 
 /// The narrowest visibility that lets every file of `users` read an item
@@ -380,6 +380,22 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
         {
             return Err(format!("`{}` is named twice", item.name));
         }
+        // A file declares one free item of a name and a kind.
+        let declared_alike = item.header.is_none()
+            && (destination
+                .symbols
+                .iter()
+                .any(|s| symbol_name(s) == item.name && s["kind"].as_u64() == item.kind)
+                || moved[..index].iter().any(|other| {
+                    other.header.is_none() && other.name == item.name && other.kind == item.kind
+                }));
+        if declared_alike {
+            return Err(format!(
+                "{} would declare `{}` twice",
+                display_path(&destination.path),
+                item.name
+            ));
+        }
     }
     mark_emptied_blocks(&sources, &mut moved);
 
@@ -404,30 +420,62 @@ struct Fixes {
     widenings: BTreeMap<PathBuf, Vec<Widening>>,
     /// By file, then by the name each import binds, so two sources importing
     /// one name by two paths leave the destination one import.
-    imports: BTreeMap<PathBuf, BTreeMap<String, String>>,
+    imports: BTreeMap<PathBuf, BTreeMap<String, (String, Meaning)>>,
 }
 
 impl Fixes {
-    /// Widens the declaration on `line` of `document` to `visibility`, unless
-    /// it writes a visibility already.
+    /// Widens the declaration on `line` of `document` to `visibility`. One
+    /// that writes a visibility already keeps it, and is reported where it
+    /// does not reach as far.
     fn widen(&mut self, document: &Document, line: usize, visibility: &'static str) {
-        let widened = self.widenings.entry(document.path.clone()).or_default();
-        if !declares_visibility(&document.lines[line]) && !widened.iter().any(|w| w.line == line) {
-            widened.push(Widening { line, visibility });
+        match declared_visibility(&document.lines[line]) {
+            None => {
+                let widened = self.widenings.entry(document.path.clone()).or_default();
+                if !widened.iter().any(|w| w.line == line) {
+                    widened.push(Widening { line, visibility });
+                }
+            }
+            Some("pub" | "pub(crate)") => {}
+            Some(declared) if declared == visibility => {}
+            Some(declared) => self.by_hand(format!(
+                "`{declared}` at {}:{} does not reach the code that now reads it; it needs `{visibility}`",
+                display_path(&document.path),
+                line + 1
+            )),
         }
     }
 
-    /// Imports `name` into `document` from its sibling `from`.
-    fn import_from_sibling(&mut self, document: &Document, from: &Document, name: &str) {
+    /// Plans `item`, a `use` binding `name` to `meaning`, for the file `path`.
+    /// `false` where the file's plan already binds the name to something else,
+    /// which leaves the plan as it was.
+    fn import(&mut self, path: &Path, name: &str, item: String, meaning: Meaning) -> bool {
+        let planned = self.imports.entry(path.to_path_buf()).or_default();
+        if let Some((_, other)) = planned.get(name) {
+            return *other == meaning;
+        }
+        planned.insert(name.to_string(), (item, meaning));
+        true
+    }
+
+    /// [`Self::import`] of `name`, which means `meaning`, into `document` from
+    /// its sibling `from`.
+    fn import_from_sibling(
+        &mut self,
+        document: &Document,
+        from: &Document,
+        name: &str,
+        meaning: Meaning,
+    ) -> bool {
         let module = from.module_name().expect("siblings name modules");
-        self.imports
-            .entry(document.path.clone())
-            .or_default()
-            .insert(name.to_string(), format!("use super::{module}::{name};"));
+        let item = format!("use super::{module}::{name};");
+        self.import(&document.path, name, item, meaning)
     }
 
     fn by_hand(&mut self, what: String) {
-        self.report.push(format!("by hand: {what}"));
+        let line = format!("by hand: {what}");
+        if !self.report.contains(&line) {
+            self.report.push(line);
+        }
     }
 }
 
@@ -468,7 +516,7 @@ impl Move {
         }
         for item in &self.destination_uses {
             if let Some(binding) = item.bindings.iter().find(|b| b.name == name) {
-                return destination.imported(client, item, binding).map(Some);
+                return destination.imported(client, binding).map(Some);
             }
         }
         Ok(None)
@@ -507,10 +555,30 @@ impl Move {
                     "context": { "includeDeclaration": false },
                 }),
             )?;
-            let users: BTreeSet<PathBuf> = locations(&references)
+            let references: Vec<(PathBuf, Position)> = locations(&references)
                 .into_iter()
-                .map(|reference| (uri_path(&reference.uri), reference.position.line))
-                .filter(|(path, line)| *path != destination.path && !self.is_moved(path, *line))
+                .map(|reference| (uri_path(&reference.uri), reference.position))
+                .collect();
+            // A path the destination names a free item by goes through the
+            // file the item leaves.
+            if item.header.is_none() {
+                for (_, at) in references
+                    .iter()
+                    .filter(|(path, _)| *path == destination.path)
+                {
+                    let before = destination.lines[at.line].get(..at.column);
+                    if before.is_some_and(|before| before.ends_with("::")) {
+                        fixes.by_hand(format!(
+                            "{} names `{}` by a path",
+                            display_position(&destination.path, *at),
+                            item.name
+                        ));
+                    }
+                }
+            }
+            let users: BTreeSet<PathBuf> = references
+                .into_iter()
+                .filter(|(path, at)| *path != destination.path && !self.is_moved(path, at.line))
                 .map(|(path, _)| path)
                 .collect();
             if users.is_empty() {
@@ -529,7 +597,11 @@ impl Move {
             let mut elsewhere = Vec::new();
             for user in &users {
                 if *user == item.source && are_siblings(source, destination) {
-                    fixes.import_from_sibling(source, destination, &item.name);
+                    let Position { line, column } = item.name_position;
+                    let itself = Meaning::from([(source.uri.clone(), line, column)]);
+                    let planned =
+                        fixes.import_from_sibling(source, destination, &item.name, itself);
+                    assert!(planned, "a file declares one item of a name");
                 } else {
                     elsewhere.push(display_path(user));
                 }
@@ -623,10 +695,12 @@ impl Move {
                     Some(_) => {}
                     None if are_siblings(source, destination) => {
                         let here = Meaning::from([(source.uri.clone(), line, column)]);
-                        match self.destination_meaning(client, name)? {
-                            None => fixes.import_from_sibling(destination, source, name),
-                            Some(there) if there == here => {}
-                            Some(_) => self.report_rebinding(fixes, name, source),
+                        let same = match self.destination_meaning(client, name)? {
+                            None => fixes.import_from_sibling(destination, source, name, here),
+                            Some(there) => there == here,
+                        };
+                        if !same {
+                            self.report_rebinding(fixes, name, source);
                         }
                     }
                     None => fixes.by_hand(format!(
@@ -657,8 +731,9 @@ impl Move {
                     if !mentioned.contains(binding.name.as_str()) {
                         continue;
                     }
+                    let here = source.imported(client, binding)?;
                     if let Some(there) = self.destination_meaning(client, &binding.name)? {
-                        if there != source.imported(client, item, binding)? {
+                        if there != here {
                             self.report_rebinding(fixes, &binding.name, source);
                         }
                         continue;
@@ -677,12 +752,10 @@ impl Move {
                         ));
                         continue;
                     }
-                    fixes
-                        .imports
-                        .entry(destination.path.clone())
-                        .or_default()
-                        .entry(binding.name.clone())
-                        .or_insert_with(|| binding.item());
+                    // Another source may have had the name planned already.
+                    if !fixes.import(&destination.path, &binding.name, binding.item(), here) {
+                        self.report_rebinding(fixes, &binding.name, source);
+                    }
                 }
                 for glob in &item.globs {
                     if !self.destination_uses.iter().any(|d| d.globs.contains(glob)) {
@@ -707,7 +780,7 @@ impl Move {
         let imports_of = |path: &Path| -> BTreeSet<String> {
             imports
                 .get(path)
-                .map(|by_name| by_name.values().cloned().collect())
+                .map(|by_name| by_name.values().map(|(item, _)| item.clone()).collect())
                 .unwrap_or_default()
         };
         for (path, widened) in &widenings {
@@ -826,6 +899,7 @@ fn moved_item(source: &Document, position: Position) -> Result<Moved, String> {
         source: source.path.clone(),
         span,
         name: symbol_name(symbol).to_string(),
+        kind: symbol["kind"].as_u64(),
         name_position: position,
         header: block.map(|block| impl_header(source, block)),
         header_span: block.map(|block| line_span(block).start..impl_header_line(source, block) + 1),
@@ -973,11 +1047,18 @@ fn render(
             .iter()
             .map(|item| item.lines.end)
             .next_back();
+        // Else below the file's own doc comment and attributes, which no item
+        // may come ahead of.
         let at = after_uses.unwrap_or_else(|| {
-            lines
+            let is_inner = |line: &String| line.starts_with("//!") || line.starts_with("#![");
+            let preamble = lines
                 .iter()
-                .position(|line| !line.starts_with("//!"))
-                .unwrap_or(lines.len())
+                .take_while(|line| line.is_empty() || is_inner(line))
+                .count();
+            lines[..preamble]
+                .iter()
+                .rposition(is_inner)
+                .map_or(0, |last| last + 1)
         });
         let mut block: Vec<String> = imports.iter().cloned().collect();
         if after_uses.is_none() {
@@ -1262,6 +1343,78 @@ fn helper(n: usize) -> i32 {
         assert!(a.contains("\nmacro_rules! twice {"), "{a}");
         assert!(report.contains("by hand: the macro `twice`"), "{report}");
         assert!(!read(&dir, "src/b.rs").contains("twice;"));
+    }
+
+    #[test]
+    fn a_stale_path_and_a_short_visibility_are_reported() {
+        let (dir, report) = a_to_b(
+            "pub fn make() -> i32 {\n    base()\n}\n\npub(self) fn base() -> i32 {\n    1\n}\n",
+            "#![allow(dead_code)]\n\npub fn twice() -> i32 {\n    super::a::make() * 2\n}\n",
+            "b::twice()",
+            &["probe::a::make"],
+        );
+        assert!(
+            report.contains("src/b.rs:4:15 names `make` by a path"),
+            "{report}"
+        );
+        assert!(report.contains("src/a.rs:5 does not reach"), "{report}");
+        let b = read(&dir, "src/b.rs");
+        assert!(
+            b.starts_with("#![allow(dead_code)]\n\nuse super::a::base;\n\npub fn twice"),
+            "{b}"
+        );
+    }
+
+    #[test]
+    fn a_second_declaration_of_a_name_is_refused() {
+        let main = "mod a;\nmod b;\nfn main() { a::reset(); b::reset(); }\n";
+        let dir = probe(&[
+            ("src/main.rs", main),
+            ("src/a.rs", "pub fn reset() {}\n"),
+            ("src/b.rs", "pub fn reset() {}\n"),
+        ]);
+        let error = move_items(
+            dir.path(),
+            &locators(&["probe::a::reset"]),
+            &dir.path().join("src/b.rs"),
+            Mode::Apply,
+        )
+        .unwrap_err();
+        assert!(error.contains("would declare `reset` twice"), "{error}");
+    }
+
+    #[test]
+    fn two_sources_binding_one_name_differently_are_reported() {
+        let dir = probe(&[
+            (
+                "src/main.rs",
+                "mod a;\nmod b;\nmod c;\nfn main() { a::one(); c::two(); }\n",
+            ),
+            (
+                "src/a.rs",
+                "use std::collections::BTreeMap as Map;\n\npub fn one() -> usize {\n    \
+                 Map::<i32, i32>::new().len()\n}\n",
+            ),
+            ("src/b.rs", ""),
+            (
+                "src/c.rs",
+                "use std::collections::HashMap as Map;\n\npub fn two() -> usize {\n    \
+                 Map::<i32, i32>::new().len()\n}\n",
+            ),
+        ]);
+        let report = move_items(
+            dir.path(),
+            &locators(&["probe::a::one", "probe::c::two"]),
+            &dir.path().join("src/b.rs"),
+            Mode::Apply,
+        )
+        .unwrap()
+        .join("\n");
+        assert!(
+            report.contains("by hand: `Map` means one thing in"),
+            "{report}"
+        );
+        assert!(!read(&dir, "src/b.rs").contains("HashMap"));
     }
 
     #[test]
