@@ -1,0 +1,21 @@
+// An array literal's length is the count of its elements, so the `List` built
+// over it takes that constant for `used` rather than reading the array back.
+
+#[inline(never)]
+fn pair(a: i32, b: i32) -> List<i32> {
+    return [a, b];
+}
+
+export fn run() {
+    let xs = pair(builtin::black_box(3), builtin::black_box(4));
+    assert xs.len() == 2;
+    assert xs[0] + xs[1] == 7;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/store_load_forward_post_scalarize"]},
+    "wir_scope": "array_literal_len_folds.wado/pair",
+    "wir_not_expect:O2": ["array_len"]
+}

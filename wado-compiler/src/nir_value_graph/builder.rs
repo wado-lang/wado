@@ -786,10 +786,15 @@ impl<'a> Builder<'a> {
         if !is_const_value(&self.pool, len) {
             return None;
         }
+        Some(self.record_array(len))
+    }
+
+    /// A fresh name for an allocation of `len` elements.
+    fn record_array(&mut self, len: ValueId) -> ValueId {
         let array = self.pool.fresh_opaque();
-        compiler_trace!("vg_field", "[{}] array_new -> len {len:?}", self.trace_id);
+        compiler_trace!("vg_field", "[{}] array of len {len:?}", self.trace_id);
         self.array_lengths.insert(array, len);
-        Some(array)
+        array
     }
 
     /// The recorded length of the array `op` names, looking through the reference
@@ -1399,11 +1404,18 @@ impl<'a> Builder<'a> {
                 }
                 None
             }
-            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            ExprKind::TupleLiteral { elements } => {
                 for e in elements {
                     self.walk_operand(e);
                 }
                 None
+            }
+            ExprKind::ArrayLiteral { elements } => {
+                for e in &elements {
+                    self.walk_operand(*e);
+                }
+                let len = self.pool.int_typed(elements.len() as u64, TypeTable::I32);
+                Some(self.record_array(len))
             }
             ExprKind::VariantConstruct { payload, .. } => {
                 self.walk_operand(payload);
