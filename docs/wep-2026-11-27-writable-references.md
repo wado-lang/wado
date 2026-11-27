@@ -241,7 +241,8 @@ this reaches it.
   object, one to an element whose index may be the current one. It is best
   effort, as `stale_reference` is.
 - A read of the place inside the scope sees the value from before the binding
-  was written. It warns where one body shows both, and is no error: a read
+  was written. It warns under `stale_reference` where one body shows both,
+  since it is the same mistake seen from the place, and is no error: a read
   ahead of any write through the binding is harmless.
 
 Swift splits the same way. An overlap it can prove is a compile error, and the
@@ -263,11 +264,6 @@ unspecified.
   spelling stays.
 
 ## Known gaps
-
-### The stale read of a scoped place has no lint name
-
-A read of a place inside the scope that will store back to it warns, and the
-lint it warns under is not named.
 
 ### An affine `variant` keeps its slot object
 
