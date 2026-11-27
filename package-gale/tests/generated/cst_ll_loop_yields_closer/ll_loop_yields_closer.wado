@@ -1,6 +1,6 @@
 #![generated(by = "src/generator.wado", sources = ["tests/grammars/ll_loop_yields_closer.g4"])]
 
-use { HashMap } from "core:collections";
+use { HashMap, HashIndex } from "core:collections";
 
 pub struct Span {
     pub start: i32,
@@ -1507,21 +1507,20 @@ struct AtnKeyLists<T> {
     keys: List<T>,
     start: List<i32>,
     len: List<i32>,
-    same_hash_next: List<i32>,
-    index: AtnKeyMap,
+    index: HashIndex,
 }
 
 impl<T: AtnKey + Eq> AtnKeyLists<T> {
     fn new() -> AtnKeyLists<T> {
-        return AtnKeyLists { keys: [], start: [], len: [], same_hash_next: [], index: AtnKeyMap::new() };
+        return AtnKeyLists { keys: [], start: [], len: [], index: HashIndex::new() };
     }
 
-    fn hash_from(&self, from: i32) -> i64 {
+    fn hash_from(&self, from: i32) -> u64 {
         let mut h: i64 = 1469598103934665603;
         for let mut i = from; i < self.keys.len(); i += 1 {
             h = (h ^ self.keys[i].key_bits() + 16) * 1099511628211;
         }
-        return h & 4611686018427387903;
+        return ((h ^ (h as u64 >> 32) as i64) * -7046029254386353131) as u64;
     }
 
     fn count(&self) -> i32 {
@@ -1529,14 +1528,15 @@ impl<T: AtnKey + Eq> AtnKeyLists<T> {
     }
 
     fn intern(&mut self, from: i32) -> i32 {
-        let h = self.hash_from(from);
-        let head = self.index.get(h).unwrap_or(-1);
-        let known = self.find_after(head, from);
-        if known >= 0 {
+        let id = self.start.len();
+        let known = self.index.find_or_insert(self.hash_from(from), |row| self.equals_pending(row, from), id);
+        if known != id {
             self.keys.truncate(from);
             return known;
         }
-        return self.add_before(head, h, from);
+        self.start.push(from);
+        self.len.push(self.keys.len() - from);
+        return id;
     }
 
     fn find_and_drop(&mut self, from: i32) -> i32 {
@@ -1557,7 +1557,6 @@ impl<T: AtnKey + Eq> AtnKeyLists<T> {
     fn add_unkeyed(&mut self) -> i32 {
         self.start.push(0);
         self.len.push(0);
-        self.same_hash_next.push(-1);
         return self.start.len() - 1;
     }
 
@@ -1576,28 +1575,14 @@ impl<T: AtnKey + Eq> AtnKeyLists<T> {
     }
 
     fn find(&self, from: i32) -> i32 {
-        return self.find_after(self.index.get(self.hash_from(from)).unwrap_or(-1), from);
-    }
-
-    fn find_after(&self, head: i32, from: i32) -> i32 {
-        let mut id = head;
-        while id >= 0 && !self.equals_pending(id, from) {
-            id = self.same_hash_next[id];
-        }
-        return id;
+        return self.index.find(self.hash_from(from), |row| self.equals_pending(row, from));
     }
 
     fn add(&mut self, from: i32) -> i32 {
-        let h = self.hash_from(from);
-        return self.add_before(self.index.get(h).unwrap_or(-1), h, from);
-    }
-
-    fn add_before(&mut self, head: i32, h: i64, from: i32) -> i32 {
         let id = self.start.len();
+        self.index.insert(self.hash_from(from), id);
         self.start.push(from);
         self.len.push(self.keys.len() - from);
-        self.same_hash_next.push(head);
-        self.index[h] = id;
         return id;
     }
 }
