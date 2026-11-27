@@ -3154,17 +3154,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // bare-name lookup reaches. Without it the arguments resolve with no
             // expected type, so a sequence literal never coerces to its `List`
             // parameter and reaches codegen mismatched.
-            if let Some(ns_source) =
-                callee_site.and_then(|id| self.namespace_alias_source(prefix, id))
-            {
-                if let Some(sig) = self
-                    .decl_in_module(&ns_source, suffix)
-                    .and_then(|def| self.function_signature(def))
-                {
-                    return Some(sig);
-                }
-            }
-            return None;
+            let ns_source = callee_site.and_then(|id| self.namespace_alias_source(prefix, id))?;
+            return self
+                .decl_in_module(&ns_source, suffix)
+                .and_then(|def| self.function_signature(def));
         }
 
         // One read for this module's functions, its imports under either
