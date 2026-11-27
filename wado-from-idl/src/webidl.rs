@@ -1162,32 +1162,54 @@ impl Lowering<'_> {
         }
         let type_path =
             |name: &str| format!("{}/{TYPES_INTERFACE}#{}", self.package, to_kebab_case(name));
-        // A callback interface's function type may name an enum, a dictionary
-        // or a union, which is declared below with the rest.
+        let is_constant = |member: &&Member| matches!(member, Member::Const { .. });
+        // A callback interface's function type may name another callback
+        // interface, an enum, a dictionary or a union, which is declared with
+        // the rest: lower each one reached until none is left.
+        let mut targets = IndexMap::new();
+        loop {
+            let reached: Vec<&str> = self
+                .callback_interfaces
+                .iter()
+                .filter(|&(&declared, &members)| {
+                    !targets.contains_key(declared)
+                        && (named.callbacks.contains(&to_upper_camel_case(declared))
+                            || members.iter().any(|m| is_constant(&m)))
+                })
+                .map(|(&declared, _)| declared)
+                .collect();
+            if reached.is_empty() {
+                break;
+            }
+            for declared in reached {
+                let signature = self.callbacks[declared].clone();
+                let target = signature.and_then(|s| self.callback_function(None, s));
+                if let Ok(target) = &target {
+                    named.collect(target);
+                }
+                targets.insert(declared, target);
+            }
+        }
         let mut callback_interfaces = Vec::new();
         for (&declared, &members) in &self.callback_interfaces {
-            let name = to_upper_camel_case(declared);
-            let constants = || members.iter().filter(|m| matches!(m, Member::Const { .. }));
-            if !named.callbacks.contains(&name) && constants().next().is_none() {
+            let Some(target) = targets.swap_remove(declared) else {
                 continue;
-            }
-            let signature = self.callbacks[declared].clone();
-            match signature.and_then(|signature| self.callback_function(None, signature)) {
-                Ok(target) => {
-                    named.collect(&target);
-                    callback_interfaces.push(WadoNewtype {
-                        cm_attr: Some(type_path(declared)),
-                        target,
-                        constants: self.constants(declared, members, skipped),
-                        name,
-                    });
-                }
+            };
+            match target {
+                Ok(target) => callback_interfaces.push(WadoNewtype {
+                    cm_attr: Some(type_path(declared)),
+                    target,
+                    constants: self.constants(declared, members, skipped),
+                    name: to_upper_camel_case(declared),
+                }),
                 // Its constants have no type to sit on.
-                Err(reason) => skipped.extend(constants().map(|constant| Skip {
-                    item: format!("{declared}.{}", constant.label()),
-                    lost: Lost::Member,
-                    reason: reason.clone(),
-                })),
+                Err(reason) => {
+                    skipped.extend(members.iter().filter(is_constant).map(|constant| Skip {
+                        item: format!("{declared}.{}", constant.label()),
+                        lost: Lost::Member,
+                        reason: reason.clone(),
+                    }));
+                }
             }
         }
         let Named {

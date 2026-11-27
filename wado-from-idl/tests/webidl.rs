@@ -1328,6 +1328,32 @@ fn a_callback_interface_declares_what_its_function_type_names() {
     assert!(!code.contains("Unreached"), "{code}");
 }
 
+/// A callback interface named only by a later one's function type, whatever
+/// the declaration order.
+#[test]
+fn a_callback_interface_declares_the_callback_interfaces_its_function_type_names() {
+    let interface = |name: &str, members: &[String]| {
+        definition("callback interface", name, "null", "", false, members)
+    };
+    let mut defs = chain();
+    defs.callbacks = vec![
+        interface("Inner", &[operation("call", &plain("undefined"), &[], "")]),
+        interface(
+            "Outer",
+            &[
+                const_member("TAG"),
+                operation("make", &plain("Inner"), &[], ""),
+            ],
+        ),
+    ];
+    let (code, _) = defs.generate();
+    assert!(
+        code.contains("pub type Outer = fn mut() -> Inner"),
+        "{code}"
+    );
+    assert!(code.contains("pub type Inner = fn mut()"), "{code}");
+}
+
 #[test]
 fn a_callback_interface_is_a_named_function_type_holding_its_constants() {
     let number = |value: &str| format!(r#"{{"type": "number", "value": "{value}"}}"#);
