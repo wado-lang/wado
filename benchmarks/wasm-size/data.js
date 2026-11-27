@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795742545050,
+  "lastUpdate": 1795747835185,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82689,6 +82689,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e3781c18bfbb5394a6c64736598c80eb8c4a4375"
         },
         "date": 1795742543978,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24979,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334351,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f2a57ce1bb5e4c4c0808c243949f453ac468cdc2",
+          "message": "Merge pull request #2780 from wado-lang/ccr-20bd15ab-9i3f8w\n\nrefactor(gale): the simulator's interned tables share one implementation, and an edge is one word",
+          "timestamp": "2026-11-27T11:25:39+09:00",
+          "tree_id": "e48ce98aab1f87bf86def72021d41fe34c22607f",
+          "url": "https://github.com/wado-lang/wado/commit/f2a57ce1bb5e4c4c0808c243949f453ac468cdc2"
+        },
+        "date": 1795747834469,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
