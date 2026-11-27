@@ -25,6 +25,7 @@ use {
 use { AmbiguousNode } from "./prediction.wado";
 use { AltBinding, unmatched_bindings } from "./attr_resolve.wado";
 use { rule_returns_vals } from "./action_translate.wado";
+use { RuleAttrs } from "./rule_attrs.wado";
 use { SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { push_unique } from "./list_util.wado";
@@ -353,6 +354,11 @@ impl EmitContext {
         return &self.analysis.parser_rules()[self.cursor.current_rule_index()];
     }
 
+    /// `current_rule` as its action bodies see it.
+    pub fn current_rule_attrs(&self) -> &RuleAttrs {
+        return &self.analysis.rule_attrs()[self.cursor.current_rule_index()];
+    }
+
     /// The name of `current_rule`, which diagnostics raised from inside a rule
     /// use as their structured owner.
     pub fn current_rule_name(&self) -> String {
@@ -446,7 +452,7 @@ impl EmitContext {
     pub fn predicate_site(&self) -> PredicateSite {
         return PredicateSite {
             rule_index: self.cursor.current_rule_index(),
-            vals_in_scope: self.rule_emits_vals(self.current_rule()),
+            vals_in_scope: self.current_rule_emits_vals(),
             bindings: self.cursor.alt_bindings,
         };
     }
@@ -491,14 +497,14 @@ impl EmitContext {
     /// rule either declares args / `returns` / `locals` or captures a labeled call
     /// for an action to read. The single source of truth for the `vals` struct,
     /// local, return type, and `$v` substitution.
-    pub fn rule_emits_vals(&self, rule: &ParserRule) -> bool {
+    pub fn rule_emits_vals(&self, rule: &RuleAttrs) -> bool {
         return self.settings.emit_actions
             && (rule_returns_vals(rule) || !self.plan.rule_captures(&rule.name).is_empty());
     }
 
     /// `rule_emits_vals` for the rule being emitted.
     pub fn current_rule_emits_vals(&self) -> bool {
-        return self.rule_emits_vals(self.current_rule());
+        return self.rule_emits_vals(self.current_rule_attrs());
     }
 
     /// Whether the rule being emitted captures `field`'s token range / builder
@@ -517,7 +523,7 @@ impl EmitContext {
     pub fn enter_rule(&mut self, idx: i32) {
         self.cursor.set_current_rule_index(idx);
         if self.settings.emit_actions {
-            self.cursor.set_alt_bindings(unmatched_bindings(&self.analysis.parser_rules()[idx]));
+            self.cursor.set_alt_bindings(unmatched_bindings(&self.analysis.rule_attrs()[idx]));
         }
     }
 

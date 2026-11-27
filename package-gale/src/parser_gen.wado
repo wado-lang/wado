@@ -293,7 +293,7 @@ pub fn gen_parser(
     );
     gen_parser_member_methods(w, members);
     if ctx.settings.emit_actions {
-        gen_vals_structs(w, grammar, ctx);
+        gen_vals_structs(w, ctx);
     }
     if ctx.settings.trace {
         gen_trace_helpers(w);
@@ -318,7 +318,7 @@ pub fn gen_parser(
     }
     w.append(&parse_w);
     gen_call_follow_tables(w, ctx);
-    warn_unhandled_actions(grammar, ctx);
+    warn_unhandled_actions(ctx);
 }
 
 /// `CALL_FOLLOW[site]` indexes the bitset of what may follow that rule call in
@@ -699,7 +699,7 @@ fn scan_element_can_match_empty(se: &ScanElement, ctx: &mut EmitContext) -> bool
 
 /// Every alternative is one token and no action runs, so one set test decides the rule.
 fn is_compact_single_token(rule: &ParserRule, ctx: &EmitContext) -> bool {
-    return all_alts_are_single_token(&rule.alternatives) && !rule_has_emittable_actions(rule, ctx);
+    return all_alts_are_single_token(&rule.alternatives) && !rule_has_emittable_actions(ctx);
 }
 
 /// A rule's scan function. A left-recursive rule's is the family
@@ -3031,7 +3031,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         rule_takes_min_prec(lowered_rule),
         ctx.current_rule_reads_follow(),
         ctx.settings.trace,
-        &rule_result_type_for(rule, ctx),
+        &rule_result_type_for(ctx.current_rule_attrs(), ctx),
         ctx,
         lr_mid_operand_gated(lowered_rule),
     );
@@ -3085,7 +3085,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     // Threaded rule arguments come last (defaulted), so the entry and plain
     // callers omit them. Only single-alt rules thread args, so `takes_min_prec`
     // is always false here for an arg-bearing rule.
-    add_arg_params(&mut f, rule, ctx);
+    add_arg_params(&mut f, ctx);
     set_rule_result_type(&mut f, result_type);
     f.emit(w, |w| {
         let lit = wado`"${*rule_display}"`;
@@ -3109,7 +3109,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         if mid_operand_gated {
             args.push("lr_cont");
         }
-        args.extend(&wrapper_args(rule, ctx));
+        args.extend(&wrapper_args(ctx));
         let call = CallStmt {
             form: if returns_vals { CallForm::Bind("let __vals = ") } else { CallForm::Discard },
             callee: inner_name.to_string(),
@@ -3176,16 +3176,16 @@ fn emit_rule_inner_fn<S: AsStrSlice>(
     mut body: fn mut(&mut CodeWriter),
 ) {
     let mut f = parse_fn_spec(fn_name, ctx);
-    add_arg_params(&mut f, rule, ctx);
-    set_rule_result_type(&mut f, rule_result_type_for(rule, ctx));
+    add_arg_params(&mut f, ctx);
+    set_rule_result_type(&mut f, rule_result_type_for(ctx.current_rule_attrs(), ctx));
     f.set_prunable();
     emit_fn(w, ctx, &f, |w| {
-        if ctx.rule_emits_vals(rule) {
-            w.line(`let mut vals = ${vals_struct_name(rule)} {};`);
+        if ctx.current_rule_emits_vals() {
+            w.line(`let mut vals = ${vals_struct_name(ctx.current_rule_attrs())} {};`);
         }
-        emit_attr_inits(w, rule, ctx);
-        emit_arg_stores(w, rule, ctx);
-        emit_span_capture(w, rule, ctx);
+        emit_attr_inits(w, ctx);
+        emit_arg_stores(w, ctx);
+        emit_span_capture(w, ctx);
         // `@init` shares the inner fn's `vals`; the seed is threaded into the
         // `_alt_<n>` helpers (see `emit_alt_helper_exit`), so overlap-group
         // dispatch preserves it.
@@ -3210,12 +3210,12 @@ fn emit_seeded_alt_fn(
     if ctx.cursor.lr_cont_in_atom() {
         add_lr_cont_param(f);
     }
-    set_rule_result_type(f, rule_result_type_for(rule, ctx));
+    set_rule_result_type(f, rule_result_type_for(ctx.current_rule_attrs(), ctx));
     emit_fn(w, ctx, f, |w| {
-        if ctx.rule_emits_vals(rule) {
+        if ctx.current_rule_emits_vals() {
             w.line("let mut vals = vals;");
         }
-        emit_span_capture(w, rule, ctx);
+        emit_span_capture(w, ctx);
         body(w);
     });
 }
@@ -3274,7 +3274,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
     // `keyword`) use a compact `{ span, token }` struct (see
     // `gen_multi_alt_cst`), built once rather than per alternative.
-    if is_compact_single_token(rule, ctx) && !ctx.rule_emits_vals(rule) {
+    if is_compact_single_token(rule, ctx) && !ctx.current_rule_emits_vals() {
         gen_parse_fn_single_token(w, rule, ctx, fn_name);
         return;
     }
@@ -3310,8 +3310,8 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                 for let gi of group {
                     let alt_index = og.non_lr_indices[*gi];
                     let mut f = parse_fn_spec(`${fn_name}_alt_${alt_index}`, ctx, ctx.helpers_take_prec());
-                    if ctx.rule_emits_vals(rule) {
-                        add_seeded_vals_param(&mut f, rule);
+                    if ctx.current_rule_emits_vals() {
+                        add_seeded_vals_param(&mut f, ctx);
                     }
                     f.set_prunable();
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
@@ -3333,8 +3333,8 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         // The atom is the LR rule's primary alt body, so it takes the seeded
         // `vals` as a required positional argument, ahead of the defaulted
         // `min_prec`.
-        if ctx.rule_emits_vals(rule) {
-            add_seeded_vals_param(&mut f, rule);
+        if ctx.current_rule_emits_vals() {
+            add_seeded_vals_param(&mut f, ctx);
         }
         // A non-greedy `??` inside the atom predicts against the rule's
         // invocation precedence (`atn_enters_cond` reads it).
@@ -3368,7 +3368,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         // A finished alternative leaves the block for the one `@after`; the
         // no-viable path returns past it, as ANTLR4 skips `@after` on error.
         let after = rule_after_for(rule, lowered_rule, ctx);
-        let emits_vals = ctx.rule_emits_vals(rule);
+        let emits_vals = ctx.current_rule_emits_vals();
         emit_rule_inner_fn(w, rule, ctx, fn_name, |w| {
             gen_rule_entry_sync(w, ctx, rule);
             if after matches { Some(_) } {
@@ -4456,13 +4456,13 @@ fn gen_lr_fn<S: AsStrSlice>(
     if mid_operand_gated {
         add_lr_cont_param(&mut f);
     }
-    set_rule_result_type(&mut f, rule_result_type_for(rule, ctx));
+    set_rule_result_type(&mut f, rule_result_type_for(ctx.current_rule_attrs(), ctx));
     emit_fn(
         w,
         ctx,
         &f,
         |w| {
-            let emits_vals = ctx.rule_emits_vals(rule);
+            let emits_vals = ctx.current_rule_emits_vals();
             let fsep = follow_sep(ctx.current_rule_reads_follow());
             w.line("let _cp = p.b.checkpoint();");
             w.line("let _start = p.peek_start();");
@@ -4477,16 +4477,16 @@ fn gen_lr_fn<S: AsStrSlice>(
                 let entry_needs_mut = ctx.settings.emit_actions
                     && (rule.init_action matches { Some(_) }
                         || rule.after_action matches { Some(_) }
-                        || rule_threads_args(rule)
-                        || rule_has_attr_inits(rule));
+                        || rule_threads_args(ctx.current_rule_attrs())
+                        || rule_has_attr_inits(ctx));
                 let mut_kw = if entry_needs_mut { "mut " } else { "" };
-                w.line(`let ${mut_kw}vals = ${vals_struct_name(rule)} {};`);
+                w.line(`let ${mut_kw}vals = ${vals_struct_name(ctx.current_rule_attrs())} {};`);
             }
             let left_operand_text = lr_alts.iter_ref().any(|a| ctx.captures_span(&a.prefix_self_ref.name));
-            emit_span_capture(w, rule, ctx, left_operand_text);
+            emit_span_capture(w, ctx, left_operand_text);
             if ctx.settings.emit_actions {
-                emit_attr_inits(w, rule, ctx);
-                emit_arg_stores(w, rule, ctx);
+                emit_attr_inits(w, ctx);
+                emit_arg_stores(w, ctx);
                 if let Some(a) = &rule.init_action {
                     gen_prequel_action(w, a, &rule.name, true, ctx);
                 }
@@ -4749,11 +4749,11 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     // fresh `vals` the suffix action writes (`$v`). The suffix's own right
     // operand is bound by its recursive call (`$r.v`). After the body, fold this
     // level's value back into the accumulator.
-    let emits_vals = ctx.rule_emits_vals(rule);
+    let emits_vals = ctx.current_rule_emits_vals();
     if emits_vals {
         w.line(`let ${lr.prefix_self_ref.name} = _lr_acc;`);
-        w.line(`let mut vals = ${vals_struct_name(rule)} {};`);
-        emit_attr_inits(w, rule, ctx);
+        w.line(`let mut vals = ${vals_struct_name(ctx.current_rule_attrs())} {};`);
+        emit_attr_inits(w, ctx);
         capture_left_operand(w, &lr.prefix_self_ref.name, ctx);
     }
     // The LR rewrite strips the leading self-ref (element 0), so suffix op `i`
@@ -5652,7 +5652,7 @@ fn gen_prequel_action<S: AsStrSlice>(
     // value struct keeps.
     let outer = *ctx.cursor.alt_bindings();
     ctx.cursor.set_alt_bindings(if at_entry {
-        unmatched_bindings(ctx.current_rule());
+        unmatched_bindings(ctx.current_rule_attrs());
     } else {
         after_label_bindings(ctx);
     });
