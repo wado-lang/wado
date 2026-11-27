@@ -945,14 +945,14 @@ length per entry. Holding each entry as a `List` of its own, interned through a
 | the keyed lists are `HashMap` keys            |           1.09× |     1.03× |                 |           |
 | a real stack is an interned `List<AtnEdge>`   |           1.57× |     1.14× |                 |           |
 | an arena node is a `List<AtnEdge>`            |           1.91× |     1.35× |           0.92× |     0.91× |
-| flat columns, an edge packed in one `AtnEdge` |           0.97× |     0.88× |           0.97× |     0.97× |
+| flat columns, an edge packed in one `AtnEdge` |           0.97× |     0.88× |           0.97× |     0.95× |
 
 Each figure is the step over the three-column tables it replaced, measured as
 the `HashMap` table above is. The last row is what landed.
 
 Fuel read the list form as the faster one. Fuel counts instructions and does
 not see the collector, and the collector is where the time went: TypeScript
-keeps about 135k arena nodes and 32k real stacks for the program's life, so
+keeps every arena node and every real stack for the program's life, so
 every collection traces one more object per node. `wado run -O2 --gc-log` shows
 it as a larger live set and longer pauses. An interner holding a heap key in
 both its list and its map doubles that.
