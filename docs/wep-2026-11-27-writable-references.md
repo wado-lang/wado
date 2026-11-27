@@ -263,6 +263,30 @@ unspecified.
   this decision the drift narrows to the absence of exclusivity, so the
   spelling stays.
 
+## Roadmap
+
+The corpus is rewritten to the rules, whatever it takes: no rule above bends to
+spare a call site. Each step leaves the tree building and its tests passing.
+
+- [ ] The specification states every rule above, each marked not yet
+  implemented until its step lands.
+- [ ] `Shared<T>` exists: the type, `Shared::new`, `*c`, the automatic
+  dereference, and `==` as identity.
+- [ ] Every cell written as a `&mut` moves to `Shared<T>`: `Signal<T>` in Rill,
+  `ValueSerializer { out: &mut v }` in `core:value`, and each `&mut` to a
+  type replaced on assignment that a variable, a value or a `return` holds.
+- [ ] The scoped forms store back from every place: a call argument and a
+  receiver on an element, a pattern binding of a type replaced on
+  assignment, and `for let v of &mut xs`.
+- [ ] A `&mut` to a type replaced on assignment is refused outside the scoped
+  forms, a local's included, and a local stops becoming a heap cell for one.
+- [ ] A `&P` is its value from every place, and `stale_reference` warns.
+- [ ] An assignment to a scoped place inside its scope is an error, and
+  `lost_write` warns.
+- [ ] A place is writable only through writable steps.
+- [ ] `&mut T` is affine and reborrowed where one is expected, and every
+  copyable struct holding one becomes affine.
+
 ## Known gaps
 
 ### An affine `variant` keeps its slot object
@@ -270,13 +294,6 @@ unspecified.
 An affine `variant` is held in an object of its own, so `&mut` of one is a
 place. Whether it takes the scoped rule too, moving in and out where a copyable
 one copies, is not examined.
-
-### Migration
-
-Every copyable struct holding a `&mut` either becomes affine or moves to a
-cell, and every `&mut` to a type replaced on assignment that a variable, a
-value or a `return` holds moves to a cell. `core:value`'s
-`ValueSerializer { out: &mut v }` is one. How many there are is not measured.
 
 ## References
 
