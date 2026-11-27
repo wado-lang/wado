@@ -21,9 +21,7 @@ use crate::rust_rename::edit::{self, Position};
 use crate::rust_rename::lsp::{Client, file_uri, uri_path};
 use crate::rust_rename::symbol::Location;
 use crate::rust_rename::{Locator, Mode, await_workspace, display_path, start_server};
-use text::{
-    Binding, BlockImport, UseItem, blocks_importing, code_only, identifiers, is_keyword, use_items,
-};
+use text::{Binding, UseItem, code_only, identifiers, is_keyword, use_items};
 
 /// `SymbolKind` values of the LSP specification.
 const MODULE_KIND: u64 = 2;
@@ -186,6 +184,39 @@ impl Document {
             .into_iter()
             .map(|target| (target.uri, target.position.line, target.position.column))
             .collect())
+    }
+
+    /// What `name` means at the file's top level, in each namespace: the
+    /// server's answer inside a function appended to the file, which binds
+    /// nothing of its own, and taken back once answered. No use the file
+    /// already makes tells it, since a block's own `use` outranks the top
+    /// level's binding there.
+    fn top_level_meaning(&self, client: &mut Client, name: &str) -> Result<Meaning, String> {
+        let separator = if self.text.ends_with('\n') { "" } else { "\n" };
+        let probe = format!("fn rust_move_probe() {{ let _: {name}; {name}; {name}!(); }}\n");
+        let line = self.text.matches('\n').count() + separator.len();
+        client.notify(
+            "textDocument/didOpen",
+            &json!({
+                "textDocument": {
+                    "uri": self.uri,
+                    "languageId": "rust",
+                    "version": 1,
+                    "text": format!("{}{separator}{probe}", self.text),
+                },
+            }),
+        );
+        let meaning = identifiers(&probe)
+            .into_iter()
+            .filter(|(_, word)| *word == name)
+            .map(|(column, _)| self.definitions(client, Position { line, column }))
+            .collect::<Result<Vec<Meaning>, String>>()
+            .map(|found| found.into_iter().flatten().collect());
+        client.notify(
+            "textDocument/didClose",
+            &json!({ "textDocument": { "uri": self.uri } }),
+        );
+        meaning
     }
 
     /// What `binding` of one of its `use` items imports.
@@ -541,53 +572,8 @@ impl Move {
                 return destination.imported(client, binding).map(Some);
             }
         }
-        // A glob or the prelude binds it without naming it, and an explicit
-        // import would outrank either: what the destination's own code reads
-        // by the bare name says: every use the top level's binding reaches,
-        // which a module of its own and a block's own `use` do not.
-        let modules = destination
-            .symbols
-            .iter()
-            .filter(|s| s["kind"].as_u64() == Some(MODULE_KIND))
-            .map(|module| {
-                let range = destination.offset(Position::from_lsp(&module["range"]["start"]))
-                    ..destination.offset(Position::from_lsp(&module["range"]["end"]));
-                (range, BlockImport::Name)
-            });
-        let blocks: Vec<(Range<usize>, BlockImport)> = blocks_importing(&destination.code, name)
-            .into_iter()
-            .chain(modules)
-            .collect();
-        let import_at = |at: Position| {
-            let offset = destination.offset(at);
-            blocks
-                .iter()
-                .filter(|(block, _)| block.contains(&offset))
-                .map(|(_, import)| *import)
-                .max()
-        };
-        let bare_uses = destination.identifiers.iter().filter(|(at, written)| {
-            let before = destination.lines[at.line][..at.column].trim_end();
-            written == name
-                && import_at(*at) != Some(BlockImport::Name)
-                && !self
-                    .destination_uses
-                    .iter()
-                    .any(|u| u.lines.contains(&at.line))
-                && !before.ends_with('.')
-                && !before.ends_with("::")
-        });
-        let mut meaning = Meaning::new();
-        for (at, _) in bare_uses {
-            if import_at(*at) == Some(BlockImport::Glob) {
-                // A block's glob may bind it there, which the server's answer
-                // does not tell from the top level's: the use itself stands
-                // for a meaning no import shares.
-                meaning.insert((destination.uri.clone(), at.line, at.column));
-            } else {
-                meaning.extend(destination.definitions(client, *at)?);
-            }
-        }
+        // A glob, the prelude or a macro scope binds it without naming it.
+        let meaning = destination.top_level_meaning(client, name)?;
         Ok((!meaning.is_empty()).then_some(meaning))
     }
 
@@ -1493,28 +1479,31 @@ fn helper(n: usize) -> i32 {
     }
 
     #[test]
-    fn a_block_importing_the_name_says_nothing_of_the_top_level() {
-        let (dir, report) = a_to_b(
-            "use std::cmp::max;\n\npub fn largest() -> i32 {\n    max(1, 2)\n}\n",
-            "use inner::*;\n\nmod inner {\n    pub fn max(a: i32, _b: i32) -> i32 {\n        a\n    }\n}\n\n\
-             pub fn local() -> i32 {\n    use std::cmp::max;\n    max(1, 2)\n}\n",
-            "a::largest(); b::local()",
-            &["probe::a::largest"],
-        );
-        assert!(!report.contains("`max` means"), "{report}");
-        assert!(read(&dir, "src/b.rs").contains("\nuse std::cmp::max;"));
+    fn a_block_of_its_own_says_nothing_of_the_top_level() {
+        for local in ["use std::cmp::max;", "use std::cmp::*;"] {
+            let (dir, report) = a_to_b(
+                "use std::cmp::max;\n\npub fn largest() -> i32 {\n    max(1, 2)\n}\n",
+                &format!(
+                    "use inner::*;\n\nmod inner {{\n    pub fn max(a: i32, _b: i32) -> i32 {{\n        \
+                     a\n    }}\n}}\n\npub fn local() -> i32 {{\n    {local}\n    max(1, 2)\n}}\n"
+                ),
+                "a::largest(); b::local()",
+                &["probe::a::largest"],
+            );
+            assert!(report.contains("by hand: `max` means"), "{local}: {report}");
+            assert!(!read(&dir, "src/b.rs").contains("\nuse std::cmp::max;"));
+        }
     }
 
     #[test]
-    fn a_block_glob_leaves_the_top_level_unknown() {
+    fn a_top_level_glob_meaning_the_same_needs_no_import() {
         let (dir, report) = a_to_b(
             "use std::cmp::max;\n\npub fn largest() -> i32 {\n    max(1, 2)\n}\n",
-            "use inner::*;\n\nmod inner {\n    pub fn max(a: i32, _b: i32) -> i32 {\n        a\n    }\n}\n\n\
-             pub fn local() -> i32 {\n    use std::cmp::*;\n    max(1, 2)\n}\n",
-            "a::largest(); b::local()",
+            "use std::cmp::*;\n\npub fn first() -> Ordering {\n    Ordering::Less\n}\n",
+            "a::largest(); b::first()",
             &["probe::a::largest"],
         );
-        assert!(report.contains("by hand: `max` means"), "{report}");
+        assert!(!report.contains("`max`"), "{report}");
         assert!(!read(&dir, "src/b.rs").contains("\nuse std::cmp::max;"));
     }
 

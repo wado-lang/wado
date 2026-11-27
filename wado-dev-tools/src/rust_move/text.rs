@@ -260,66 +260,6 @@ pub fn use_items(text: &str) -> Vec<UseItem> {
     items
 }
 
-/// How a block's own `use` items bind a name, the stronger last.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum BlockImport {
-    /// A glob, which binds it only if its module has one.
-    Glob,
-    Name,
-}
-
-/// The byte ranges of the blocks of `code` (as `code_only` leaves it) whose
-/// own `use` items may bind `name`, and how.
-pub fn blocks_importing(code: &str, name: &str) -> Vec<(Range<usize>, BlockImport)> {
-    let mut uses = identifiers(code)
-        .into_iter()
-        .filter(|(_, word)| *word == "use")
-        .map(|(at, _)| at)
-        .peekable();
-    let mut open: Vec<(usize, Option<BlockImport>)> = Vec::new();
-    let mut found = Vec::new();
-    for (at, c) in code.char_indices() {
-        if uses.next_if_eq(&at).is_some()
-            && let Some((_, import)) = open.last_mut()
-        {
-            let tree_start = at + "use".len();
-            let tree_len = code[tree_start..]
-                .find(';')
-                .expect("a `use` item ends in `;`");
-            let mut item = UseItem {
-                lines: 0..0,
-                bindings: Vec::new(),
-                globs: Vec::new(),
-                plain: false,
-            };
-            flatten_use_tree(
-                code,
-                "",
-                &code[tree_start..tree_start + tree_len],
-                &mut item,
-            );
-            let this = if item.bindings.iter().any(|b| b.name == name) {
-                Some(BlockImport::Name)
-            } else if !item.globs.is_empty() {
-                Some(BlockImport::Glob)
-            } else {
-                None
-            };
-            *import = (*import).max(this);
-        }
-        match c {
-            '{' => open.push((at, None)),
-            '}' => {
-                if let Some((start, Some(import))) = open.pop() {
-                    found.push((start..at + 1, import));
-                }
-            }
-            _ => {}
-        }
-    }
-    found
-}
-
 /// Where the tree of a top-level `use` on `line` starts.
 fn use_keyword_end(line: &str) -> Option<usize> {
     let after_visibility = match line.strip_prefix("pub") {
@@ -445,32 +385,6 @@ mod tests {
     fn identifiers_carry_their_offsets() {
         let text = "let あ = b;";
         assert_eq!(identifiers(text), [(0, "let"), (4, "あ"), (10, "b")]);
-    }
-
-    #[test]
-    fn a_nested_use_binds_its_own_block() {
-        let code = "use a::max;\nfn f() {\n    { use std::cmp::{max, min}; max(1, 2) }\n    \
-                    use b::max as top;\n    max(1, 2)\n}\nfn g() {\n    use c::*;\n}\n";
-        let inner = code.find("{ use").unwrap();
-        let inner_end = code.find("2) }").unwrap() + "2) }".len();
-        let f = code.find("{\n    {").unwrap();
-        let f_end = code.find("}\nfn g").unwrap() + 1;
-        let g = code.find("{\n    use c").unwrap();
-        let g_end = code.len() - 1;
-        let glob = (g..g_end, BlockImport::Glob);
-        assert_eq!(
-            blocks_importing(code, "max"),
-            [(inner..inner_end, BlockImport::Name), glob.clone()]
-        );
-        assert_eq!(
-            blocks_importing(code, "top"),
-            [(f..f_end, BlockImport::Name), glob.clone()]
-        );
-        assert_eq!(
-            blocks_importing(code, "min"),
-            [(inner..inner_end, BlockImport::Name), glob.clone()]
-        );
-        assert_eq!(blocks_importing(code, "c"), [glob]);
     }
 
     #[test]
