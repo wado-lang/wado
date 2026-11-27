@@ -1451,12 +1451,14 @@ impl<T: AtnKey + Eq> AtnKeyLists<T> {
     }
 
     fn intern(&mut self, from: i32) -> i32 {
-        let known = self.find(from);
+        let h = self.hash_from(from);
+        let head = self.index.get(h).unwrap_or(-1);
+        let known = self.find_after(head, from);
         if known >= 0 {
             self.keys.truncate(from);
             return known;
         }
-        return self.add(from);
+        return self.add_before(head, h, from);
     }
 
     fn find_and_drop(&mut self, from: i32) -> i32 {
@@ -1496,7 +1498,11 @@ impl<T: AtnKey + Eq> AtnKeyLists<T> {
     }
 
     fn find(&self, from: i32) -> i32 {
-        let mut id = self.index.get(self.hash_from(from)).unwrap_or(-1);
+        return self.find_after(self.index.get(self.hash_from(from)).unwrap_or(-1), from);
+    }
+
+    fn find_after(&self, head: i32, from: i32) -> i32 {
+        let mut id = head;
         while id >= 0 && !self.equals_pending(id, from) {
             id = self.same_hash_next[id];
         }
@@ -1504,11 +1510,15 @@ impl<T: AtnKey + Eq> AtnKeyLists<T> {
     }
 
     fn add(&mut self, from: i32) -> i32 {
-        let id = self.start.len();
         let h = self.hash_from(from);
+        return self.add_before(self.index.get(h).unwrap_or(-1), h, from);
+    }
+
+    fn add_before(&mut self, head: i32, h: i64, from: i32) -> i32 {
+        let id = self.start.len();
         self.start.push(from);
         self.len.push(self.keys.len() - from);
-        self.same_hash_next.push(self.index.get(h).unwrap_or(-1));
+        self.same_hash_next.push(head);
         self.index[h] = id;
         return id;
     }
