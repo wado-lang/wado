@@ -56,8 +56,7 @@ struct SurfaceNode {
     referenced: HashMap<String, List<Element>>,
     value: String,
     listeners: List<Listener>,
-    // The document's node iterators, which a removal moves; empty on any
-    // other node.
+    // On the document, its node iterators, which a removal moves.
     iterators: List<NodeIterator>,
     parent: Option<Node>,
     first_child: Option<Node>,
@@ -325,9 +324,6 @@ fn following(node: Node, root: Node) -> Option<Node> {
 // The node after `node`'s inclusive descendants in tree order, among `root`'s
 // inclusive descendants.
 fn following_past(node: Node, root: Node) -> Option<Node> {
-    if !is_inclusive_ancestor(root, node) {
-        return null;
-    }
     let mut at = node;
     while at != root {
         let here = surface_node(at);
@@ -351,11 +347,28 @@ fn preceding(node: Node, root: Node) -> Option<Node> {
     let Some(sibling) = here.previous_sibling else {
         return here.parent;
     };
-    let mut at = sibling;
+    return Option::Some(last_inclusive_descendant(sibling));
+}
+
+fn last_inclusive_descendant(node: Node) -> Node {
+    let mut at = node;
     while let Some(last) = surface_node(at).last_child {
         at = last;
     }
-    return Option::Some(at);
+    return at;
+}
+
+// Whether `later` comes after `earlier` in tree order, both in one tree.
+fn follows(later: Node, earlier: Node) -> bool {
+    let top = root_of(earlier);
+    let mut at = earlier;
+    while let Some(next) = following(at, top) {
+        if next == later {
+            return true;
+        }
+        at = next;
+    }
+    return false;
 }
 
 // The DOM standard's `NodeIterator` pre-removing steps, as `removed` leaves its
@@ -366,7 +379,8 @@ fn pre_remove(iterator: &mut SurfaceIterator, removed: Node) {
         return;
     }
     if iterator.pointer_before_reference {
-        if let Some(next) = following_past(removed, root) {
+        // Nothing of the root follows the subtree that takes the root along.
+        if !is_inclusive_ancestor(removed, root) && let Some(next) = following_past(removed, root) {
             iterator.reference = next;
             return;
         }
@@ -911,6 +925,26 @@ impl SurfaceDom {
         let root = iterator.traverser.root;
         let mut node = iterator.reference;
         let mut before = iterator.pointer_before_reference;
+        // A removal left the reference outside the root, so the walk enters the
+        // root at whichever end tree order puts beside the reference, if any.
+        if !is_inclusive_ancestor(root, node) {
+            match direction {
+                _::Next => {
+                    if !follows(root, node) {
+                        return null;
+                    }
+                    node = root;
+                    before = true;
+                },
+                _::Previous => {
+                    if !follows(node, root) {
+                        return null;
+                    }
+                    node = last_inclusive_descendant(root);
+                    before = false;
+                },
+            }
+        }
         loop {
             match direction {
                 _::Next => if before {

@@ -205,7 +205,27 @@ test "a node iterator before a reference nothing follows turns to the one before
     };
 }
 
-test "a node iterator moves only where its reference leaves its root, a move included" {
+test "a node iterator whose root is removed with its reference passes no node outside the root" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = traversal_tree(doc);
+        let div = body.first_child().unwrap();
+        let iterator = doc.create_node_iterator(div, NodeFilter::SHOW_ELEMENT, |_| NodeFilter::FILTER_ACCEPT);
+        iterator.next_node();
+        assert name(iterator.next_node()) == "P";
+        let html = body.parent_node().unwrap();
+        html.remove_child(body);
+        assert iterator.reference_node().node_name() == "HEAD";
+        assert iterator.next_node() == null;
+        assert iterator.previous_node() == null;
+        // Back in one tree, the root follows the reference.
+        html.append_child(body);
+        assert name(iterator.next_node()) == "DIV";
+    };
+}
+
+test "removing a node iterator's root leaves it, and moving its reference moves it" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let iterator = at_span(Dom::document(), false);
