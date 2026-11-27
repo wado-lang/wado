@@ -78,4 +78,5 @@ mise run format
 - A member of a trait `impl`, which cannot leave its block.
 - An item inside a function, a trait or a nested module.
 - An item that shares a line with other code.
-- A top-level item the destination already declares one of, by name and kind.
+- A top-level item whose name the destination already declares, whatever the
+  kind of either.

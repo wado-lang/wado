@@ -279,8 +279,6 @@ struct Moved {
     source: PathBuf,
     span: Range<usize>,
     name: String,
-    /// Its `SymbolKind`, which tells a type from a value of the same name.
-    kind: Option<u64>,
     name_position: Position,
     /// The header of the `impl` block it is a member of.
     header: Option<String>,
@@ -380,15 +378,17 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
         {
             return Err(format!("`{}` is named twice", item.name));
         }
-        // A file declares one free item of a name and a kind.
+        // By the name alone: a struct and a type alias differ in kind and
+        // share a namespace, and a legal pair (a function named as a type is)
+        // is not worth telling from them.
         let declared_alike = item.header.is_none()
             && (destination
                 .symbols
                 .iter()
-                .any(|s| symbol_name(s) == item.name && s["kind"].as_u64() == item.kind)
-                || moved[..index].iter().any(|other| {
-                    other.header.is_none() && other.name == item.name && other.kind == item.kind
-                }));
+                .any(|s| symbol_name(s) == item.name)
+                || moved[..index]
+                    .iter()
+                    .any(|other| other.header.is_none() && other.name == item.name));
         if declared_alike {
             return Err(format!(
                 "{} would declare `{}` twice",
@@ -899,7 +899,6 @@ fn moved_item(source: &Document, position: Position) -> Result<Moved, String> {
         source: source.path.clone(),
         span,
         name: symbol_name(symbol).to_string(),
-        kind: symbol["kind"].as_u64(),
         name_position: position,
         header: block.map(|block| impl_header(source, block)),
         header_span: block.map(|block| line_span(block).start..impl_header_line(source, block) + 1),
@@ -1049,17 +1048,7 @@ fn render(
             .next_back();
         // Else below the file's own doc comment and attributes, which no item
         // may come ahead of.
-        let at = after_uses.unwrap_or_else(|| {
-            let is_inner = |line: &String| line.starts_with("//!") || line.starts_with("#![");
-            let preamble = lines
-                .iter()
-                .take_while(|line| line.is_empty() || is_inner(line))
-                .count();
-            lines[..preamble]
-                .iter()
-                .rposition(is_inner)
-                .map_or(0, |last| last + 1)
-        });
+        let at = after_uses.unwrap_or_else(|| preamble_end(&lines));
         let mut block: Vec<String> = imports.iter().cloned().collect();
         if after_uses.is_none() {
             if at > 0 {
@@ -1079,6 +1068,37 @@ fn render(
     let mut text = lines.join("\n");
     text.push('\n');
     text
+}
+
+/// The line after a file's own doc comment and inner attributes, which no item
+/// may come ahead of. A comment or a blank line among them is passed over, and
+/// an attribute runs to the line closing its bracket.
+fn preamble_end(lines: &[String]) -> usize {
+    let mut end = 0;
+    let mut at = 0;
+    while let Some(line) = lines.get(at) {
+        let line = line.trim_start();
+        if line.starts_with("#![") {
+            let mut depth = 0i32;
+            loop {
+                let text = &lines[at];
+                depth += text.matches('[').count() as i32 - text.matches(']').count() as i32;
+                at += 1;
+                if depth <= 0 || at == lines.len() {
+                    break;
+                }
+            }
+            end = at;
+        } else if line.starts_with("//!") {
+            at += 1;
+            end = at;
+        } else if line.is_empty() || line.starts_with("//") {
+            at += 1;
+        } else {
+            break;
+        }
+    }
+    end
 }
 
 #[cfg(test)]
@@ -1381,6 +1401,43 @@ fn helper(n: usize) -> i32 {
         )
         .unwrap_err();
         assert!(error.contains("would declare `reset` twice"), "{error}");
+    }
+
+    #[test]
+    fn a_second_declaration_of_another_kind_is_refused() {
+        let main = "mod a;\nmod b;\nfn main() { let _ = (a::Reset, 0 as b::Reset); }\n";
+        let dir = probe(&[
+            ("src/main.rs", main),
+            ("src/a.rs", "pub struct Reset;\n"),
+            ("src/b.rs", "pub type Reset = i32;\n"),
+        ]);
+        let error = move_items(
+            dir.path(),
+            &locators(&["probe::a::Reset"]),
+            &dir.path().join("src/b.rs"),
+            Mode::Apply,
+        )
+        .unwrap_err();
+        assert!(error.contains("would declare `Reset` twice"), "{error}");
+    }
+
+    #[test]
+    fn the_preamble_ends_after_the_last_inner_attribute() {
+        let lines = |text: &str| -> Vec<String> { text.lines().map(str::to_string).collect() };
+        assert_eq!(preamble_end(&lines("pub fn f() {}")), 0);
+        assert_eq!(preamble_end(&lines("// note\n\npub fn f() {}")), 0);
+        assert_eq!(
+            preamble_end(&lines(
+                "//! Doc.\n\n#![allow(dead_code)]\n\n// note\nfn f() {}"
+            )),
+            3
+        );
+        assert_eq!(
+            preamble_end(&lines(
+                "// License.\n#![allow(\n    dead_code\n)]\n\nfn f() {}"
+            )),
+            4
+        );
     }
 
     #[test]
