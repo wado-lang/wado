@@ -12,6 +12,8 @@ const $CLASSES = [
   ["HTMLInputElement", 6],
   ["Document", 7],
   ["Window", 8],
+  ["NodeIterator", 10],
+  ["TreeWalker", 11],
 ];
 const $ENUMS = {
   AriaNotifyPriority: ["normal", "high"],
@@ -1891,6 +1893,12 @@ export function $glue() {
       "$wado-lang:web/document#create-event": (p0, p1, p2) => {
         return p0.createEvent($string(p1, p2));
       },
+      "$wado-lang:web/document#create-node-iterator": (p0, p1, p2, p3) => {
+        return p0.createNodeIterator(p1, (p2 >>> 0), $callback(p3, (closure, a0) => $core.exports["$cm_callback__call-handle-to-u16"](closure, a0)));
+      },
+      "$wado-lang:web/document#create-tree-walker": (p0, p1, p2, p3) => {
+        return p0.createTreeWalker(p1, (p2 >>> 0), $callback(p3, (closure, a0) => $core.exports["$cm_callback__call-handle-to-u16"](closure, a0)));
+      },
       "$wado-lang:web/document#fullscreen-enabled": (p0) => {
         return (p0.fullscreenEnabled ? 1 : 0);
       },
@@ -2307,6 +2315,60 @@ export function $glue() {
       },
       "$wado-lang:web/window#cancel-animation-frame": (p0, p1) => {
         p0.cancelAnimationFrame((p1 >>> 0));
+      },
+      "$wado-lang:web/node-iterator#root": (p0) => {
+        return p0.root;
+      },
+      "$wado-lang:web/node-iterator#reference-node": (p0) => {
+        return p0.referenceNode;
+      },
+      "$wado-lang:web/node-iterator#pointer-before-reference-node": (p0) => {
+        return (p0.pointerBeforeReferenceNode ? 1 : 0);
+      },
+      "$wado-lang:web/node-iterator#what-to-show": (p0) => {
+        return p0.whatToShow;
+      },
+      "$wado-lang:web/node-iterator#next-node": (p0) => {
+        return (p0.nextNode() ?? null);
+      },
+      "$wado-lang:web/node-iterator#previous-node": (p0) => {
+        return (p0.previousNode() ?? null);
+      },
+      "$wado-lang:web/node-iterator#detach": (p0) => {
+        p0.detach();
+      },
+      "$wado-lang:web/tree-walker#root": (p0) => {
+        return p0.root;
+      },
+      "$wado-lang:web/tree-walker#what-to-show": (p0) => {
+        return p0.whatToShow;
+      },
+      "$wado-lang:web/tree-walker#current-node": (p0) => {
+        return p0.currentNode;
+      },
+      "$wado-lang:web/tree-walker#set-current-node": (p0, p1) => {
+        p0.currentNode = p1;
+      },
+      "$wado-lang:web/tree-walker#parent-node": (p0) => {
+        return (p0.parentNode() ?? null);
+      },
+      "$wado-lang:web/tree-walker#first-child": (p0) => {
+        return (p0.firstChild() ?? null);
+      },
+      "$wado-lang:web/tree-walker#last-child": (p0) => {
+        return (p0.lastChild() ?? null);
+      },
+      "$wado-lang:web/tree-walker#previous-sibling": (p0) => {
+        return (p0.previousSibling() ?? null);
+      },
+      "$wado-lang:web/tree-walker#next-sibling": (p0) => {
+        return (p0.nextSibling() ?? null);
+      },
+      "$wado-lang:web/tree-walker#previous-node": (p0) => {
+        return (p0.previousNode() ?? null);
+      },
+      "$wado-lang:web/tree-walker#next-node": (p0) => {
+        return (p0.nextNode() ?? null);
       },
       "$wado-lang:web/rejection#name": (p0, $ret) => {
         const $value = String(p0.name ?? "Error");

@@ -424,9 +424,9 @@ impl WadoType {
         }
     }
 
-    /// What a callback export's name calls an argument of this type; `None`
-    /// where the host cannot call a closure back with one.
-    pub fn callback_argument_word(&self) -> Option<&'static str> {
+    /// What a callback export's name calls an argument or a result of this
+    /// type; `None` where neither crosses as one core value.
+    pub fn callback_value_word(&self) -> Option<&'static str> {
         match self {
             Self::Named(_) => Some(CALLBACK_HANDLE_WORD),
             _ => self.primitive_name(),

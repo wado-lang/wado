@@ -1722,7 +1722,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     ResolvedType::Primitive(p) if wado_primitive_name_to_cm(p.as_str()).is_some()
                 )
         };
-        let admitted = return_type == TypeTable::UNIT && params.iter().all(|&p| crosses(p));
+        let admitted = (return_type == TypeTable::UNIT || crosses(return_type))
+            && params.iter().all(|&p| crosses(p));
         drop(tt);
         if !admitted {
             let _ = self.emit(TypeError::CallbackAtCmBoundary {

@@ -592,9 +592,13 @@ impl TirRefVisitor for Walker<'_> {
                 }
             }
             // A closure reaches a frame only through its captures, which the
-            // frame that builds one accounts for.
-            TirExprKind::IndirectCall { args, .. } => {
+            // frame that builds one accounts for. One this frame was handed
+            // writes through that handle: a callee specialized on a closure
+            // takes it as a `&mut` of the struct its captures fill.
+            TirExprKind::IndirectCall { callee, args } => {
                 self.writes.beyond_handed = true;
+                let names = self.resolver.names(callee);
+                self.record(&names, WholeOf::Handed(callee.type_id));
                 for arg in args
                     .iter()
                     .filter(|a| self.type_table.is_mut_ref(a.type_id))

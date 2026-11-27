@@ -838,7 +838,8 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
 /// the collector may run. A copying collector moves objects there, so every
 /// reference live across one is spilled and reloaded, and a loop holds more of
 /// them than the callee does. `safepoint_calls` says which calls are one. The
-/// literal a `return` hands back is not: it is the body's last act, so what is
+/// literal a `return` hands back, on whichever path a branch or a labeled block
+/// takes, is not: it is the body's last act, so what is
 /// live across it is what was live across the call it replaces, and a caller
 /// that takes it apart deletes it. Nor is a literal of constants that a `let`
 /// binds to a local the body never writes (none in `written`), or that a
@@ -858,6 +859,8 @@ fn has_safepoint(
         cold: &'a RareRuns,
         safepoint_calls: &'a [CallSafepoint],
         written: &'a IndexSet<u32>,
+        /// The literals a `return` hands back, on whichever path it takes.
+        returned: IndexSet<ExprId>,
     }
     impl Walk<'_> {
         fn block(&self, block: BlockId) -> bool {
@@ -876,13 +879,10 @@ fn has_safepoint(
             match node {
                 NodeRef::Block(b) => return self.block(b),
                 NodeRef::Expr(e) if self.lends_constant(e) => return false,
-                NodeRef::Expr(e) if self.is_safepoint(e) => return true,
+                NodeRef::Expr(e) if !self.returned.contains(&e) && self.is_safepoint(e) => {
+                    return true;
+                }
                 NodeRef::Stmt(s) => match self.body.stmts[s].kind {
-                    StmtKind::Return {
-                        value: Some(Operand::Expr(e)),
-                    } if allocates(&self.body.exprs[e].kind) => {
-                        return self.children(NodeRef::Expr(e));
-                    }
                     StmtKind::Let {
                         local_index,
                         value: Some(value),
@@ -939,12 +939,27 @@ fn has_safepoint(
                 | ExprKind::VariantConstruct { .. }
         )
     }
+    let mut returned = IndexSet::default();
+    body.for_each_node_under(NodeRef::Block(body.root()), |node| {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Return {
+                value: Some(Operand::Expr(e)),
+            } = body.stmts[s].kind
+        {
+            body.for_each_value_leaf(e, &mut |leaf| {
+                if allocates(&body.exprs[leaf].kind) {
+                    returned.insert(leaf);
+                }
+            });
+        }
+    });
     Walk {
         body,
         type_table,
         cold,
         safepoint_calls,
         written,
+        returned,
     }
     .block(body.root())
 }

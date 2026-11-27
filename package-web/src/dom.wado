@@ -1614,6 +1614,12 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#create-event")]
     #[cm_params("self", "interface")]
     fn create_event(&self, interface_: String) -> Event;
+    #[cm("wado-lang:web/document#create-node-iterator")]
+    #[cm_params("self", "root", "what-to-show", "filter")]
+    fn create_node_iterator(&self, root: Node, what_to_show: u32, filter: NodeFilter) -> NodeIterator;
+    #[cm("wado-lang:web/document#create-tree-walker")]
+    #[cm_params("self", "root", "what-to-show", "filter")]
+    fn create_tree_walker(&self, root: Node, what_to_show: u32, filter: NodeFilter) -> TreeWalker;
     #[cm("wado-lang:web/document#fullscreen-enabled")]
     #[cm_params("self")]
     fn fullscreen_enabled(&self) -> bool;
@@ -1996,6 +2002,68 @@ pub resource Window extends EventTarget {
     #[cm("wado-lang:web/window#cancel-animation-frame")]
     #[cm_params("self", "handle")]
     fn cancel_animation_frame(&self, handle: u32);
+}
+
+#[cm("wado-lang:web/node-iterator", linearity = "unrestricted", repr = "externref", classes = "10..=10")]
+pub resource NodeIterator {
+    #[cm("wado-lang:web/node-iterator#root")]
+    #[cm_params("self")]
+    fn root(&self) -> Node;
+    #[cm("wado-lang:web/node-iterator#reference-node")]
+    #[cm_params("self")]
+    fn reference_node(&self) -> Node;
+    #[cm("wado-lang:web/node-iterator#pointer-before-reference-node")]
+    #[cm_params("self")]
+    fn pointer_before_reference_node(&self) -> bool;
+    #[cm("wado-lang:web/node-iterator#what-to-show")]
+    #[cm_params("self")]
+    fn what_to_show(&self) -> u32;
+    #[cm("wado-lang:web/node-iterator#next-node")]
+    #[cm_params("self")]
+    fn next_node(&self) -> Option<Node>;
+    #[cm("wado-lang:web/node-iterator#previous-node")]
+    #[cm_params("self")]
+    fn previous_node(&self) -> Option<Node>;
+    #[cm("wado-lang:web/node-iterator#detach")]
+    #[cm_params("self")]
+    fn detach(&self);
+}
+
+#[cm("wado-lang:web/tree-walker", linearity = "unrestricted", repr = "externref", classes = "11..=11")]
+pub resource TreeWalker {
+    #[cm("wado-lang:web/tree-walker#root")]
+    #[cm_params("self")]
+    fn root(&self) -> Node;
+    #[cm("wado-lang:web/tree-walker#what-to-show")]
+    #[cm_params("self")]
+    fn what_to_show(&self) -> u32;
+    #[cm("wado-lang:web/tree-walker#current-node")]
+    #[cm_params("self")]
+    fn current_node(&self) -> Node;
+    #[cm("wado-lang:web/tree-walker#set-current-node")]
+    #[cm_params("self", "value")]
+    fn set_current_node(&self, value: Node);
+    #[cm("wado-lang:web/tree-walker#parent-node")]
+    #[cm_params("self")]
+    fn parent_node(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#first-child")]
+    #[cm_params("self")]
+    fn first_child(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#last-child")]
+    #[cm_params("self")]
+    fn last_child(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#previous-sibling")]
+    #[cm_params("self")]
+    fn previous_sibling(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#next-sibling")]
+    #[cm_params("self")]
+    fn next_sibling(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#previous-node")]
+    #[cm_params("self")]
+    fn previous_node(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#next-node")]
+    #[cm_params("self")]
+    fn next_node(&self) -> Option<Node>;
 }
 
 /// Why a promise was rejected: any value, which need not be an `Error`.

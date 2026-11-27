@@ -203,7 +203,7 @@ pub fn list_carries(ty: &WadoType) -> bool {
         | Shape::String
         | Shape::Record(_)
         | Shape::Variant(_) => true,
-        Shape::List(_) | Shape::Option(_) | Shape::Callback(_) => false,
+        Shape::List(_) | Shape::Option(_) | Shape::Callback(..) => false,
     }
 }
 
@@ -214,7 +214,7 @@ pub fn reads_params(params: &[WadoParam]) -> bool {
     !cross_in_memory(params)
         || !params
             .iter()
-            .any(|p| matches!(Shape::of(&p.ty), Shape::Callback(_)))
+            .any(|p| matches!(Shape::of(&p.ty), Shape::Callback(..)))
 }
 
 /// Whether `params` are more core values than a call takes, so that they
@@ -402,7 +402,8 @@ enum Shape<'a> {
     String,
     List(&'a WadoType),
     Option(&'a WadoType),
-    Callback(&'a [WadoType]),
+    /// A closure: its parameters and its result.
+    Callback(&'a [WadoType], Option<&'a WadoType>),
 }
 
 impl<'a> Shape<'a> {
@@ -427,7 +428,7 @@ impl<'a> Shape<'a> {
             WadoType::String => Self::String,
             WadoType::List(elem) => Self::List(elem),
             WadoType::Option(inner) => Self::Option(inner),
-            WadoType::Callback { params, .. } => Self::Callback(params),
+            WadoType::Callback { params, result, .. } => Self::Callback(params, result.as_deref()),
             WadoType::Char
             | WadoType::I128
             | WadoType::U128
@@ -471,7 +472,7 @@ fn flat(ty: &WadoType, place: Place) -> Vec<Core> {
         Shape::Scalar(Scalar::Handle) if place == Place::Whole => vec![Core::Ref],
         Shape::Scalar(scalar) => vec![scalar.core()],
         Shape::Enum(_) => vec![Core::I32],
-        Shape::Callback(_) => vec![Core::Ref],
+        Shape::Callback(..) => vec![Core::Ref],
         Shape::Record(fields) => fields
             .iter()
             .flat_map(|field| flat(&field.ty, Place::Part))
@@ -596,7 +597,7 @@ fn lift(ty: &WadoType, flat: &mut dyn CoreValues, place: Place) -> String {
                 load(elem, "at", 0)
             )
         }
-        Shape::Callback(params) => callback(params, &flat.next()),
+        Shape::Callback(params, result) => callback(params, result, &flat.next()),
         Shape::Scalar(scalar) if place == Place::Part => scalar.read_part(&flat.next()),
         Shape::Scalar(scalar) => scalar.read_core(&flat.next()),
         Shape::Enum(name) => enum_value(name, &flat.next()),
@@ -640,20 +641,23 @@ fn lower(ty: &WadoType, value: &str, place: Place) -> String {
         | Shape::Option(_)
         | Shape::String
         | Shape::List(_)
-        | Shape::Callback(_) => {
+        | Shape::Callback(..) => {
             unreachable!("{ty:?} is no single core value")
         }
     }
 }
 
-/// The function calling the closure `closure` back, which takes `params`.
-fn callback(params: &[WadoType], closure: &str) -> String {
-    let words = params.iter().map(|ty| {
-        ty.callback_argument_word().unwrap_or_else(|| {
-            unreachable!("the WebIDL frontend admits no {ty:?} callback argument")
-        })
-    });
-    let export = cm_callback_func_name(&callback_export_name(words));
+/// The function calling the closure `closure` back, which takes `params` and
+/// answers `result`.
+fn callback(params: &[WadoType], result: Option<&WadoType>, closure: &str) -> String {
+    let word = |ty: &WadoType| {
+        ty.callback_value_word()
+            .unwrap_or_else(|| unreachable!("the WebIDL frontend admits no {ty:?} in a callback"))
+    };
+    let export = cm_callback_func_name(&callback_export_name(
+        params.iter().map(word),
+        result.map(word),
+    ));
     let names: Vec<String> = (0..params.len()).map(|i| format!("a{i}")).collect();
     let lowered: Vec<String> = params
         .iter()
@@ -661,10 +665,19 @@ fn callback(params: &[WadoType], closure: &str) -> String {
         .map(|(ty, name)| format!(", {}", lower(ty, name, Place::Whole)))
         .collect();
     let taken: Vec<String> = names.iter().map(|name| format!(", {name}")).collect();
+    let call = |entry: String| format!("{entry}(closure{})", lowered.concat());
+    // The page reads a result before it goes on, so a callback answering one
+    // runs to its end, entered directly: a `wait` inside it traps.
+    let answer = match result {
+        Some(ty) => {
+            let value = call(format!("$core.exports[{export:?}]"));
+            lift(ty, &mut CaseValues(vec![value].into_iter()), Place::Whole)
+        }
+        None => call(format!("$enter({export:?})")),
+    };
     format!(
-        "$callback({closure}, (closure{}) => $enter({export:?})(closure{}))",
-        taken.concat(),
-        lowered.concat()
+        "$callback({closure}, (closure{}) => {answer})",
+        taken.concat()
     )
 }
 
@@ -689,7 +702,7 @@ fn layout(ty: &WadoType) -> (u32, u32) {
             let (size, align) = layout(inner);
             (align_to(align_to(1, align) + size, align), align)
         }
-        Shape::Callback(_) => unreachable!("a closure crosses only as a whole parameter"),
+        Shape::Callback(..) => unreachable!("a closure crosses only as a whole parameter"),
     }
 }
 
@@ -756,7 +769,7 @@ fn load(ty: &WadoType, base: &str, offset: u32) -> String {
                 load(&case.ty, base, offset + payload)
             })
         }
-        Shape::Callback(_) => unreachable!("a closure crosses only as a whole parameter"),
+        Shape::Callback(..) => unreachable!("a closure crosses only as a whole parameter"),
     }
 }
 
@@ -795,7 +808,7 @@ fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<St
             lines.extend(items.into_iter().map(|line| format!("  {line}")));
             lines.push("});".to_string());
         }
-        Shape::Variant(_) | Shape::Callback(_) => {
+        Shape::Variant(_) | Shape::Callback(..) => {
             unreachable!("the WebIDL frontend returns no {ty:?}")
         }
     }

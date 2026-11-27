@@ -1,0 +1,107 @@
+use { HashIndex } from "core:collections";
+
+fn spread(key: i64) -> u64 {
+    return HashIndex::spread(key as u64);
+}
+
+test "spread carries a low bit and a high bit into the top ones" {
+    assert HashIndex::spread(1) >> 56 != HashIndex::spread(2) >> 56;
+    assert HashIndex::spread(1 << 62) >> 56 != HashIndex::spread(1 << 63) >> 56;
+    assert HashIndex::spread(1 << 62) as u32 != HashIndex::spread(1 << 63) as u32;
+}
+
+struct Names {
+    rows: List<i64>,
+    index: HashIndex,
+}
+
+impl Names {
+    fn row_of(&mut self, key: i64) -> i32 {
+        let next = self.rows.len();
+        let row = self.index.find_or_insert(spread(key), |r| self.rows[r] == key, next);
+        if row == next {
+            self.rows.push(key);
+        }
+        return row;
+    }
+
+    fn find(&self, key: i64) -> i32 {
+        return self.index.find(spread(key), |r| self.rows[r] == key);
+    }
+}
+
+test "a key keeps the row it was first given" {
+    let mut names = Names { rows: [], index: HashIndex::new() };
+    assert names.find(7) == -1;
+    assert names.row_of(7) == 0;
+    assert names.row_of(9) == 1;
+    assert names.row_of(7) == 0;
+    assert names.find(9) == 1;
+    assert names.index.len() == 2;
+}
+
+test "rows survive the table growing" {
+    let mut names = Names { rows: [], index: HashIndex::new() };
+    for let i of 0..<1000 {
+        assert names.row_of(i as i64 * 3) == i;
+    }
+    for let i of 0..<1000 {
+        assert names.find(i as i64 * 3) == i;
+        assert names.find(i as i64 * 3 + 1) == -1;
+    }
+    assert names.index.len() == 1000;
+}
+
+test "keys sharing a hash are told apart by the caller" {
+    let rows: List<i64> = [10, 20, 30];
+    let mut index = HashIndex::new();
+    for let r of 0..<3 {
+        assert index.find_or_insert(42, |held| rows[held] == rows[r], r) == r;
+    }
+    for let r of 0..<3 {
+        assert index.find(42, |held| rows[held] == rows[r]) == r;
+    }
+    assert index.find(42, |_held| false) == -1;
+}
+
+test "insert indexes a row without asking" {
+    let mut index = HashIndex::new();
+    for let r of 0..<100 {
+        index.insert(spread(r as i64), r);
+    }
+    for let r of 0..<100 {
+        assert index.find(spread(r as i64), |held| held == r) == r;
+    }
+}
+
+test "clear forgets every row" {
+    let mut names = Names { rows: [], index: HashIndex::new() };
+    names.index.clear();
+    for let i of 0..<10 {
+        names.row_of(i as i64);
+    }
+    names.index.clear();
+    names.rows.truncate(0);
+    assert names.index.len() == 0;
+    assert names.find(3) == -1;
+    assert names.row_of(3) == 0;
+}
+
+test "clear cuts a table one large fill left wide" {
+    let mut names = Names { rows: [], index: HashIndex::new() };
+    for let i of 0..<5000 {
+        names.row_of(i as i64);
+    }
+    names.index.clear();
+    names.rows.truncate(0);
+    for let i of 0..<20 {
+        names.row_of(i as i64);
+    }
+    names.index.clear();
+    names.rows.truncate(0);
+    for let i of 0..<20 {
+        assert names.row_of(i as i64 + 100) == i;
+    }
+    assert names.find(105) == 5;
+    assert names.find(5) == -1;
+}

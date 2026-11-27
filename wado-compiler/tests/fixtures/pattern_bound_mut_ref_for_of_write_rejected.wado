@@ -1,0 +1,22 @@
+variant Shape {
+    Circle(i32),
+    Dot,
+}
+
+struct Holder {
+    shape: Shape,
+    count: i32,
+}
+
+test "a write through a field a loop destructures" {
+    let mut holders: List<Holder> = [Holder { shape: Shape::Circle(1), count: 0 }];
+    for let { shape, .. } of &mut holders {
+        *shape = Shape::Dot;
+    }
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+}
