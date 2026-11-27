@@ -1,0 +1,28 @@
+// Twelve structs, each holding a `List` of every one of them and none holding a
+// `&mut`, form one recursive group with about 12! simple paths. Asking whether
+// a `&S0` handed to a call reaches a `&mut` visits each type once.
+
+struct S0 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S1 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S2 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S3 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S4 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S5 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S6 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S7 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S8 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S9 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S10 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+struct S11 { a0: List<S0>, a1: List<S1>, a2: List<S2>, a3: List<S3>, a4: List<S4>, a5: List<S5>, a6: List<S6>, a7: List<S7>, a8: List<S8>, a9: List<S9>, a10: List<S10>, a11: List<S11> }
+
+#[inline(never)]
+fn width(s: &S0) -> i32 {
+    return s.a0.len() + s.a11.len();
+}
+
+test {
+    let s = S0 { a0: [], a1: [], a2: [], a3: [], a4: [], a5: [], a6: [], a7: [], a8: [], a9: [], a10: [], a11: [] };
+    let mut n = builtin::black_box(1);
+    n = 2;
+    assert width(&s) + n == 2;
+}

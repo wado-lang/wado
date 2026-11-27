@@ -363,6 +363,25 @@ impl Monomorphization {
         Some((template.module_source.clone(), error.into()))
     }
 
+    /// The error refusing the first call that hands its callee a `&mut`, as a
+    /// type argument, behind a `&` it could hand back writable, with the
+    /// module holding the call. Read once every instance exists.
+    pub fn shared_mut_leak(&self, flat: &FlatPackage) -> Option<(ModuleSource, Diagnostic)> {
+        let leaks = self.monomorphizer.shared_mut_leaks.borrow();
+        let leak = leaks.first()?;
+        let error = TypeError::CannotMutate {
+            message: format!(
+                "cannot call `{}` with `{} = {}` behind a `&`: a `&mut` read through a `&` is a `&`, and `{}` can hand it back writable",
+                leak.callee,
+                leak.param,
+                flat.type_table.borrow().name(leak.arg),
+                leak.callee,
+            ),
+            span: leak.span,
+        };
+        Some((leak.module_source.clone(), error.into()))
+    }
+
     /// The error refusing the first call whose outranking impl gives it other
     /// types than the blanket its generic body was checked against, with the
     /// module holding the call. Read once every instance exists.

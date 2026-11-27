@@ -220,9 +220,11 @@ impl<T> Signal<T> {
 
     pub fn set(&self, value: T) {
         assert COMPUTING_MEMOS == 0, "a memo computes a value and writes nothing";
-        self.cell.value = value;
-        self.cell.dep.readers.version += 1;
-        notify(self.cell.dep);
+        // A `&self` grants reading alone; the copy holds the cell to write.
+        let signal = *self;
+        signal.cell.value = value;
+        signal.cell.dep.readers.version += 1;
+        notify(signal.cell.dep);
     }
 }
 
@@ -305,7 +307,9 @@ impl<T> Eq for Memo<T> {
 
 impl<T> Memo<T> {
     pub fn get(&self) -> T with Track {
-        let core = self.state.core;
+        // A `&self` grants reading alone; the copy holds the state to refresh.
+        let memo = *self;
+        let core = memo.state.core;
         refresh(core);
         Track::read(core.dep);
         return self.state.cached.unwrap();

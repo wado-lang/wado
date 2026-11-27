@@ -2572,6 +2572,7 @@ fn build_after_load<H: CompilerHost>(
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
         bind_monomorphized(&mut flat, &mut mono, logger)?;
         refuse_instances(mono.outranked_disagreement(&flat), logger)?;
+        refuse_instances(mono.shared_mut_leak(&flat), logger)?;
         mono.finish(&mut flat);
         synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }

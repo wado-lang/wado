@@ -371,6 +371,20 @@ impl TypeSystem {
         }
     }
 
+    /// `id` as a holder of a `&` to it sees it: a `&mut T` is a `&T`, since a
+    /// `&` grants reading alone to everything reached through it. A newtype
+    /// over a `&mut T` is one too, and reads as the `&T` it wraps.
+    pub(crate) fn shared_view(&self, id: TypeId) -> TypeId {
+        let inner = {
+            let tt = self.type_table.borrow();
+            match tt.get(tt.representation_head(id)) {
+                ResolvedType::MutRef(inner) => *inner,
+                _ => return id,
+            }
+        };
+        self.type_table.borrow_mut().make_ref(inner)
+    }
+
     /// `id` read through one reference, if it is one.
     pub(crate) fn through_ref(&self, id: TypeId) -> TypeId {
         self.pointee_of(id).unwrap_or(id)
@@ -2239,10 +2253,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(place) = receiver_ast {
             self.record_mut_ref(place, ctx);
         }
-        let immutable = match self.reference_mutability(receiver) {
-            Some(mutable) => !mutable,
-            None => receiver_ast.is_some_and(|e| self.place_roots_at_immutable_ref(e)),
-        };
+        let immutable = self.reference_mutability(receiver) == Some(false)
+            || receiver_ast.is_some_and(|e| self.place_roots_at_immutable_ref(e));
         if immutable {
             let _ = self.emit(TypeError::CannotMutate {
                 message: format!(
@@ -2345,24 +2357,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether the place `expr` reaches its storage through an immutable
-    /// reference (`&T`): a field/index/deref chain whose crossed step has
-    /// recorded type `&T`. A `&mut T` step makes the place mutable and stops
-    /// the walk. Works on the source AST plus recorded `expression_types`
-    /// because annotate-time receiver TIR is a placeholder without structure.
+    /// reference (`&T`): a field/index/deref chain any crossed step of which
+    /// has recorded type `&T`. A `&mut T` step does not end the walk, since a
+    /// `&` further out grants reading alone to everything behind it. Works on
+    /// the source AST plus recorded `expression_types` because annotate-time
+    /// receiver TIR is a placeholder without structure. A subscript `IndexRef`
+    /// answers is such a step where the element is mutated in place: it
+    /// arrives as its `&Output`. A replace-on-assign element taken that way is
+    /// a detached copy, which lowering writes back, or an affine variant's
+    /// cell, which is the slot. A field or subscript step auto-derefs every
+    /// reference layer of its base, so any `&` among them refuses; an explicit
+    /// `*` crosses only the outermost, and a deeper `*` judges the next.
     pub(super) fn place_roots_at_immutable_ref(&self, expr: &ast::Expr) -> bool {
-        let inner = match expr {
-            ast::Expr::FieldAccess(fa) => &fa.expr,
-            ast::Expr::Index(ix) => &ix.expr,
-            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => &u.expr,
+        let (inner, explicit_deref) = match expr {
+            ast::Expr::FieldAccess(fa) => (&fa.expr, false),
+            ast::Expr::Index(ix)
+                if self.subscript_shares(ix.id) && self.mutated_in_place(ix.id) =>
+            {
+                return true;
+            }
+            ast::Expr::Index(ix) => (&ix.expr, false),
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => (&u.expr, true),
             _ => return false,
         };
         let Some(inner_type) = self.sem.types.expression_types.get(&inner.id()).copied() else {
             return false;
         };
-        match self.reference_mutability(inner_type) {
-            Some(mutable) => !mutable,
-            None => self.place_roots_at_immutable_ref(inner),
-        }
+        let crosses_shared = if explicit_deref {
+            let tt = self.tysys.type_table.borrow();
+            matches!(
+                tt.get(tt.representation_head(inner_type)),
+                ResolvedType::Ref(_)
+            )
+        } else {
+            self.reference_mutability(inner_type) == Some(false)
+        };
+        crosses_shared || self.place_roots_at_immutable_ref(inner)
+    }
+
+    /// Whether the value `id` evaluates to is mutated in place through a
+    /// reference to it.
+    fn mutated_in_place(&self, id: ast::AstId) -> bool {
+        self.sem
+            .types
+            .expression_types
+            .get(&id)
+            .is_some_and(|&ty| self.mutates_in_place(ty))
+    }
+
+    /// Whether a value of type `ty` is mutated in place through a reference
+    /// to it, rather than replaced on assignment.
+    pub(super) fn mutates_in_place(&self, ty: TypeId) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        tt.is_in_place_aggregate(tt.representation_head(ty))
     }
 
     /// Point `name` at another type, keeping the bounds it carries. A name

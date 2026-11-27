@@ -153,6 +153,19 @@ pub(super) struct Monomorphizer {
     /// The calls a generic body was checked against a value blanket for that
     /// an impl written for the instance answers instead.
     pub outranked_calls: RefCell<Vec<OutrankedCall>>,
+    /// The calls that hand a callee a `&mut`, as a type argument, behind a `&`.
+    pub shared_mut_leaks: RefCell<Vec<SharedMutLeak>>,
+}
+
+/// A call whose callee reads a type parameter, instantiated to a `&mut`,
+/// through a `&` parameter the caller holds shared, and can hand it back: the
+/// `&mut` a `&` grants only reading of would leave writable.
+pub(super) struct SharedMutLeak {
+    pub module_source: ModuleSource,
+    pub span: Span,
+    pub callee: String,
+    pub param: String,
+    pub arg: TypeId,
 }
 
 /// A call an impl outranking the blanket it was checked against answers: the
@@ -217,6 +230,7 @@ impl Monomorphizer {
             expanding: None,
             instantiating_module: None,
             outranked_calls: RefCell::new(Vec::new()),
+            shared_mut_leaks: RefCell::new(Vec::new()),
         }
     }
 

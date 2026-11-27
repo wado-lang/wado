@@ -134,6 +134,9 @@ pub(super) enum PendingOp {
         receiver: TypeId,
         access: IndexAccess,
         key: TypeId,
+        /// The subscripted value sits behind a `&`, so a `&mut` element
+        /// reads as a `&`.
+        through_shared: bool,
     },
     IndexAssign {
         key: TypeId,
@@ -654,10 +657,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver,
                 access,
                 key,
+                through_shared,
             } => {
                 let receiver = self.apply_infer_holes(receiver);
                 let key = self.apply_infer_holes(key);
-                self.dispatch_index(pending.origin, pending.span, receiver, access, key)
+                let read = self.dispatch_index(pending.origin, pending.span, receiver, access, key);
+                self.read_through(through_shared, read)
             }
             PendingOp::IndexAssign { .. } => {
                 let key = key.expect("a subscript selects at its key");

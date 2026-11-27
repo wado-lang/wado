@@ -43,6 +43,7 @@ fn by_value(p: &i32, h: Holder) -> i32 {
 
 #[inline("never")]
 fn shared_holder(p: &i32, h: &Holder) -> i32 {
+    let h = *h;
     *h.r = 8;
     return *p;
 }

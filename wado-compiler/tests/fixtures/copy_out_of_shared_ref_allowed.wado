@@ -1,0 +1,53 @@
+// What a `&` still lets a body read: a value holding no `&mut`, a `&mut` read
+// as a `&`, a value holding one by reference or through a `&self` method, and
+// a `fn` it may call.
+
+use { println, Stdout } from "core:cli";
+
+struct S {
+    f: i32,
+}
+
+struct Inner {
+    r: &mut S,
+}
+
+impl Inner {
+    fn peek(&self) -> i32 {
+        return self.r.f;
+    }
+}
+
+struct Holder {
+    n: List<i32>,
+    r: &mut S,
+    inner: Inner,
+    shown: fn(i32) -> i32,
+}
+
+fn peek_inner(i: &Inner) -> i32 {
+    return i.r.f;
+}
+
+fn reads(h: &Holder) -> i32 {
+    let n = h.n;
+    let r = h.r;
+    let shown = h.shown;
+    return n[0] + r.f + h.inner.peek() + peek_inner(&h.inner) + shown(1);
+}
+
+fn first<I: Iterator<Item = i32>>(it: &I) -> Option<i32> with _ {
+    let mut copy = *it;
+    return copy.next();
+}
+
+export fn run() with Stdout {
+    let mut s = S { f: 1 };
+    let mut t = S { f: 2 };
+    let h = Holder { n: [3], r: &mut s, inner: Inner { r: &mut t }, shown: |x| x * 10 };
+    let r = 0..<5;
+    println(`${reads(&h)} ${first(&r):?}`);
+}
+
+__DATA__
+{"stdout": "18 Option::Some(0)\n"}

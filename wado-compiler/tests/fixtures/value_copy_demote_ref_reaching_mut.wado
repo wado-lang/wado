@@ -1,7 +1,7 @@
 // `value_copy_demote` rule: a `&` handed to a call keeps elements immutable
 // only when nothing reachable from it is a `&mut`. `bump0` hands `poke` a `&H`
 // whose field is a `&mut` into its own first element, through which `poke`
-// writes. So `bump0` is not element-immutable, and the copy in `bumped` stays
+// writes from a copy of `*h`. So `bump0` is not element-immutable, and the copy in `bumped` stays
 // deep: the caller's list must keep its value. `poke(&h)` and a local holding
 // `&h` are the same reference, and neither demotes.
 
@@ -11,6 +11,7 @@ struct P { x: i32, s: String }
 struct H { m: &mut P }
 
 fn poke(h: &H) {
+    let h = *h;
     h.m.x = 42;
 }
 

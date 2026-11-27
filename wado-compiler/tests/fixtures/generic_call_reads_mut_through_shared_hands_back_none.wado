@@ -1,0 +1,20 @@
+// A generic call reading a `&mut` through a `&` is refused only where a slot
+// it can hand that `&mut` back through holds one: a `&mut i32` cannot.
+
+struct S { f: i32 }
+
+fn count<T>(xs: &List<T>, n: &mut i32) {
+    *n = xs.len();
+}
+
+fn tally(xs: &List<&mut S>) -> i32 {
+    let mut n = 0;
+    count(xs, &mut n);
+    return n;
+}
+
+test {
+    let mut s = S { f: 1 };
+    let xs: List<&mut S> = [&mut s];
+    assert tally(&xs) == 1;
+}

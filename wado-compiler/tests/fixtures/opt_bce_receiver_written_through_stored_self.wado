@@ -1,0 +1,42 @@
+// `handoff` writes nothing through `self` itself, but stores it in a struct a
+// callee empties the list through. The guard `i < b.xs.len()` therefore no
+// longer bounds `b.xs[i]` after the call, and the index check must trap.
+
+struct Buf {
+    xs: List<i32>,
+}
+
+struct Keep {
+    r: &mut Buf,
+}
+
+#[inline(never)]
+fn clear_through(k: &Keep) {
+    let k = *k;
+    k.r.xs.truncate(0);
+}
+
+impl Buf {
+    #[inline(never)]
+    fn handoff(&mut self) {
+        let k = Keep { r: self };
+        clear_through(&k);
+    }
+}
+
+#[inline(never)]
+fn read_after(i: i32) -> i32 {
+    let mut b = Buf { xs: [1, 2, 3] };
+    if i < b.xs.len() {
+        b.handoff();
+        return b.xs[i];
+    }
+    return -1;
+}
+
+export fn run() {
+    read_after(builtin::black_box(2));
+}
+
+__DATA__
+{"stderr_contains": ["index < self.len()"], "trapped": true}
