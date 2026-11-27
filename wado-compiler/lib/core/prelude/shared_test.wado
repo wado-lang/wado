@@ -1,0 +1,22 @@
+test "new holds its argument, and a copy is the same cell" {
+    let a = Shared::new(1);
+    let b = a;
+    *b = 2;
+    assert *a == 2;
+}
+
+test "== asks whether two cells are one" {
+    let a = Shared::new(1);
+    let b = a;
+    assert a == b;
+    assert a != Shared::new(1);
+}
+
+test "default holds the default of what it holds" {
+    let c: Shared<i32> = Shared::default();
+    assert *c == 0;
+}
+
+test "inspect writes what the cell holds" {
+    assert `${Shared::new(3):?}` == "Shared(3)";
+}

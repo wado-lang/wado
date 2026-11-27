@@ -183,7 +183,7 @@ export struct Rule {
     pub pattern: String,
 }
 
-pub struct Shared {
+pub struct Clash {
     pub a: String,
 }
 "#;
@@ -193,7 +193,7 @@ export struct Other {
     pub name: String,
 }
 
-pub struct Shared {
+pub struct Clash {
     pub b: String,
 }
 "#;
@@ -205,7 +205,7 @@ const PRIVATE_ENTRY_TYPE_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 use { Rule } from "./rule.wado";
 
-struct Shared {
+struct Clash {
     a: String,
 }
 
@@ -215,7 +215,7 @@ export struct Options {
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.primary.path;
-    let scratch = Shared { a: req.primary.path };
+    let scratch = Clash { a: req.primary.path };
     let _ = scratch.a.len() + req.options.rules.len();
     return Result::Ok(Response { files: [] });
 }
@@ -266,10 +266,10 @@ fn a_private_entry_type_still_claims_its_name_against_a_submodule() {
     let diags = host.diagnostics();
     let found = diags
         .iter()
-        .any(|d| d.code == Code::DuplicateDefinition && d.message.contains("`Shared`"));
+        .any(|d| d.code == Code::DuplicateDefinition && d.message.contains("`Clash`"));
     assert!(
         found,
-        "expected DuplicateDefinition naming `Shared`, got:\n{}",
+        "expected DuplicateDefinition naming `Clash`, got:\n{}",
         diag_list(&diags)
     );
 }
@@ -294,10 +294,10 @@ fn duplicate_public_type_across_generator_modules_is_diagnosed() {
     let diags = host.diagnostics();
     let found = diags
         .iter()
-        .any(|d| d.code == Code::DuplicateDefinition && d.message.contains("`Shared`"));
+        .any(|d| d.code == Code::DuplicateDefinition && d.message.contains("`Clash`"));
     assert!(
         found,
-        "expected DuplicateDefinition naming `Shared`, got:\n{}",
+        "expected DuplicateDefinition naming `Clash`, got:\n{}",
         diag_list(&diags)
     );
 }
