@@ -188,9 +188,8 @@ impl Document {
 
     /// What `name` means at the file's top level, in each namespace: the
     /// server's answer inside a function appended to the file, which binds
-    /// nothing of its own, and taken back once answered. No use the file
-    /// already makes tells it, since a block's own `use` outranks the top
-    /// level's binding there.
+    /// nothing of its own, and taken back once answered. A use the file
+    /// already makes would not do: a block's own `use` outranks the top level.
     fn top_level_meaning(&self, client: &mut Client, name: &str) -> Result<Meaning, String> {
         let separator = if self.text.ends_with('\n') { "" } else { "\n" };
         let probe = format!("fn rust_move_probe() {{ let _: {name}; {name}; {name}!(); }}\n");
@@ -548,7 +547,6 @@ impl Move {
         client: &mut Client,
         name: &str,
     ) -> Result<Option<Meaning>, String> {
-        let destination = &self.destination;
         // A top-level item that moves is the destination's own from here on.
         if let Some(item) = self
             .moved
@@ -559,21 +557,7 @@ impl Move {
             let Position { line, column } = item.name_position;
             return Ok(Some(Meaning::from([(uri, line, column)])));
         }
-        if let Some(symbol) = destination.symbols.iter().find(|s| symbol_name(s) == name) {
-            let Position { line, column } = name_position(symbol);
-            return Ok(Some(Meaning::from([(
-                destination.uri.clone(),
-                line,
-                column,
-            )])));
-        }
-        for item in &self.destination_uses {
-            if let Some(binding) = item.bindings.iter().find(|b| b.name == name) {
-                return destination.imported(client, binding).map(Some);
-            }
-        }
-        // A glob, the prelude or a macro scope binds it without naming it.
-        let meaning = destination.top_level_meaning(client, name)?;
+        let meaning = self.destination.top_level_meaning(client, name)?;
         Ok((!meaning.is_empty()).then_some(meaning))
     }
 
