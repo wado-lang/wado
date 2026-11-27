@@ -5,7 +5,7 @@
 // A view holds `&Array<T>` plus offsets, so it aliases the source until the
 // source replaces its buffer, after which it keeps the one it was built from.
 
-use { Ref, IndexValue, IndexRef, Eq, Ord, Ordering, Display, Inspect } from "core:prelude/traits.wado";
+use { Ref, IndexValue, IndexRef, Eq, Ord, Ordering, Display, Inspect, Hash, Hasher } from "core:prelude/traits.wado";
 use {
     Iterator,
     IntoIterator,
@@ -236,6 +236,16 @@ impl<T> IndexValue<RangeInclusive<i32>> for Slice<T> {
 impl<T: Eq> Eq for Slice<T> {
     pub fn eq(&self, other: &Self) -> bool {
         return seq_eq(self.repr, self.start, self.end, other.repr, other.start, other.end);
+    }
+}
+
+/// As the `List<T>` holding the same elements hashes.
+impl<T: Hash> Hash for Slice<T> {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64((self.end - self.start) as u64);
+        for let i of self.start..<self.end {
+            self.repr[i].hash(h);
+        }
     }
 }
 
