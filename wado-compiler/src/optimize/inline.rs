@@ -1635,7 +1635,8 @@ fn single_bindings(scan: &BodyScan) -> IndexMap<u32, Operand> {
 /// and at the callee's only site, where the body moves rather than being
 /// copied. Only a callee reaching no safepoint qualifies inside a loop, so the
 /// splice brings its body alone and none of the spills a safepoint costs the
-/// loop ([`Reach::SoleOutsideLoops`] says what qualifies outside one). At `-O2`
+/// loop ([`Reach::SoleOutsideLoops`] says what qualifies outside one, and
+/// [`Reach::SoleClosure`] what qualifies in one anyway). At `-O2`
 /// this admits up to 120, which reaches the stdlib's UTF-8 codec helpers and
 /// the zlib match helpers that once carried an inline hint each. Priced with
 /// what each splices, a tagged template's one-site `sql` driver is 105.
@@ -1693,11 +1694,13 @@ enum Reach {
     /// [`Reach::Sole`] for a loop-free callee reaching a safepoint, and only
     /// outside a loop: the call it replaces is a safepoint too, so the caller
     /// spills nothing it did not already, where a loop would reload its
-    /// references on every iteration. A closure literal's `$call` body is the
-    /// exception, admitted in a loop as well: spliced, its environment is a
-    /// literal SROA splits and its captures are loads LICM hoists, which pays
-    /// where splicing a derived deserializer's `next_field` measured slower.
+    /// references on every iteration.
     SoleOutsideLoops,
+    /// [`Reach::SoleOutsideLoops`] for a closure literal's `$call` body, which
+    /// a loop takes as well: spliced, its environment is a literal SROA splits
+    /// and its captures are loads LICM hoists. Admitting every such callee in a
+    /// loop spliced the derived deserializers' `next_field` and measured slower.
+    SoleClosure,
     Everywhere,
 }
 
@@ -1733,7 +1736,7 @@ impl Reach {
     /// loop depth decides.
     fn covers(self, spots: Spots) -> bool {
         match self {
-            Reach::Everywhere | Reach::Sole => spots.any(),
+            Reach::Everywhere | Reach::Sole | Reach::SoleClosure => spots.any(),
             Reach::SoleOutsideLoops => spots.outside_loops,
             Reach::Loops => spots.in_loop,
             Reach::Nowhere => false,
@@ -1831,6 +1834,9 @@ enum Basis {
     Safepoint {
         sole_and_loop_free: bool,
     },
+    /// [`Basis::Safepoint`]'s one site for a closure literal's `$call` body,
+    /// in a loop too.
+    SoleClosure,
     /// Under the payback bound: its one site, or its sites in loops.
     Payback {
         sole: bool,
@@ -1853,6 +1859,7 @@ impl Basis {
             Basis::Safepoint {
                 sole_and_loop_free: true,
             } => Reach::SoleOutsideLoops,
+            Basis::SoleClosure => Reach::SoleClosure,
             Basis::Payback { sole: true } => Reach::Sole,
             Basis::Payback { sole: false } => Reach::Loops,
         }
@@ -1875,8 +1882,7 @@ enum Refusal {
     LeftToCopyElision,
     /// The callee waits for the constants a site may still hand it.
     AwaitingConstant,
-    /// A callee admitted outside loops only, at a site in one, and not a
-    /// closure literal's `$call` body.
+    /// A callee admitted outside loops only, at a site in one.
     InLoop,
     /// A callee admitted in loops only, at a site outside them.
     OutsideLoop,
@@ -2089,8 +2095,11 @@ fn classify_callee(
     } else if net_cost(plain, params) > effective_threshold * PAYBACK_FACTOR {
         Basis::OverPayback
     } else if has_safepoint(body, type_table, cold, safepoint_calls, written) {
-        Basis::Safepoint {
-            sole_and_loop_free: sites == 1 && !arena_query::block_contains_loop(body, body.root()),
+        let sole_and_loop_free = sites == 1 && !arena_query::block_contains_loop(body, body.root());
+        if sole_and_loop_free && func.is_closure_call() {
+            Basis::SoleClosure
+        } else {
+            Basis::Safepoint { sole_and_loop_free }
         }
     } else {
         Basis::Payback { sole: sites == 1 }
@@ -2629,8 +2638,6 @@ struct Candidates<'a> {
     fold_pending: bool,
     /// Per function, whether it is a `$value_copy$T` helper.
     value_copies: &'a [bool],
-    /// Per function, whether it is a closure literal's `$call` body.
-    closure_calls: &'a [bool],
     /// The candidates [`Verdict::awaits`] keeps waiting, each with the numeric
     /// parameters it waits on.
     awaiting: &'a IndexMap<FuncId, IndexSet<u32>>,
@@ -2849,11 +2856,6 @@ fn inline_round(
         .map(|(&eligible, e)| eligible && e.is_pure())
         .collect();
     let value_copies = project.value_copy_functions();
-    let closure_calls: Vec<bool> = project
-        .functions
-        .iter()
-        .map(|f| f.borrow().is_closure_call())
-        .collect();
     let loopy: Vec<bool> = scans.iter().map(|s| s.loopy).collect();
     let spins: Vec<bool> = scans.iter().map(|s| s.spins).collect();
 
@@ -3170,7 +3172,6 @@ fn inline_round(
             ctfe_eligible: &ctfe_eligible,
             fold_pending,
             value_copies: &value_copies,
-            closure_calls: &closure_calls,
             awaiting: &awaiting,
             opens: &opens,
             spins: &spins,
@@ -3978,20 +3979,19 @@ fn try_inline_call_expr(
             // until the loop converges: spliced, it becomes statements
             // `let_block_flatten` lays into the caller before the fold reaches
             // them. One still standing then is one the engine could not fold.
-            (Site::Plain, Reach::SoleOutsideLoops) => sole_site(frame).or_else(|| {
-                let left = candidates.fold_pending
-                    && folds_to_constant(
-                        caller,
-                        Operand::Expr(call_id),
-                        &IndexSet::default(),
-                        Some(candidates.ctfe_eligible),
-                    );
-                frame.deferred |= left;
-                left.then_some(Refusal::LeftToEngine)
-            }),
-            (Site::Loop, Reach::SoleOutsideLoops) if candidates.closure_calls[func_id.index()] => {
-                sole_site(frame)
-            }
+            (Site::Plain, Reach::SoleOutsideLoops | Reach::SoleClosure) => sole_site(frame)
+                .or_else(|| {
+                    let left = candidates.fold_pending
+                        && folds_to_constant(
+                            caller,
+                            Operand::Expr(call_id),
+                            &IndexSet::default(),
+                            Some(candidates.ctfe_eligible),
+                        );
+                    frame.deferred |= left;
+                    left.then_some(Refusal::LeftToEngine)
+                }),
+            (Site::Loop, Reach::SoleClosure) => sole_site(frame),
             (Site::Loop, Reach::SoleOutsideLoops) => Some(Refusal::InLoop),
             (Site::Loop, Reach::Loops) => {
                 if frame.glue {

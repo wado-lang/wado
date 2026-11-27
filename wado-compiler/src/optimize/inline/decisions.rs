@@ -226,6 +226,7 @@ fn basis_text(basis: Basis) -> &'static str {
         Basis::Safepoint {
             sole_and_loop_free: false,
         } => "nowhere: it reaches a safepoint, and has a loop or several sites",
+        Basis::SoleClosure => "its one site, in a loop too: a closure body reaching a safepoint",
         Basis::Payback { sole: true } => "its one site: under the payback bound",
         Basis::Payback { sole: false } => {
             "its one site in each loop: under the payback bound, with several sites"
