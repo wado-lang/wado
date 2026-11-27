@@ -188,11 +188,20 @@ pub struct WadoResource {
     /// The parent resource of a `resource X extends Y`.
     pub extends: Option<String>,
     pub methods: Vec<WadoFunction>,
-    /// The inherited instance methods a handle of this resource must not
-    /// reach, each with the reason its `#[unavailable]` gives.
-    pub unavailable: Vec<(String, String)>,
+    /// The names this resource declares absent: inherited instance methods a
+    /// handle of it must not reach, and the bare name of an overloaded member.
+    pub unavailable: Vec<WadoUnavailable>,
     /// The constants of the `impl` block following the resource.
     pub constants: Vec<WadoConstant>,
+}
+
+/// A name declared absent, with the reason its `#[unavailable]` gives.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WadoUnavailable {
+    pub name: String,
+    /// An instance method's name, reserved with `self`, rather than a static's.
+    pub instance: bool,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone)]

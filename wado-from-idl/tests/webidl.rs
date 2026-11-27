@@ -488,14 +488,6 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
             &[variadic("nodes", &plain("NodeList"))],
             "",
         ),
-        // Two overloads that both lower are ambiguous, so neither is emitted.
-        operation("alert", &plain("undefined"), &[], ""),
-        operation(
-            "alert",
-            &plain("undefined"),
-            &[argument("message", &plain("DOMString"), false, "null")],
-            "",
-        ),
         // A special operation names no method.
         operation(
             "",
@@ -512,7 +504,6 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
         "{code}"
     );
     assert!(!code.contains("attributes"), "{code}");
-    assert!(!code.contains("alert"), "{code}");
     assert_eq!(
         skipped,
         [
@@ -520,10 +511,102 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
             "Element.append: `nodes`: `any`",
             "Element.create_element: optional `options` dropped: `any`",
             "Element.prepend: `nodes`: `NodeList` is outside the slice",
-            "Element.alert: 2 overloads",
             "Element.(getter): getter operation",
         ]
     );
+}
+
+/// Two specifications may each declare one member, as both of `@webref/idl`'s
+/// partials of `CaptureController` declare its `constructor()`.
+#[test]
+fn a_member_declared_twice_is_one_member() {
+    let alert = operation("alert", &plain("undefined"), &[], "");
+    let mut defs = chain();
+    defs.interfaces
+        .push(partial("Element", std::slice::from_ref(&alert)));
+    defs.interfaces.push(partial("Element", &[alert]));
+    let (code, skipped) = defs.generate();
+    assert_eq!(code.matches("fn alert(&self);").count(), 1, "{code}");
+    assert_eq!(skipped, Vec::<String>::new());
+}
+
+/// Each overload is named by the arguments that tell it apart, after those
+/// every overload shares; the bare name is the overload taking none, and
+/// unavailable where there is none.
+#[test]
+fn an_overload_is_named_by_the_arguments_that_tell_it_apart() {
+    let op = |name: &str, args: &[String]| operation(name, &plain("undefined"), args, "");
+    let required = |name: &str, ty: &str| argument(name, &plain(ty), false, "null");
+    let constructor = |args: &[String]| {
+        format!(
+            r#"{{"type": "constructor", "arguments": [{}], "extAttrs": []}}"#,
+            args.join(", ")
+        )
+    };
+    let members = [
+        op("alert", &[]),
+        op("alert", &[required("message", "DOMString")]),
+        op(
+            "scroll",
+            &[argument("top", &plain("unsigned long"), true, "null")],
+        ),
+        op(
+            "scroll",
+            &[required("x", "double"), required("y", "double")],
+        ),
+        op(
+            "append",
+            &[
+                required("name", "DOMString"),
+                required("value", "DOMString"),
+            ],
+        ),
+        op(
+            "append",
+            &[
+                required("name", "DOMString"),
+                required("blobValue", "Node"),
+                argument("filename", &plain("DOMString"), true, "null"),
+            ],
+        ),
+        // Every overload names its argument `data`, so the types tell them
+        // apart, and one the slice cannot type takes only itself out.
+        op("send", &[required("data", "DOMString")]),
+        op("send", &[required("data", "Node")]),
+        op("send", &[required("data", "any")]),
+        constructor(&[required("node", "Node")]),
+        constructor(&[required("text", "DOMString")]),
+    ];
+    let mut defs = chain();
+    defs.interfaces.push(partial("Element", &members));
+    let (code, skipped) = defs.generate();
+    for expected in [
+        "    #[cm(\"wado-lang:web/element#alert\")]\n    #[cm_params(\"self\")]\n    fn alert(&self);",
+        "    #[cm(\"wado-lang:web/element#alert-with-message\")]\n    #[cm_params(\"self\", \"message\")]\n    fn alert_with_message(&self, message: String);",
+        "fn scroll_with_top(&self, top: Option<u32> = null);",
+        "fn scroll_with_x_y(&self, x: f64, y: f64);",
+        "#[unavailable(\"overloaded; use `scroll_with_top` or `scroll_with_x_y`\")]\n    fn scroll(&self);",
+        "fn append_with_value(&self, name: String, value: String);",
+        "fn append_with_blob_value_filename(&self, name: String, blob_value: Node, filename: Option<String> = null);",
+        "#[unavailable(\"overloaded; use `append_with_value` or `append_with_blob_value_filename`\")]\n    fn append(&self);",
+        "fn send_with_string(&self, data: String);",
+        "fn send_with_node(&self, data: Node);",
+        "#[unavailable(\"overloaded; use `send_with_string` or `send_with_node`\")]\n    fn send(&self);",
+        "    #[cm(\"wado-lang:web/element#new-with-node\")]\n    #[cm_params(\"node\")]\n    fn new_with_node(node: Node) -> Element;",
+        "fn new_with_text(text: String) -> Element;",
+        "#[unavailable(\"overloaded; use `new_with_node` or `new_with_text`\")]\n    fn new();",
+    ] {
+        assert!(code.contains(expected), "{expected}\n---\n{code}");
+    }
+    assert_eq!(skipped, ["Element.send_with_any: `data`: `any`"]);
+
+    // Each overload calls the one JavaScript member, which picks the overload
+    // by the arguments it is passed.
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(glue.contains("p0.alert();"), "{glue}");
+    assert!(glue.contains("p0.alert($string(p1, p2));"), "{glue}");
 }
 
 #[test]
@@ -2110,10 +2193,10 @@ fn the_skip_table_counts_each_cause_by_what_was_lost() {
     assert_eq!(
         skip_table(&skipped),
         "\
-Cause         Definitions  Members  Overloads  Arguments
-a dictionary            1        1          0          1
-`any`                   0        1          0          0
-Total                   1        2          0          1
+Cause         Definitions  Members  Arguments
+a dictionary            1        1          1
+`any`                   0        1          0
+Total                   1        2          1
 "
     );
 }

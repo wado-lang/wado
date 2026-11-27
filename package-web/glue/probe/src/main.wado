@@ -1,7 +1,7 @@
 //! What only the host's own objects answer, which `glue/dom.test.mjs` reads
 //! back from the attributes of `<body>`: identity, narrowing through more than
 //! one level of `extends`, the name `Inspect` writes, a list of handles each
-//! way, a callback's result, an enum each way, a dictionary, a union, a promise
+//! way, a callback's result, an overload, an enum each way, a dictionary, a union, a promise
 //! settled and rejected, a listener entered while `run` waits, which waits
 //! itself, and what the collector reclaims.
 
@@ -47,6 +47,13 @@ export fn run() with (Dom, MonotonicClock) {
         return if n == input as Node { NodeFilter::FILTER_REJECT } else { NodeFilter::FILTER_ACCEPT };
     });
     report("walk", `${walker.next_node() == Option::Some(div as Node)} ${walker.next_node() == null}`);
+
+    // An overload calls the one member, which picks it by the arguments.
+    if let field: HtmlInputElement = input {
+        field.set_value("abc");
+        field.set_range_text_with_start_end_selection_mode("X", 0, 1);
+        report("overload", field.value());
+    }
 
     // An enum is a string to the host, and its case's index on the way.
     let found = div.spatial_navigation_search(SpatialNavigationDirection::Down);
