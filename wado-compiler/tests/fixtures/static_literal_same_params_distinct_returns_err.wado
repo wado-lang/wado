@@ -1,0 +1,19 @@
+// Two impls taking the same parameter and returning different types are two
+// candidates for a literal argument: the expected type keeps the one returning
+// `i64`, which leaves the literal between `i64` and `i128`.
+struct S { v: i32 }
+
+trait Conv<P, R> with () { fn mk(n: P) -> R; }
+impl Conv<i64, String> for S { fn mk(n: i64) -> String { return `${n}`; } }
+impl Conv<i64, i64> for S { fn mk(n: i64) -> i64 { return n + 1; } }
+impl Conv<i128, i64> for S { fn mk(_n: i128) -> i64 { return 100; } }
+
+export fn run() {
+    let x: i64 = S::mk(5);
+}
+
+__DATA__
+{
+  "compile_error": ":12:18: analysis error: ambiguous call to 'S::mk': a literal argument admits 'i64' and 'i128'",
+  "compile_error_count": 1
+}

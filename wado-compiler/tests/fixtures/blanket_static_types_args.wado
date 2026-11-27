@@ -71,6 +71,16 @@ impl<T: Ord> Mk for T {
     fn mk(n: i64) -> i64 { return n; }
 }
 
+trait Coll with () { fn collect(seed: Self, xs: List<i64>) -> i64; }
+impl<T: Marked> Coll for T {
+    fn collect(seed: T, xs: List<i64>) -> i64 { return seed.mark() as i64 + xs[1]; }
+}
+
+test "a generic receiver spelled without its arguments" {
+    let bx = Bx::<i32> { v: 1 };
+    assert Bx::collect(bx, [1, 5_000_000_000]) == 5_000_000_003;
+}
+
 test "a primitive receiver" {
     assert i32::ap(|x| x + 7) == 27;
     assert i32::wide(5_000_000_000) == 5_000_000_000;

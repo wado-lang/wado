@@ -397,8 +397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // At the link the resolution reaches: checking the spelled receiver
         // alone found an empty bucket, so `type Q = P` passed a call the same
         // call through `P` is rejected for.
-        let owner = self.static_owner_key(receiver, method_name);
-        let Some(entry) = self.static_method_entry(&owner, method_name) else {
+        let Some(entry) = self.reached_static_entry(receiver, method_name) else {
             return;
         };
         let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);
@@ -787,9 +786,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inherited = owner
             .as_ref()
             .is_none_or(|(link, _)| *link != target_type_id);
-        let declaring_key = owner
-            .filter(|(link, _)| self.is_declaring_link(*link))
-            .map(|(_, key)| key);
+        let declaring = owner.filter(|(link, _)| self.is_declaring_link(*link));
+        let declaring_type = declaring
+            .as_ref()
+            .map_or(target_type_id, |(link, _)| *link);
+        let declaring_key = declaring.map(|(_, key)| key);
         let key = declaring_key.or_else(|| self.tysys.static_receiver_key(target_type_id));
         // The head as written names the receiver only where the key is the
         // target's own; a link below it has no spelling of its own.
@@ -851,7 +852,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // key comes from the resolved target type, as every lookup below does.
         if let Some(receiver) = &lookup_receiver {
             self.check_static_call_visibility(
-                receiver,
+                &receiver.at_type(Some(declaring_type)),
                 &static_call.method,
                 Some(static_call.id),
                 static_call.span,

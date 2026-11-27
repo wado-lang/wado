@@ -21,7 +21,7 @@ use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::solver_bridge::Ordered;
 use super::synth::ArgClass;
-use super::trait_env::{ImplHeader, ImplTargetKey};
+use super::trait_env::{ImplHeader, ImplMethodEntry, ImplTargetKey};
 use super::trait_query::DerivedAt;
 use super::types::{OverloadedCallForm, TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
@@ -839,6 +839,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: &ReceiverId,
         method_name: &str,
     ) -> Option<ImplTargetKey> {
+        self.newtype_static_link(receiver, method_name)
+            .map(|link| link.key)
+    }
+
+    /// [`Self::newtype_static_target`], at the type the chain gives that link.
+    fn newtype_static_link(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+    ) -> Option<ReceiverId> {
         let key = &receiver.key;
         if !self.is_newtype_key(key) {
             return None;
@@ -849,7 +859,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // asked of a receiver without a type.
         let at = receiver.at_type(receiver.ty.or_else(|| self.declared_self_type(def)));
         let owner = self.static_owner(&StaticQuery::of(&at, method_name));
-        (owner.receiver.key != *key).then_some(owner.receiver.key)
+        (owner.receiver.key != *key).then_some(owner.receiver)
+    }
+
+    /// The index entry of the inherent `method_name` a call on `receiver`
+    /// reaches: at the link owning the static, in the block written for the
+    /// instance the call names. Blocks for two instances of one generic type
+    /// share a key, and each declares a visibility of its own.
+    pub(super) fn reached_static_entry(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+    ) -> Option<&ImplMethodEntry> {
+        let owner = self
+            .newtype_static_link(receiver, method_name)
+            .unwrap_or_else(|| receiver.clone());
+        let instance = self
+            .tysys
+            .receiver_declaring_args(owner.ty, &[], owner.key.decl())
+            .unwrap_or_default();
+        self.impl_method_entries(&owner.key, method_name)
+            .find(|entry| self.declaration_reaches(entry.method_id, &instance))
     }
 
     /// The key of the link a static named `method_name` on `receiver` belongs
@@ -1915,6 +1945,24 @@ impl TypeSystem {
         match receiver {
             Some(receiver) => table.bind_impl_slots_asked(impl_def, asked, receiver, &mut slots),
             None => table.bind_each_into(&written, asked, &mut slots),
+        }
+        // A parameter `asked` settles is the receiver's too wherever the
+        // target places it: `impl<T> Mark<T> for W<List<T>>` answers
+        // `Mark<String>` for `W<List<String>>` alone.
+        if let Some(receiver) = receiver
+            && let Some(decl) = table.impl_target_decl(impl_def)
+            && let Some(held) = table.args_at_decl(receiver, decl)
+            && !held.iter().any(|&arg| table.awaits_inference(arg))
+        {
+            let placed: Vec<TypeId> = table
+                .impl_target_args(impl_def)
+                .to_vec()
+                .into_iter()
+                .map(|arg| table.substitute_type_params(arg, &slots))
+                .collect();
+            if table.bind_type_params(&placed, &held).is_none() {
+                return false;
+            }
         }
         written.iter().zip(asked).all(|(&arg, &want)| {
             let held = table.substitute_type_params(arg, &slots);

@@ -912,10 +912,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => ty,
             };
             let params: Vec<TypeId> = params.into_iter().map(at_receiver).collect();
-            if survey.candidates.iter().any(|c| c.params == params) {
+            let return_type = at_receiver(offer.return_type);
+            // The expected type selects among candidates by their result, so
+            // two taking the same parameters are one only where they return
+            // the same too.
+            if survey
+                .candidates
+                .iter()
+                .any(|c| c.params == params && c.return_type == return_type)
+            {
                 continue;
             }
-            let return_type = at_receiver(offer.return_type);
             survey.candidates.push(ArgCandidate {
                 spelling,
                 params,

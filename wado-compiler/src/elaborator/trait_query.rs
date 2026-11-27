@@ -1790,6 +1790,7 @@ impl TypeSystem {
     /// inference has yet to settle stays open.
     fn header_answers_bound_args(
         &self,
+        block: DefId,
         header: &ImplHeader,
         wanted: &[FqTypeName],
         type_args: Option<&[TypeId]>,
@@ -1803,10 +1804,14 @@ impl TypeSystem {
         // Most headers write no argument an impl parameter stands in.
         let written = header.trait_arg_ids();
         let target = Some(&header.target_id);
-        if type_args.is_none() || !written.iter().any(FqTypeName::mentions_binder) {
+        let Some(type_args) = type_args.filter(|_| written.iter().any(FqTypeName::mentions_binder))
+        else {
             return trait_args_answer(written, wanted, &decl_header.defaults, target);
-        }
+        };
         let slots = ImplParamSlots::of(&header.ty, &header.type_params);
+        // Matched against the target at any depth: `T` in
+        // `impl<T> Mark<T> for W<List<T>>` is the receiver's `List` element.
+        let placed = self.type_table.borrow_mut().impl_slots(block, type_args);
         let at_receiver: Vec<FqTypeName> = {
             let table = self.type_table.borrow();
             // A pack's slot is where its spread stands in the target, not one
@@ -1816,7 +1821,11 @@ impl TypeSystem {
                 .iter()
                 .filter(|param| !param.is_pack)
                 .filter_map(|param| {
-                    let &arg = type_args?.get(slots.of_name(&param.name)? as usize)?;
+                    let index = slots.of_name(&param.name)?;
+                    let &arg = placed.get(&TypeParamId {
+                        owner: block,
+                        index,
+                    })?;
                     let binder =
                         ParamRef::declared(param, &self.resolutions).binder(&self.resolutions);
                     (!table.awaits_inference(arg)).then(|| (binder, table.fq_type_name(arg)))
@@ -1869,7 +1878,7 @@ impl TypeSystem {
                 // made an aliased bound unsatisfiable and a same-named foreign
                 // trait satisfied (#1785).
                 if header.trait_def() == Some(trait_)
-                    && self.header_answers_bound_args(header, wanted, type_args)
+                    && self.header_answers_bound_args(entry, header, wanted, type_args)
                     && self.impl_reaches(entry, type_args)
                     && self.check_impl_block_bounds(
                         ctx,

@@ -1,7 +1,11 @@
 //! A static call a value blanket (`impl<T: Bound> Trait for T`) answers: which
 //! blankets cover a receiver, and the template instantiated at it.
 
+use std::sync::Arc;
+
 use super::Elaborator;
+use super::sig::MethodSig;
+use super::trait_env::TraitEnv;
 use super::call::ArgSite;
 use super::call::CalleeSignature;
 use super::call::slot_names;
@@ -367,7 +371,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: &ReceiverId,
         method_name: &str,
     ) -> Option<CalleeSignature> {
-        let receiver_type = receiver.ty()?;
+        let Some(receiver_type) = receiver.ty() else {
+            return self.unapplied_blanket_static_signature(receiver, method_name);
+        };
         let blanket = self
             .resolve_static_callee(StaticQuery::of(receiver, method_name))
             .blanket()?;
@@ -388,6 +394,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 sig.own_params.clone(),
             ),
         })
+    }
+
+    /// The signature of a blanket's static called on a generic type spelled
+    /// without its arguments (`Bx::collect(bx, [1, 2])`): the blanket's
+    /// receiver parameter is a slot the arguments settle, so one of them names
+    /// the instance while the rest take their parameters' types. Only where
+    /// nothing the receiver declares answers the name and a single value
+    /// blanket does, since no instance says yet which blankets admit it.
+    fn unapplied_blanket_static_signature(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+    ) -> Option<CalleeSignature> {
+        self.receiver_generic_arity(receiver)?;
+        if self.declares_case_named(receiver.key(), method_name)
+            || !matches!(
+                self.resolve_static_callee(StaticQuery::of(receiver, method_name)),
+                StaticLookup::NotStatic
+            )
+        {
+            return None;
+        }
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let [(blanket, sig)] = self.value_blanket_statics(&trait_env, method_name)[..] else {
+            return None;
+        };
+        let header = &trait_env.impl_headers[&blanket.def];
+        let receiver_param = header
+            .type_params
+            .iter()
+            .find(|param| param.name == blanket.param)
+            .expect("a value blanket declares its receiver parameter")
+            .clone();
+        let slot = self
+            .tysys
+            .blanket_param_slot(blanket.def, &blanket.param);
+        let mut slots = vec![slot];
+        slots.extend(sig.own_type_param_ids());
+        let mut decls = vec![receiver_param];
+        decls.extend(sig.own_params.iter().cloned());
+        Some(CalleeSignature {
+            param_types: sig.value_param_types(),
+            slots,
+            declaring_slot_count: 1,
+            return_type: sig.decl.return_type,
+            slot_decls: (slot_names(&decls, &self.tysys.resolutions), decls),
+        })
+    }
+
+    /// Each value blanket declaring a static `method_name`, with the
+    /// declaration's signature.
+    pub(super) fn value_blanket_statics<'e>(
+        &'e self,
+        trait_env: &'e TraitEnv,
+        method_name: &str,
+    ) -> Vec<(&'e BlanketImpl, &'e MethodSig)> {
+        trait_env
+            .blanket_impls
+            .values()
+            .flatten()
+            .filter(|blanket| blanket.receiver == BlanketReceiver::Value)
+            .filter_map(|blanket| {
+                let method = self.tysys.declared_method(blanket.def, method_name)?;
+                let sig = self.tysys.signatures.method_sig(method)?;
+                (sig.self_kind == ast::SelfKind::None).then_some((blanket, sig))
+            })
+            .collect()
     }
 
     pub(super) fn resolve_named_type_blanket_static(

@@ -2014,20 +2014,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl()
             .expect("an unapplied generic is a declaration");
         let trait_env = Arc::clone(&self.tysys.trait_env);
-        let statics: Vec<(TypeId, &MethodSig)> = trait_env
-            .blanket_impls
-            .values()
-            .flatten()
-            .filter(|blanket| blanket.receiver == BlanketReceiver::Value)
-            .filter_map(|blanket| {
-                let method = self.tysys.declared_method(blanket.def, method_name)?;
-                let sig = self.tysys.signatures.method_sig(method)?;
+        let statics: Vec<(TypeId, &MethodSig)> = self
+            .value_blanket_statics(&trait_env, method_name)
+            .into_iter()
+            .map(|(blanket, sig)| {
                 let slot = self
                     .tysys
                     .type_table
                     .borrow()
                     .impl_target_whole(blanket.def);
-                (sig.self_kind == ast::SelfKind::None).then_some((slot, sig))
+                (slot, sig)
             })
             .collect();
         if statics.is_empty() {
