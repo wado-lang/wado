@@ -480,6 +480,36 @@ fn reject_overrides<H: CompilerHost>(
     }
 }
 
+/// A child may not declare a constant under a name an ancestor declares one
+/// under, for the reason [`reject_overrides`] gives for a method.
+fn reject_constant_overrides<H: CompilerHost>(
+    signatures: &sig::Signatures,
+    tysys: &TypeSystem,
+    logger: &Logger<'_, H>,
+) {
+    let type_table = tysys.type_table.borrow();
+    let defs = tysys.resolutions.defs();
+    for ((owner, name), constant) in &signatures.associated_constants {
+        let declaring = type_table
+            .resource_chain(*owner)
+            .skip(1)
+            .find(|ancestor| signatures.associated_constant(*ancestor, name).is_some());
+        if let Some(ancestor) = declaring {
+            let _ = logger.error_in(
+                &constant.module,
+                TypeError::ResourceExtends {
+                    message: format!(
+                        "`{}` redeclares the constant `{name}`, which it inherits from `{}`",
+                        defs.name(*owner),
+                        defs.name(ancestor)
+                    ),
+                    span: constant.name_span,
+                },
+            );
+        }
+    }
+}
+
 /// Whether `target` is `from` or lies on its parent chain.
 fn reaches(links: &IndexMap<DefId, DefId>, from: DefId, target: DefId) -> bool {
     let mut seen: Vec<DefId> = Vec::new();
@@ -1775,6 +1805,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     sem.decls.current_module_globals.clone(),
                 );
             }
+            reject_constant_overrides(&signatures, &state.tysys, logger);
             let tysys = &state.tysys;
             signatures.inherit_trait_param_defaults(tysys.resolutions.defs(), &|block, param| {
                 tysys

@@ -1,0 +1,27 @@
+// A child may not declare a constant under a name it inherits: one name
+// reaches one declaration, as with a method.
+#[cm("test:dom/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
+resource Node {}
+
+#[cm("test:dom/dom#element", linearity = "unrestricted", repr = "externref", classes = "1..=2")]
+resource Element extends Node {}
+
+#[cm("test:dom/dom#html-element", linearity = "unrestricted", repr = "externref", classes = "2..=2")]
+resource HtmlElement extends Element {}
+
+impl Node {
+    pub const KIND: u16 = 1;
+}
+
+impl HtmlElement {
+    pub const KIND: u16 = 2;
+    pub const OWN: u16 = 3;
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":17:15: analysis error: `HtmlElement` redeclares the constant `KIND`, which it inherits from `Node`",
+    "compile_error_count": 1
+}

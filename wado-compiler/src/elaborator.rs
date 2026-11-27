@@ -1739,6 +1739,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.associated_constants.clear();
         type AssocConstInput = (
             AstId,
+            Span,
             DefId,
             String,
             ast::Type,
@@ -1761,6 +1762,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(impl_block.constants.iter().map(move |assoc_const| {
                     (
                         assoc_const.id,
+                        assoc_const.name_span,
                         owner,
                         assoc_const.name.clone(),
                         assoc_const.ty.clone(),
@@ -1771,12 +1773,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             })
             .flatten()
             .collect();
-        for (decl, owner, const_name, ty, value, inherent_visibility) in assoc_const_inputs {
+        for (decl, name_span, owner, const_name, ty, value, inherent_visibility) in
+            assoc_const_inputs
+        {
             let type_id = self.resolve_type(&ty);
             self.sem.decls.associated_constants.insert(
                 (owner, const_name),
                 sig::AssocConstSig {
                     decl,
+                    name_span,
                     module: module_source.clone(),
                     ty: type_id,
                     value,
@@ -2313,9 +2318,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 }
 
 impl TypeSystem {
-    /// The impl-associated constant `owner` holds as `name`: its own, or else
-    /// that of the nearest resource it extends. `owner` is the declaration the
-    /// use site's qualifier resolved to, never a spelling.
+    /// The impl-associated constant `owner` holds as `name`: its own, or the
+    /// one a resource it extends declares. `owner` is the declaration the use
+    /// site's qualifier resolved to, never a spelling.
     pub(super) fn associated_constant_of(
         &self,
         owner: DefId,

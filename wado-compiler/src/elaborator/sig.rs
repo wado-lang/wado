@@ -11,6 +11,7 @@ use crate::tir::{EffectParam, EffectRows, RowVar, TemplateId, TypeArgMap, TypeId
 use crate::type_table::TypeTable;
 
 use super::sem::decls::FunctionSig;
+use crate::Span;
 use crate::ast;
 use crate::ast::{SelfKind, Visibility};
 use crate::name::FqTypeName;
@@ -20,6 +21,7 @@ use crate::tir::SlotProjections;
 #[derive(Debug, Clone)]
 pub(crate) struct AssocConstSig {
     pub(crate) decl: AstId,
+    pub(crate) name_span: Span,
     /// The impl-declaring module; reify walks [`Self::value`] under it.
     pub(crate) module: ModuleSource,
     pub(crate) ty: TypeId,
