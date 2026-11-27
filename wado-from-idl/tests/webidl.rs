@@ -1294,6 +1294,40 @@ pub type EventListener = fn mut(Node) with Dom;
 
 /// A callback interface has no object for a resource to stand for, so its
 /// constants sit on the function type its one operation is.
+/// What a callback interface's function type names is declared, though no
+/// bound member names the interface.
+#[test]
+fn a_callback_interface_declares_what_its_function_type_names() {
+    let decide = |name: &str, members: &[String]| {
+        let mut members = members.to_vec();
+        members.push(operation(
+            "decide",
+            &plain("Decision"),
+            &[argument("node", &plain("Node"), false, "null")],
+            "",
+        ));
+        definition("callback interface", name, "null", "", false, &members)
+    };
+    let mut defs = chain();
+    defs.enums = vec![
+        string_enum("Decision", &["accept", "skip"]),
+        string_enum("Unreached", &["a"]),
+    ];
+    defs.callbacks = vec![
+        decide("DecisionFilter", &[const_member("LEVEL")]),
+        // Nothing names this one, and it holds no constant.
+        decide("Unnamed", &[]),
+    ];
+    let (code, _) = defs.generate();
+    assert!(
+        code.contains("pub type DecisionFilter = fn mut(Node) -> Decision with Dom;"),
+        "{code}"
+    );
+    assert!(code.contains("pub enum Decision {"), "{code}");
+    assert!(!code.contains("Unnamed"), "{code}");
+    assert!(!code.contains("Unreached"), "{code}");
+}
+
 #[test]
 fn a_callback_interface_is_a_named_function_type_holding_its_constants() {
     let number = |value: &str| format!(r#"{{"type": "number", "value": "{value}"}}"#);
@@ -1357,6 +1391,7 @@ impl NodeFilter {
     );
     assert!(!code.contains("Unused"), "{code}");
     assert!(!code.contains("Uncallable"), "{code}");
+    assert!(!code.contains("enum Decision"), "{code}");
     assert_eq!(
         skipped,
         [

@@ -510,6 +510,44 @@ struct Merged<'a> {
     members: Vec<&'a Member>,
 }
 
+/// The types signatures name that the module declares, each once.
+#[derive(Default)]
+struct Named {
+    enums: IndexSet<String>,
+    dictionaries: IndexMap<String, WadoDictionary>,
+    unions: IndexMap<String, WadoUnion>,
+    /// The callback interfaces, by Wado name.
+    callbacks: IndexSet<String>,
+}
+
+impl Named {
+    fn collect(&mut self, ty: &WadoType) {
+        ty.walk(&mut |ty| match ty {
+            WadoType::StringEnum(name) => {
+                self.enums.insert(name.clone());
+            }
+            WadoType::Dictionary(dictionary) => {
+                self.dictionaries
+                    .insert(dictionary.name.clone(), dictionary.clone());
+            }
+            WadoType::Union(union) => {
+                let declared = self.unions.insert(union.name.clone(), union.clone());
+                assert!(
+                    declared.is_none_or(|declared| declared == *union),
+                    "two unions are named `{}`",
+                    union.name
+                );
+            }
+            WadoType::Callback {
+                name: Some(name), ..
+            } => {
+                self.callbacks.insert(name.clone());
+            }
+            _ => {}
+        });
+    }
+}
+
 /// A function, its JavaScript half, and why its trailing optional arguments
 /// were left out, where they were.
 struct Bound {
@@ -1113,41 +1151,51 @@ impl Lowering<'_> {
         module: &mut WadoModule,
         skipped: &mut Vec<Skip>,
     ) -> IndexMap<String, Vec<String>> {
-        let mut enums = IndexSet::new();
-        let mut callbacks = IndexSet::new();
-        let mut dictionaries = IndexMap::new();
-        let mut unions = IndexMap::new();
+        let mut named = Named::default();
         let methods = module.resources.iter().flat_map(|r| &r.methods);
         let functions = module.interfaces.iter().flat_map(|i| &i.functions);
         for function in methods.chain(functions) {
             let params = function.params.iter().map(|p| &p.ty);
             for ty in params.chain(&function.return_type) {
-                ty.walk(&mut |ty| match ty {
-                    WadoType::StringEnum(name) => {
-                        enums.insert(name.clone());
-                    }
-                    WadoType::Dictionary(dictionary) => {
-                        dictionaries.insert(dictionary.name.clone(), dictionary.clone());
-                    }
-                    WadoType::Union(union) => {
-                        let declared = unions.insert(union.name.clone(), union.clone());
-                        assert!(
-                            declared.is_none_or(|declared| declared == *union),
-                            "two unions are named `{}`",
-                            union.name
-                        );
-                    }
-                    WadoType::Callback {
-                        name: Some(name), ..
-                    } => {
-                        callbacks.insert(name.clone());
-                    }
-                    _ => {}
-                });
+                named.collect(ty);
             }
         }
         let type_path =
             |name: &str| format!("{}/{TYPES_INTERFACE}#{}", self.package, to_kebab_case(name));
+        // A callback interface's function type may name an enum, a dictionary
+        // or a union, which is declared below with the rest.
+        let mut callback_interfaces = Vec::new();
+        for (&declared, &members) in &self.callback_interfaces {
+            let name = to_upper_camel_case(declared);
+            let constants = || members.iter().filter(|m| matches!(m, Member::Const { .. }));
+            if !named.callbacks.contains(&name) && constants().next().is_none() {
+                continue;
+            }
+            let signature = self.callbacks[declared].clone();
+            match signature.and_then(|signature| self.callback_function(None, signature)) {
+                Ok(target) => {
+                    named.collect(&target);
+                    callback_interfaces.push(WadoNewtype {
+                        cm_attr: Some(type_path(declared)),
+                        target,
+                        constants: self.constants(declared, members, skipped),
+                        name,
+                    });
+                }
+                // Its constants have no type to sit on.
+                Err(reason) => skipped.extend(constants().map(|constant| Skip {
+                    item: format!("{declared}.{}", constant.label()),
+                    lost: Lost::Member,
+                    reason: reason.clone(),
+                })),
+            }
+        }
+        let Named {
+            enums,
+            dictionaries,
+            mut unions,
+            ..
+        } = named;
         let mut values = IndexMap::new();
         for declared in &snapshot.enums {
             let name = to_upper_camel_case(&declared.name);
@@ -1217,28 +1265,9 @@ impl Lowering<'_> {
                     .collect(),
             }));
         }
-        for (&declared, &members) in &self.callback_interfaces {
-            let name = to_upper_camel_case(declared);
-            let constants = || members.iter().filter(|m| matches!(m, Member::Const { .. }));
-            if !callbacks.contains(&name) && constants().next().is_none() {
-                continue;
-            }
-            let signature = self.callbacks[declared].clone();
-            match signature.and_then(|signature| self.callback_function(None, signature)) {
-                Ok(target) => module.types.push(WadoTypeDef::Newtype(WadoNewtype {
-                    cm_attr: Some(type_path(declared)),
-                    target,
-                    constants: self.constants(declared, members, skipped),
-                    name,
-                })),
-                // Its constants have no type to sit on.
-                Err(reason) => skipped.extend(constants().map(|constant| Skip {
-                    item: format!("{declared}.{}", constant.label()),
-                    lost: Lost::Member,
-                    reason: reason.clone(),
-                })),
-            }
-        }
+        module
+            .types
+            .extend(callback_interfaces.into_iter().map(WadoTypeDef::Newtype));
         values
     }
 
