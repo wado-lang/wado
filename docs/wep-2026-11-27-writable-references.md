@@ -117,6 +117,11 @@ definition as `Array<T>` is: `pub type Shared<T>;`.
   interchangeable, since a write to one leaves the other, and `*a == *b`
   compares what they hold. So a struct holding a cell derives the `Eq` that
   `Signal<T>` writes by hand today. A cell has no order, so it is not `Ord`.
+- A cell is not `Hash`: `==` is identity, and Wasm GC gives a reference no
+  address to hash. So a struct holding a cell derives no `Hash`. A type that
+  wants one writes it, hashing what it holds, as `StrSlice` writes its own over
+  the text it views. Such a hash agrees with `==`, since one cell holds one
+  value.
 - `T` is not affine.
 
 It is a type and not a `struct`, because a `struct` is a value: its copy is
@@ -226,11 +231,6 @@ unspecified. Wado defines it, and warns where one body shows both writes.
   spelling stays.
 
 ## Known gaps
-
-### A cell is not `Hash`
-
-`==` on a cell is identity, and Wasm GC gives a reference no address to hash.
-So a cell is no key of a `HashMap`, and neither is a struct holding one.
 
 ### A cell of an affine value
 
