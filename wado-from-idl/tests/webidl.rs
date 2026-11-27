@@ -80,9 +80,17 @@ fn namespace(name: &str, members: &[String]) -> String {
 }
 
 fn const_member(name: &str) -> String {
+    typed_const(
+        name,
+        "unsigned short",
+        r#"{"type": "number", "value": "1"}"#,
+    )
+}
+
+fn typed_const(name: &str, ty: &str, value: &str) -> String {
     format!(
-        r#"{{"type": "const", "name": "{name}", "idlType": {}, "extAttrs": [], "value": {{"type": "number", "value": "1"}}}}"#,
-        plain("unsigned short")
+        r#"{{"type": "const", "name": "{name}", "idlType": {}, "extAttrs": [], "value": {value}}}"#,
+        plain(ty)
     )
 }
 
@@ -1797,9 +1805,49 @@ fn parameters_past_sixteen_core_values_are_read_from_memory() {
 }
 
 #[test]
+fn a_constant_is_an_associated_constant_of_its_resource() {
+    let number = |value: &str| format!(r#"{{"type": "number", "value": "{value}"}}"#);
+    let mut defs = chain();
+    defs.typedefs = vec![typedef("GLenum", &plain("unsigned long"))];
+    defs.interfaces.push(partial(
+        "Node",
+        &[
+            const_member("ELEMENT_NODE"),
+            typed_const("SHOW_ALL", "GLenum", &number("0xFFFFFFFF")),
+            typed_const("TIMEOUT_IGNORED", "long long", &number("-1")),
+            typed_const("STRICT", "boolean", r#"{"type": "boolean", "value": true}"#),
+            typed_const(
+                "LIMIT",
+                "double",
+                r#"{"type": "Infinity", "negative": false}"#,
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "\
+impl Node {
+    pub const ELEMENT_NODE: u16 = 1;
+    pub const SHOW_ALL: u32 = 4294967295;
+    pub const TIMEOUT_IGNORED: i64 = -1;
+    pub const STRICT: bool = true;
+}
+"
+        ),
+        "{code}"
+    );
+    assert!(!code.contains("impl Element"), "{code}");
+    assert_eq!(
+        skipped,
+        ["Node.LIMIT: a constant whose value `f64` cannot spell"]
+    );
+}
+
+#[test]
 fn every_member_kind_parses_and_one_without_a_binding_is_reported() {
     let members = [
-        const_member("ELEMENT_NODE"),
+        typed_const("LIMIT", "double", r#"{"type": "NaN"}"#),
         iteration("iterable"),
         iteration("maplike"),
         iteration("setlike"),
@@ -1812,7 +1860,7 @@ fn every_member_kind_parses_and_one_without_a_binding_is_reported() {
     let mut defs = chain();
     defs.interfaces.push(partial("Node", &members));
     let (code, skipped) = defs.transform();
-    assert!(!code.contains("ELEMENT_NODE"), "{code}");
+    assert!(!code.contains("LIMIT"), "{code}");
     let reported: Vec<(String, Cause)> = skipped
         .iter()
         .map(|s| {
@@ -1821,7 +1869,10 @@ fn every_member_kind_parses_and_one_without_a_binding_is_reported() {
         })
         .collect();
     let expected = [
-        ("Node.ELEMENT_NODE: a constant", Cause::Constant),
+        (
+            "Node.LIMIT: a constant whose value `f64` cannot spell",
+            Cause::Constant,
+        ),
         (
             "Node.(iterable): an iteration declaration",
             Cause::Iteration,

@@ -11,9 +11,9 @@ use wado_compiler::ast::HandleClasses;
 use crate::WadoCodeGenerator;
 use crate::glue;
 use crate::ir::{
-    DictionaryField, UnionCase, WadoDictionary, WadoEnum, WadoEnumVariant, WadoField, WadoFunction,
-    WadoInterface, WadoModule, WadoParam, WadoResource, WadoStruct, WadoType, WadoTypeDef,
-    WadoUnion, WadoVariant, WadoVariantCase,
+    DictionaryField, UnionCase, WadoConstant, WadoDictionary, WadoEnum, WadoEnumVariant, WadoField,
+    WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoStruct, WadoType,
+    WadoTypeDef, WadoUnion, WadoVariant, WadoVariantCase,
 };
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
@@ -183,7 +183,12 @@ pub enum Member {
         ext_attrs: Vec<ExtAttr>,
     },
     #[serde(rename = "const")]
-    Const { name: String },
+    Const {
+        name: String,
+        #[serde(rename = "idlType")]
+        idl_type: IdlType,
+        value: DefaultValue,
+    },
     #[serde(rename = "iterable")]
     Iterable,
     #[serde(rename = "maplike")]
@@ -198,7 +203,7 @@ impl Member {
     /// What a report calls the member: its `WebIDL` name, or what stands in for one.
     fn label(&self) -> String {
         match self {
-            Self::Attribute { name, .. } | Self::Const { name } => name.clone(),
+            Self::Attribute { name, .. } | Self::Const { name, .. } => name.clone(),
             Self::Operation { name, special, .. } if name.is_empty() => format!("({special})"),
             Self::Operation { name, .. } => name.clone(),
             Self::Constructor { .. } => "new".to_string(),
@@ -220,7 +225,8 @@ pub struct Argument {
     pub default: Option<DefaultValue>,
 }
 
-/// An optional argument's default, as the snapshot records it.
+/// An optional argument's default or a constant's value, as the snapshot
+/// records it.
 #[derive(Deserialize)]
 #[serde(tag = "type")]
 pub enum DefaultValue {
@@ -622,6 +628,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
         let path = lowering.interface_path(name);
+        let constants = lowering.constants_of(name, iface, &mut skipped);
         let methods = split_js(
             lowering.methods_of(name, &path, iface, &mut skipped),
             &mut js,
@@ -637,6 +644,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 extends: iface.inheritance.as_deref().map(to_upper_camel_case),
                 methods,
                 unavailable: Vec::new(),
+                constants,
             },
         );
     }
@@ -1225,7 +1233,52 @@ impl Lowering<'_> {
             extends: None,
             methods,
             unavailable: Vec::new(),
+            constants: Vec::new(),
         }
+    }
+
+    /// Every constant of `iface` whose value its type can spell, appending to
+    /// `skipped` the ones it cannot.
+    fn constants_of(
+        &self,
+        iface: &str,
+        merged: &Merged<'_>,
+        skipped: &mut Vec<Skip>,
+    ) -> Vec<WadoConstant> {
+        let mut constants = Vec::new();
+        for member in &merged.members {
+            let Member::Const {
+                name,
+                idl_type,
+                value,
+            } = member
+            else {
+                continue;
+            };
+            let written = self.lower_type(idl_type, Flow::Out).and_then(|ty| {
+                let Some(value) = literal(value, &ty) else {
+                    let text = format!(
+                        "a constant whose value `{}` cannot spell",
+                        WadoCodeGenerator::format_type(&ty)
+                    );
+                    return Err(Reason::new(Cause::Constant, text));
+                };
+                Ok(WadoConstant {
+                    name: name.clone(),
+                    ty,
+                    value,
+                })
+            });
+            match written {
+                Ok(constant) => constants.push(constant),
+                Err(reason) => skipped.push(Skip {
+                    item: format!("{iface}.{name}"),
+                    lost: Lost::Member,
+                    reason,
+                }),
+            }
+        }
+        constants
     }
 
     /// Every member of `iface` that lowers, appending to `skipped` the ones
@@ -1398,7 +1451,8 @@ impl Lowering<'_> {
                     None,
                 )]
             }
-            Member::Const { .. } => vec![Err((member.label(), Reason::of(Cause::Constant)))],
+            // `constants_of` binds these: a constant is no function.
+            Member::Const { .. } => Vec::new(),
             Member::Iterable | Member::Maplike | Member::Setlike | Member::AsyncIterable => {
                 vec![Err((member.label(), Reason::of(Cause::Iteration)))]
             }
@@ -1864,13 +1918,23 @@ fn optional(ty: WadoType, wrap: bool) -> WadoType {
 /// written out; any other is `None`, which crosses as `undefined`, so the
 /// browser applies its own default. A callback has no default to write.
 fn optional_argument(ty: WadoType, default: Option<&DefaultValue>) -> (WadoType, Option<String>) {
-    let written = match (default, &ty) {
-        (Some(DefaultValue::Boolean { value }), WadoType::Bool) => Some(value.to_string()),
-        (Some(DefaultValue::Number { value }), WadoType::F32 | WadoType::F64) => {
+    let written = default.and_then(|value| literal(value, &ty));
+    match (written, ty) {
+        (Some(written), ty) => (ty, Some(written)),
+        (None, ty @ WadoType::Callback { .. }) => (ty, None),
+        (None, ty) => (optional(ty, true), Some("null".to_string())),
+    }
+}
+
+/// `value` as Wado source of type `ty`; `None` where `ty` cannot spell it.
+fn literal(value: &DefaultValue, ty: &WadoType) -> Option<String> {
+    match (value, ty) {
+        (DefaultValue::Boolean { value }, WadoType::Bool) => Some(value.to_string()),
+        (DefaultValue::Number { value }, WadoType::F32 | WadoType::F64) => {
             Some(format!("{:?}", float_value(value)))
         }
         (
-            Some(DefaultValue::Number { value }),
+            DefaultValue::Number { value },
             WadoType::I8
             | WadoType::I16
             | WadoType::I32
@@ -1882,16 +1946,11 @@ fn optional_argument(ty: WadoType, default: Option<&DefaultValue>) -> (WadoType,
             | WadoType::U64
             | WadoType::U128,
         ) => Some(integer_value(value).to_string()),
-        (Some(DefaultValue::String { value }), WadoType::String) => Some(string_literal(value)),
-        (Some(DefaultValue::String { value }), WadoType::StringEnum(name)) => {
+        (DefaultValue::String { value }, WadoType::String) => Some(string_literal(value)),
+        (DefaultValue::String { value }, WadoType::StringEnum(name)) => {
             Some(format!("{name}::{}", to_upper_camel_case(value)))
         }
         _ => None,
-    };
-    match (written, ty) {
-        (Some(written), ty) => (ty, Some(written)),
-        (None, ty @ WadoType::Callback { .. }) => (ty, None),
-        (None, ty) => (optional(ty, true), Some("null".to_string())),
     }
 }
 

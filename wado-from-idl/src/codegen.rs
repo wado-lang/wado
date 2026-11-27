@@ -253,6 +253,22 @@ impl WadoCodeGenerator {
             self.indent -= 1;
             self.writeln("}");
         }
+
+        if !resource.constants.is_empty() {
+            self.writeln("");
+            self.writeln(&format!("impl {} {{", resource.name));
+            self.indent += 1;
+            for constant in &resource.constants {
+                self.writeln(&format!(
+                    "pub const {}: {} = {};",
+                    constant.name,
+                    Self::format_type(&constant.ty),
+                    constant.value
+                ));
+            }
+            self.indent -= 1;
+            self.writeln("}");
+        }
     }
 
     fn write_interface(&mut self, effect: &WadoInterface) {
@@ -400,7 +416,7 @@ impl WadoCodeGenerator {
             .join(", ")
     }
 
-    fn format_type(ty: &WadoType) -> String {
+    pub(crate) fn format_type(ty: &WadoType) -> String {
         match ty {
             WadoType::Bool
             | WadoType::Char

@@ -189,6 +189,16 @@ pub struct WadoResource {
     /// The inherited instance methods a handle of this resource must not
     /// reach, each with the reason its `#[unavailable]` gives.
     pub unavailable: Vec<(String, String)>,
+    /// The constants of the `impl` block following the resource.
+    pub constants: Vec<WadoConstant>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WadoConstant {
+    pub name: String,
+    pub ty: WadoType,
+    /// The value, as Wado source.
+    pub value: String,
 }
 
 #[derive(Debug, Clone)]

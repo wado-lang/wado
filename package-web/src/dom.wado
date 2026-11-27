@@ -336,6 +336,13 @@ pub resource Event {
     fn init_event(&self, type: String, bubbles: bool = false, cancelable: bool = false);
 }
 
+impl Event {
+    pub const NONE: u16 = 0;
+    pub const CAPTURING_PHASE: u16 = 1;
+    pub const AT_TARGET: u16 = 2;
+    pub const BUBBLING_PHASE: u16 = 3;
+}
+
 #[cm("wado-lang:web/node", linearity = "unrestricted", repr = "externref", classes = "1..=7")]
 pub resource Node extends EventTarget {
     #[cm("wado-lang:web/node#node-type")]
@@ -428,6 +435,27 @@ pub resource Node extends EventTarget {
     #[cm("wado-lang:web/node#remove-child")]
     #[cm_params("self", "child")]
     fn remove_child(&self, child: Node) -> Node;
+}
+
+impl Node {
+    pub const ELEMENT_NODE: u16 = 1;
+    pub const ATTRIBUTE_NODE: u16 = 2;
+    pub const TEXT_NODE: u16 = 3;
+    pub const CDATA_SECTION_NODE: u16 = 4;
+    pub const ENTITY_REFERENCE_NODE: u16 = 5;
+    pub const ENTITY_NODE: u16 = 6;
+    pub const PROCESSING_INSTRUCTION_NODE: u16 = 7;
+    pub const COMMENT_NODE: u16 = 8;
+    pub const DOCUMENT_NODE: u16 = 9;
+    pub const DOCUMENT_TYPE_NODE: u16 = 10;
+    pub const DOCUMENT_FRAGMENT_NODE: u16 = 11;
+    pub const NOTATION_NODE: u16 = 12;
+    pub const DOCUMENT_POSITION_DISCONNECTED: u16 = 1;
+    pub const DOCUMENT_POSITION_PRECEDING: u16 = 2;
+    pub const DOCUMENT_POSITION_FOLLOWING: u16 = 4;
+    pub const DOCUMENT_POSITION_CONTAINS: u16 = 8;
+    pub const DOCUMENT_POSITION_CONTAINED_BY: u16 = 16;
+    pub const DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC: u16 = 32;
 }
 
 #[cm("wado-lang:web/character-data", linearity = "unrestricted", repr = "externref", classes = "2..=3")]
