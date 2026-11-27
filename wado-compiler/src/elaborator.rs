@@ -42,6 +42,7 @@ mod solver_bridge;
 mod static_args;
 mod static_blanket;
 mod static_call;
+mod static_dispatch;
 mod stmt;
 mod synth;
 mod tagged_template;
