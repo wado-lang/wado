@@ -2982,7 +2982,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }),
             None => None,
         };
-        let (callee_params, declares_params) = resolved.params();
+        // A blanket's resolver checks and pads the call itself; what the
+        // arguments are typed against is still its parameters.
+        let blanket_params = resolved.blanket().map(|blanket| {
+            self.picked_blanket_static_at(blanket, &static_call.method, target_type_id)
+                .0
+        });
+        let (mut callee_params, declares_params) = resolved.params();
+        if let Some(param_types) = blanket_params {
+            callee_params.param_types = param_types;
+        }
         let CalleeParams {
             param_is_mut,
             param_defaults: static_method_defaults,
@@ -3639,30 +3648,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // lookup reaches a blanket, so the call site brings none.
         let static_method_defaults = Param::named_defaults(&sig.params);
         let defaults_module = sig.defaults_module.clone();
-        let template_params = sig.value_param_types();
         // The method's own slots are solved as an instance call's are: from
         // the turbofish, the arguments, and the type expected of the call.
         let own_params = sig.own_params.clone();
         let slots = sig.own_type_param_ids();
-        let template_return = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
-        if template_return == TypeTable::UNKNOWN {
+        if sig.decl.return_type == Some(TypeTable::UNKNOWN) {
             return None;
         }
-        // The template is written against the blanket param, so `-> Self` /
-        // `-> T` lands on the receiver at the call site.
         let blanket_slot = self.tysys.blanket_param_slot(blanket_def, &blanket_param);
-        let receiver_slot = self
-            .tysys
-            .type_table
-            .borrow()
-            .bind_params(&[blanket_slot], &[receiver_type_id]);
-        let return_type = self.substitute_map_in_frame(&receiver_slot, template_return);
-        let param_types = self.blanket_static_param_types(
-            blanket_def,
-            &template_params,
-            &blanket_param,
-            receiver_type_id,
-        );
+        let (param_types, return_type) =
+            self.blanket_static_at_receiver(blanket_def, &blanket_param, method, receiver_type_id);
 
         let mut written = method_type_args.to_vec();
         if self.group_variadic_type_args_of(method, &own_params, &mut written, span) {
@@ -3789,26 +3784,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(return_type)
     }
 
-    /// The blanket template's value-parameter types with its receiver param
-    /// bound to the concrete receiver, so the call site compares against the
-    /// types the instantiation will actually take.
-    fn blanket_static_param_types(
+    /// The value parameters and the result of the blanket's static `method`
+    /// with its receiver param bound to the concrete receiver: the template is
+    /// written against that param, so `-> Self` / `-> T` lands on the receiver
+    /// and the call site reads the types the instantiation will take.
+    fn blanket_static_at_receiver(
         &mut self,
         blanket: DefId,
-        template: &[TypeId],
         blanket_param: &str,
+        method: &str,
         receiver_type_id: TypeId,
-    ) -> Vec<TypeId> {
+    ) -> (Vec<TypeId>, TypeId) {
+        let method_def = self
+            .tysys
+            .declared_method(blanket, method)
+            .expect("a blanket is a candidate only where it declares the method");
+        let sig = self
+            .tysys
+            .signatures
+            .method_sig(method_def)
+            .expect("the decl pass records every impl-declared method's signature");
+        let template_params = sig.value_param_types();
+        let template_return = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         let blanket_slot = self.tysys.blanket_param_slot(blanket, blanket_param);
         let receiver_slot = self
             .tysys
             .type_table
             .borrow()
             .bind_params(&[blanket_slot], &[receiver_type_id]);
-        template
+        let param_types = template_params
             .iter()
             .map(|&pt| self.substitute_map_in_frame(&receiver_slot, pt))
-            .collect()
+            .collect();
+        (
+            param_types,
+            self.substitute_map_in_frame(&receiver_slot, template_return),
+        )
+    }
+
+    /// [`Self::blanket_static_at_receiver`] for the blanket a resolution
+    /// picked, which names it by its block alone.
+    pub(super) fn picked_blanket_static_at(
+        &mut self,
+        blanket: DefId,
+        method: &str,
+        receiver_type_id: TypeId,
+    ) -> (Vec<TypeId>, TypeId) {
+        let BlanketStatic { param, def, .. } =
+            self.find_blanket_static_method(receiver_type_id, method, blanket);
+        self.blanket_static_at_receiver(def, &param, method, receiver_type_id)
     }
 
     /// Whether `args` arguments fill a callee declaring `params` parameters,
@@ -4108,43 +4132,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (link_name, self.tysys.fq_receiver_head(link))
     }
 
-    /// A static method's signature, in the declaration's own frame — its slots
-    /// still `TypeParam`, for the caller to substitute after inference.
-    ///
-    /// `None` is a receiver / method pair nothing declares, which an empty
-    /// parameter list would otherwise report as "declares no parameters" — and
-    /// a count checked against that drops the arguments a caller wrote.
-    pub(super) fn lookup_static_method_sig(
-        &self,
-        static_key: &ImplTargetKey,
-        method_name: &str,
-    ) -> Option<MethodSig> {
-        if let Some(sig) = self.unique_static_method_sig(static_key, method_name) {
-            return Some(sig.clone());
-        }
-        // A resource declares its statics in Wado like any other declaration,
-        // so they answer from the same signature table at the same point in the
-        // pass — `Response::new` is checked where `P::make` is. Statics are not
-        // inherited, so the receiver's own declaration answers, never its chain.
-        if let ImplTargetKey::Decl(def) = static_key
-            && let Some(sig) = self.tysys.signatures.resource_method_sig(*def, method_name)
-            && sig.self_kind == ast::SelfKind::None
-        {
-            return Some(sig.clone());
-        }
-        // The index holds only the declaring resource's own methods, so an
-        // inherited one is reached by walking the chain. Instance methods only:
-        // a static the receiver declares itself shadows an inherited instance
-        // method of the same name, and the arm above has already answered it.
-        if let ImplTargetKey::Decl(def) = static_key
-            && !self.tysys.declares_resource_static(*def, method_name)
-            && let Some((_, sig)) = self.tysys.resource_instance_method(*def, method_name)
-        {
-            return Some(sig);
-        }
-        None
-    }
-
     /// The type a static call's receiver names: the call's own, else the one
     /// its declaration declares, since a namespaced `dep::Pt` leaves the
     /// caller's frame no `Pt`, or another one. `None` for a declaration that
@@ -4195,22 +4182,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
         });
         keys
-    }
-
-    /// The static method declared under this name, `None` when several impls
-    /// declare it and the index has nothing to choose between them. A call that
-    /// must choose goes through [`Self::preselect_static_arg`].
-    fn unique_static_method_sig(
-        &self,
-        static_key: &ImplTargetKey,
-        method_name: &str,
-    ) -> Option<&sig::MethodSig> {
-        let mut declared = self.static_method_entries(static_key, method_name);
-        let only = declared.next()?;
-        if declared.next().is_some() {
-            return None;
-        }
-        self.tysys.signatures.method_sig(only.method_id)
     }
 
     /// Report why a static call's arguments matched no impl, when the
@@ -5008,13 +4979,6 @@ impl TypeSystem {
         let first = &layouts[0];
         let odd = layouts.iter().position(|l| l != first)?;
         Some(table.name(rows[odd]))
-    }
-
-    /// Whether the resource `def` declares `method_name` as a static of its own.
-    fn declares_resource_static(&self, def: DefId, method_name: &str) -> bool {
-        self.trait_env
-            .resource_static(&ImplTargetKey::Decl(def), method_name)
-            .is_some()
     }
 }
 

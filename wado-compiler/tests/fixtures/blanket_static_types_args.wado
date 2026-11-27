@@ -1,0 +1,73 @@
+// A static a value blanket supplies types the call's arguments as any other
+// declaration does: a closure parameter, a literal and a list literal each
+// take the type the blanket's parameter writes.
+
+use lib from "./sub/blanket_static_types_args_lib.wado";
+use { Make as LibMake } from "./sub/blanket_static_types_args_lib.wado";
+
+struct S { v: i32 }
+struct Bx<T> { v: T }
+
+struct Base { v: i32 }
+impl Base {
+    fn ap(_n: i64) -> i32 { return 1; }
+}
+type N = Base;
+
+trait Marked with () { fn mark(&self) -> i32; }
+impl Marked for S { fn mark(&self) -> i32 { return 1; } }
+impl Marked for N { fn mark(&self) -> i32 { return 2; } }
+impl Marked for Bx<i32> { fn mark(&self) -> i32 { return 3; } }
+
+trait Make with () {
+    fn ap(f: fn(i32) -> i32) -> i32;
+    fn wide(n: i64) -> i64;
+    fn total(xs: List<i64>) -> i64;
+    fn named(s: String = "abc") -> i32;
+    fn twice<U>(f: fn(U) -> U, v: U) -> U;
+}
+impl<T: Marked> Make for T {
+    fn ap(f: fn(i32) -> i32) -> i32 { return f(20); }
+    fn wide(n: i64) -> i64 { return n; }
+    fn total(xs: List<i64>) -> i64 {
+        let mut sum: i64 = 0;
+        for let x of xs { sum += x; }
+        return sum;
+    }
+    fn named(s: String) -> i32 { return s.len(); }
+    fn twice<U>(f: fn(U) -> U, v: U) -> U { return f(f(v)); }
+}
+
+test "a closure parameter" {
+    assert S::ap(|x| x + 1) == 21;
+}
+
+test "a literal" {
+    assert S::wide(5_000_000_000) == 5_000_000_000;
+}
+
+test "a list literal" {
+    assert S::total([1, 2, 5_000_000_000]) == 5_000_000_003;
+}
+
+test "a default" {
+    assert S::named() == 3;
+}
+
+test "the method's own slot, written" {
+    assert S::twice::<i64>(|x| x + 1, 5_000_000_000) == 5_000_000_002;
+}
+
+test "a receiver writing its arguments" {
+    assert Bx::<i32>::ap(|x| x + 2) == 22;
+    assert Bx::<i32>::wide(5_000_000_000) == 5_000_000_000;
+}
+
+test "over a static the newtype inherits" {
+    assert N::ap(|x| x + 3) == 23;
+}
+
+test "a receiver named through a namespace" {
+    assert lib::P::ap(|x| x + 4) == 24;
+    assert lib::P::wide(5_000_000_000) == 5_000_000_000;
+}

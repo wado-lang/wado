@@ -455,7 +455,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolutions = &self.tysys.resolutions;
         let key = match resolutions.walked(segment.id)? {
             Resolution::Def(def) if resolutions.defs().kind(def).is_type() => {
-                ImplTargetKey::of_decl(resolutions.defs(), def)
+                let ty = self.monomorphic_declared_type(def);
+                return Some(ReceiverId::of_decl(resolutions.defs(), def, ty));
             }
             Resolution::Def(_) => return None,
             Resolution::Binder(binder) => ImplTargetKey::TypeParam {
@@ -465,6 +466,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Resolution::Projection(_) | Resolution::Unresolved => return None,
         };
         Some(ReceiverId::keyed(key, None))
+    }
+
+    /// The type `def` declares where it declares no parameter, so the name
+    /// alone is the whole type.
+    pub(super) fn monomorphic_declared_type(&self, def: DefId) -> Option<TypeId> {
+        let lookup = self.type_lookup();
+        if let Some(newtype) = lookup.newtype_of(def) {
+            return Some(newtype);
+        }
+        if lookup.declared_type_param_ids(def).is_some() {
+            return None;
+        }
+        let ty = lookup.nominal_type_of(def, &mut self.tysys.type_table.borrow_mut());
+        (ty != TypeTable::UNKNOWN).then_some(ty)
     }
 
     /// The receiver the call resolved to `ty`, which a reference keys by kind.

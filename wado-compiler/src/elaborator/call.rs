@@ -2019,7 +2019,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // First, determine expected parameter types to handle coercion.
         let signature = self.lookup_function_signature(
             effective_name,
-            prefix_receiver.as_ref(),
+            static_method_receiver.as_ref().or(prefix_receiver.as_ref()),
             effect_op,
             callee_site,
         );
@@ -3122,13 +3122,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // arguments resolve against that link's parameters, and are held to
             // the newtype once the call retypes them.
             if let Some(receiver) = receiver {
+                // The receiver may take a namespace ahead of it
+                // (`ns::Type::method`), so the method is the last segment.
+                let (_, method_name) = name.rsplit_once("::").expect("a qualified name");
+                if let Some(sig) = self.blanket_static_signature(receiver, method_name) {
+                    return Some(sig);
+                }
                 let key = receiver.key();
-                let owner = self.static_owner_key(key, suffix);
-                if let Some(sig) = self.unique_qualified_method_sig(&owner, suffix) {
+                let owner = self.static_owner_key(key, method_name);
+                if let Some(sig) = self.unique_qualified_method_sig(&owner, method_name) {
                     let slot_decls = self.sig_slots(&sig);
                     return Some(CalleeSignature::of_method(&sig, slot_decls));
                 }
-                if let Some(sig) = self.derived_method_signature(key, suffix) {
+                if let Some(sig) = self.derived_method_signature(key, method_name) {
                     return Some(sig);
                 }
             }
@@ -3157,26 +3163,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return Some(sig);
                 }
-                // The signature read above declines the `ns::Type::method`
-                // shape, so the receiver resolves through the namespace instead.
-                if let Some((type_name, method_name)) = suffix.split_once("::")
-                    && let Some(site) = callee_site
-                    && let Some(def) = self.namespace_member(site, prefix, type_name)
-                {
-                    let ns_key =
-                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-                    let owner = self.static_owner_key(&ns_key, method_name);
-                    if let Some(sig) = self.lookup_static_method_sig(&owner, method_name) {
-                        let slot_decls = self.sig_slots(&sig);
-                        return Some(CalleeSignature {
-                            param_types: sig.value_param_types(),
-                            ..CalleeSignature::of_method(&sig, slot_decls)
-                        });
-                    }
-                    if let Some(sig) = self.derived_method_signature(&ns_key, method_name) {
-                        return Some(sig);
-                    }
-                }
             }
             return None;
         }
@@ -3184,6 +3170,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // One read for this module's functions, its imports under either
         // spelling, and a default expression's callee scope.
         self.function_signature(self.tysys.free_function_at(callee_site?)?)
+    }
+
+    /// The signature of the static the resolution hands a value blanket, read
+    /// at `receiver`: the blanket's own parameter is the receiver, which leaves
+    /// the method's slots for the call site to instantiate.
+    fn blanket_static_signature(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+    ) -> Option<CalleeSignature> {
+        let receiver_type = receiver.ty()?;
+        let blanket = self
+            .resolve_static_callee(StaticQuery::of(receiver, method_name))
+            .blanket()?;
+        let (param_types, return_type) =
+            self.picked_blanket_static_at(blanket, method_name, receiver_type);
+        let sig = self
+            .tysys
+            .declared_method(blanket, method_name)
+            .and_then(|method| self.tysys.signatures.method_sig(method))
+            .expect("the decl pass records every impl-declared method's signature");
+        Some(CalleeSignature {
+            param_types,
+            slots: sig.own_type_param_ids(),
+            declaring_slot_count: 0,
+            return_type: Some(return_type),
+            slot_decls: (
+                slot_names(&sig.own_params, &self.tysys.resolutions),
+                sig.own_params.clone(),
+            ),
+        })
     }
 
     fn function_signature(&self, def: DefId) -> Option<CalleeSignature> {
@@ -5400,7 +5417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(ReceiverId::of_decl(
                 self.tysys.resolutions.defs(),
                 def,
-                None,
+                self.monomorphic_declared_type(def),
             ))
         })?;
         Some(receiver.written_as(&format!("{prefix}::{type_name}")))
