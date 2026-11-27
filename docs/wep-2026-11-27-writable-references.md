@@ -100,6 +100,34 @@ about a resource ([Components](./spec-components.md)).
 `Signal<T>` holds a cell. A parser's `out: &mut String` stays a borrow, and
 the struct holding it becomes affine.
 
+### `&` of a type replaced on assignment is its value
+
+A primitive, `enum`, `flags`, `fn` or reference has no storage a reference
+could share. A `&P` of one is a copy of the value, wherever it is taken from: a
+local, a field or an element. An assignment to the place afterwards does not
+reach it.
+
+Today a `&i32` of a local sees a later assignment and one of a field does not.
+Making every `&P` see it is not open: Wasm GC has no pointer into a struct or
+an array, so it would take a heap cell for every primitive field and element.
+
+A program Rust accepts cannot tell the difference, since Rust forbids the
+assignment while the `&` is live. `&T` still shares the storage of a `struct`,
+`List`, `String` or tuple, so a generic body that holds a `&T` across an
+assignment to its place answers by the kind of `T`.
+
+A closure's capture is not a `&P`. A closure captures the variable, and reads
+what the variable holds when it runs, as it does today.
+
+### A write that leaves a `&P` behind warns
+
+An assignment to a place while a `&P` taken from it is still read is almost
+always a mistake under the rule above. The compiler warns where it is certain:
+the reference, the assignment and the later read are in one body, and the type
+is known to be replaced on assignment. It stays silent in a body generic over
+the type, and across a call. The warning is best effort and promises to find
+nothing, so no program is refused over it.
+
 ### Declined
 
 - A parameter mode in place of `&mut` (Swift's `inout`). It removes the copy,
@@ -170,10 +198,10 @@ A `variant` is replaced on assignment, yet its payload is written in place.
 Much of the corpus writes `if let Some(e) = &mut self.f` and depends on that.
 It fits neither row above.
 
-### `&` of a type replaced on assignment
+### The stale-read warning has no name
 
-A `&i32` of a local sees a later assignment to the local, and one of a field
-is a snapshot. This WEP does not touch either.
+It is a lint like `shadowed_name`, waived by `allow`. Its name is not chosen,
+and neither is whether a `variant` counts, given the gap above.
 
 ### Migration
 
