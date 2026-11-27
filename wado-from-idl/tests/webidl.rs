@@ -343,8 +343,9 @@ fn an_optional_argument_takes_its_webidl_default_or_null() {
             )],
             "",
         ),
-        // A number is read by WebIDL's grammar, where a leading `0` is octal
-        // and a float may start or end at its `.`, and written in Wado's.
+        // A number keeps its WebIDL spelling where Wado reads it the same.
+        // It does not for a leading `0`, which is octal in WebIDL, nor for a
+        // float starting or ending at its `.`.
         operation(
             "setMode",
             &plain("undefined"),
@@ -417,7 +418,7 @@ fn an_optional_argument_takes_its_webidl_default_or_null() {
         ),
         "{code}"
     );
-    assert!(code.contains("fn step_up(&self, n: i32 = 255);"), "{code}");
+    assert!(code.contains("fn step_up(&self, n: i32 = 0xFF);"), "{code}");
     assert!(
         code.contains("fn set_mode(&self, mode: i32 = -493, ratio: f64 = 0.5, scale: f64 = 5.0);"),
         "{code}"
@@ -1829,7 +1830,7 @@ fn a_constant_is_an_associated_constant_of_its_resource() {
             "\
 impl Node {
     pub const ELEMENT_NODE: u16 = 1;
-    pub const SHOW_ALL: u32 = 4294967295;
+    pub const SHOW_ALL: u32 = 0xFFFFFFFF;
     pub const TIMEOUT_IGNORED: i64 = -1;
     pub const STRICT: bool = true;
 }

@@ -1945,12 +1945,24 @@ fn literal(value: &DefaultValue, ty: &WadoType) -> Option<String> {
             | WadoType::U32
             | WadoType::U64
             | WadoType::U128,
-        ) => Some(integer_value(value).to_string()),
+        ) => Some(integer_literal(value)),
         (DefaultValue::String { value }, WadoType::String) => Some(string_literal(value)),
         (DefaultValue::String { value }, WadoType::StringEnum(name)) => {
             Some(format!("{name}::{}", to_upper_camel_case(value)))
         }
         _ => None,
+    }
+}
+
+/// A `WebIDL` `integer` token as Wado source: the token itself, hexadecimal
+/// included, except an octal one, which Wado would read as decimal.
+fn integer_literal(token: &str) -> String {
+    let digits = token.strip_prefix('-').unwrap_or(token);
+    let octal = digits.len() > 1 && digits.starts_with('0') && !digits[1..].starts_with(['x', 'X']);
+    if octal {
+        integer_value(token).to_string()
+    } else {
+        token.to_string()
     }
 }
 
