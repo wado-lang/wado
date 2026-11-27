@@ -3215,7 +3215,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .all(|m| m.is_blanket_ref_impl && m.method_info.self_kind == ast::SelfKind::Ref);
         if behind_referent {
             for m in found {
-                m.tie_behind_referent.clone_from(&ties);
+                m.tie_behind_referent.extend(ties.iter().cloned());
             }
         } else {
             for tie in ties {
@@ -3252,19 +3252,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report the impls of one trait that each leave a slot to the call and all
     /// admit its arguments (`impl<T: A> Put<T> for X` beside `impl<T: B>
     /// Put<T> for X`), naming the trait at what the call passes.
-    fn report_impls_tied_at_call(
+    fn impls_tied_at_call(
         &self,
         found: &[TraitMethodMatch],
         tied: &[usize],
         receiver: TypeId,
         span: Span,
-    ) {
+    ) -> TypeError {
         let blocks: Vec<DefId> = tied
             .iter()
             .map(|&i| slot_leaving_block(&found[i]))
             .collect();
         let receiver = self.tysys.type_id_to_string(receiver);
-        self.report_blocks_tied(&blocks, &found[tied[0]].trait_args, &receiver, span);
+        self.blocks_tied(&blocks, &found[tied[0]].trait_args, &receiver, span)
     }
 
     /// Report impl `blocks` of one trait, each leaving a slot to the call, as
@@ -3276,11 +3276,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: &str,
         span: Span,
     ) {
+        let _ = self.emit(self.blocks_tied(blocks, trait_args, receiver, span));
+    }
+
+    fn blocks_tied(
+        &self,
+        blocks: &[DefId],
+        trait_args: &[TypeId],
+        receiver: &str,
+        span: Span,
+    ) -> TypeError {
         let env = Arc::clone(&self.tysys.trait_env);
         let decl = env.impl_headers[&blocks[0]]
             .trait_def()
             .expect("a tied block implements a resolved trait");
-        let _ = self.emit(TypeError::AmbiguousHeadImpls {
+        TypeError::AmbiguousHeadImpls {
             trait_name: self.trait_at(decl, trait_args).to_display(),
             receiver: receiver.to_string(),
             headers: blocks
@@ -3288,7 +3298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|block| header_as_written(&env.impl_headers[block]))
                 .collect(),
             span,
-        });
+        }
     }
 
     /// What the order says about this call (`docs/wep-2026-09-01-trait-resolution.md`).
@@ -3473,7 +3483,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // function where both bounds hold, and no argument can tell
                 // them apart.
                 if let [first, _, ..] = admitted.as_slice() {
-                    self.report_impls_tied_at_call(&found_traits, &admitted, receiver, span);
+                    let tie = self.impls_tied_at_call(&found_traits, &admitted, receiver, span);
+                    self.report_tie_where_it_answers(&mut found_traits, vec![tie]);
                     return TraitLookup::Found(Box::new(found_traits.swap_remove(*first)));
                 }
             }
@@ -3487,7 +3498,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     found_traits = vec![m];
                 }
                 [] if !applicable.is_empty() => {
-                    self.report_no_admitted_overload(&found_traits, method_name, &classes, span);
+                    let none =
+                        self.no_admitted_overload(&found_traits, method_name, &classes, span);
+                    self.report_tie_where_it_answers(&mut found_traits, Vec::from_iter(none));
                     return TraitLookup::first_of(found_traits);
                 }
                 [_, _, ..] if self.ties_on_closure_rows(&found_traits, &admitted, &classes) => {
@@ -3506,7 +3519,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        self.report_trait_argument_ambiguity(&found_traits, method_name, &classes, span);
+        let tie = self.trait_argument_ambiguity(&found_traits, method_name, &classes, span);
+        self.report_tie_where_it_answers(&mut found_traits, Vec::from_iter(tie));
         // Still return a winner: reporting and then claiming the method is
         // missing would stack a second, wrong diagnostic on the same call.
         TraitLookup::first_of(found_traits)
@@ -3626,45 +3640,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// is how `List<T>` carries two `IndexValue` impls. `classes` is what each
     /// argument contributed, so the message can name the one that gave selection
     /// nothing to work with.
-    fn report_trait_argument_ambiguity(
+    fn trait_argument_ambiguity(
         &self,
         found_traits: &[TraitMethodMatch],
         method_name: &str,
         classes: &[ArgClass],
         span: Span,
-    ) {
-        let Some(traits) = Self::overload_spellings(found_traits) else {
-            return;
-        };
-        let _ = self.emit(TypeError::AmbiguousTraitArguments {
+    ) -> Option<TypeError> {
+        Some(TypeError::AmbiguousTraitArguments {
             method: method_name.to_string(),
-            traits,
+            traits: Self::overload_spellings(found_traits)?,
             arguments: self.tysys.describe_arg_classes(classes),
             form: OverloadedCallForm::Receiver,
             span,
-        });
+        })
     }
 
     /// The other end of the same rule: every argument list of the overload set
     /// rejected the arguments. A class only ever over-approximates, so no
     /// candidate admitting it means no candidate can accept it — and telling the
     /// caller to annotate an already-pinned argument would be wrong advice.
-    fn report_no_admitted_overload(
+    fn no_admitted_overload(
         &self,
         found_traits: &[TraitMethodMatch],
         method_name: &str,
         classes: &[ArgClass],
         span: Span,
-    ) {
-        let Some(traits) = Self::overload_spellings(found_traits) else {
-            return;
-        };
-        let _ = self.emit(TypeError::NoMatchingOverload {
+    ) -> Option<TypeError> {
+        Some(TypeError::NoMatchingOverload {
             method: method_name.to_string(),
-            traits,
+            traits: Self::overload_spellings(found_traits)?,
             arguments: self.tysys.describe_arg_classes(classes),
             span,
-        });
+        })
     }
 
     /// The competing spellings of one declaration's overload set, in candidate

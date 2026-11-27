@@ -1,5 +1,7 @@
 // Tied reference blankets do not stand in the way of the referent's own
-// `&self` method: between two traits, and between two blankets of one trait.
+// `&self` method: between two traits, between two blankets of one trait, and
+// between two of one trait at different arguments, whether the call's
+// arguments admit both or neither.
 
 trait Near with () {
     fn near() -> i32;
@@ -84,4 +86,50 @@ test "two traits tied" {
 test "two blankets of one trait tied" {
     let p = Point { x: 1 };
     assert (&p).label() == "point 1";
+}
+
+trait Read<A> with () {
+    fn read(&self) -> A;
+    fn take(&self, a: A) -> i32;
+}
+
+trait Plain with () {
+    fn read(&self) -> String;
+    fn take(&self, a: String) -> i32;
+}
+
+impl<T: Near> Read<i32> for &T {
+    fn read(&self) -> i32 {
+        return 1;
+    }
+
+    fn take(&self, a: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Near> Read<bool> for &T {
+    fn read(&self) -> bool {
+        return true;
+    }
+
+    fn take(&self, a: bool) -> i32 {
+        return 2;
+    }
+}
+
+impl Plain for Point {
+    fn read(&self) -> String {
+        return "plain";
+    }
+
+    fn take(&self, a: String) -> i32 {
+        return 3;
+    }
+}
+
+test "two blankets of one trait at different arguments" {
+    let p = Point { x: 1 };
+    assert (&p).read() == "plain";
+    assert (&p).take("x") == 3;
 }

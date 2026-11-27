@@ -3022,6 +3022,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && !sig.own_params.is_empty()
                 && self.turbofish_leaves_slot(&method_type_args, sig.own_params.len())
         });
+        // The expected type answers an open slot or a `_` before a literal
+        // under it takes its default. A newtype's inherited static is read at
+        // its base.
+        let ret = if open_own_slots.is_some() || !written_vars.is_empty() {
+            let (_, expected_at_base) =
+                self.at_inherited_base(newtype, declaring_link, &[], expected_type);
+            match (&callee_sig, expected_at_base) {
+                (Some(sig), Some(expected)) => {
+                    let declaring = sig
+                        .declaring_impl
+                        .map(|id| self.tysys.signatures.impl_sig(id));
+                    let declared = sig
+                        .instantiate_call_with(
+                            &self.tysys.type_table,
+                            declaring,
+                            &callee_args,
+                            &method_type_args,
+                        )
+                        .return_type;
+                    Some(ExpectedReturn { declared, expected })
+                }
+                (None, _) | (Some(_), None) => None,
+            }
+        } else {
+            None
+        };
         // The static's own slots the spelling left open, as variables the
         // arguments were typed against: a literal among them waits for what
         // the slots' bounds say, as an instance call's does.
@@ -3044,7 +3070,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self_binding: Some(SelfBinding::of_static(target_type_id, declaring_trait)),
                     impl_args: &impl_args,
                 },
-                None,
+                ret,
             );
             own_inst = inst;
             args
@@ -3059,27 +3085,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect()
         } else {
-            // The expected type answers a `_` before a literal under it takes
-            // its default. A newtype's inherited static is read at its base.
-            let (_, expected_at_base) =
-                self.at_inherited_base(newtype, declaring_link, &[], expected_type);
-            let ret = match (&callee_sig, expected_at_base) {
-                (Some(sig), Some(expected)) => {
-                    let declaring = sig
-                        .declaring_impl
-                        .map(|id| self.tysys.signatures.impl_sig(id));
-                    let declared = sig
-                        .instantiate_call_with(
-                            &self.tysys.type_table,
-                            declaring,
-                            &callee_args,
-                            &method_type_args,
-                        )
-                        .return_type;
-                    Some(ExpectedReturn { declared, expected })
-                }
-                (None, _) | (Some(_), None) => None,
-            };
             let inst = Instantiated::of_vars(written_vars.into_iter().collect());
             self.resolve_args_against_params(&static_call.args, ctx, &param_types, Some(&inst), ret)
         };

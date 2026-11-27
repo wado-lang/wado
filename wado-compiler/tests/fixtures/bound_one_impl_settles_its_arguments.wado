@@ -156,6 +156,16 @@ impl<R> Typed<R> {
     fn give<A, T: Pair<R, A>>(&self, t: &T, a: A) -> i32 {
         return t.pair(a);
     }
+
+    fn echo<A>(a: A) -> A {
+        return a;
+    }
+}
+
+test "the expected type reaches a literal of a static on a written receiver" {
+    let n: i64 = Typed::<i32>::echo(1);
+    let xs: List<u8> = [Typed::<i32>::echo(1)];
+    assert n == 1 && xs[0] == 1;
 }
 
 test "a literal argument of a static on a written receiver" {

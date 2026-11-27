@@ -1,0 +1,40 @@
+// Two reference blankets of one trait at different arguments tie where the
+// referent has no method of the name, and the call's arguments select neither.
+
+trait Near with () {
+    fn near() -> i32;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Near for Point {
+    fn near() -> i32 {
+        return 1;
+    }
+}
+
+trait Read<A> with () {
+    fn read(&self) -> A;
+}
+
+impl<T: Near> Read<i32> for &T {
+    fn read(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Near> Read<bool> for &T {
+    fn read(&self) -> bool {
+        return true;
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    let _ = (&p).read();
+}
+
+__DATA__
+{"compile_error": ":36:13: analysis error: ambiguous call to 'read': the arguments do not select between 'Read<i32>' and 'Read<bool>'"}
