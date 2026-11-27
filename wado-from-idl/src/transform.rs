@@ -530,6 +530,7 @@ impl<'a> Transformer<'a> {
                     ty: self.transform_type(field.ty)?,
                     doc_comment: field.docs.contents.clone(),
                     cm_attr: field.name.clone(),
+                    default: None,
                 })
             })
             .collect::<Result<Vec<_>>>()?;

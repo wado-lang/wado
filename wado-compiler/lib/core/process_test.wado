@@ -322,3 +322,23 @@ test "the child gets the env it is given and a private HOME" {
     assert out.stdout == b"hi";
     assert out.status == ExitStatus::Exited(0);
 }
+
+test "a variable given twice reaches the child once, with its last value" {
+    if availability() != Availability::Available {
+        return;
+    }
+    // `printenv` reads the first entry of a name, where a shell keeps the last.
+    let out = Command::new("printenv").arg("GREETING").env("GREETING", "hi").env("GREETING", "bye").read().unwrap();
+    assert out == b"bye\n";
+}
+
+test "a script that names no interpreter runs under sh" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let dir = scratch("bare-script");
+    let script = `${dir}/script`;
+    fs::write(&script, &"printf %s \"$1\"\n").unwrap();
+    assert Command::new("chmod").args(["+x", script]).status().unwrap() == ExitStatus::Exited(0);
+    assert Command::new(`./${script}`).arg("ran").read().unwrap() == b"ran";
+}

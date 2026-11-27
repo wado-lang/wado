@@ -3,8 +3,9 @@
 //! named by a path, leaving the process group, typing into a terminal,
 //! `ptrace`, and `io_uring`, whose operations seccomp never sees.
 //!
-//! Everything the child reads is built before the fork, so the window between
-//! `fork` and `exec` makes only system calls.
+//! The child borrows the host's memory until its `exec` ([`vfork`]), so
+//! everything it reads is built before it starts, and it makes only system
+//! calls.
 //!
 //! The filter refers each call it refuses to the host through a seccomp
 //! listener, which the child passes back over a socket pair before its `exec`.
@@ -20,13 +21,12 @@ use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command as StdCommand, Stdio as StdStdio};
 use std::ptr;
 use std::sync::OnceLock;
 
 use super::terminal::give_terminal;
+use super::vfork;
 use super::{
     Access, Availability, Child, Command, Network, Policy, Refusal, Refusals, ResolvedPolicy,
     Spawned, Stdio, Trace,
@@ -138,21 +138,24 @@ fn probe_listener() -> io::Result<bool> {
     let mut asm = Assembler::default();
     asm.ret(libc::SECCOMP_RET_ALLOW);
     let filter = asm.finish();
-    // SAFETY: the child makes only system calls, on memory built before the
-    // fork, and exits without returning.
-    let pid = unsafe { libc::fork() };
-    if pid == 0 {
-        // SAFETY: as above.
-        let listens = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } == 0
-            && install_filter(&filter, libc::SECCOMP_FILTER_FLAG_NEW_LISTENER).is_ok();
-        // SAFETY: as above.
-        unsafe { libc::_exit(i32::from(!listens)) };
-    }
-    check(pid)?;
+    // SAFETY: the closure makes only system calls, on memory built above.
+    let pid = unsafe {
+        vfork::spawn(|| {
+            let listens = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0
+                && install_filter(&filter, libc::SECCOMP_FILTER_FLAG_NEW_LISTENER).is_ok();
+            i32::from(!listens)
+        })
+    }?;
+    let status = reap(pid)?;
+    Ok(libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0)
+}
+
+/// The status the child `pid` ended with, once it has.
+fn reap(pid: libc::pid_t) -> io::Result<libc::c_int> {
     let mut status = 0;
     // SAFETY: `status` outlives the call.
     retried(|| unsafe { libc::waitpid(pid, &raw mut status, 0) })?;
-    Ok(libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0)
+    Ok(status)
 }
 
 pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Result<Spawned> {
@@ -179,29 +182,10 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Resul
         Some([tx, rx]) => (Some(tx), Some(rx)),
         None => (None, None),
     };
-    let cwd = command.cwd.map(File::try_clone).transpose()?;
-
-    let mut std_command = StdCommand::new(command.program);
-    std_command
-        .args(command.args)
-        .env_clear()
-        .envs(command.env.iter().map(|(key, value)| (key, value)))
-        .stdin(std_stdio(command.stdin))
-        .stdout(std_stdio(command.stdout))
-        .stderr(std_stdio(command.stderr));
-    // SAFETY: the closure makes only system calls, on memory built before the
-    // fork, so it is safe in the child of a multithreaded process.
-    unsafe {
-        std_command.pre_exec(move || {
-            confine_self(
-                &ruleset,
-                &filter,
-                cwd.as_ref(),
-                listener_tx.as_ref().map(AsRawFd::as_raw_fd),
-                terminal,
-            )
-        });
-    }
+    let image = vfork::Image::new(command.program, command.args, command.env)?;
+    let stdin = Stream::new(command.stdin, Direction::Read)?;
+    let stdout = Stream::new(command.stdout, Direction::Write)?;
+    let stderr = Stream::new(command.stderr, Direction::Write)?;
     let refusals = Refusals::default();
     if let Some(listener_rx) = listener_rx {
         let recorded = refusals.clone();
@@ -223,15 +207,39 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Resul
             }
         })?;
     }
-    let spawned = std_command.spawn();
-    // Closes the host's copy of the sender, which the closure holds.
-    drop(std_command);
-    let mut child = spawned?;
+    let streams =
+        [&stdin, &stdout, &stderr].map(|stream| stream.child.as_ref().map(AsRawFd::as_raw_fd));
+    let mut failure = None;
+    // SAFETY: the closure makes only system calls, on memory built above.
+    let pid = unsafe {
+        vfork::spawn(|| {
+            let confined = confine_self(
+                &ruleset,
+                &filter,
+                command.cwd,
+                listener_tx.as_ref().map(AsRawFd::as_raw_fd),
+                terminal,
+            );
+            failure = Some(match confined {
+                Ok(()) => vfork::exec(&image, streams),
+                Err(err) => err,
+            });
+            127
+        })
+    };
+    // The host's copy of the sender: with it closed, the thread above sees a
+    // child that ended before it sent a listener.
+    drop(listener_tx);
+    let pid = pid?;
+    if let Some(failure) = failure {
+        reap(pid)?;
+        return Err(failure);
+    }
     Ok(Spawned {
-        child: Child::new(child.id() as libc::pid_t),
-        stdin: child.stdin.take().map(OwnedFd::from),
-        stdout: child.stdout.take().map(OwnedFd::from),
-        stderr: child.stderr.take().map(OwnedFd::from),
+        child: Child::new(pid),
+        stdin: stdin.host,
+        stdout: stdout.host,
+        stderr: stderr.host,
         refusals,
         unobserved: (!listens)
             .then_some("an enclosing sandbox holds the one seccomp listener the kernel allows"),
@@ -262,7 +270,7 @@ union FdControl {
 }
 
 /// The child's pid with room for one descriptor, all on the stack, since the
-/// child builds one between `fork` and `exec`.
+/// child builds one before its `exec`.
 struct FdMessage {
     pid: libc::pid_t,
     iov: libc::iovec,
@@ -290,7 +298,7 @@ impl FdMessage {
     }
 }
 
-/// Runs in the child between `fork` and `exec`, and returns once the host
+/// Runs in the child before its `exec`, and returns once the host
 /// holds the listener, so no call the filter refers goes unanswered: the
 /// error is the host's, where it could not take it.
 fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
@@ -319,7 +327,7 @@ fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
     }
 }
 
-/// `call` until a signal no longer interrupts it. Safe between `fork` and
+/// `call` until a signal no longer interrupts it. Safe in the child before its
 /// `exec`.
 fn retried<T: Copy + PartialEq + From<i8>>(mut call: impl FnMut() -> T) -> io::Result<T> {
     loop {
@@ -1326,15 +1334,61 @@ fn open_path(path: impl AsRef<Path>) -> io::Result<File> {
         .open(path)
 }
 
-fn std_stdio(stdio: Stdio) -> StdStdio {
-    match stdio {
-        Stdio::Null => StdStdio::null(),
-        Stdio::Inherit => StdStdio::inherit(),
-        Stdio::Piped => StdStdio::piped(),
+/// Which way a standard stream carries data, as the child sees it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Read,
+    Write,
+}
+
+/// One standard stream of a child: the descriptor it takes, where it inherits
+/// none, and the host's end of a pipe.
+struct Stream {
+    child: Option<OwnedFd>,
+    host: Option<OwnedFd>,
+}
+
+impl Stream {
+    fn new(stdio: Stdio, direction: Direction) -> io::Result<Self> {
+        let (child, host) = match stdio {
+            Stdio::Inherit => (None, None),
+            Stdio::Null => {
+                let null = OpenOptions::new()
+                    .read(direction == Direction::Read)
+                    .write(direction == Direction::Write)
+                    .open("/dev/null")?;
+                (Some(OwnedFd::from(null)), None)
+            }
+            Stdio::Piped => {
+                let mut fds = [0 as RawFd; 2];
+                // SAFETY: `fds` has room for the two descriptors the call writes.
+                check(unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) })?;
+                // SAFETY: the kernel just returned these descriptors to us alone.
+                let [read, write] = fds.map(|fd| unsafe { OwnedFd::from_raw_fd(fd) });
+                match direction {
+                    Direction::Read => (Some(read), Some(write)),
+                    Direction::Write => (Some(write), Some(read)),
+                }
+            }
+        };
+        // Where the host holds a standard stream closed, a new descriptor
+        // takes its number, and the child would overwrite it while it moves
+        // another into place.
+        let child = match child {
+            Some(fd) if fd.as_raw_fd() <= libc::STDERR_FILENO => Some(fd.try_clone()?),
+            child => child,
+        };
+        assert!(
+            child
+                .as_ref()
+                .is_none_or(|fd| fd.as_raw_fd() > libc::STDERR_FILENO),
+            "a clone is numbered past the standard streams"
+        );
+        Ok(Self { child, host })
     }
 }
 
-/// Runs in the child between `fork` and `exec`.
+/// Runs in the child before its `exec`.
 fn confine_self(
     ruleset: &OwnedFd,
     filter: &[libc::sock_filter],
@@ -1367,8 +1421,8 @@ fn confine_self(
         check(unsafe { libc::close(listener) })?;
     }
     // Confinement mediates what the child opens, never what it already holds.
-    // Marked close-on-exec rather than closed, so the descriptor the standard
-    // library reports a failed `exec` through survives until the `exec`.
+    // Marked close-on-exec rather than closed: the child has yet to move its
+    // standard streams into place.
     check_long(unsafe {
         libc::syscall(
             libc::SYS_close_range,
@@ -1395,7 +1449,8 @@ fn check_long(ret: libc::c_long) -> io::Result<()> {
 }
 
 /// Confine the calling thread with `filter`, returning the listener
-/// `SECCOMP_FILTER_FLAG_NEW_LISTENER` asks for. Safe between `fork` and `exec`.
+/// `SECCOMP_FILTER_FLAG_NEW_LISTENER` asks for. Safe in the child before its
+/// `exec`.
 fn install_filter(filter: &[libc::sock_filter], flags: libc::c_ulong) -> io::Result<RawFd> {
     let program = libc::sock_fprog {
         len: u16::try_from(filter.len()).expect("the filter is built short"),
@@ -1475,7 +1530,7 @@ fn ruleset(policy: &Policy, stream_files: &[StreamFile]) -> io::Result<OwnedFd> 
 }
 
 /// Grant `allowed` beneath the file `parent` names. The child calls it too,
-/// between `fork` and `exec`.
+/// before its `exec`.
 fn add_rule(ruleset: &OwnedFd, parent: RawFd, allowed: u64) -> io::Result<()> {
     let beneath = PathBeneathAttr {
         allowed_access: allowed,

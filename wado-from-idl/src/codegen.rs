@@ -168,8 +168,12 @@ impl WadoCodeGenerator {
         for field in &s.fields {
             self.write_doc_comment(field.doc_comment.as_ref());
             self.writeln(&format!("#[cm(\"{}\")]", field.cm_attr));
+            let default = field
+                .default
+                .as_ref()
+                .map_or_else(String::new, |default| format!(" = {default}"));
             self.writeln(&format!(
-                "pub {}: {},",
+                "pub {}: {}{default},",
                 field.name,
                 Self::format_type(&field.ty)
             ));
@@ -446,7 +450,9 @@ impl WadoCodeGenerator {
             }
             WadoType::Stream(inner) => format!("Stream<{}>", Self::format_type(inner)),
             WadoType::Future(inner) => format!("Future<{}>", Self::format_type(inner)),
-            WadoType::Named(name) => name.clone(),
+            WadoType::Named(name) | WadoType::StringEnum(name) => name.clone(),
+            WadoType::Dictionary(dictionary) => dictionary.name.clone(),
+            WadoType::Union(union) => union.name.clone(),
             WadoType::Borrow(inner) => format!("&{}", Self::format_type(inner)),
             WadoType::Callback { params, effect } => {
                 let params = params
