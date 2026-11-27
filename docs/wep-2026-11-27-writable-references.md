@@ -83,6 +83,10 @@ on the way is of a `&mut`. Through `rr: &&mut T`, an assignment to `rr.x`, a
 since none of them copies. The dereference of a shared cell starts the path
 again: the place a cell holds is writable whatever reached the cell.
 
+The rule for references is in force, stated in
+[Variable Mutability](./spec-expressions.md#variable-mutability). What it
+leaves is the copy: `*h` is a value of its own, and the `&mut` it holds writes.
+
 ### A `&mut` is reborrowed where one is expected
 
 It follows from affinity: without it, passing a `&mut` parameter to two calls
@@ -326,7 +330,7 @@ spare a call site. Each step leaves the tree building and its tests passing.
 - [ ] A `&P` is its value from every place, and `stale_reference` warns.
 - [ ] An assignment to a scoped place inside its scope is an error, and
   `lost_write` warns.
-- [ ] A place is writable only through writable steps.
+- [x] A place is writable only through writable steps.
 - [ ] `&mut T` is affine and reborrowed where one is expected, and every
   copyable struct holding one becomes affine.
 
