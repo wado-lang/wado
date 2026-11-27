@@ -2124,6 +2124,44 @@ impl Body {
         }
     }
 
+    /// Hands `leaf` each expression `e`'s value can be, by the path that runs:
+    /// `e` itself, or through an `if`, a `match` or a `switch` the value of
+    /// each arm, and through a labeled block each `break` value and its tail.
+    /// A pool value is no expression and is left out.
+    pub fn for_each_value_leaf(&self, e: ExprId, leaf: &mut dyn FnMut(ExprId)) {
+        let of_operand = |op: Option<Operand>, leaf: &mut dyn FnMut(ExprId)| {
+            if let Some(Operand::Expr(e)) = op {
+                self.for_each_value_leaf(e, leaf);
+            }
+        };
+        match &self.exprs[e].kind {
+            ExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                of_operand(self.block_tail(*then_branch), leaf);
+                of_operand(else_branch.and_then(|b| self.block_tail(b)), leaf);
+            }
+            ExprKind::Match { arms, .. } => {
+                for arm in arms {
+                    of_operand(Some(arm.body), leaf);
+                }
+            }
+            ExprKind::Switch { arms, default, .. } => {
+                for &arm in arms.iter().chain([default]) {
+                    of_operand(self.block_tail(arm), leaf);
+                }
+            }
+            ExprKind::LabeledBlock { .. } => {
+                for exit in self.block_exits(e).into_iter().flatten() {
+                    of_operand(exit, leaf);
+                }
+            }
+            _ => leaf(e),
+        }
+    }
+
     /// The operand of `block`'s last statement, where that statement is an `Expr`.
     pub fn block_tail(&self, block: BlockId) -> Option<Operand> {
         match self.stmts[*self.blocks[block].stmts.last()?].kind {

@@ -1636,6 +1636,44 @@ impl ClosureCallSiteLowerer<'_> {
             .then(|| &self.functor_infos[self.local_to_closure[&index] as usize])
     }
 
+    /// Retypes an argument naming a functor type to that functor, through the
+    /// blocks [`yielded`] reads past: a closure literal becomes the struct it
+    /// builds, and a forwarded functor param passes as the functor it holds.
+    fn pass_as_functor(&self, expr: &mut TirExpr) -> TypeId {
+        let ref_type_id = match &mut expr.kind {
+            TirExprKind::Block(block) => {
+                let Some(TirStmtKind::Expr(tail)) =
+                    block.stmts.last_mut().map(|stmt| &mut stmt.kind)
+                else {
+                    unreachable!("`yielded` reads past a block only through its tail");
+                };
+                self.pass_as_functor(tail)
+            }
+            TirExprKind::Closure {
+                captures,
+                functor_id: Some(closure_id),
+                ..
+            } => {
+                let functor = &self.functor_infos[*closure_id as usize];
+                let fields = build_capture_fields(captures, self.enclosing_self, expr.span);
+                expr.kind = TirExprKind::StructLiteral {
+                    struct_type: functor.struct_type_id,
+                    struct_name: functor.struct_name.clone(),
+                    fields,
+                };
+                functor.ref_type_id
+            }
+            TirExprKind::Local { index, .. } => {
+                self.functor_param(*index)
+                    .expect("only a functor param is forwarded")
+                    .ref_type_id
+            }
+            _ => unreachable!("only a closure or a functor param names a functor type"),
+        };
+        expr.type_id = ref_type_id;
+        ref_type_id
+    }
+
     /// `arg_offset` is the count of leading `args` that are not value
     /// arguments — 1 for a trait-qualified `Call` carrying its receiver in
     /// `args[0]`, 0 for a free call and for
@@ -1677,29 +1715,7 @@ impl ClosureCallSiteLowerer<'_> {
         // Closure args → struct literals; a forwarded functor param passes as
         // the functor it holds.
         for arg_idx in &raw_indices {
-            let arg = &mut args[*arg_idx];
-            match &arg.expr.kind {
-                TirExprKind::Closure {
-                    captures,
-                    functor_id: Some(closure_id),
-                    ..
-                } => {
-                    let functor = &self.functor_infos[*closure_id as usize];
-                    arg.expr.kind = TirExprKind::StructLiteral {
-                        struct_type: functor.struct_type_id,
-                        struct_name: functor.struct_name.clone(),
-                        fields: build_capture_fields(captures, self.enclosing_self, arg.expr.span),
-                    };
-                    arg.expr.type_id = functor.ref_type_id;
-                }
-                TirExprKind::Local { index, .. } => {
-                    arg.expr.type_id = self
-                        .functor_param(*index)
-                        .expect("only a functor param is forwarded")
-                        .ref_type_id;
-                }
-                _ => unreachable!("only a closure or a functor param names a functor type"),
-            }
+            self.pass_as_functor(&mut args[*arg_idx].expr);
         }
 
         let functor_suffix = build_functor_suffix(&functor_types, self.type_table);
@@ -2044,13 +2060,23 @@ fn functor_arg_type(
     functor_infos: &[ClosureFunctor],
     forwarded: impl Fn(u32) -> Option<TypeId>,
 ) -> Option<TypeId> {
-    match &arg.expr.kind {
+    match &yielded(&arg.expr).kind {
         TirExprKind::Closure {
             functor_id: Some(id),
             ..
         } => Some(functor_infos[*id as usize].struct_type_id),
         TirExprKind::Local { index, .. } => forwarded(*index),
         _ => None,
+    }
+}
+
+/// The expression `expr` yields: itself, or the tail of the blocks around it.
+/// `capture_ref` binds a closure literal's `&T` proxies in a block ahead of
+/// it, and a contract's clauses ride ahead of the last argument the same way.
+fn yielded(expr: &TirExpr) -> &TirExpr {
+    match &expr.kind {
+        TirExprKind::Block(block) => block.tail_expr().map_or(expr, yielded),
+        _ => expr,
     }
 }
 

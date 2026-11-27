@@ -724,11 +724,21 @@ impl Expander<'_> {
         // clauses after them share; only an earlier argument's are assigned.
         let mut stmts = Vec::new();
         let last_index = args.len().saturating_sub(1);
+        let read_by_clauses = local_use(&contract.clauses).read;
         let substitutes: Vec<TirExpr> = args
             .iter_mut()
             .zip(&contract.params)
             .enumerate()
             .map(|(i, (arg, &param_type))| {
+                // A closure literal no clause reads stays the argument: bound,
+                // it would reach the callee as a local, which is not
+                // specialized to. Building it reads nothing a clause or a
+                // later argument can change, since a capture is a reference.
+                if matches!(arg.expr.kind, TirExprKind::Closure { .. })
+                    && !read_by_clauses.contains(&(i as u32))
+                {
+                    return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
+                }
                 if !in_last_arg {
                     return self.bind_passed(arg, param_type, &mut stmts);
                 }

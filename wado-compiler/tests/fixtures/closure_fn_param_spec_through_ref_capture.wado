@@ -1,0 +1,34 @@
+// A capture whose local is also address-taken is read through a `&T` proxy,
+// bound in a block ahead of the closure. The argument is then that block, not
+// a closure literal, and the fn-param specializer, looking for a bare literal,
+// kept the canonical closure.
+
+use { println, Stdout } from "core:cli";
+
+fn first(probe: &i64, accepts: fn(i32) -> bool) -> i32 {
+    for let row of 0..<3 {
+        if *probe > 0 && accepts(row) {
+            return row;
+        }
+    }
+    return -1;
+}
+
+fn lookup(keys: &List<i64>, key: i64) -> i32 {
+    return first(&key, |row| keys[row] == key);
+}
+
+export fn run() with Stdout {
+    let keys: List<i64> = [5, 6, 7];
+    println(`${lookup(&keys, builtin::black_box(6 as i64))}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n",
+    "wir_expect:O0": ["/first$$Closure_{}\"("],
+    "wir_not_expect:O0": ["call_ref"],
+    "wir_contrast": {"O0": [
+        {"first(&key, |row| keys[row] == key)": "first(&key, builtin::black_box(|row: i32| keys[row] == key))"}
+    ]}
+}
