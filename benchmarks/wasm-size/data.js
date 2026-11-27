@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795754437753,
+  "lastUpdate": 1795758524182,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82777,6 +82777,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/64bf441d5846152033e28d2982222cecdd818e24"
         },
         "date": 1795754436691,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "01fdcf656fb4b190e681264d5b25d59c04b72b90",
+          "message": "Merge pull request #2781 from wado-lang/ccr-f0010f7e-dmdgyw\n\nfix(elaborator): ns::Type::method resolves exactly as Type::method does",
+          "timestamp": "2026-11-27T14:35:51+09:00",
+          "tree_id": "d36f9e3e68ca18152a6fa2888f295d310e85440d",
+          "url": "https://github.com/wado-lang/wado/commit/01fdcf656fb4b190e681264d5b25d59c04b72b90"
+        },
+        "date": 1795758523452,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
