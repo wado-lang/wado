@@ -347,16 +347,6 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
     }
     mark_emptied_blocks(&sources, &mut moved);
 
-    let is_moved = |path: &Path, line: usize| {
-        moved
-            .iter()
-            .any(|item| item.source == path && item.span.contains(&line))
-    };
-    let mut report = Vec::new();
-    let mut widenings: BTreeMap<PathBuf, Vec<Widening>> = BTreeMap::new();
-    // By the name each binds, so two sources importing one name by two paths
-    // leave the destination one import.
-    let mut imports: BTreeMap<PathBuf, BTreeMap<String, String>> = BTreeMap::new();
     let destination_uses = use_items(&destination.text);
     // A top-level item that moves is the destination's own from here on.
     let destination_names: BTreeSet<String> = destination
@@ -369,266 +359,342 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
                 .map(|item| item.name.clone()),
         )
         .collect();
+    let the_move = Move {
+        destination,
+        destination_uses,
+        destination_names,
+        sources,
+        moved,
+    };
+    let mut fixes = Fixes::default();
+    the_move.keep_moved_items_in_reach(client, &mut fixes)?;
+    the_move.keep_source_items_in_reach(client, &mut fixes)?;
+    the_move.repeat_imports(&mut fixes);
+    Ok(the_move.write(fixes))
+}
 
-    // An item the move takes out of the reach of who refers to it.
-    for item in &moved {
-        let source = &sources[&item.source];
-        let references = client.request(
-            "textDocument/references",
-            json!({
-                "textDocument": { "uri": source.uri },
-                "position": item.name_position.to_lsp(),
-                "context": { "includeDeclaration": false },
-            }),
-        )?;
-        let users: BTreeSet<PathBuf> = locations(&references)
-            .into_iter()
-            .map(|reference| (uri_path(&reference.uri), reference.position.line))
-            .filter(|(path, line)| *path != destination.path && !is_moved(path, *line))
-            .map(|(path, _)| path)
-            .collect();
-        if users.is_empty() {
-            continue;
+/// What crossing the file boundary asks for, gathered before any text changes:
+/// every position in it is in the text as read.
+#[derive(Default)]
+struct Fixes {
+    report: Vec<String>,
+    widenings: BTreeMap<PathBuf, Vec<Widening>>,
+    /// By file, then by the name each import binds, so two sources importing
+    /// one name by two paths leave the destination one import.
+    imports: BTreeMap<PathBuf, BTreeMap<String, String>>,
+}
+
+impl Fixes {
+    /// Widens the declaration on `line` of `document` to `visibility`, unless
+    /// it writes a visibility already.
+    fn widen(&mut self, document: &Document, line: usize, visibility: &'static str) {
+        let widened = self.widenings.entry(document.path.clone()).or_default();
+        if !declares_visibility(&document.lines[line]) && !widened.iter().any(|w| w.line == line) {
+            widened.push(Widening { line, visibility });
         }
-        if !declares_visibility(&source.lines[item.name_position.line]) {
-            widenings
-                .entry(item.source.clone())
-                .or_default()
-                .push(Widening {
-                    line: item.name_position.line,
-                    visibility: visibility_reaching(&destination.path, &users),
-                });
-        }
-        // A member is reached through its type, wherever its block is; a free
-        // item is reached by a path, which names the file it left.
-        if item.header.is_none() {
-            let mut by_hand = Vec::new();
+    }
+
+    /// Imports `name` into `document` from its sibling `from`.
+    fn import_from_sibling(&mut self, document: &Document, from: &Document, name: &str) {
+        let module = from.module_name().expect("siblings name modules");
+        self.imports
+            .entry(document.path.clone())
+            .or_default()
+            .insert(name.to_string(), format!("use super::{module}::{name};"));
+    }
+
+    fn by_hand(&mut self, what: String) {
+        self.report.push(format!("by hand: {what}"));
+    }
+}
+
+/// The items a move takes and the files it takes them between.
+struct Move {
+    destination: Document,
+    destination_uses: Vec<UseItem>,
+    /// The names the destination's top level gives a meaning once the items
+    /// have landed.
+    destination_names: BTreeSet<String>,
+    sources: BTreeMap<PathBuf, Document>,
+    moved: Vec<Moved>,
+}
+
+impl Move {
+    fn is_moved(&self, path: &Path, line: usize) -> bool {
+        self.moved
+            .iter()
+            .any(|item| item.source == path && item.span.contains(&line))
+    }
+
+    /// An item the move takes out of the reach of who refers to it.
+    fn keep_moved_items_in_reach(
+        &self,
+        client: &mut Client,
+        fixes: &mut Fixes,
+    ) -> Result<(), String> {
+        let destination = &self.destination;
+        for item in &self.moved {
+            let source = &self.sources[&item.source];
+            let references = client.request(
+                "textDocument/references",
+                json!({
+                    "textDocument": { "uri": source.uri },
+                    "position": item.name_position.to_lsp(),
+                    "context": { "includeDeclaration": false },
+                }),
+            )?;
+            let users: BTreeSet<PathBuf> = locations(&references)
+                .into_iter()
+                .map(|reference| (uri_path(&reference.uri), reference.position.line))
+                .filter(|(path, line)| *path != destination.path && !self.is_moved(path, *line))
+                .map(|(path, _)| path)
+                .collect();
+            if users.is_empty() {
+                continue;
+            }
+            fixes.widen(
+                source,
+                item.name_position.line,
+                visibility_reaching(&destination.path, &users),
+            );
+            // A member is reached through its type, wherever its block is; a
+            // free item is reached by a path, which names the file it left.
+            if item.header.is_some() {
+                continue;
+            }
+            let mut elsewhere = Vec::new();
             for user in &users {
-                if *user == item.source && are_siblings(source, &destination) {
-                    imports.entry(item.source.clone()).or_default().insert(
-                        item.name.clone(),
-                        format!(
-                            "use super::{}::{};",
-                            destination.module_name().expect("siblings name modules"),
-                            item.name
-                        ),
-                    );
+                if *user == item.source && are_siblings(source, destination) {
+                    fixes.import_from_sibling(source, destination, &item.name);
                 } else {
-                    by_hand.push(display_path(user));
+                    elsewhere.push(display_path(user));
                 }
             }
-            if !by_hand.is_empty() {
-                report.push(format!(
-                    "by hand: `{}` is named in {}",
+            if !elsewhere.is_empty() {
+                fixes.by_hand(format!(
+                    "`{}` is named in {}",
                     item.name,
-                    by_hand.join(", ")
+                    elsewhere.join(", ")
                 ));
             }
         }
+        Ok(())
     }
 
-    // What the moved code reads of the file it leaves: a private item there
-    // is now out of reach, and a free one needs an import.
-    for item in &moved {
-        let source = &sources[&item.source];
-        let mut helpers: BTreeSet<(usize, usize)> = BTreeSet::new();
-        for (position, name) in source.mentions(item) {
-            if is_keyword(name) {
-                continue;
-            }
-            let definition = client.request(
-                "textDocument/definition",
-                json!({
-                    "textDocument": { "uri": source.uri },
-                    "position": position.to_lsp(),
-                }),
-            )?;
-            for target in locations(&definition) {
-                if target.uri == source.uri && !is_moved(&source.path, target.position.line) {
-                    helpers.insert((target.position.line, target.position.column));
+    /// What the moved code reads of the file it leaves: a private item there
+    /// is now out of reach, and a free one needs an import.
+    fn keep_source_items_in_reach(
+        &self,
+        client: &mut Client,
+        fixes: &mut Fixes,
+    ) -> Result<(), String> {
+        let destination = &self.destination;
+        for item in &self.moved {
+            let source = &self.sources[&item.source];
+            let mut read: BTreeSet<(usize, usize)> = BTreeSet::new();
+            for (position, name) in source.mentions(item) {
+                if is_keyword(name) {
+                    continue;
+                }
+                let definition = client.request(
+                    "textDocument/definition",
+                    json!({
+                        "textDocument": { "uri": source.uri },
+                        "position": position.to_lsp(),
+                    }),
+                )?;
+                for target in locations(&definition) {
+                    if target.uri == source.uri
+                        && !self.is_moved(&source.path, target.position.line)
+                    {
+                        read.insert((target.position.line, target.position.column));
+                    }
                 }
             }
-        }
-        for (line, column) in helpers {
-            let position = Position { line, column };
-            let Some((helper, parent)) = find_symbol(&source.symbols, position, None) else {
-                continue;
-            };
-            let kind = helper["kind"].as_u64();
-            // A variant is as visible as its enum. A type alias is no
-            // exception to the rest, though the server reports one under the
-            // kind of a type parameter.
-            if kind == Some(ENUM_MEMBER_KIND) {
-                continue;
+            let visibility = visibility_reaching(&source.path, [&destination.path]);
+            for (line, column) in read {
+                let position = Position { line, column };
+                let Some((symbol, parent)) = find_symbol(&source.symbols, position, None) else {
+                    continue;
+                };
+                let kind = symbol["kind"].as_u64();
+                // A variant is as visible as its enum. A type alias is no
+                // exception to the rest, though the server reports one under
+                // the kind of a type parameter.
+                if kind == Some(ENUM_MEMBER_KIND) {
+                    continue;
+                }
+                let name = symbol_name(symbol);
+                match parent {
+                    // A trait's member is as visible as the trait.
+                    Some(parent)
+                        if is_trait_impl(parent)
+                            || (!is_impl(parent) && kind != Some(FIELD_KIND)) =>
+                    {
+                        if parent["kind"].as_u64() == Some(MODULE_KIND) {
+                            fixes.by_hand(format!(
+                                "`{name}` in the module `{}` of {} is read by the moved code",
+                                symbol_name(parent),
+                                display_path(&source.path)
+                            ));
+                        }
+                        continue;
+                    }
+                    // A field is read off a value, so the moved code may
+                    // never name the type holding it; the type is needed all
+                    // the same.
+                    Some(holder) if !is_impl(holder) => {
+                        fixes.widen(source, name_position(holder).line, visibility);
+                    }
+                    Some(_) => {}
+                    None if are_siblings(source, destination) => {
+                        if !self.destination_names.contains(name) {
+                            fixes.import_from_sibling(destination, source, name);
+                        }
+                    }
+                    None => fixes.by_hand(format!(
+                        "import `{name}` of {} into {}",
+                        display_path(&source.path),
+                        display_path(&destination.path)
+                    )),
+                }
+                fixes.widen(source, line, visibility);
             }
-            let name = symbol_name(helper);
-            match parent {
-                // A trait's member is as visible as the trait.
-                Some(parent)
-                    if is_trait_impl(parent) || (!is_impl(parent) && kind != Some(FIELD_KIND)) =>
-                {
-                    if parent["kind"].as_u64() == Some(MODULE_KIND) {
-                        report.push(format!(
-                            "by hand: `{name}` in the module `{}` of {} is read by the moved code",
-                            symbol_name(parent),
+        }
+        Ok(())
+    }
+
+    /// The imports the moved code reads by name.
+    fn repeat_imports(&self, fixes: &mut Fixes) {
+        let destination = &self.destination;
+        for source in self.sources.values() {
+            let mentioned: BTreeSet<&str> = self
+                .moved
+                .iter()
+                .filter(|item| item.source == source.path)
+                .flat_map(|item| source.mentions(item))
+                .map(|(_, name)| name.as_str())
+                .collect();
+            for item in use_items(&source.text).iter().filter(|item| item.plain) {
+                for binding in &item.bindings {
+                    if !mentioned.contains(binding.name.as_str())
+                        || self.destination_names.contains(&binding.name)
+                    {
+                        continue;
+                    }
+                    if binding.is_relative() && !are_siblings(source, destination) {
+                        fixes.by_hand(format!(
+                            "`{}` of {} is relative to it",
+                            binding.item(),
+                            display_path(&source.path)
+                        ));
+                        continue;
+                    }
+                    fixes
+                        .imports
+                        .entry(destination.path.clone())
+                        .or_default()
+                        .entry(binding.name.clone())
+                        .or_insert_with(|| binding.item());
+                }
+                for glob in &item.globs {
+                    if !self.destination_uses.iter().any(|d| d.globs.contains(glob)) {
+                        fixes.by_hand(format!(
+                            "the moved code may read `use {glob}::*;` of {}",
                             display_path(&source.path)
                         ));
                     }
-                    continue;
-                }
-                Some(_) => {}
-                None if are_siblings(source, &destination) => {
-                    if !destination_names.contains(name) {
-                        imports.entry(destination.path.clone()).or_default().insert(
-                            name.to_string(),
-                            format!(
-                                "use super::{}::{name};",
-                                source.module_name().expect("siblings name modules")
-                            ),
-                        );
-                    }
-                }
-                None => report.push(format!(
-                    "by hand: import `{name}` of {} into {}",
-                    display_path(&source.path),
-                    display_path(&destination.path)
-                )),
-            }
-            // A field is read off a value, so the moved code may never name
-            // the type holding it; the type is needed all the same.
-            let holder = parent
-                .filter(|parent| kind == Some(FIELD_KIND) && !is_impl(parent))
-                .map(|parent| name_position(parent).line);
-            let widened = widenings.entry(item.source.clone()).or_default();
-            for line in [line].into_iter().chain(holder) {
-                if !declares_visibility(&source.lines[line])
-                    && !widened.iter().any(|w| w.line == line)
-                {
-                    widened.push(Widening {
-                        line,
-                        visibility: visibility_reaching(&source.path, [&destination.path]),
-                    });
                 }
             }
         }
     }
 
-    // The imports the moved code reads by name.
-    for source in sources.values() {
-        let mentioned: BTreeSet<String> = moved
-            .iter()
-            .filter(|item| item.source == source.path)
-            .flat_map(|item| source.mentions(item))
-            .map(|(_, name)| name.clone())
-            .collect();
-        for item in use_items(&source.text).iter().filter(|item| item.plain) {
-            for binding in &item.bindings {
-                if !mentioned.contains(&binding.name) || destination_names.contains(&binding.name) {
-                    continue;
-                }
-                if binding.is_relative() && !are_siblings(source, &destination) {
-                    report.push(format!(
-                        "by hand: `{}` of {} is relative to it",
-                        binding.item(),
-                        display_path(&source.path)
-                    ));
-                    continue;
-                }
-                imports
-                    .entry(destination.path.clone())
-                    .or_default()
-                    .entry(binding.name.clone())
-                    .or_insert_with(|| binding.item());
-            }
-            for glob in &item.globs {
-                if !destination_uses.iter().any(|d| d.globs.contains(glob)) {
-                    report.push(format!(
-                        "by hand: the moved code may read `use {glob}::*;` of {}",
-                        display_path(&source.path)
-                    ));
-                }
+    /// The new text of each file, and the account of what changed.
+    fn write(&self, fixes: Fixes) -> Plan {
+        let Fixes {
+            mut report,
+            widenings,
+            imports,
+        } = fixes;
+        let imports_of = |path: &Path| -> BTreeSet<String> {
+            imports
+                .get(path)
+                .map(|by_name| by_name.values().cloned().collect())
+                .unwrap_or_default()
+        };
+        for (path, widened) in &widenings {
+            for widening in widened {
+                report.push(format!(
+                    "widen {}:{} to {}",
+                    display_path(path),
+                    widening.line + 1,
+                    widening.visibility
+                ));
             }
         }
-    }
-
-    for (path, widened) in &widenings {
-        for widening in widened {
+        for path in imports.keys() {
+            for item in imports_of(path) {
+                report.push(format!("import in {}: {item}", display_path(path)));
+            }
+        }
+        for item in &self.moved {
             report.push(format!(
-                "widen {}:{} to {}",
-                display_path(path),
-                widening.line + 1,
-                widening.visibility
+                "move {}:{} `{}` to {}",
+                display_path(&item.source),
+                item.span.start + 1,
+                item.name,
+                display_path(&self.destination.path)
             ));
         }
-    }
-    let imports: BTreeMap<PathBuf, BTreeSet<String>> = imports
-        .into_iter()
-        .map(|(path, by_name)| (path, by_name.into_values().collect()))
-        .collect();
-    for (path, items) in &imports {
-        for item in items {
-            report.push(format!("import in {}: {item}", display_path(path)));
-        }
-    }
-    for item in &moved {
-        report.push(format!(
-            "move {}:{} `{}` to {}",
-            display_path(&item.source),
-            item.span.start + 1,
-            item.name,
-            display_path(&destination.path)
-        ));
-    }
-    report.push(
-        "next: `cargo check` names a trait import the moved code calls a method of, \
-         and `cargo clippy --fix` removes the imports left unused"
-            .to_string(),
-    );
-
-    // Every position above is in the text as read, so the lines are edited in
-    // place first and cut or spliced after.
-    let mut files = BTreeMap::new();
-    let mut taken: Vec<Option<Taken>> = moved.iter().map(|_| None).collect();
-    for source in sources.values() {
-        let mut lines = source.lines.clone();
-        for widening in widenings.get(&source.path).into_iter().flatten() {
-            let line = &mut lines[widening.line];
-            let indent = line.len() - line.trim_start().len();
-            line.insert_str(indent, &format!("{} ", widening.visibility));
-        }
-        let mut cut: Vec<Range<usize>> = Vec::new();
-        let own = moved
-            .iter()
-            .enumerate()
-            .filter(|(_, item)| item.source == source.path);
-        for (index, item) in own {
-            taken[index] = Some((item.header.clone(), lines[item.span.clone()].to_vec()));
-            let span = item.emptied_block.clone().unwrap_or(item.span.clone());
-            if !cut.contains(&span) {
-                cut.push(span);
-            }
-        }
-        let own_imports = imports.get(&source.path).cloned().unwrap_or_default();
-        files.insert(
-            source.path.clone(),
-            render(without(lines, &cut), &own_imports, &[], source),
+        report.push(
+            "next: `cargo check` names a trait import the moved code calls a method of, \
+             and `cargo clippy --fix` removes the imports left unused"
+                .to_string(),
         );
+
+        // The lines are widened in place first, and cut or spliced after.
+        let mut files = BTreeMap::new();
+        let mut taken: Vec<Option<Taken>> = self.moved.iter().map(|_| None).collect();
+        for source in self.sources.values() {
+            let mut lines = source.lines.clone();
+            for widening in widenings.get(&source.path).into_iter().flatten() {
+                let line = &mut lines[widening.line];
+                let indent = line.len() - line.trim_start().len();
+                line.insert_str(indent, &format!("{} ", widening.visibility));
+            }
+            let mut cut: Vec<Range<usize>> = Vec::new();
+            let own = self
+                .moved
+                .iter()
+                .enumerate()
+                .filter(|(_, item)| item.source == source.path);
+            for (index, item) in own {
+                taken[index] = Some((item.header.clone(), lines[item.span.clone()].to_vec()));
+                let span = item.emptied_block.clone().unwrap_or(item.span.clone());
+                if !cut.contains(&span) {
+                    cut.push(span);
+                }
+            }
+            files.insert(
+                source.path.clone(),
+                render(without(lines, &cut), &imports_of(&source.path), &[], source),
+            );
+        }
+        let taken: Vec<Taken> = taken
+            .into_iter()
+            .map(|item| item.expect("every moved item has a source"))
+            .collect();
+        files.insert(
+            self.destination.path.clone(),
+            render(
+                self.destination.lines.clone(),
+                &imports_of(&self.destination.path),
+                &taken,
+                &self.destination,
+            ),
+        );
+        Plan { files, report }
     }
-    let taken: Vec<Taken> = taken
-        .into_iter()
-        .map(|item| item.expect("every moved item has a source"))
-        .collect();
-    let own_imports = imports.get(&destination.path).cloned().unwrap_or_default();
-    files.insert(
-        destination.path.clone(),
-        render(
-            destination.lines.clone(),
-            &own_imports,
-            &taken,
-            &destination,
-        ),
-    );
-    Ok(Plan { files, report })
 }
 
 fn display_position(path: &Path, position: Position) -> String {
