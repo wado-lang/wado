@@ -1142,8 +1142,9 @@ impl Lowering<'_> {
     }
 
     /// Declares in `module` each enum, dictionary, union and callback
-    /// interface a function of it names, and each callback interface holding a
-    /// constant. Answers each enum's values as the host spells them, in case
+    /// interface a function of it names, each callback interface holding a
+    /// constant, and each type a declared callback interface's function type
+    /// names. Answers each enum's values as the host spells them, in case
     /// order, by Wado name.
     fn declare_types(
         &self,
@@ -1163,9 +1164,8 @@ impl Lowering<'_> {
         let type_path =
             |name: &str| format!("{}/{TYPES_INTERFACE}#{}", self.package, to_kebab_case(name));
         let is_constant = |member: &&Member| matches!(member, Member::Const { .. });
-        // A callback interface's function type may name another callback
-        // interface, an enum, a dictionary or a union, which is declared with
-        // the rest: lower each one reached until none is left.
+        // A function type may name a callback interface the snapshot declares
+        // before its own, so the walk runs until it reaches none.
         let mut targets = IndexMap::new();
         loop {
             let reached: Vec<&str> = self
