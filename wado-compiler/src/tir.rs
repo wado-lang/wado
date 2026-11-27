@@ -639,10 +639,12 @@ pub fn wrapped_reference(expr: TirExpr, type_table: &TypeTable) -> TirExpr {
 }
 
 /// The `&mut T` the cell `expr` is stored as, read through any references to
-/// the cell. Erasure leaves the cast between one type.
+/// the cell and any newtype naming it. Erasure leaves the cast between one
+/// type.
 pub fn cell_reference(expr: TirExpr, type_table: &mut TypeTable) -> TirExpr {
     let expr = deref_to_layers(expr, 0, type_table);
-    let ResolvedType::Shared(held) = *type_table.get(expr.type_id) else {
+    let cell = type_table.representation_head(expr.type_id);
+    let ResolvedType::Shared(held) = *type_table.get(cell) else {
         unreachable!("the caller passes a cell");
     };
     let reference = type_table.make_mut_ref(held);

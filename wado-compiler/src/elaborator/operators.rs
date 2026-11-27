@@ -656,7 +656,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. }
                         | ResolvedType::Tuple(_)
-                        | ResolvedType::Variant { .. } => {
+                        | ResolvedType::Variant { .. }
+                        | ResolvedType::Shared(_) => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
                         }
                         ResolvedType::Resource { type_args, .. } if !type_args.is_empty() => {

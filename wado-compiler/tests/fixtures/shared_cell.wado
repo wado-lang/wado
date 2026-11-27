@@ -131,12 +131,20 @@ test "a path through a cell is writable under a &" {
 }
 
 type Tally = Shared<i32>;
+type Origin = Shared<Point>;
 
 test "a newtype over a cell is a cell" {
     let t: Tally = Shared::new(1) as Tally;
     let u = t;
     *u += 1;
     assert *t == 2;
+    assert t == u;
+
+    let o = Shared::new(Point { x: 1, y: 2 }) as Origin;
+    o.x = 5;
+    o.bump();
+    assert o.sum() == 8;
+    assert `${o:?}` == "Shared(Point { x: 6, y: 2 }) as Origin";
 }
 
 test "a closure captures a cell and writes it without being fn mut" {

@@ -469,25 +469,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id
     }
 
-    /// The `&mut T` a receiver that is a `Shared<T>`, or a reference to one,
-    /// is called through, where no `impl` written for the cell gives it
-    /// `method_name`. `None` for any other receiver, and for the cell's own
-    /// methods.
+    /// The `&mut T` a receiver that is a `Shared<T>`, a newtype over one or a
+    /// reference to either is called through, where no `impl` written for the
+    /// cell or for a newtype naming it gives it `method_name`. `None` for any
+    /// other receiver, and for the cell's own methods.
     fn cell_receiver_view(&self, receiver: TypeId, method_name: &str) -> Option<TypeId> {
         let held = {
             let tt = self.tysys.type_table.borrow();
-            let cell = tt.peel_refs(receiver);
-            let ResolvedType::Shared(held) = *tt.get(cell) else {
-                return None;
-            };
-            if self
-                .tysys
-                .trait_env
-                .has_method_by_receiver(&tt.impl_receiver_key(cell), method_name)
-            {
+            let mut link = tt.peel_refs(receiver);
+            if !tt.is_cell(link) {
                 return None;
             }
-            held
+            loop {
+                if self
+                    .tysys
+                    .trait_env
+                    .has_method_by_receiver(&tt.impl_receiver_key(link), method_name)
+                {
+                    return None;
+                }
+                match tt.get(link) {
+                    ResolvedType::Shared(held) => break *held,
+                    _ => link = tt.link_below(link).expect("a cell's chain ends at it"),
+                }
+            }
         };
         Some(self.tysys.type_table.borrow_mut().make_mut_ref(held))
     }
