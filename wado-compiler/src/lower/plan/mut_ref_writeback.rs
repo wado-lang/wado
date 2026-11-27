@@ -228,43 +228,46 @@ impl WriteBack<'_> {
         }
     }
 
+    /// Note that `local` holds a detached reference. Only a binding something
+    /// replaces through loses a write: one used to mutate a payload lands
+    /// through the box either way. Reading the binding hands the same
+    /// reference on, so a later sink is the same escape.
+    fn hold_detached(&mut self, local: u32, span: Span, holder: &str) {
+        if self.replaced_locals.contains(&local) {
+            self.refuse(span, format!("{holder} holds it past the reference"));
+        }
+        self.detached_locals.insert(local);
+    }
+
     /// Note the bindings of `pattern` that hold a detached reference. A `&mut`
     /// scrutinee binds what it names by reference, the whole as well as each
     /// field, element and payload, and a value of a replace type is read into
-    /// a fresh box. A binding whose slot already holds a `&mut` binds that
-    /// reference by value.
+    /// a fresh box. A field, element or payload [`TypeTable::boxes_slot`] boxes
+    /// is its own box, which the binding reaches; the whole never is. A binding
+    /// whose slot already holds a `&mut` binds that reference by value.
     fn bind_pattern(&mut self, pattern: &TirPattern, scrutinee: &TirExpr, span: Span) {
+        let type_table = self.type_table;
         let whole = Slot {
-            ty: Some(self.type_table.reference_path(scrutinee.type_id).1),
+            ty: Some(type_table.reference_path(scrutinee.type_id).1),
             kind: PlaceKind::Storage,
         };
-        let mut bindings = Vec::new();
+        let mut detached = Vec::new();
         for_each_pattern_binding_in(
             pattern,
             whole,
             self.carrying,
             &mut |local, type_id, slot| {
-                bindings.push((local, type_id, slot));
+                if let ResolvedType::MutRef(pointee) = type_table.get(type_id)
+                    && slot.ty.is_none_or(|held| held == *pointee)
+                    && type_table.is_boxed_reference_target(*pointee)
+                    && (slot.kind == PlaceKind::Storage || !type_table.boxes_slot(*pointee))
+                {
+                    detached.push(local);
+                }
             },
         );
-        for (local, type_id, slot) in bindings {
-            let detached = matches!(
-                self.type_table.get(type_id),
-                ResolvedType::MutRef(pointee)
-                    if slot.ty.is_none_or(|held| held == *pointee)
-                        && self.type_table.is_boxed_reference_target(*pointee)
-                        && !self.type_table.boxes_slot(*pointee)
-            );
-            if !detached {
-                continue;
-            }
-            if self.replaced_locals.contains(&local) {
-                self.refuse(
-                    span,
-                    "a pattern binding holds it past the reference".to_string(),
-                );
-            }
-            self.detached_locals.insert(local);
+        for local in detached {
+            self.hold_detached(local, span, "a pattern binding");
         }
     }
 
@@ -783,23 +786,15 @@ impl TirOptVisitor for WriteBack<'_> {
         }
         let changed = opt_walk_stmt(self, stmt);
         // Asked after the walk, which is what notes the bindings of a `match`
-        // inside the value: a `let … else` yields its binding out of one. Only
-        // a binding something replaces through loses a write — one used to
-        // mutate a payload lands through the box either way.
+        // inside the value: a `let … else` yields its binding out of one.
         if let TirStmtKind::Let {
             value: Some(value),
             local_index,
             ..
         } = &stmt.kind
-            && self.detached_in_value_position(value).is_some()
+            && let Some(place) = self.detached_in_value_position(value)
         {
-            let local_index = *local_index;
-            if self.replaced_locals.contains(&local_index) {
-                self.refuse_stored(value, "a variable");
-            }
-            // Reading the binding hands the same detached reference on, so
-            // a later sink is the same escape.
-            self.detached_locals.insert(local_index);
+            self.hold_detached(*local_index, place, "a variable");
         }
         changed
     }

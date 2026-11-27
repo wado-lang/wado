@@ -212,10 +212,13 @@ fix to conform; none should be preserved.
   | `variant` element / whole capture / branch, at a written position | refused                  |
   | `variant` element as a `&mut self` receiver (`xs[i].m()`)         | refused                  |
 
-  A pattern binds a field, a tuple element or a payload of a replace type
-  through a fresh box, whatever the scrutinee is rooted at. So the binding is a
-  detached reference even under `&mut local`, and a generic body's instance
-  reaches the refusal with a scalar payload.
+  A pattern binds a value of a replace type through a fresh box, whatever the
+  scrutinee is rooted at: a field, a tuple element, a payload, or the scrutinee
+  whole. So the binding is a detached reference even under `&mut local`, and a
+  generic body's instance reaches the refusal with a scalar payload. An affine
+  `variant` is its own box as a field, an element or a payload, which the
+  binding reaches, but a binding of the whole scrutinee is a fresh box for it
+  too.
 
   The same operations on a value-type _local_ all work, wherever the
   reference goes; nothing else is the storage itself, since `&mut` of any other
