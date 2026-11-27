@@ -1,0 +1,32 @@
+pub struct Base { pub v: i32 }
+
+impl Base {
+    fn mk() -> i32 { return 1; }
+    pub fn zero() -> i32 { return 1; }
+}
+
+pub type N = Base;
+
+pub trait Marked with () {
+    fn mark(&self) -> i32;
+}
+
+impl Marked for N {
+    fn mark(&self) -> i32 { return 2; }
+}
+
+pub trait Make with () {
+    fn mk() -> i32;
+}
+
+impl<T: Marked> Make for T {
+    fn mk() -> i32 { return 20; }
+}
+
+pub trait Zero with () {
+    fn zero<U: Default>() -> U;
+}
+
+impl<T: Marked> Zero for T {
+    fn zero<U: Default>() -> U { return U::default(); }
+}

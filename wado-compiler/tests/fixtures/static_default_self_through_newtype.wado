@@ -1,0 +1,17 @@
+// A static's default argument naming `Self`, called on a newtype: `Self` in
+// the default is the receiver the call names, by either spelling.
+
+use dep from "./sub/static_default_self_through_newtype_lib.wado";
+use { Loc, WI, IB, Build } from "./sub/static_default_self_through_newtype_lib.wado";
+
+test "through a namespace" {
+    assert dep::Loc::dflt(3) == 10;
+    assert dep::WI::mk().v == 0;
+    assert dep::IB::twin().n == 2;
+}
+
+test "by the two-segment spelling" {
+    assert Loc::dflt(3) == 10;
+    assert WI::mk().v == 0;
+    assert IB::twin().n == 2;
+}

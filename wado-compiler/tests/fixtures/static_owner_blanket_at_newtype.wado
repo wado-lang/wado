@@ -1,0 +1,17 @@
+// A blanket whose bound holds at a newtype owns the static there, so every
+// question asked of the call's owner is asked of the blanket: its visibility,
+// not that of the private static the base declares, and its type parameters,
+// not those of the base's.
+
+use dep from "./sub/static_owner_blanket_at_newtype_lib.wado";
+use { N, Make, Zero } from "./sub/static_owner_blanket_at_newtype_lib.wado";
+
+test "the base's private static is not the one called" {
+    assert dep::N::mk() == 20;
+    assert N::mk() == 20;
+}
+
+test "the turbofish names the blanket's parameters" {
+    assert dep::N::zero::<i32>() == 0;
+    assert N::zero::<i32>() == 0;
+}

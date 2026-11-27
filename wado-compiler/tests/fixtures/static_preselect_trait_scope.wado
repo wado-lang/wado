@@ -1,0 +1,10 @@
+// A literal argument is weighed against the impls the call can reach alone: an
+// impl of a trait out of scope here is no candidate, so it makes no tie.
+
+use dep from "./sub/static_preselect_trait_scope_lib.wado";
+use { Point, PickNarrow } from "./sub/static_preselect_trait_scope_lib.wado";
+
+test "the trait in scope answers" {
+    assert dep::Point::pick(1) == 1;
+    assert Point::pick(1) == 1;
+}
