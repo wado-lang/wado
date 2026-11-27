@@ -747,7 +747,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if binding.is_mut {
             return;
         }
-        if self.tysys.type_table.borrow().is_mut_ref(binding.type_id) {
+        if self.tysys.type_table.borrow().is_mut_ref(binding.type_id)
+            || self.place_crosses_cell(callee)
+        {
             return;
         }
         let _ = self.emit(TypeError::ClosureMutBindingRequired {

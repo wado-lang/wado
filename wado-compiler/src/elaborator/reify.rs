@@ -2912,8 +2912,15 @@ impl<'a> Reify<'a> {
                 }
                 // A field is read through the one reference that is the
                 // struct's handle: any further layer is dereferenced to it,
-                // and a newtype over that reference is cast to it.
-                let inner = {
+                // and a newtype over that reference is cast to it. A cell is
+                // that handle itself.
+                let through_cell = {
+                    let tt = self.tysys.type_table.borrow();
+                    tt.is_cell(tt.peel_refs(inner.type_id))
+                };
+                let inner = if through_cell {
+                    tir::cell_reference(inner, &mut self.tysys.type_table.borrow_mut())
+                } else {
                     let tt = self.tysys.type_table.borrow();
                     let inner = if self.tysys.wraps_reference(tt.peel_refs(inner.type_id)) {
                         wrapped_reference(inner, &tt)

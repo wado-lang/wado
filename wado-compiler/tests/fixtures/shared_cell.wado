@@ -147,6 +147,46 @@ test "a newtype over a cell is a cell" {
     assert `${o:?}` == "Shared(Point { x: 6, y: 2 }) as Origin";
 }
 
+variant Watcher {
+    Idle(Shared<Point>),
+    Busy(Shared<Point>),
+}
+
+fn x_of(watcher: &Watcher) -> i32 {
+    return match watcher {
+        Idle(p) => p.x,
+        Busy(p) => p.x,
+    };
+}
+
+test "a cell bound by a pattern under a & is still the cell" {
+    let p = Shared::new(Point { x: 7, y: 0 });
+    let watchers: List<Watcher> = [Watcher::Busy(p)];
+    assert x_of(&watchers[0]) == 7;
+    for let w of watchers {
+        match w {
+            Idle(q) => { q.y = 1; },
+            Busy(q) => { q.y = 2; },
+        }
+    }
+    assert p.y == 2;
+}
+
+struct Task {
+    runs: i32,
+    step: fn mut(),
+}
+
+test "a fn mut a cell holds is called without mut" {
+    let mut count = 0;
+    let task = Shared::new(Task { runs: 0, step: || { count += 1; } });
+    (task.step)();
+    (task.step)();
+    task.runs += 2;
+    assert count == 2;
+    assert task.runs == 2;
+}
+
 test "a closure captures a cell and writes it without being fn mut" {
     let c = Shared::new(0);
     let inc = || { *c += 1; };

@@ -82,9 +82,9 @@ trait Source with () {
     }
 }
 
-struct Shared {}
+struct Common {}
 
-impl Source for Shared {
+impl Source for Common {
     type Seq = Both;
     type Map = Both;
     fn seq(&self) -> Both {
@@ -190,7 +190,7 @@ test "a nested projection off Self picks through its declared bound" {
 }
 
 test "projections bound to one type each pick through their own bound" {
-    assert Shared {}.ends() == 12;
+    assert Common {}.ends() == 12;
 }
 
 test "a type parameter's bound picks the static" {

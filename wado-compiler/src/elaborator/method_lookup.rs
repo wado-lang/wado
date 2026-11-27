@@ -2449,6 +2449,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && self.place_roots_at_immutable_ref(inner))
     }
 
+    /// Whether the place `expr` reaches its storage through a cell, which no
+    /// binding's `mut` governs.
+    pub(super) fn place_crosses_cell(&self, expr: &ast::Expr) -> bool {
+        let (inner, explicit_deref) = match expr {
+            ast::Expr::FieldAccess(fa) => (&fa.expr, false),
+            ast::Expr::Index(ix) => (&ix.expr, false),
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => (&u.expr, true),
+            _ => return false,
+        };
+        self.sem
+            .types
+            .expression_types
+            .get(&inner.id())
+            .is_some_and(|&ty| self.crosses_cell(ty, explicit_deref))
+            || self.place_crosses_cell(inner)
+    }
+
     /// Whether a step out of a base of type `ty` dereferences a cell: an
     /// explicit `*` crosses the outermost layer alone, a field or subscript
     /// step every one.
