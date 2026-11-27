@@ -20,6 +20,7 @@ use super::static_call::StaticQuery;
 use super::trait_env::ImplTargetKey;
 use super::trait_env::TraitEnv;
 use super::trait_query::SelfBinding;
+use super::trait_query::Unsettled;
 use super::types::FunctionContext;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
@@ -597,7 +598,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// parameters are slots the arguments settle, so one of them names the
     /// instance while the rest take their parameters' types. Only where
     /// nothing the receiver declares answers the name and a single value
-    /// blanket does, since no instance says yet which blankets admit it.
+    /// blanket does whose bounds some instance may meet.
     fn unapplied_blanket_static_signature(
         &mut self,
         receiver: &ReceiverId,
@@ -612,8 +613,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return None;
         }
+        let some_instance = self
+            .spelled_at_vars(receiver)
+            .expect("an unapplied generic is a declaration");
         let trait_env = Arc::clone(&self.tysys.trait_env);
-        let [(_, sig)] = self.value_blanket_statics(&trait_env, method_name)[..] else {
+        let admitting: Vec<&MethodSig> = self
+            .value_blanket_statics(&trait_env, method_name)
+            .into_iter()
+            .filter(|(blanket, _)| {
+                let slots = self.blanket_block_slots(blanket.def, some_instance, &[]);
+                self.tysys
+                    .unmet_slot_bound(&self.annotate_ctx, blanket.def, &slots, Unsettled::MayHold)
+                    .is_none()
+            })
+            .map(|(_, sig)| sig)
+            .collect();
+        let [sig] = admitting[..] else {
             return None;
         };
         Some(CalleeSignature::of_method(sig, self.sig_slots(sig)))

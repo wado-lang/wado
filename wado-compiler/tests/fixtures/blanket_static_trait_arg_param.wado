@@ -61,6 +61,8 @@ test "a generic receiver spelled without its arguments" {
 test "beside a blanket whose bound the receiver fails" {
     let n: i64 = 5_000_000_000;
     assert Bx::keep(Bx::<i32> { v: 1 }, n) == 5_000_000_000;
+    let m: i64 = Bx::keep(Bx::<i32> { v: 1 }, 5_000_000_000);
+    assert m == 5_000_000_000;
 }
 
 test "the trait named with its argument" {

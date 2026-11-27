@@ -1741,7 +1741,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// [`Self::spelled_type`] with a fresh variable for each argument the
     /// spelling omits.
-    fn spelled_at_vars(&mut self, receiver: &ReceiverId) -> Option<TypeId> {
+    pub(super) fn spelled_at_vars(&mut self, receiver: &ReceiverId) -> Option<TypeId> {
         if !self.omits_type_args(receiver) {
             return self.spelled_type(receiver);
         }
