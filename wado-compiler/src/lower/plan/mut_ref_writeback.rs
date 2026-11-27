@@ -229,14 +229,13 @@ impl WriteBack<'_> {
     }
 
     /// Note the bindings of `pattern` that hold a detached reference. A `&mut`
-    /// scrutinee binds each field, element and payload by reference, and one of
-    /// a replace type is read into a fresh box. A binding of the scrutinee
-    /// whole is the scrutinee's own reference, and one whose slot already
-    /// holds a `&mut` binds that reference by value.
+    /// scrutinee binds what it names by reference, the whole as well as each
+    /// field, element and payload, and a value of a replace type is read into
+    /// a fresh box. A binding whose slot already holds a `&mut` binds that
+    /// reference by value.
     fn bind_pattern(&mut self, pattern: &TirPattern, scrutinee: &TirExpr, span: Span) {
-        let whole_is_detached = self.detached_in_value_position(scrutinee).is_some();
         let whole = Slot {
-            ty: Some(scrutinee.type_id),
+            ty: Some(self.type_table.reference_path(scrutinee.type_id).1),
             kind: PlaceKind::Storage,
         };
         let mut bindings = Vec::new();
@@ -249,16 +248,13 @@ impl WriteBack<'_> {
             },
         );
         for (local, type_id, slot) in bindings {
-            let detached = match slot.kind {
-                PlaceKind::Storage => whole_is_detached,
-                PlaceKind::Field | PlaceKind::Value => matches!(
-                    self.type_table.get(type_id),
-                    ResolvedType::MutRef(pointee)
-                        if slot.ty.is_none_or(|held| held == *pointee)
-                            && self.type_table.is_boxed_reference_target(*pointee)
-                            && !self.type_table.boxes_slot(*pointee)
-                ),
-            };
+            let detached = matches!(
+                self.type_table.get(type_id),
+                ResolvedType::MutRef(pointee)
+                    if slot.ty.is_none_or(|held| held == *pointee)
+                        && self.type_table.is_boxed_reference_target(*pointee)
+                        && !self.type_table.boxes_slot(*pointee)
+            );
             if !detached {
                 continue;
             }
@@ -772,25 +768,6 @@ fn place_root(expr: &TirExpr) -> Option<Root> {
 impl TirOptVisitor for WriteBack<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         match &stmt.kind {
-            // A TIR `Let` is a single binding; a destructuring `let` lowered to
-            // a pattern, which binds through the reference rather than keeping it.
-            // Only a binding something replaces through loses a write — one used
-            // to mutate a payload lands through the box either way.
-            TirStmtKind::Let {
-                value: Some(value),
-                local_index,
-                ..
-            } => {
-                let local_index = *local_index;
-                if self.detached_in_value_position(value).is_some() {
-                    if self.replaced_locals.contains(&local_index) {
-                        self.refuse_stored(value, "a variable");
-                    }
-                    // Reading the binding hands the same detached reference on, so
-                    // a later sink is the same escape.
-                    self.detached_locals.insert(local_index);
-                }
-            }
             TirStmtKind::LetDestructure { pattern, value } => {
                 self.bind_pattern(pattern, value, stmt.span);
             }
@@ -804,7 +781,27 @@ impl TirOptVisitor for WriteBack<'_> {
             } => self.refuse_stored(value, "the block's value"),
             _ => {}
         }
-        opt_walk_stmt(self, stmt)
+        let changed = opt_walk_stmt(self, stmt);
+        // Asked after the walk, which is what notes the bindings of a `match`
+        // inside the value: a `let … else` yields its binding out of one. Only
+        // a binding something replaces through loses a write — one used to
+        // mutate a payload lands through the box either way.
+        if let TirStmtKind::Let {
+            value: Some(value),
+            local_index,
+            ..
+        } = &stmt.kind
+            && self.detached_in_value_position(value).is_some()
+        {
+            let local_index = *local_index;
+            if self.replaced_locals.contains(&local_index) {
+                self.refuse_stored(value, "a variable");
+            }
+            // Reading the binding hands the same detached reference on, so
+            // a later sink is the same escape.
+            self.detached_locals.insert(local_index);
+        }
+        changed
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {

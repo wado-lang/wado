@@ -1,0 +1,22 @@
+// A pattern that binds a `&mut` scrutinee whole binds a fresh box too, where
+// the scrutinee names a local as well.
+
+variant Shape {
+    Circle(i32),
+    Dot,
+}
+
+test "a write through a binding of the whole scrutinee" {
+    let mut shape = Shape::Circle(1);
+    match &mut shape {
+        whole => {
+            *whole = Shape::Dot;
+        },
+    }
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+}
