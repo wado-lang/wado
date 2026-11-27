@@ -951,13 +951,14 @@ Each figure is the step over the three-column tables it replaced, measured as
 the `HashMap` table above is. The last row is what landed.
 
 Fuel read the list form as the faster one. Fuel counts instructions and does
-not see the collector, and the collector is where the time went: TypeScript
-keeps every arena node and every real stack for the program's life, so
-every collection traces one more object per node. `wado run -O2 --gc-log` shows
+not see the collector, and the collector is where the time went. A node stays
+live until its pool is replaced (`AtnDfa::make_room` for the arena,
+`CtxArena::enter_caller_stack` for the real stacks), and the
+benchmark's input fills neither that far, so every collection traces one more object per node. `wado run -O2 --gc-log` shows
 it as a larger live set and longer pauses. An interner holding a heap key in
 both its list and its map doubles that.
 
-So a table that lives as long as the simulator keeps flat columns, and a change
+So a table that outlives a prediction keeps flat columns, and a change
 to one is judged by time, with fuel beside it.
 
 ### Measured non-levers
