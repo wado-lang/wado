@@ -2432,30 +2432,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The same resolution the call itself uses, not a second one:
         // two resolutions of one call disagree, which is what the edge
         // then records.
+        //
+        // At the receiver's type, since no blanket is asked of a receiver
+        // without one: a blanket whose bound holds there owns the call, and
+        // the static a newtype inherits a link below is not the one named.
         let receiver_args = self.expected_receiver_args(receiver, suffix, expected_type);
-        let selection = self
-            .resolve_static_callee(StaticQuery {
-                arg_types: args,
-                receiver_args: &receiver_args,
-                expected_return: expected_type,
-                ..StaticQuery::of(receiver, suffix)
-            })
-            .found()
-            .map(|callee| callee.method_ref.method_id);
-        let method_def = selection.flatten().or_else(|| {
-            let owner = self.static_owner_key(receiver.key(), suffix);
-            self.qualified_method_decl_id(&owner, suffix)
-        });
-        let own_from = method_def.is_some_and(|def| self.declares_own_from(def));
-        if let Some(suffix_seg) = ident.segments.last()
-            && let Some(method_def) = method_def
-            && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
-        {
-            return TypeTable::ERROR;
-        }
-        // The same argument the selection above read: without it this
-        // resolution answers a different declaration than the call was
-        // mangled to.
         let typed = receiver.at_type(Some(receiver_type));
         let resolved = self.resolve_static_callee(StaticQuery {
             arg_types: args,
@@ -2463,10 +2444,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             expected_return: expected_type,
             ..StaticQuery::of(&typed, suffix)
         });
-        // A blanket whose bound holds at the receiver itself outranks the
-        // static a newtype inherits a link below, and the blanket resolver
-        // instantiates it. Before the turbofish is counted, since it names
-        // the blanket's parameters and not the inherited static's.
+        // The blanket resolver instantiates it and records the reference.
+        // Before the turbofish is counted, since it names the blanket's
+        // parameters and not the inherited static's.
         if matches!(resolved, StaticLookup::Blanket(_))
             && let Some(return_type) = self.resolve_named_type_blanket_static(
                 &typed,
@@ -2482,6 +2462,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         {
             return return_type;
+        }
+        let selection = resolved
+            .found()
+            .and_then(|callee| callee.method_ref.method_id);
+        let method_def = selection.or_else(|| {
+            let owner = self.static_owner_key(receiver.key(), suffix);
+            self.qualified_method_decl_id(&owner, suffix)
+        });
+        let own_from = method_def.is_some_and(|def| self.declares_own_from(def));
+        if let Some(suffix_seg) = ident.segments.last()
+            && let Some(method_def) = method_def
+            && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
+        {
+            return TypeTable::ERROR;
         }
         // An omitted turbofish infers both levels; a partial one keeps
         // what it named and infers only its `_` slots. The call's own
