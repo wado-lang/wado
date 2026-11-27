@@ -35,7 +35,7 @@ use crate::elaborator::sem::types::{
 use crate::elaborator::typecheck::{
     MeetRules, Meetings, NeverMeets, TypeMismatchPayload, meetings,
 };
-use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name};
+use crate::name::{FqTraitName, FqTypeName, RefKind, TypeHead, mangle_generic_name};
 use crate::tir;
 
 /// One body's inference variables and what is owed once they settle.
@@ -1614,6 +1614,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Equate each variable `asked` writes with the part of `offered` at its
     /// position, where the two agree on every head above it.
     fn equate_open_parts(&mut self, asked: &FqTypeName, offered: TypeId) {
+        let mut offered = offered;
+        for kind in asked.references() {
+            let ((ResolvedType::Ref(behind), RefKind::Shared)
+            | (ResolvedType::MutRef(behind), RefKind::Mut)) =
+                (self.tysys.type_table.borrow().get(offered).clone(), kind)
+            else {
+                return;
+            };
+            offered = behind;
+        }
         if let TypeHead::Infer { var, .. } = asked.head() {
             let hole = self.tysys.type_table.borrow_mut().make_infer_var(*var);
             // A literal's type is a default that settles last, so the bound
@@ -1637,13 +1647,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let (name, parts) = {
             let table = self.tysys.type_table.borrow();
-            (
-                table.fq_type_name(offered),
-                table.nominal_type_args(offered).unwrap_or_default(),
-            )
+            let parts = if let ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } = table.get(offered)
+            {
+                params.iter().copied().chain([*return_type]).collect()
+            } else if let Some(elems) = table.as_tuple(offered) {
+                elems
+            } else {
+                table.nominal_type_args(offered).unwrap_or_default()
+            };
+            (table.fq_type_name(offered), parts)
         };
-        if name.head() == asked.head() && parts.len() == asked.args().len() {
-            for (asked, part) in asked.args().iter().zip(parts) {
+        if !name.references().is_empty() {
+            return;
+        }
+        // A function type's head is its whole signature, which is where its
+        // variables are, so two of them agree on the rest of it.
+        let asked_parts = if let (
+            TypeHead::Function {
+                is_mut,
+                signature,
+                effects,
+            },
+            TypeHead::Function {
+                is_mut: offered_mut,
+                effects: offered_effects,
+                ..
+            },
+        ) = (asked.head(), name.head())
+        {
+            if is_mut != offered_mut || effects != offered_effects {
+                return;
+            }
+            &signature[..]
+        } else if name.head() == asked.head() {
+            asked.args()
+        } else {
+            return;
+        };
+        if asked_parts.len() == parts.len() {
+            for (asked, part) in asked_parts.iter().zip(parts) {
                 self.equate_open_parts(asked, part);
             }
         }

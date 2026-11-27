@@ -20,7 +20,9 @@ use crate::tir::{
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::call::{ArgSite, CallSolve, CaseSite, InheritedStatic, SigChoice, bind_nearer};
+use super::call::{
+    ArgSite, CallSolve, CaseSite, DefaultTypeBinding, InheritedStatic, SigChoice, bind_nearer,
+};
 use super::callee::StaticMethodRef;
 use super::coercion::ExpectedReturn;
 use super::expr::IndexAccess;
@@ -763,7 +765,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !reported
             && let Some((ref_kind, trait_match)) = behind_referent
         {
-            if let Some(tie) = &trait_match.tie_behind_referent {
+            for tie in &trait_match.tie_behind_referent {
                 let _ = self.emit(tie.clone());
             }
             let adopted = self.adopt_ref_match(trait_match, base_type_id);
@@ -2422,6 +2424,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.answer_frame_projections_in(param_types);
     }
 
+    /// The type parameters of the block `declaring_impl` as the static's
+    /// receiver `target` settles them: the arguments, then the bindings.
+    fn static_impl_bindings(
+        &self,
+        target: TypeId,
+        declaring_impl: Option<DefId>,
+    ) -> (Vec<TypeId>, Vec<DefaultTypeBinding>) {
+        let declaring_args = self
+            .tysys
+            .receiver_args_at_impl(Some(target), &[], declaring_impl)
+            .unwrap_or_default();
+        let impl_bindings = declaring_impl
+            .map(|id| {
+                let table = &self.tysys.type_table;
+                slot_type_bindings(table, table.borrow().impl_target_args(id), &declaring_args)
+            })
+            .unwrap_or_default();
+        (declaring_args, impl_bindings)
+    }
+
     /// `written`, the arguments `target` spells, as the block declaring `sig`
     /// names its receiver: a newtype calling its base's static passes the
     /// base's, which a re-shaping one (`type Wl<T> = Wrap<List<T>>`) does not
@@ -2615,7 +2637,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 static_call.id,
                 Some(static_call.method_id),
                 static_call.span,
-                None,
+                expected_type,
                 ctx,
             );
         }
@@ -2994,7 +3016,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .copied()
             .chain(self.vars_holding_written_holes(&method_type_args))
             .collect();
-        let args: Vec<TypeId> = if written_vars.is_empty() {
+        let open_own_slots = callee_sig.as_ref().filter(|sig| {
+            written_vars.is_empty()
+                && lookup_receiver.is_some()
+                && !sig.own_params.is_empty()
+                && self.turbofish_leaves_slot(&method_type_args, sig.own_params.len())
+        });
+        // The static's own slots the spelling left open, as variables the
+        // arguments were typed against: a literal among them waits for what
+        // the slots' bounds say, as an instance call's does.
+        let mut own_inst = None;
+        let args: Vec<TypeId> = if let Some(sig) = open_own_slots {
+            let (_, impl_bindings) = self.static_impl_bindings(target_type_id, sig.declaring_impl);
+            let impl_args = settled_impl_args(&impl_bindings);
+            let declaring_trait = self.tysys.signatures.declaring_trait(sig);
+            let (args, inst) = self.resolve_args_through_slots(
+                ctx,
+                &static_call.args,
+                &param_types,
+                &sig.own_type_param_ids(),
+                &sig.own_params,
+                &Instantiation {
+                    kind: InstanceKind::Method,
+                    name: &static_call.method,
+                    span: static_call.span,
+                    type_args: &method_type_args,
+                    self_binding: Some(SelfBinding::of_static(target_type_id, declaring_trait)),
+                    impl_args: &impl_args,
+                },
+                None,
+            );
+            own_inst = inst;
+            args
+        } else if written_vars.is_empty() {
             static_call
                 .args
                 .iter()
@@ -3091,17 +3145,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut arg_sites: Vec<ArgSite> = static_call.args.iter().map(ArgSite::written).collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
-        // The declaring block's type parameters, as the receiver settles them.
-        let declaring_args = self
-            .tysys
-            .receiver_args_at_impl(Some(target_type_id), &[], declaring_impl)
-            .unwrap_or_default();
-        let impl_bindings = declaring_impl
-            .map(|id| {
-                let table = &self.tysys.type_table;
-                slot_type_bindings(table, table.borrow().impl_target_args(id), &declaring_args)
-            })
-            .unwrap_or_default();
+        let (declaring_args, impl_bindings) =
+            self.static_impl_bindings(target_type_id, declaring_impl);
         let declaring_trait = callee_sig
             .as_ref()
             .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
@@ -3146,24 +3191,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let qualified = format!("{receiver}::{}", static_call.method);
             let (args_at_base, expected_at_base) =
                 self.at_inherited_base(newtype, declaring_link, &args, expected_type);
-            (method_type_args, _) = self.bind_static_type_args(
-                method_type_args,
-                &qualified,
-                MethodInferenceInput {
-                    slots: &own_ids,
-                    own_params: &sig.own_params,
-                    param_types: &param_types,
-                    args: &args_at_base,
-                    raw_args: &static_call.args,
-                    decl_return_type: declared_return,
-                    expected_return_type: expected_at_base,
-                    self_binding: SelfBinding::of_static(target_type_id, declaring_trait),
-                    declaring_module: Some(sig.defaults_module.clone()),
-                    impl_args: &impl_args,
-                    inst: None,
-                    span: static_call.span,
-                },
-            );
+            let input = MethodInferenceInput {
+                slots: &own_ids,
+                own_params: &sig.own_params,
+                param_types: &param_types,
+                args: &args_at_base,
+                raw_args: &static_call.args,
+                decl_return_type: declared_return,
+                expected_return_type: expected_at_base,
+                self_binding: SelfBinding::of_static(target_type_id, declaring_trait),
+                declaring_module: Some(sig.defaults_module.clone()),
+                impl_args: &impl_args,
+                inst: own_inst.as_ref(),
+                span: static_call.span,
+            };
+            (method_type_args, _) = if input.inst.is_some() {
+                self.bind_method_type_args(method_type_args, input)
+            } else {
+                self.bind_static_type_args(method_type_args, &qualified, input)
+            };
             self.instantiate_static_params(
                 Some(&sig),
                 &declaring_args,

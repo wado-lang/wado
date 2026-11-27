@@ -107,3 +107,60 @@ test "a literal argument takes the one impl's type" {
     let one = One { n: 7 };
     assert put(&one, 1) == 64;
 }
+
+struct Shapes { n: i32 }
+impl Source<&i32> for Shapes { fn first(&self) -> &i32 { return &self.n; } }
+impl Items<[i32, String]> for Shapes { fn items(&self) -> [i32, String] { return [self.n, "x"]; } }
+
+struct Thunk {}
+impl Source<fn() -> i32> for Thunk { fn first(&self) -> fn() -> i32 { return || 7; } }
+
+fn behind_ref<A, T: Source<&A>>(t: &T) -> A {
+    return *t.first();
+}
+
+fn in_tuple<A, T: Items<[A, String]>>(t: &T) -> A {
+    return t.items().0;
+}
+
+fn returned<A, T: Source<fn() -> A>>(t: &T) -> A {
+    let make = t.first();
+    return make();
+}
+
+test "behind a reference, in a tuple, in a function type" {
+    let shapes = Shapes { n: 7 };
+    let r = behind_ref(&shapes);
+    let t = in_tuple(&shapes);
+    let f = returned(&Thunk {});
+    assert `${r}` == "7" && `${t}` == "7" && `${f}` == "7";
+}
+
+trait Pair<R, A> with () {
+    fn pair(&self, a: A) -> i32;
+}
+
+impl Pair<i64, u64> for One {
+    fn pair(&self, a: u64) -> i32 {
+        return 64;
+    }
+}
+
+struct Typed<R> { r: R }
+
+impl<R> Typed<R> {
+    fn put<A, T: Pair<R, A>>(t: &T, a: A) -> i32 {
+        return t.pair(a);
+    }
+
+    fn give<A, T: Pair<R, A>>(&self, t: &T, a: A) -> i32 {
+        return t.pair(a);
+    }
+}
+
+test "a literal argument of a static on a written receiver" {
+    let one = One { n: 7 };
+    assert Typed::<i64>::put(&one, 1) == 64;
+    assert Typed::<i64> { r: 1 }.give(&one, 1) == 64;
+    assert Host::put::<_, One>(&Host {}, &one, 1) == 1;
+}

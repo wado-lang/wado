@@ -2565,21 +2565,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // reported, as the assert above allows.
                 if let [first, ..] = found_traits.as_slice() {
                     let trait_ = self.trait_at(first.trait_decl, &first.trait_args);
-                    self.report_tied_impls(defs, &trait_, receiver, span);
+                    let ties = self.tysys.tied_impl_errors(defs, &trait_, receiver, span);
+                    self.report_tie_where_it_answers(&mut found_traits, ties);
                 }
             }
             Some(Ordered::AmbiguousTraits(_)) => {
                 let tie = self.cross_trait_ambiguity(&found_traits, method_name, span);
-                let behind_referent = found_traits.iter().all(|m| {
-                    m.is_blanket_ref_impl && m.method_info.self_kind == ast::SelfKind::Ref
-                });
-                if behind_referent {
-                    for m in &mut found_traits {
-                        m.tie_behind_referent = Some(tie.clone());
-                    }
-                } else {
-                    let _ = self.emit(tie);
-                }
+                self.report_tie_where_it_answers(&mut found_traits, vec![tie]);
                 // The call continues on one of them only to recover, so it
                 // continues on one taking the receiver it was written with.
                 let takes_receiver =
@@ -3148,7 +3140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 blanket_binder: blanket_binder.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
-                tie_behind_referent: None,
+                tie_behind_referent: Vec::new(),
                 ref_impl_target,
             });
             method_found = true;
@@ -3201,7 +3193,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     blanket_binder,
                     impl_struct_fq,
                     is_blanket_ref_impl,
-                    tie_behind_referent: None,
+                    tie_behind_referent: Vec::new(),
                     ref_impl_target,
                 });
             }
@@ -3211,6 +3203,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(scope);
 
         found_traits
+    }
+
+    /// Make the reports `ties` of a tie among `found`, or leave them on the
+    /// matches where every one is a reference blanket's `&self` method: those
+    /// answer only where the referent has no method of the name, and the tie
+    /// is one only there.
+    fn report_tie_where_it_answers(&self, found: &mut [TraitMethodMatch], ties: Vec<TypeError>) {
+        let behind_referent = found
+            .iter()
+            .all(|m| m.is_blanket_ref_impl && m.method_info.self_kind == ast::SelfKind::Ref);
+        if behind_referent {
+            for m in found {
+                m.tie_behind_referent.clone_from(&ties);
+            }
+        } else {
+            for tie in ties {
+                let _ = self.emit(tie);
+            }
+        }
     }
 
     /// Report a tie the order left among one trait's impls

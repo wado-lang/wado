@@ -4496,10 +4496,10 @@ pub(super) struct TraitMethodMatch {
     /// `Inner`). A reference impl buckets by kind, so nothing else names the
     /// link a newtype inherits it through.
     pub(super) ref_impl_target: Option<TypeId>,
-    /// The tie this match stands for, among reference blankets that answer
-    /// only where the referent has no method of the name: the call adopting
-    /// the match reports it.
-    pub(super) tie_behind_referent: Option<TypeError>,
+    /// The reports of the tie this match stands for, among reference blankets
+    /// that answer only where the referent has no method of the name: the
+    /// call adopting the match makes them.
+    pub(super) tie_behind_referent: Vec<TypeError>,
 }
 
 impl TraitMethodMatch {

@@ -82,6 +82,13 @@ test "a qualified call names either" {
     assert Tag::<i32>::tag(&one) == 3;
 }
 
+test "the expected type selects where the qualified call writes `_`" {
+    let one = One { n: 3 };
+    let n: i32 = Pick::<_>::pick(&one);
+    let b: bool = Pick::<_>::pick(&one);
+    assert n == 7 && b;
+}
+
 trait SinkX<A> with () {
     fn x(&self, a: A) -> i32;
 }

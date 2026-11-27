@@ -741,7 +741,9 @@ of the reference, and a write to `*self` would land in the copy. The prelude's
 back to itself. `candidates` still ranks the blanket first, so the elaborator
 sets the solver's verdict aside for these methods. A tie the order reports
 among such blankets is set aside with it, and reported only where the referent
-has no method of the name (`trait_ref_blankets_tied_behind_referent.wado`).
+has no method of the name: a tie between two traits
+(`trait_ref_blankets_tied_behind_referent.wado`) and one between two blankets
+of one trait (`trait_ref_blankets_of_one_trait_tied_behind_referent.wado`).
 
 It adopts one for a receiver holding one reference only. On `&mut &mut I` the
 blanket's parameter would stand for `&mut I`, which the lookup does not hand
@@ -817,9 +819,14 @@ Rust: `put(&one, 1)` under `fn put<A, T: Sink<A>>(t: &T, a: A)` takes `1` as
 `i64` where `One` has `Sink<i64>` alone. A call settles its literals after its
 other arguments, and asks the bounds of its slots just before the default
 (`Elaborator::settle_slot_bounds_by_sole_impl`). Several impls leave the
-default, and so does a literal the type cannot take
-(`bound_several_impls_leave_literal_default.wado`). The cost is Rust's: a
+default (`bound_several_impls_leave_literal_default.wado`), and so does a
+literal the type cannot take
+(`bound_one_impl_leaves_unfit_literal_default.wado`). The cost is Rust's: a
 second impl changes what an existing call's literal is.
+
+A bound's argument holding a pack (`T: Source<[..P]>`) is settled from the one
+impl only where the impl's tuple has one element. A longer one leaves the pack
+empty, and the bound is then refused at `Source<[]>`.
 
 - [x] Settle a parameter only the trait reference names, at a method call and a
   static one alike.
