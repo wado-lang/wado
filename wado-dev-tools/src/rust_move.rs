@@ -969,6 +969,11 @@ fn without(lines: Vec<String>, cut: &[Range<usize>]) -> Vec<String> {
         after_cut = false;
         kept.push(line);
     }
+    if after_cut {
+        while kept.last().is_some_and(|last| last.trim().is_empty()) {
+            kept.pop();
+        }
+    }
     kept
 }
 
@@ -1456,6 +1461,19 @@ fn helper(n: usize) -> i32 {
                 "// License.\n#![allow(\n    dead_code\n)]\n\nfn f() {}"
             )),
             4
+        );
+    }
+
+    #[test]
+    fn cutting_the_last_item_leaves_no_blank_line_at_the_end() {
+        let lines = |text: &str| -> Vec<String> { text.lines().map(str::to_string).collect() };
+        assert_eq!(
+            without(lines("fn a() {}\n\nfn b() {}"), &[2..3]),
+            lines("fn a() {}")
+        );
+        assert_eq!(
+            without(lines("fn a() {}\n\nfn b() {}\n\nfn c() {}"), &[2..3]),
+            lines("fn a() {}\n\nfn c() {}")
         );
     }
 

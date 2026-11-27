@@ -1,14 +1,18 @@
 //! The spellings of a static call (`Type::method(…)`, `Type::<T>::method(…)`,
 //! `T::method(…)`), each resolved to the function it dispatches to.
 
+use std::ops::ControlFlow;
+
 use super::Elaborator;
 use super::call::ArgSite;
+use super::call::ArgsSite;
 use super::call::CaseSite;
 use super::call::GivenSlots;
 use super::call::InheritedStatic;
 use super::call::PathCall;
 use super::call::ResolvedArgs;
 use super::call::SigChoice;
+use super::call::StaticArgsReceiver;
 use super::call::StaticCallee;
 use super::call::StaticTypeArgs;
 use super::call::bind_nearer;
@@ -695,34 +699,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver = self
             .receiver_of(type_param_type_id)
             .written_as(type_param_name);
-        let args: Vec<TypeId> = if let Some(args) = pretyped_args {
-            args.to_vec()
-        } else {
-            // The blanket's parameters type the arguments. One naming the
-            // method's own slot waits for the call to solve it.
-            let sig = self.blanket_static_signature(&receiver, method_name);
-            let expected_of = |e: &Self, i: usize| {
-                let sig = sig.as_ref()?;
-                let param = *sig.param_types.get(i)?;
-                let open = e.tysys.type_table.borrow().mentions_any(param, &sig.slots);
-                (!open).then_some(param)
-            };
-            call.args
-                .iter()
-                .enumerate()
-                .map(|(i, arg)| {
-                    let expected = expected_of(self, i);
-                    self.resolve_expr(arg, ctx, expected)
-                })
-                .collect()
+        let signature = self.blanket_static_signature(&receiver, method_name);
+        let qualified = format!("{type_param_name}::{method_name}");
+        let resolved = match self.resolve_args_against(
+            signature,
+            ArgsSite {
+                call,
+                name: &qualified,
+                expected_type,
+                receiver: StaticArgsReceiver::Param,
+                self_type: Some(type_param_type_id),
+            },
+            pretyped_args.map(<[TypeId]>::to_vec),
+            ctx,
+        ) {
+            ControlFlow::Continue(resolved) => resolved,
+            ControlFlow::Break(reported) => return reported,
         };
         self.blanket_static_or_unknown(
             &receiver,
             method_name,
             ident,
             call,
-            None,
-            &args,
+            resolved.given_slots(),
+            &resolved.args,
             expected_type,
             ctx,
         )

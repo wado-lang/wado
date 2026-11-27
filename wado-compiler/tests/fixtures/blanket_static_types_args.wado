@@ -47,16 +47,24 @@ fn through_param<T: Marked>() -> i64 {
     return T::ap(|x| x + 6) as i64 + T::wide(5_000_000_000);
 }
 
+fn own_slot_through_param<T: Marked>() -> i64 {
+    let n: i64 = T::twice(|x| x + 1, 5_000_000_000);
+    return n;
+}
+
 // A second parameter of the block, settled by the receiver's bound.
 trait Holder with () { type Item; }
 impl Holder for S { type Item = i64; }
+impl<V> Holder for Bx<V> { type Item = V; }
 trait TakeIt<A> with () {
     fn take(a: A) -> A;
     fn many(xs: List<A>) -> i32;
+    fn beside(seed: Self, xs: List<A>) -> A;
 }
 impl<A, T: Holder<Item = A>> TakeIt<A> for T {
     fn take(a: A) -> A { return a; }
     fn many(xs: List<A>) -> i32 { return xs.len(); }
+    fn beside(_seed: T, xs: List<A>) -> A { return xs[1]; }
 }
 
 // `Narrow` withholds the `Ord` its base derives, so the blanket's bound holds
@@ -79,6 +87,15 @@ impl<T: Marked> Coll for T {
 test "a generic receiver spelled without its arguments" {
     let bx = Bx::<i32> { v: 1 };
     assert Bx::collect(bx, [1, 5_000_000_000]) == 5_000_000_003;
+}
+
+test "its instance settling a second parameter of the block" {
+    let bx = Bx::<i64> { v: 1 };
+    assert Bx::beside(bx, [1, 5_000_000_000]) == 5_000_000_000;
+}
+
+test "the method's own slot, on a bound parameter" {
+    assert own_slot_through_param::<S>() == 5_000_000_002;
 }
 
 test "a primitive receiver" {

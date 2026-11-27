@@ -136,6 +136,29 @@ pub(super) struct CallSolve<'a> {
     pub(super) ret: Option<(TypeId, TypeId)>,
 }
 
+/// Whose static a call's arguments are typed for.
+#[derive(Clone, Copy)]
+pub(super) enum StaticArgsReceiver<'a> {
+    /// A free function: no receiver.
+    None,
+    /// A named type, whose own rules apply: the link a newtype inherits the
+    /// static from, and the literal preselect.
+    Named(&'a ReceiverId),
+    /// A type parameter, which declares nothing itself.
+    Param,
+}
+
+/// The call [`Elaborator::resolve_args_against`] types the arguments of.
+pub(super) struct ArgsSite<'a> {
+    pub(super) call: &'a ast::CallExpr,
+    /// The callee as diagnostics name it.
+    pub(super) name: &'a str,
+    pub(super) expected_type: Option<TypeId>,
+    pub(super) receiver: StaticArgsReceiver<'a>,
+    /// What `Self` reads as in a slot's bound.
+    pub(super) self_type: Option<TypeId>,
+}
+
 /// A callee's signature in its declaration's own frame, as a call site reads it.
 #[derive(Default)]
 pub(super) struct CalleeSignature {
@@ -163,7 +186,10 @@ impl CalleeSignature {
         }
     }
 
-    fn of_method(sig: &MethodSig, slot_decls: (Vec<ParamRef>, Vec<ast::GenericParam>)) -> Self {
+    pub(super) fn of_method(
+        sig: &MethodSig,
+        slot_decls: (Vec<ParamRef>, Vec<ast::GenericParam>),
+    ) -> Self {
         Self {
             declaring_slot_count: sig.declaring_type_params().len(),
             ..Self::of(&sig.decl, slot_decls)
@@ -660,6 +686,15 @@ pub(super) struct ResolvedArgs {
     pub(super) slot_instantiation: Option<Instantiated>,
     /// Whether the callee's signature was found, and so its arity checked.
     signature_known: bool,
+}
+
+impl ResolvedArgs {
+    pub(super) fn given_slots(&self) -> Option<GivenSlots<'_>> {
+        self.slot_instantiation.as_ref().map(|inst| GivenSlots {
+            slots: &self.callee_slots,
+            inst,
+        })
+    }
 }
 
 /// An operation of an `interface` or resource, as a callee names it.
@@ -2014,6 +2049,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             effect_op,
             callee_site,
         );
+        self.resolve_args_against(
+            signature,
+            ArgsSite {
+                call,
+                name: effective_name,
+                expected_type,
+                receiver: match &static_method_receiver {
+                    Some(receiver) => StaticArgsReceiver::Named(receiver),
+                    None => StaticArgsReceiver::None,
+                },
+                self_type: prefix_receiver.as_ref().and_then(ReceiverId::ty),
+            },
+            pretyped_args,
+            ctx,
+        )
+    }
+
+    /// Types a call's arguments against `signature`, its slots instantiated
+    /// so that the arguments decide them.
+    pub(super) fn resolve_args_against(
+        &mut self,
+        signature: Option<CalleeSignature>,
+        site: ArgsSite<'_>,
+        pretyped_args: Option<Vec<TypeId>>,
+        ctx: &mut FunctionContext,
+    ) -> ControlFlow<TypeId, ResolvedArgs> {
+        let ArgsSite {
+            call,
+            name: effective_name,
+            expected_type,
+            receiver,
+            self_type,
+        } = site;
+        let static_method_receiver = match receiver {
+            StaticArgsReceiver::Named(receiver) => Some(receiver),
+            StaticArgsReceiver::None | StaticArgsReceiver::Param => None,
+        };
         let signature_known = signature.is_some();
         let CalleeSignature {
             mut param_types,
@@ -2042,11 +2114,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // own and opaque here, so a literal checked against `List<T>` reports
         // every element as heterogeneous; against `List<?0>` the check defers
         // and the elements decide what `?0` is.
-        let kind = match static_method_receiver {
-            Some(_) => InstanceKind::Static {
+        let kind = match receiver {
+            StaticArgsReceiver::Named(_) | StaticArgsReceiver::Param => InstanceKind::Static {
                 declaring: declaring_slot_count,
             },
-            None => InstanceKind::Function,
+            StaticArgsReceiver::None => InstanceKind::Function,
         };
         let mut slot_instantiation = (!callee_slots.is_empty()).then(|| {
             self.instantiate(
@@ -2067,10 +2139,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inst.links = Some(SlotLinks {
                 owners: owners.clone(),
                 names: names.clone(),
-                self_binding: prefix_receiver
-                    .as_ref()
-                    .and_then(ReceiverId::ty)
-                    .map(|receiver| SelfBinding::of_static(receiver, None)),
+                self_binding: self_type.map(|receiver| SelfBinding::of_static(receiver, None)),
                 span: call.span,
             });
         }
@@ -2082,7 +2151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // A static a newtype inherits is solved at the link declaring it,
         // whichever path names the newtype.
-        let expected_at_owner = match static_method_receiver.as_ref().map(static_method) {
+        let expected_at_owner = match static_method_receiver.map(static_method) {
             Some((receiver, method_name)) => {
                 let owner = self.static_owner_key(receiver, method_name);
                 let newtype = (&owner != receiver.key())
@@ -2104,7 +2173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Literal preselect on a static call's arguments (WEP 2026-07-31
         // phase 4): see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
-        if let Some((receiver, method_name)) = static_method_receiver.as_ref().map(static_method) {
+        if let Some((receiver, method_name)) = static_method_receiver.map(static_method) {
             let preselected = self.preselect_static_args(
                 StaticReceiver {
                     expected_return: expected_type,
@@ -2259,24 +2328,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(receiver) = &receivers.static_method_receiver
             && let Some(receiver_type) = self.static_receiver_type_as_written(site, prefix)
         {
-            return ControlFlow::Break(
-                self.blanket_static_or_unknown(
-                    &receiver.at_type(Some(receiver_type)),
-                    method_name,
-                    ident,
-                    call,
-                    resolved_args
-                        .slot_instantiation
-                        .as_ref()
-                        .map(|inst| GivenSlots {
-                            slots: &resolved_args.callee_slots,
-                            inst,
-                        }),
-                    &resolved_args.args,
-                    expected_type,
-                    ctx,
-                ),
-            );
+            return ControlFlow::Break(self.blanket_static_or_unknown(
+                &receiver.at_type(Some(receiver_type)),
+                method_name,
+                ident,
+                call,
+                resolved_args.given_slots(),
+                &resolved_args.args,
+                expected_type,
+                ctx,
+            ));
         }
         // Namespace import: `use ns from "..."` then `ns::Type::method()`
         // or `ns::func()`.

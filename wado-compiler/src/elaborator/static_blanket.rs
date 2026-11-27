@@ -40,6 +40,7 @@ use crate::name::MethodName;
 use crate::tir::FunctionRef;
 use crate::tir::MonomorphInfo;
 use crate::tir::ResolvedType;
+use crate::tir::TypeArgMap;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
 
@@ -146,15 +147,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("the decl pass records every impl-declared method's signature");
         let template_params = sig.value_param_types();
         let template_return = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
-        let blanket_slot = self.tysys.blanket_param_slot(blanket, blanket_param);
-        // The receiver settles the block's other parameters through its
-        // bounds: `A` in `impl<A, T: Holder<Item = A>> Trait<A> for T`.
-        let block_slots = {
-            let mut table = self.tysys.type_table.borrow_mut();
-            let mut slots = table.bind_params(&[blanket_slot], &[receiver_type_id]);
-            table.project_impl_slots(blanket, &mut slots);
-            slots
-        };
+        let block_slots = self.blanket_block_slots(blanket, blanket_param, receiver_type_id);
         let param_types = template_params
             .iter()
             .map(|&pt| self.substitute_map_in_frame(&block_slots, pt))
@@ -163,6 +156,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types,
             self.substitute_map_in_frame(&block_slots, template_return),
         )
+    }
+
+    /// The blanket's block parameters at `receiver_type_id`: its own is the
+    /// receiver, which settles the others through its bounds, `A` in
+    /// `impl<A, T: Holder<Item = A>> Trait<A> for T`.
+    fn blanket_block_slots(
+        &mut self,
+        blanket: DefId,
+        blanket_param: &str,
+        receiver_type_id: TypeId,
+    ) -> TypeArgMap {
+        let blanket_slot = self.tysys.blanket_param_slot(blanket, blanket_param);
+        let mut table = self.tysys.type_table.borrow_mut();
+        let mut slots = table.bind_params(&[blanket_slot], &[receiver_type_id]);
+        table.project_impl_slots(blanket, &mut slots);
+        slots
     }
 
     /// [`Self::blanket_static_at_receiver`] for the blanket a resolution
@@ -277,19 +286,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The variables the call typed its arguments by are answered by this
         // solve: left open, a slot only its default settles is reported.
         if let Some(given) = given {
+            let block_slots =
+                self.blanket_block_slots(blanket_def, &blanket_param, receiver_type_id);
             let solved: Vec<TypeId> = given
                 .slots
                 .iter()
                 .zip(&given.inst.vars)
-                .map(|(slot, &var)| {
-                    if *slot == blanket_slot {
-                        return receiver_type_id;
-                    }
-                    slots
+                .map(|(&slot, &var)| {
+                    if let Some(&answer) = slots
                         .iter()
                         .zip(&method_type_args)
-                        .find_map(|(own, &answer)| (own == slot).then_some(answer))
-                        .unwrap_or(var)
+                        .find_map(|(&own, answer)| (own == slot).then_some(answer))
+                    {
+                        return answer;
+                    }
+                    let at_receiver = self.substitute_map_in_frame(&block_slots, slot);
+                    if at_receiver == slot {
+                        var
+                    } else {
+                        at_receiver
+                    }
                 })
                 .collect();
             self.record_instantiation(given.inst, &solved);
@@ -439,28 +455,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let trait_env = Arc::clone(&self.tysys.trait_env);
-        let [(blanket, sig)] = self.value_blanket_statics(&trait_env, method_name)[..] else {
+        let [(_, sig)] = self.value_blanket_statics(&trait_env, method_name)[..] else {
             return None;
         };
-        let header = &trait_env.impl_headers[&blanket.def];
-        let receiver_param = header
-            .type_params
-            .iter()
-            .find(|param| param.name == blanket.param)
-            .expect("a value blanket declares its receiver parameter")
-            .clone();
-        let slot = self.tysys.blanket_param_slot(blanket.def, &blanket.param);
-        let mut slots = vec![slot];
-        slots.extend(sig.own_type_param_ids());
-        let mut decls = vec![receiver_param];
-        decls.extend(sig.own_params.iter().cloned());
-        Some(CalleeSignature {
-            param_types: sig.value_param_types(),
-            slots,
-            declaring_slot_count: 1,
-            return_type: sig.decl.return_type,
-            slot_decls: (slot_names(&decls, &self.tysys.resolutions), decls),
-        })
+        Some(CalleeSignature::of_method(sig, self.sig_slots(sig)))
     }
 
     /// Each value blanket declaring a static `method_name`, with the
