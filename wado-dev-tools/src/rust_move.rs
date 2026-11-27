@@ -623,17 +623,17 @@ impl Move {
             // The import the move plans is private, and a private import
             // re-exports nothing.
             let source_uses = use_items(&source.text);
-            let reexported = references.iter().any(|(path, at)| {
+            let reexports = references.iter().filter(|(path, at)| {
                 *path == item.source
                     && source_uses.iter().any(|u| {
                         u.lines.contains(&at.line)
                             && declared_visibility(&source.lines[u.lines.start]).is_some()
                     })
             });
-            if reexported {
+            for (_, at) in reexports {
                 fixes.by_hand(format!(
                     "{} re-exports `{}`, which now lives in {}",
-                    display_path(&source.path),
+                    display_position(&source.path, *at),
                     item.name,
                     display_path(&destination.path)
                 ));
@@ -1679,7 +1679,8 @@ fn helper(n: usize) -> i32 {
             ),
             (
                 "src/a.rs",
-                "pub use self::make as exported;\n\npub fn make() -> i32 {\n    1\n}\n\n\
+                "pub use self::make as exported;\npub use self::make as also;\n\n\
+                 pub fn make() -> i32 {\n    1\n}\n\n\
                  pub fn shout() -> i32 {\n    super::b::value()\n}\n",
             ),
             ("src/b.rs", "pub fn value() -> i32 {\n    1\n}\n"),
@@ -1694,7 +1695,14 @@ fn helper(n: usize) -> i32 {
         )
         .unwrap()
         .join("\n");
-        assert!(report.contains("re-exports `make`"), "{report}");
+        assert!(
+            report.contains("src/a.rs:1:15 re-exports `make`"),
+            "{report}"
+        );
+        assert!(
+            report.contains("src/a.rs:2:15 re-exports `make`"),
+            "{report}"
+        );
         assert!(report.contains("reads `super::`"), "{report}");
     }
 
