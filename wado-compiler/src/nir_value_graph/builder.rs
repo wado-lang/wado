@@ -1411,10 +1411,10 @@ impl<'a> Builder<'a> {
                 None
             }
             ExprKind::ArrayLiteral { elements } => {
-                for e in &elements {
-                    self.walk_operand(*e);
-                }
                 let len = self.pool.int_typed(elements.len() as u64, TypeTable::I32);
+                for e in elements {
+                    self.walk_operand(e);
+                }
                 Some(self.record_array(len))
             }
             ExprKind::VariantConstruct { payload, .. } => {
