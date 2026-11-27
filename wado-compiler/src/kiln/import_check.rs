@@ -254,14 +254,7 @@ pub fn inject_kiln_request_adapter(
         quoted: None,
         name_id: module.alloc_ast_id(),
         name_span: span,
-        value: Expr::Ident(IdentExpr {
-            id: module.alloc_ast_id(),
-            name: name.to_string(),
-            span,
-            segments: Vec::new(),
-            type_args: Vec::new(),
-            type_args_on_prefix: false,
-        }),
+        value: ident_expr(module, name, span),
         is_shorthand: false,
         span,
     };
@@ -366,23 +359,9 @@ pub fn inject_kiln_request_adapter(
     // function's scope.
     let call = Expr::Call(Box::new(CallExpr {
         id: module.alloc_ast_id(),
-        callee: Expr::Ident(IdentExpr {
-            id: module.alloc_ast_id(),
-            name: KILN_ADAPTER_GENERATE.to_string(),
-            span,
-            segments: Vec::new(),
-            type_args: Vec::new(),
-            type_args_on_prefix: false,
-        }),
+        callee: ident_expr(module, KILN_ADAPTER_GENERATE, span),
         type_args: Vec::new(),
-        args: vec![Expr::Ident(IdentExpr {
-            id: module.alloc_ast_id(),
-            name: param_name,
-            span,
-            segments: Vec::new(),
-            type_args: Vec::new(),
-            type_args_on_prefix: false,
-        })],
+        args: vec![ident_expr(module, &param_name, span)],
         has_trailing_comma: false,
         span,
     }));
@@ -433,8 +412,14 @@ pub fn inject_kiln_request_adapter(
         doc: None,
         span: fn_span,
     };
-    module.items.insert(item_idx + 1, Item::Function(wire_generate));
+    module
+        .items
+        .insert(item_idx + 1, Item::Function(wire_generate));
     module.items.insert(0, Item::Use(kiln_use));
+}
+
+fn ident_expr(module: &mut Module, name: &str, span: Span) -> Expr {
+    IdentExpr::bare(module.alloc_ast_id(), name, span)
 }
 
 /// `core:kiln`'s `name {}`, for a struct with no fields.

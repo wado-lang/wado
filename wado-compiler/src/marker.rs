@@ -170,17 +170,6 @@ fn marker_payload(block: &ImplBlock) -> Option<&Type> {
     }
 }
 
-fn ident(id: AstId, name: &str, span: Span) -> Expr {
-    Expr::Ident(IdentExpr {
-        id,
-        name: name.to_string(),
-        span,
-        segments: Vec::new(),
-        type_args: Vec::new(),
-        type_args_on_prefix: false,
-    })
-}
-
 /// `a::b`, as the parser spells a path.
 fn path(fresh: &mut impl FnMut() -> AstId, segments: [&str; 2], span: Span) -> Expr {
     Expr::Ident(IdentExpr {
@@ -261,7 +250,7 @@ fn from_method(module: &mut Module, source: &Type, span: Span) -> Function {
         id: fresh(),
         callee,
         type_args: turbofish,
-        args: vec![ident(fresh(), &value_name, span)],
+        args: vec![IdentExpr::bare(fresh(), &value_name, span)],
         has_trailing_comma: false,
         span,
     }));
@@ -294,7 +283,7 @@ fn waitable_method(module: &mut Module, cases: &[(String, bool)], span: Span) ->
                 };
                 let call = Expr::MethodCall(Box::new(MethodCallExpr {
                     id: fresh(),
-                    receiver: ident(fresh(), &member, span),
+                    receiver: IdentExpr::bare(fresh(), &member, span),
                     method: WAIT_ON.to_string(),
                     method_id: fresh(),
                     method_span: span,
@@ -334,7 +323,7 @@ fn waitable_method(module: &mut Module, cases: &[(String, bool)], span: Span) ->
         .collect();
     let value = Expr::Match(Box::new(MatchExpr {
         id: fresh(),
-        expr: ident(fresh(), "self", span),
+        expr: IdentExpr::bare(fresh(), "self", span),
         arms,
         span,
     }));

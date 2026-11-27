@@ -11,17 +11,13 @@ use { LoweredGrammar, Rule, RuleHeader, rule_header } from "./gir.wado";
 use { CodeWriter, EnumSpec, FnSpec, GlobalSpec, ImplSpec, Vis } from "wado-lang:wadopoet";
 use { to_pascal_case, escape_case, rule_kind_const } from "./gen_util.wado";
 
-fn rule_name(rule: &Rule) -> String {
-    return rule_header(rule).name;
-}
-
 /// Emit the per-rule `RK_<RULE>` node-kind constants and the `RULE_NAMES`
 /// table (rule-index order); the name table drives `to_string_tree`. The
 /// `RK_*` constants are `pub` so a consumer can dispatch on a node's kind
 /// (e.g. an interpreter walking the tree).
 pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     for let mut i = 0; i < rules.len(); i += 1 {
-        GlobalSpec::new(rule_kind_const(&rule_name(&rules[i])), "NodeKind", `${i}`, Vis::Pub).emit(w);
+        GlobalSpec::new(rule_kind_const(&rule_header(&rules[i]).name), "NodeKind", `${i}`, Vis::Pub).emit(w);
     }
     w.blank();
     let mut names = String::with_capacity(rules.len() * 12);
@@ -31,7 +27,7 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
             names.push_str(", ");
         }
         names.push('"');
-        names.push_str(&rule_name(&rules[i]));
+        names.push_str(&rule_header(&rules[i]).name);
         names.push('"');
     }
     names.push(']');
