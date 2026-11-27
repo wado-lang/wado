@@ -21,7 +21,7 @@ use crate::rust_rename::edit::{self, Position};
 use crate::rust_rename::lsp::{Client, file_uri, uri_path};
 use crate::rust_rename::symbol::Location;
 use crate::rust_rename::{Locator, Mode, await_workspace, display_path, start_server};
-use text::{Binding, UseItem, identifiers, is_keyword, use_items};
+use text::{Binding, UseItem, code_only, identifiers, is_keyword, use_items};
 
 /// `SymbolKind` values of the LSP specification.
 const MODULE_KIND: u64 = 2;
@@ -103,6 +103,8 @@ struct Document {
     path: PathBuf,
     uri: String,
     text: String,
+    /// `text` with its comments and literals blanked, at the same offsets.
+    code: String,
     lines: Vec<String>,
     /// Its `DocumentSymbol` tree.
     symbols: Vec<Value>,
@@ -142,6 +144,7 @@ impl Document {
             uri,
             lines: text.lines().map(str::to_string).collect(),
             identifiers,
+            code: code_only(&text),
             text,
             symbols: symbols.as_array().cloned().unwrap_or_default(),
         })
@@ -245,17 +248,21 @@ fn find_symbol<'a>(
 fn impl_header_range(document: &Document, block: &Value) -> Range<usize> {
     let start = document.offset(Position::from_lsp(&block["range"]["start"]));
     let name_at = document.offset(name_position(block));
-    // A const argument (`impl Slot<{ 1 + 1 }>`) opens a brace inside the
-    // angle brackets; the arrow of a function type closes none.
-    let mut depth = 0usize;
+    // A const argument (`impl Slot<{ 2 > 1 }>`) opens a brace inside the
+    // angle brackets, which an operator in it does not close, and the arrow
+    // of a function type closes none. A comment or a literal is no code.
+    let mut angles = 0usize;
+    let mut braces = 0usize;
     let mut previous = ' ';
-    let brace = document.text[name_at..]
+    let brace = document.code[name_at..]
         .char_indices()
         .find_map(|(at, c)| {
             match c {
-                '<' => depth += 1,
-                '>' if previous != '-' => depth -= 1,
-                '{' if depth == 0 => return Some(name_at + at),
+                '{' if angles == 0 => return Some(name_at + at),
+                '{' => braces += 1,
+                '}' => braces -= 1,
+                '<' if braces == 0 => angles += 1,
+                '>' if braces == 0 && previous != '-' => angles -= 1,
                 _ => {}
             }
             previous = c;
@@ -991,16 +998,15 @@ fn mark_emptied_blocks(sources: &BTreeMap<PathBuf, Document>, moved: &mut [Moved
             };
             // Not by its symbols alone: the server lists neither a comment nor
             // a macro invocation, and the block keeps what does not move.
-            let header_line = impl_header_line(source, block);
+            let open = impl_header_range(source, block).end;
+            let header_line = source.text[..open].matches('\n').count();
             let close_line = block_span.end - 1;
-            let after_brace = {
-                let line = &source.lines[header_line];
-                &line[line.rfind('{').expect("the header line opens the block") + 1..]
-            };
-            let before_close = {
-                let line = &source.lines[close_line];
-                &line[..line.rfind('}').expect("the last line closes the block")]
-            };
+            let after_brace = source.text[open + 1..]
+                .lines()
+                .next()
+                .expect("the header line opens the block");
+            let close = Position::from_lsp(&block["range"]["end"]);
+            let before_close = &source.lines[close_line][..close.column - '}'.len_utf8()];
             let body = header_line + 1..close_line;
             let all_move = !children(block).is_empty()
                 && header_line < close_line
@@ -1628,13 +1634,13 @@ fn helper(n: usize) -> i32 {
     fn a_block_keeps_what_its_brace_lines_hold() {
         let (dir, _) = a_to_b(
             "pub struct S;\n\nmacro_rules! extra {\n    () => {};\n}\n\n\
-             impl S { extra!();\n    pub fn one(&self) -> i32 {\n        1\n    }\n}\n",
+             impl S { extra!(); // {\n\n    pub fn one(&self) -> i32 {\n        1\n    }\n}\n",
             "",
             "a::S.one()",
             &["probe::a::S::one"],
         );
         let a = read(&dir, "src/a.rs");
-        assert!(a.contains("impl S { extra!();"), "{a}");
+        assert!(a.contains("impl S { extra!(); // {"), "{a}");
     }
 
     #[test]
@@ -1646,7 +1652,7 @@ fn helper(n: usize) -> i32 {
             ),
             (
                 "src/a.rs",
-                "pub struct Slot<const N: usize>;\n\nimpl Slot<{ 1 + 1 }> {\n    \
+                "pub struct Slot<const N: usize>;\n\nimpl Slot<{ (2 > 1) as usize + 1 }> {\n    \
                  pub fn width(&self) -> usize {\n        2\n    }\n}\n",
             ),
             ("src/b.rs", "use super::a::Slot;\n"),
@@ -1661,7 +1667,7 @@ fn helper(n: usize) -> i32 {
         )
         .unwrap();
         let b = read(&dir, "src/b.rs");
-        assert!(b.contains("impl Slot<{ 1 + 1 }> {"), "{b}");
+        assert!(b.contains("impl Slot<{ (2 > 1) as usize + 1 }> {"), "{b}");
     }
 
     #[test]

@@ -69,7 +69,7 @@ pub fn identifiers(text: &str) -> Vec<(usize, &str)> {
 
 /// `text` with every comment and literal blanked, byte for byte and line for
 /// line: what is left is code, at the offsets it has in `text`.
-fn code_only(text: &str) -> String {
+pub fn code_only(text: &str) -> String {
     let mut code = String::with_capacity(text.len());
     let mut at = 0;
     while at < text.len() {
