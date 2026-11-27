@@ -1467,12 +1467,13 @@ fn helper(n: usize) -> i32 {
     #[test]
     fn cutting_the_last_item_leaves_no_blank_line_at_the_end() {
         let lines = |text: &str| -> Vec<String> { text.lines().map(str::to_string).collect() };
+        let third_line = std::slice::from_ref(&(2..3));
         assert_eq!(
-            without(lines("fn a() {}\n\nfn b() {}"), &[2..3]),
+            without(lines("fn a() {}\n\nfn b() {}"), third_line),
             lines("fn a() {}")
         );
         assert_eq!(
-            without(lines("fn a() {}\n\nfn b() {}\n\nfn c() {}"), &[2..3]),
+            without(lines("fn a() {}\n\nfn b() {}\n\nfn c() {}"), third_line),
             lines("fn a() {}\n\nfn c() {}")
         );
     }

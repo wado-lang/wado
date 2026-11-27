@@ -119,10 +119,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// at the link that owns the call, which need not be the receiver's head:
     /// a newtype may withhold a trait its base derives.
     fn picked_blanket_static(&self, blanket: DefId) -> BlanketStatic {
+        self.blanket_static(self.picked_blanket(blanket))
+            .expect("the resolution picks a blanket whose trait resolves")
+    }
+
+    fn picked_blanket(&self, blanket: DefId) -> &BlanketImpl {
         self.tysys
             .trait_env
             .blanket_of_block(blanket)
-            .and_then(|candidate| self.blanket_static(candidate))
             .expect("the resolution picks a blanket the index holds")
     }
 
@@ -198,13 +202,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_id: TypeId,
         trait_args: &[TypeId],
     ) -> TypeArgMap {
-        let trait_env = &self.tysys.trait_env;
-        let blanket = trait_env
-            .blanket_of_block(blanket)
-            .expect("the resolution picks a blanket the index holds");
         blanket_settled_slots(
-            trait_env,
-            blanket,
+            &self.tysys.trait_env,
+            self.picked_blanket(blanket),
             receiver_type_id,
             trait_args,
             &mut self.tysys.type_table.borrow_mut(),
@@ -398,13 +398,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The receiver, then whatever its bounds project and the trait
         // arguments set: what an instance call through the same impl keys on.
         let impl_type_args = if sets_params {
-            let trait_env = Arc::clone(&self.tysys.trait_env);
-            let blanket_impl = trait_env
-                .blanket_of_block(blanket_def)
-                .expect("the resolution picks a blanket the index holds");
             blanket_impl_args(
-                &trait_env,
-                blanket_impl,
+                &self.tysys.trait_env,
+                self.picked_blanket(blanket_def),
                 receiver_type_id,
                 &trait_args,
                 &mut self.tysys.type_table.borrow_mut(),
