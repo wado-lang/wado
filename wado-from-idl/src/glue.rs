@@ -651,7 +651,7 @@ fn lower(ty: &WadoType, value: &str, place: Place) -> String {
 /// answers `result`.
 fn callback(params: &[WadoType], result: Option<&WadoType>, closure: &str) -> String {
     let word = |ty: &WadoType| {
-        ty.callback_argument_word()
+        ty.callback_value_word()
             .unwrap_or_else(|| unreachable!("the WebIDL frontend admits no {ty:?} in a callback"))
     };
     let export = cm_callback_func_name(&callback_export_name(
@@ -665,16 +665,16 @@ fn callback(params: &[WadoType], result: Option<&WadoType>, closure: &str) -> St
         .map(|(ty, name)| format!(", {}", lower(ty, name, Place::Whole)))
         .collect();
     let taken: Vec<String> = names.iter().map(|name| format!(", {name}")).collect();
+    let call = |entry: String| format!("{entry}(closure{})", lowered.concat());
     // The page reads a result before it goes on, so a callback answering one
     // runs to its end, entered directly: a `wait` inside it traps.
-    let entry = match result {
-        Some(_) => format!("$core.exports[{export:?}]"),
-        None => format!("$enter({export:?})"),
+    let answer = match result {
+        Some(ty) => {
+            let value = call(format!("$core.exports[{export:?}]"));
+            lift(ty, &mut CaseValues(vec![value].into_iter()), Place::Whole)
+        }
+        None => call(format!("$enter({export:?})")),
     };
-    let call = format!("{entry}(closure{})", lowered.concat());
-    let answer = result.map_or(call.clone(), |ty| {
-        lift(ty, &mut CaseValues(vec![call].into_iter()), Place::Whole)
-    });
     format!(
         "$callback({closure}, (closure{}) => {answer})",
         taken.concat()

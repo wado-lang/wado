@@ -1816,7 +1816,7 @@ impl Lowering<'_> {
                     return uncallable(argument("optional"));
                 }
                 let ty = self.lower_type(&arg.idl_type, Flow::Out)?;
-                if ty.callback_argument_word().is_some() {
+                if ty.callback_value_word().is_some() {
                     return Ok(ty);
                 }
                 uncallable(argument("neither a scalar nor a handle"))
@@ -1826,7 +1826,7 @@ impl Lowering<'_> {
             None
         } else {
             let ty = self.lower_type(return_type, Flow::In)?;
-            if ty.callback_argument_word().is_none() {
+            if ty.callback_value_word().is_none() {
                 return uncallable("a result neither a scalar nor a handle".to_string());
             }
             Some(Box::new(ty))
