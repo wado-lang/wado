@@ -20,6 +20,17 @@ impl<A, T: Marked> TakeIt<A> for T {
     fn pair(value: A) -> [A, A] { return [value, value]; }
 }
 
+// `Bx` meets `Marked` alone, so `Rare`'s blanket supplies it no `keep`.
+trait Rare with () { fn rare(&self) -> i32; }
+trait Keep<A> with () { fn keep(seed: Self, value: A) -> A; }
+impl<A, T: Marked> Keep<A> for T {
+    fn keep(_seed: T, value: A) -> A { return value; }
+}
+trait KeepRare<A> with () { fn keep(seed: Self, value: A) -> A; }
+impl<A, T: Rare> KeepRare<A> for T {
+    fn keep(_seed: T, value: A) -> A { return value; }
+}
+
 fn through_param<T: Marked>(seed: T) -> i64 {
     let n: i64 = T::take(seed, 5_000_000_000);
     return n;
@@ -45,6 +56,25 @@ test "a literal nothing else types" {
 test "a generic receiver spelled without its arguments" {
     let n: i64 = 5_000_000_000;
     assert Bx::take(Bx::<i32> { v: 1 }, n) == 5_000_000_000;
+}
+
+test "beside a blanket whose bound the receiver fails" {
+    let n: i64 = 5_000_000_000;
+    assert Bx::keep(Bx::<i32> { v: 1 }, n) == 5_000_000_000;
+}
+
+test "the trait named with its argument" {
+    let n: i64 = 5_000_000_000;
+    assert TakeIt::<i64, Self = S>::take(S { v: 1 }, n) == 5_000_000_000;
+    assert TakeIt::<String, Self = S>::take(S { v: 1 }, "a") == "a";
+    assert TakeIt::<i64, Self = S>::take(S { v: 1 }, 5_000_000_000) == 5_000_000_000;
+}
+
+test "the trait named, its argument left to the call" {
+    let n: i64 = 5_000_000_000;
+    assert TakeIt::<_, Self = S>::take(S { v: 1 }, n) == 5_000_000_000;
+    let m: i64 = TakeIt::<_, Self = S>::take(S { v: 1 }, 5_000_000_000);
+    assert m == 5_000_000_000;
 }
 
 test "a receiver that is a bound parameter" {

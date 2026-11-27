@@ -245,10 +245,23 @@ fn find_symbol<'a>(
 fn impl_header_range(document: &Document, block: &Value) -> Range<usize> {
     let start = document.offset(Position::from_lsp(&block["range"]["start"]));
     let name_at = document.offset(name_position(block));
-    let brace = name_at
-        + document.text[name_at..]
-            .find('{')
-            .expect("an impl block opens a brace");
+    // A const argument (`impl Slot<{ 1 + 1 }>`) opens a brace inside the
+    // angle brackets; the arrow of a function type closes none.
+    let mut depth = 0usize;
+    let mut previous = ' ';
+    let brace = document.text[name_at..]
+        .char_indices()
+        .find_map(|(at, c)| {
+            match c {
+                '<' => depth += 1,
+                '>' if previous != '-' => depth -= 1,
+                '{' if depth == 0 => return Some(name_at + at),
+                _ => {}
+            }
+            previous = c;
+            None
+        })
+        .expect("an impl block opens a brace");
     start..brace
 }
 
@@ -519,6 +532,22 @@ impl Move {
                 return destination.imported(client, binding).map(Some);
             }
         }
+        // A glob or the prelude binds it without naming it, and an explicit
+        // import would outrank either: what the destination's own code reads
+        // by the bare name says.
+        let bare_use = destination.identifiers.iter().find(|(at, written)| {
+            let before = destination.lines[at.line][..at.column].trim_end();
+            written == name
+                && !self.destination_uses.iter().any(|u| u.lines.contains(&at.line))
+                && !before.ends_with('.')
+                && !before.ends_with("::")
+        });
+        if let Some((at, _)) = bare_use {
+            let meaning = destination.definitions(client, *at)?;
+            if !meaning.is_empty() {
+                return Ok(Some(meaning));
+            }
+        }
         Ok(None)
     }
 
@@ -581,6 +610,24 @@ impl Move {
                     }
                 }
             }
+            // The import the move plans is private, and a private import
+            // re-exports nothing.
+            let source_uses = use_items(&source.text);
+            let reexported = references.iter().any(|(path, at)| {
+                *path == item.source
+                    && source_uses.iter().any(|u| {
+                        u.lines.contains(&at.line)
+                            && declared_visibility(&source.lines[u.lines.start]).is_some()
+                    })
+            });
+            if reexported {
+                fixes.by_hand(format!(
+                    "{} re-exports `{}`, which now lives in {}",
+                    display_path(&source.path),
+                    item.name,
+                    display_path(&destination.path)
+                ));
+            }
             let users: BTreeSet<PathBuf> = references
                 .into_iter()
                 .filter(|(path, at)| *path != destination.path && !self.is_moved(path, at.line))
@@ -634,6 +681,15 @@ impl Move {
             let source = &self.sources[&item.source];
             let mut read: BTreeSet<(usize, usize)> = BTreeSet::new();
             for (position, name) in source.mentions(item) {
+                // `super` names the parent of the module the code is in,
+                // which only a sibling shares.
+                if name == "super" && !are_siblings(source, destination) {
+                    fixes.by_hand(format!(
+                        "{} reads `super::`, which names another module in {}",
+                        display_position(&source.path, *position),
+                        display_path(&destination.path)
+                    ));
+                }
                 if is_keyword(name) {
                     continue;
                 }
@@ -893,6 +949,14 @@ fn moved_item(source: &Document, position: Position) -> Result<Moved, String> {
         }
     };
     let span = line_span(symbol);
+    // Its file stays where the module tree put it, under the source's path.
+    if symbol["kind"].as_u64() == Some(MODULE_KIND)
+        && source.lines[span.end - 1].trim_end().ends_with(';')
+    {
+        return Err(format!(
+            "{at} declares a module whose file would stay behind; move it by hand"
+        ));
+    }
     let start = Position::from_lsp(&symbol["range"]["start"]);
     let end = Position::from_lsp(&symbol["range"]["end"]);
     let alone = source.lines[start.line][..start.column].trim().is_empty()
@@ -924,8 +988,21 @@ fn mark_emptied_blocks(sources: &BTreeMap<PathBuf, Document>, moved: &mut [Moved
             };
             // Not by its symbols alone: the server lists neither a comment nor
             // a macro invocation, and the block keeps what does not move.
-            let body = impl_header_line(source, block) + 1..block_span.end - 1;
+            let header_line = impl_header_line(source, block);
+            let close_line = block_span.end - 1;
+            let after_brace = {
+                let line = &source.lines[header_line];
+                &line[line.rfind('{').expect("the header line opens the block") + 1..]
+            };
+            let before_close = {
+                let line = &source.lines[close_line];
+                &line[..line.rfind('}').expect("the last line closes the block")]
+            };
+            let body = header_line + 1..close_line;
             let all_move = !children(block).is_empty()
+                && header_line < close_line
+                && after_brace.trim().is_empty()
+                && before_close.trim().is_empty()
                 && body
                     .into_iter()
                     .all(|line| leaves(line) || source.lines[line].trim().is_empty());
@@ -1354,6 +1431,22 @@ fn helper(n: usize) -> i32 {
     }
 
     #[test]
+    fn an_import_outranking_a_glob_of_the_destination_is_reported() {
+        let (dir, report) = a_to_b(
+            "use std::cmp::max;\n\npub fn largest() -> i32 {\n    max(1, 2)\n}\n",
+            "use inner::*;\n\nmod inner {\n    pub fn max(a: i32, _b: i32) -> i32 {\n        a\n    }\n}\n\n\
+             pub fn first() -> i32 {\n    max(1, 2)\n}\n",
+            "a::largest(); b::first()",
+            &["probe::a::largest"],
+        );
+        assert!(
+            report.contains("by hand: `max` means one thing"),
+            "{report}"
+        );
+        assert!(!read(&dir, "src/b.rs").contains("use std::cmp::max;"));
+    }
+
+    #[test]
     fn what_takes_no_visibility_is_not_widened() {
         let (dir, report) = a_to_b(
             "enum Shape {\n    Circle { radius: i32 },\n    Dot,\n}\n\n\
@@ -1526,6 +1619,89 @@ fn helper(n: usize) -> i32 {
             a.contains("impl S {\n    // A note the block keeps.\n}"),
             "{a}"
         );
+    }
+
+    #[test]
+    fn a_block_keeps_what_its_brace_lines_hold() {
+        let (dir, _) = a_to_b(
+            "pub struct S;\n\nmacro_rules! extra {\n    () => {};\n}\n\n\
+             impl S { extra!();\n    pub fn one(&self) -> i32 {\n        1\n    }\n}\n",
+            "",
+            "a::S.one()",
+            &["probe::a::S::one"],
+        );
+        let a = read(&dir, "src/a.rs");
+        assert!(a.contains("impl S { extra!();"), "{a}");
+    }
+
+    #[test]
+    fn a_const_argument_keeps_its_header_whole() {
+        let dir = probe(&[
+            ("src/main.rs", "mod a;\nmod b;\nfn main() { a::Slot::<2>.width(); }\n"),
+            (
+                "src/a.rs",
+                "pub struct Slot<const N: usize>;\n\nimpl Slot<{ 1 + 1 }> {\n    \
+                 pub fn width(&self) -> usize {\n        2\n    }\n}\n",
+            ),
+            ("src/b.rs", "use super::a::Slot;\n"),
+        ]);
+        let column = "    pub fn ".len() + 1;
+        let position = format!("{}:4:{column}", dir.path().join("src/a.rs").display());
+        move_items(
+            dir.path(),
+            &locators(&[&position]),
+            &dir.path().join("src/b.rs"),
+            Mode::Apply,
+        )
+        .unwrap();
+        let b = read(&dir, "src/b.rs");
+        assert!(b.contains("impl Slot<{ 1 + 1 }> {"), "{b}");
+    }
+
+    #[test]
+    fn a_reexport_and_a_parent_path_are_reported() {
+        let dir = probe(&[
+            (
+                "src/main.rs",
+                "mod a;\nmod b;\nmod far;\nfn main() { a::exported(); a::shout(); }\n",
+            ),
+            (
+                "src/a.rs",
+                "pub use self::make as exported;\n\npub fn make() -> i32 {\n    1\n}\n\n\
+                 pub fn shout() -> i32 {\n    super::b::value()\n}\n",
+            ),
+            ("src/b.rs", "pub fn value() -> i32 {\n    1\n}\n"),
+            ("src/far.rs", "pub mod inner;\n"),
+            ("src/far/inner.rs", ""),
+        ]);
+        let report = move_items(
+            dir.path(),
+            &locators(&["probe::a::make", "probe::a::shout"]),
+            &dir.path().join("src/far/inner.rs"),
+            Mode::Apply,
+        )
+        .unwrap()
+        .join("\n");
+        assert!(report.contains("re-exports `make`"), "{report}");
+        assert!(report.contains("reads `super::`"), "{report}");
+    }
+
+    #[test]
+    fn a_module_backed_by_a_file_is_refused() {
+        let dir = probe(&[
+            ("src/main.rs", "mod a;\nmod b;\nfn main() {}\n"),
+            ("src/a.rs", "mod inner;\n"),
+            ("src/a/inner.rs", ""),
+            ("src/b.rs", ""),
+        ]);
+        let error = move_items(
+            dir.path(),
+            &locators(&["probe::a::inner"]),
+            &dir.path().join("src/b.rs"),
+            Mode::Apply,
+        )
+        .unwrap_err();
+        assert!(error.contains("whose file would stay behind"), "{error}");
     }
 
     #[test]

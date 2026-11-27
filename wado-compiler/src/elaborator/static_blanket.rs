@@ -7,6 +7,7 @@ use super::Elaborator;
 use super::call::ArgSite;
 use super::call::CalleeSignature;
 use super::call::GivenSlots;
+use super::instantiate::InstanceKind;
 use super::method_call::UnappliedStatic;
 use super::method_lookup::MethodInferenceInput;
 use super::method_lookup::settled_impl_args;
@@ -43,6 +44,7 @@ use crate::tir::MonomorphInfo;
 use crate::tir::ResolvedType;
 use crate::tir::TypeArgMap;
 use crate::tir::TypeId;
+use crate::tir::TypeParamId;
 use crate::type_table::TypeTable;
 
 /// The value blanket a static call dispatches through.
@@ -162,34 +164,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The trait arguments the blanket is reached at where a call's variables
-    /// answer the block parameters only they name (`A` in
-    /// `impl<A, T: Marked> Put<A> for T`), which no receiver settles.
-    fn blanket_trait_args_at_call(
-        &mut self,
-        blanket: DefId,
-        receiver_type_id: TypeId,
-        given: GivenSlots<'_>,
-    ) -> Vec<TypeId> {
-        let mut answered = self.blanket_block_slots(blanket, receiver_type_id, &[]);
-        for (&slot, &var) in given.slots.iter().zip(&given.inst.vars) {
-            let Some(param) = self.tysys.type_table.borrow().type_param_id(slot) else {
-                continue;
-            };
-            if param.owner == blanket && !answered.contains_key(&param) {
-                answered.insert(param, self.apply_infer_holes(var));
-            }
-        }
-        let written = self
-            .tysys
-            .type_table
-            .borrow()
-            .impl_trait_args(blanket)
-            .to_vec();
-        written
-            .iter()
-            .map(|&arg| self.substitute_map_in_frame(&answered, arg))
-            .collect()
+    /// Whether `slot` is a parameter of `blanket` only its trait's arguments
+    /// set (`A` in `impl<A, T: Marked> Put<A> for T`) that `settled` leaves
+    /// for the call to answer.
+    fn is_open_trait_arg_slot(&self, blanket: DefId, slot: TypeId, settled: &TypeArgMap) -> bool {
+        let table = self.tysys.type_table.borrow();
+        table.type_param_id(slot).is_some_and(|param| {
+            table.impl_trait_arg_slots(blanket).contains(&param) && !settled.contains_key(&param)
+        })
     }
 
     /// The blanket's block parameters at `receiver_type_id`, reached at
@@ -212,14 +194,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::blanket_static_in`] for the blanket a resolution picked, at
-    /// what `receiver_type_id` alone settles.
+    /// what `receiver_type_id` and the `trait_args` the call wrote settle.
     pub(super) fn picked_blanket_static_at(
         &mut self,
         blanket: DefId,
         method: &str,
         receiver_type_id: TypeId,
+        trait_args: &[TypeId],
     ) -> (Vec<TypeId>, TypeId) {
-        let block_slots = self.blanket_block_slots(blanket, receiver_type_id, &[]);
+        let block_slots = self.blanket_block_slots(blanket, receiver_type_id, trait_args);
         self.blanket_static_in(blanket, method, &block_slots)
     }
 
@@ -239,6 +222,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_id: Option<AstId>,
         method_type_args: &[TypeId],
         given: Option<GivenSlots<'_>>,
+        required_args: &[TypeId],
         raw_args: &[Expr],
         args: &[TypeId],
         arg_sites: &[ArgSite],
@@ -282,26 +266,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if sig.decl.return_type == Some(TypeTable::UNKNOWN) {
             return None;
         }
-        let blanket_slot = self.tysys.blanket_param_slot(blanket_def, &blanket_param);
-        let sets_params = self
-            .tysys
-            .type_table
-            .borrow()
-            .impl_trait_sets_params(blanket_def);
-        let trait_args = match given {
-            Some(given) if sets_params => {
-                self.blanket_trait_args_at_call(blanket_def, receiver_type_id, given)
-            }
-            Some(_) | None => Vec::new(),
+        let block_decls: Vec<(TypeId, ast::GenericParam)> = {
+            let (_, owners) = self.sig_slots(sig);
+            sig.decl.type_params[..sig.declaring_split()]
+                .iter()
+                .map(|(_, slot)| *slot)
+                .zip(owners)
+                .collect()
         };
-        let block_slots = self.blanket_block_slots(blanket_def, receiver_type_id, &trait_args);
-        let (param_types, return_type) = self.blanket_static_in(blanket_def, method, &block_slots);
-
-        let mut written = method_type_args.to_vec();
-        if self.group_variadic_type_args_of(method, &own_params, &mut written, span) {
-            return Some(TypeTable::ERROR);
-        }
+        let blanket_slot = self.tysys.blanket_param_slot(blanket_def, &blanket_param);
         let trait_decl = trait_name.canonical();
+        let self_binding = SelfBinding::of_static(receiver_type_id, trait_decl);
         // A bound on the method may name the blanket's parameter, which the
         // receiver settles.
         let impl_args = settled_impl_args(&slot_type_bindings(
@@ -313,8 +288,100 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "{}::{method}",
             self.tysys.type_table.borrow().name(receiver_type_id)
         );
+        let sets_params = self
+            .tysys
+            .type_table
+            .borrow()
+            .impl_trait_sets_params(blanket_def);
+        let trait_args = if sets_params {
+            let mut answered =
+                self.blanket_block_slots(blanket_def, receiver_type_id, required_args);
+            // A `_` among the trait's arguments leaves its parameter to the
+            // call, as the spelling that names no trait leaves them all.
+            let written_holes: Vec<(TypeParamId, TypeId)> = {
+                let table = self.tysys.type_table.borrow();
+                let set_by_trait_args = table.impl_trait_arg_slots(blanket_def);
+                answered
+                    .iter()
+                    .filter(|&(param, &answer)| {
+                        set_by_trait_args.contains(param)
+                            && table.is_infer_var(self.apply_infer_holes(answer))
+                    })
+                    .map(|(&param, &answer)| (param, answer))
+                    .collect()
+            };
+            for (param, _) in &written_holes {
+                answered.shift_remove(param);
+            }
+            if let Some(given) = given {
+                for (&slot, &var) in given.slots.iter().zip(&given.inst.vars) {
+                    if self.is_open_trait_arg_slot(blanket_def, slot, &answered) {
+                        let param = self.tysys.type_table.borrow().type_param_id(slot);
+                        answered.insert(
+                            param.expect("an open slot is a parameter"),
+                            self.apply_infer_holes(var),
+                        );
+                    }
+                }
+            }
+            // One the call typed its arguments without is solved from them
+            // now, as the method's own slots are below.
+            let (open_slots, open_params): (Vec<TypeId>, Vec<ast::GenericParam>) = block_decls
+                .into_iter()
+                .filter(|(slot, _)| self.is_open_trait_arg_slot(blanket_def, *slot, &answered))
+                .unzip();
+            if !open_slots.is_empty() {
+                let (param_types, return_type) =
+                    self.blanket_static_in(blanket_def, method, &answered);
+                let (_, solved) = self.bind_static_type_args(
+                    Vec::new(),
+                    InstanceKind::Static {
+                        declaring: open_slots.len(),
+                    },
+                    &qualified,
+                    MethodInferenceInput {
+                        slots: &open_slots,
+                        own_params: &open_params,
+                        param_types: &param_types,
+                        args,
+                        raw_args,
+                        decl_return_type: return_type,
+                        expected_return_type: expected_type,
+                        self_binding,
+                        declaring_module: Some(blanket_module.clone()),
+                        impl_args: &impl_args,
+                        inst: None,
+                        span,
+                    },
+                );
+                answered.extend(solved);
+            }
+            for (param, hole) in written_holes {
+                self.equate(hole, answered[&param]);
+            }
+            let written = self
+                .tysys
+                .type_table
+                .borrow()
+                .impl_trait_args(blanket_def)
+                .to_vec();
+            written
+                .iter()
+                .map(|&arg| self.substitute_map_in_frame(&answered, arg))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let block_slots = self.blanket_block_slots(blanket_def, receiver_type_id, &trait_args);
+        let (param_types, return_type) = self.blanket_static_in(blanket_def, method, &block_slots);
+
+        let mut written = method_type_args.to_vec();
+        if self.group_variadic_type_args_of(method, &own_params, &mut written, span) {
+            return Some(TypeTable::ERROR);
+        }
         let (method_type_args, subst) = self.bind_static_type_args(
             written,
+            InstanceKind::Method,
             &qualified,
             MethodInferenceInput {
                 slots: &slots,
@@ -324,7 +391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 raw_args,
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
-                self_binding: SelfBinding::of_static(receiver_type_id, trait_decl),
+                self_binding,
                 declaring_module: Some(blanket_module.clone()),
                 impl_args: &impl_args,
                 inst: None,
@@ -426,7 +493,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The template is written against the blanket parameter, which the
         // monomorphizer binds to the receiver. A default reads the method's own
         // slots as the call solved them.
-        let self_binding = SelfBinding::of_static(receiver_type_id, trait_decl);
         let own_bindings = self.own_slot_default_bindings(
             &static_method_defaults,
             &own_params,
@@ -460,7 +526,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        Some(return_type)
+        // A `_` among the trait's arguments is answered by the checks above.
+        Some(self.apply_infer_holes(return_type))
     }
 
     /// The signature of the static the resolution hands a value blanket, read
@@ -478,7 +545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .resolve_static_callee(StaticQuery::of(receiver, method_name))
             .blanket()?;
         let (param_types, return_type) =
-            self.picked_blanket_static_at(blanket, method_name, receiver_type);
+            self.picked_blanket_static_at(blanket, method_name, receiver_type, &[]);
         let sig = self
             .tysys
             .declared_method(blanket, method_name)
@@ -494,21 +561,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             names.len() == sig.decl.type_params.len() && owners.len() == names.len(),
             "a signature's slots and their declarations are parallel"
         );
-        let open: Vec<bool> = {
-            let table = self.tysys.type_table.borrow();
-            let set_by_trait_args = table.impl_trait_arg_slots(blanket);
-            sig.decl
-                .type_params
-                .iter()
-                .enumerate()
-                .map(|(index, (_, slot))| {
-                    index >= split
-                        || table.type_param_id(*slot).is_some_and(|param| {
-                            set_by_trait_args.contains(&param) && !settled.contains_key(&param)
-                        })
-                })
-                .collect()
-        };
+        let open: Vec<bool> = sig
+            .decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(index, (_, slot))| {
+                index >= split || self.is_open_trait_arg_slot(blanket, *slot, &settled)
+            })
+            .collect();
         let kept = |index: &usize| open[*index];
         Some(CalleeSignature {
             param_types,
@@ -675,6 +736,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_id,
             method_type_args,
             given,
+            &[],
             raw_args,
             args,
             &arg_sites,

@@ -1,5 +1,6 @@
 // A blanket's block parameter that only the trait's argument names, and that
-// nothing in the call reaches, is reported as the call's to spell.
+// nothing in the call reaches, is reported as the call's to spell, through the
+// trait: the receiver's turbofish does not write it.
 
 trait Marked with () { fn mark(&self) -> i32; }
 struct S { v: i32 }
@@ -16,5 +17,5 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":14:13: analysis error: cannot infer type parameter `A` of `S::nothing`"
+  "compile_error": ":14:13: analysis error: cannot infer type parameter `A` of `S::nothing`; add a turbofish (`TakeIt::<..., Self = S>::nothing()`) or a type annotation"
 }

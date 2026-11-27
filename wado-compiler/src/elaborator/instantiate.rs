@@ -196,7 +196,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The parameter and the rest of the sentence stay apart so
             // `finalize_infer_holes` can name every unsolved slot of this use
             // site in one message.
-            let owner = of.kind.owner_of_slot(of.name, i);
+            let owner = self
+                .trait_arg_slot_owner(of.kind, of.name, param)
+                .unwrap_or_else(|| of.kind.owner_of_slot(of.name, i));
             // Answered here, so an argument meets what the source wrote. A `_`
             // in it reports as this slot would.
             if let Some(named) = named {
@@ -216,6 +218,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inferred,
             links: None,
         }
+    }
+
+    /// [`InstanceKind::owner_of_slot`] for a static's slot that only the
+    /// arguments of its impl's trait set, `A` in
+    /// `impl<A, T: Marked> Put<A> for T`: no turbofish on the receiver writes
+    /// it, and the spelling naming the trait does.
+    fn trait_arg_slot_owner(
+        &self,
+        kind: InstanceKind,
+        name: &str,
+        param: TypeParamId,
+    ) -> Option<String> {
+        let InstanceKind::Static { .. } = kind else {
+            return None;
+        };
+        let header = self.tysys.trait_env.impl_headers.get(&param.owner)?;
+        if !self
+            .tysys
+            .type_table
+            .borrow()
+            .impl_trait_arg_slots(param.owner)
+            .contains(&param)
+        {
+            return None;
+        }
+        let trait_name = self.tysys.resolutions.defs().name(header.trait_def()?);
+        let (prefix, suffix) = name.rsplit_once("::").expect("a static is a path");
+        Some(TypeError::cannot_infer_owner(
+            &format!("`{prefix}::{suffix}`"),
+            &format!("`{trait_name}::<..., Self = {prefix}>::{suffix}()`"),
+        ))
     }
 
     /// Rewrite a type written in a declaration's frame into `inst`'s variables.

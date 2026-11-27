@@ -1033,10 +1033,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// [`Self::bind_method_type_args`] for a static whose arguments resolved
     /// before its own slots were instantiated: they are instantiated here, so
-    /// an unsolved one is blamed on `name`.
+    /// an unsolved one is blamed on `name`, worded as a slot of `kind`.
     pub(super) fn bind_static_type_args(
         &mut self,
         explicit: Vec<TypeId>,
+        kind: InstanceKind,
         name: &str,
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, TypeArgMap) {
@@ -1048,7 +1049,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.instantiate(
                 input.slots,
                 &Instantiation {
-                    kind: InstanceKind::Method,
+                    kind,
                     name,
                     span: input.span,
                     type_args: &explicit,

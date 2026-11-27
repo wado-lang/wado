@@ -992,14 +992,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // A blanket's resolver checks and pads the call itself; what the
         // arguments are typed against is still its parameters.
-        let blanket_params = resolved.blanket().map(|blanket| {
-            self.picked_blanket_static_at(blanket, &static_call.method, target_type_id)
-                .0
+        let blanket_at_call = resolved.blanket().map(|blanket| {
+            self.picked_blanket_static_at(
+                blanket,
+                &static_call.method,
+                target_type_id,
+                required_args,
+            )
         });
         let (mut callee_params, declares_params) = resolved.params();
-        if let Some(param_types) = blanket_params {
+        let blanket_return = blanket_at_call.map(|(param_types, return_type)| {
             callee_params.param_types = param_types;
-        }
+            return_type
+        });
         let CalleeParams {
             param_is_mut,
             param_defaults: static_method_defaults,
@@ -1078,6 +1083,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .copied()
             .chain(self.vars_holding_written_holes(&method_type_args))
+            .chain(self.vars_holding_written_holes(required_args))
             .collect();
         let open_own_slots = callee_sig.as_ref().filter(|sig| {
             receiver_holes.is_empty()
@@ -1091,23 +1097,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ret = if open_own_slots.is_some() || !written_vars.is_empty() {
             let (_, expected_at_base) =
                 self.at_inherited_base(newtype, declaring_link, &[], expected_type);
-            match (&callee_sig, expected_at_base) {
-                (Some(sig), Some(expected)) => {
+            let declared = match &callee_sig {
+                Some(sig) => {
                     let declaring = sig
                         .declaring_impl
                         .map(|id| self.tysys.signatures.impl_sig(id));
-                    let declared = sig
-                        .instantiate_call_with(
+                    Some(
+                        sig.instantiate_call_with(
                             &self.tysys.type_table,
                             declaring,
                             &callee_args,
                             &method_type_args,
                         )
-                        .return_type;
-                    Some(ExpectedReturn { declared, expected })
+                        .return_type,
+                    )
                 }
-                (None, _) | (Some(_), None) => None,
-            }
+                None => blanket_return,
+            };
+            declared
+                .zip(expected_at_base)
+                .map(|(declared, expected)| ExpectedReturn { declared, expected })
         } else {
             None
         };
@@ -1276,7 +1285,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (method_type_args, _) = if input.inst.is_some() {
                 self.bind_method_type_args(method_type_args, input)
             } else {
-                self.bind_static_type_args(method_type_args, &qualified, input)
+                self.bind_static_type_args(
+                    method_type_args,
+                    InstanceKind::Method,
+                    &qualified,
+                    input,
+                )
             };
             self.instantiate_static_params(
                 Some(&sig),
@@ -1431,6 +1445,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(static_call.method_id),
                 &method_type_args,
                 None,
+                required_args,
                 &static_call.args,
                 &args,
                 &arg_sites,
