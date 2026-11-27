@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795732668491,
+  "lastUpdate": 1795742545050,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82645,6 +82645,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0fb78d90861d0e16a35a91761f74176da76af020"
         },
         "date": 1795732667103,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24979,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334351,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e3781c18bfbb5394a6c64736598c80eb8c4a4375",
+          "message": "Merge pull request #2778 from wado-lang/ccr-06ec82c2-nz18ok\n\nfeat(web): bind WebIDL enums, dictionaries and argument unions",
+          "timestamp": "2026-11-27T10:06:18+09:00",
+          "tree_id": "8b78c82f63beabc8e04dbef51b45436551c16187",
+          "url": "https://github.com/wado-lang/wado/commit/e3781c18bfbb5394a6c64736598c80eb8c4a4375"
+        },
+        "date": 1795742543978,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
