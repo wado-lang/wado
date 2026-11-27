@@ -595,8 +595,7 @@ A method call resolves statically. `recv.m()` gathers every `m` declared along `
 
 #### Constants
 
-A resource holds the associated constants of every resource it extends: `Child::NAME` names the constant a resource along the `extends` chain declares as `NAME`, in an expression and in a pattern alike. A child may not declare a constant under a name it inherits. A constant in a
-trait impl belongs to that impl and is not inherited.
+A resource holds the associated constants of every resource it extends: `Child::NAME` names the constant a resource along the `extends` chain declares as `NAME`, in an expression and in a pattern alike. A child may not declare a constant under a name it inherits. A constant in a trait impl belongs to that impl and is not inherited.
 
 #### Handle Classes
 
