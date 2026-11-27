@@ -1,7 +1,7 @@
 //! The core exports a host of the web imports calls: one per shape of
-//! arguments and result to call a Wado closure back through, and the pair that reaches the slots of
-//! extern handles. The component lifts none of them: each takes or answers an
-//! `externref`, which the Component Model cannot carry.
+//! arguments and result to call a Wado closure back through, and the pair that
+//! reaches the slots of extern handles. The component lifts none of them: each
+//! takes or answers an `externref`, which the Component Model cannot carry.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -41,18 +41,17 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
     let type_table = entry_type_table(project);
     let mut shapes: IndexSet<String> = IndexSet::default();
     for &(closure, extern_object) in callbacks {
-        let (params, result) = type_table
-            .borrow()
-            .function_signature(closure)
-            .map(|(params, result)| (params.to_vec(), result))
-            .expect("an import takes a callback as a closure");
-        let shape = {
+        let (params, result, shape) = {
             let type_table = type_table.borrow();
+            let (params, result) = type_table
+                .function_signature(closure)
+                .expect("an import takes a callback as a closure");
             let word = |ty: TypeId| value_word(&type_table, ty);
-            callback_export_name(
+            let shape = callback_export_name(
                 params.iter().map(|&param| word(param)),
                 (result != TypeTable::UNIT).then(|| word(result)),
-            )
+            );
+            (params.to_vec(), result, shape)
         };
         if !shapes.insert(shape.clone()) {
             continue;
