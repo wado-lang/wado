@@ -215,6 +215,25 @@ need no rule at all. It was declined for its cost: `Option<String>` stops being
 a nullable reference, and every `variant` field and element gains an
 allocation.
 
+The line between the two kinds of `&mut` is `RefMut`, which the specification
+already draws. A type with an object that is its place can be borrowed, and one
+without lasts for a scope:
+
+| The type                                                                    | `&mut` of it                   |
+| --------------------------------------------------------------------------- | ------------------------------ |
+| `RefMut`: a `struct`, a tuple, `List`, `String`, `i128`, any affine value   | an affine borrow of the place  |
+| not `RefMut`: a primitive, `enum`, `flags`, a copyable `variant`, `fn`, `&` | scoped, as this section states |
+
+An affine `variant` stays on the first row. A field, an element or a payload
+holds it in an object of its own
+([Affine Types](./wep-2026-10-17-affine-types.md#an-affine-value-is-an-object-and-a-place-is-a-nullable-reference-to-it)),
+so `&mut` of one names a place and is stored and returned. Giving it the scoped
+rule would move the value out for the scope where a copyable one is copied, and
+leave the place empty meanwhile. Another route would then read a moved place,
+which is unspecified, where it reads a stale value of a copyable one. Swift
+moves in and out this way and has exclusivity to forbid the other route. The
+object costs an allocation only where a `variant` wraps a resource.
+
 A function cannot hand such a `&mut` back, and nothing is added to make one.
 The scoped forms work because the place is written where it is used: the
 compiler reads `map[k]`, and stores to `map[k]` after. A function's result is a
@@ -286,14 +305,6 @@ spare a call site. Each step leaves the tree building and its tests passing.
 - [ ] A place is writable only through writable steps.
 - [ ] `&mut T` is affine and reborrowed where one is expected, and every
   copyable struct holding one becomes affine.
-
-## Known gaps
-
-### An affine `variant` keeps its slot object
-
-An affine `variant` is held in an object of its own, so `&mut` of one is a
-place. Whether it takes the scoped rule too, moving in and out where a copyable
-one copies, is not examined.
 
 ## References
 
