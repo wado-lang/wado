@@ -251,7 +251,10 @@ An accessor that yields a scoped place, as Swift's `_modify` and Hylo's
 subscripts do, waits for a need the three do not meet.
 
 A scope that stores back does so at every exit, whether or not its binding was
-written. A write to the place by another route inside the scope is therefore
+written: its end, a `return`, a `break`, a `continue` and a `?`. A trap is no
+exit. It does not unwind, so it stores nothing back, as it runs no drops
+([Affine Types](./spec-affine.md#drop)). A handler always resumes or diverges,
+so an operation dispatched inside a scope adds no exit of its own. A write to the place by another route inside the scope is therefore
 overwritten: `if let Some(n) = &mut self.count { self.count = null; *n += 1 }`
 leaves `Some`. A binding of an in-place type stores nothing back, so none of
 this reaches it.
