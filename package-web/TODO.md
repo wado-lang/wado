@@ -175,9 +175,9 @@ lower is then available to each interface the slice adds.
 - jco 1.30.0 fails an export that a listener reenters during
   `dispatch_event`.
 - `SurfaceDom` neither removes a listener nor ignores one added twice.
-- `SurfaceDom` does not move a `NodeIterator`'s reference node off a node
-  removed from the tree, as the DOM standard's pre-removing steps do: it
-  tracks no iterator after creating it.
+- `SurfaceDom` keeps every `NodeIterator` it creates for the document's life,
+  and each removal visits them all: nothing drops an iterator the program no
+  longer reaches.
 - A callback that returns a value runs to its end before the page goes on, so
   waiting on a promise inside it traps.
 - A `NodeFilter` is required, though the page accepts `null` for one that
