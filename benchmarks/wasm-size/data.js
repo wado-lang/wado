@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795782356515,
+  "lastUpdate": 1795787890069,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82953,6 +82953,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ce878fa65648b37aab64822bb9e0d21c68ee54cc"
         },
         "date": 1795782356204,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "413713e8574552d8c5b7df489507e3eff488ed35",
+          "message": "Merge pull request #2785 from wado-lang/ccr-06ec82c2-nz18ok\n\nfeat(web): callbacks that return a value, and NodeIterator / TreeWalker",
+          "timestamp": "2026-11-27T22:41:09+09:00",
+          "tree_id": "423d599b7bb0dc64dc0aeafb2279386e2e4b165e",
+          "url": "https://github.com/wado-lang/wado/commit/413713e8574552d8c5b7df489507e3eff488ed35"
+        },
+        "date": 1795787889367,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
