@@ -933,6 +933,34 @@ What remains is what an insertion-ordered map costs: a hit reads the slot, the
 fingerprint, the key, the liveness flag and the value from five arrays, where
 the open-addressing table read two.
 
+### A `List` per context node, interned by `HashMap` — NO-GO (2026-11)
+
+The simulator's interned tables (`AtnKeyLists`, `RealStacks`, `CtxArena` in
+`atn_predict.wado`) each keep their keys in one flat column, with a start and a
+length per entry. Holding each entry as a `List` of its own, interned through a
+`HashMap` keyed by that list, reads shorter and runs slower:
+
+| step, cumulative                              | TypeScript time | Rust time | TypeScript fuel | Rust fuel |
+| --------------------------------------------- | --------------: | --------: | --------------: | --------: |
+| the keyed lists are `HashMap` keys            |           1.09× |     1.03× |                 |           |
+| a real stack is an interned `List<AtnEdge>`   |           1.57× |     1.14× |                 |           |
+| an arena node is a `List<AtnEdge>`            |           1.91× |     1.35× |           0.92× |     0.91× |
+| flat columns, an edge packed in one `AtnEdge` |           0.97× |     0.88× |           0.97× |     0.95× |
+
+Each figure is the step over the three-column tables it replaced, measured as
+the `HashMap` table above is. The last row is what landed.
+
+Fuel read the list form as the faster one. Fuel counts instructions and does
+not see the collector, and the collector is where the time went. A node stays
+live until its pool is replaced (`AtnDfa::make_room` for the arena,
+`CtxArena::enter_caller_stack` for the real stacks), and the
+benchmark's input fills neither that far, so every collection traces one more object per node. `wado run -O2 --gc-log` shows
+it as a larger live set and longer pauses. An interner holding a heap key in
+both its list and its map doubles that.
+
+So a table that outlives a prediction keeps flat columns, and a change
+to one is judged by time, with fuel beside it.
+
 ### Measured non-levers
 
 General findings — forcing inlining, raising the inline threshold, `br_table`
