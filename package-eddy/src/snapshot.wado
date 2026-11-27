@@ -82,18 +82,10 @@ test "a run holds the tree until it lets go" {
     let path = "build/hold-test.lock";
     let first = hold(&path).unwrap().unwrap();
     assert hold(&path).unwrap_err().contains("another run");
-<<<<<<< HEAD
-    // The lock goes when the child has exited, which dropping it does not
-    // wait for.
-    first.stop(5_000_000_000).unwrap();
-||||||| 750566210
-    builtin::drop(first);
-=======
     // Dropping the child kills it without waiting, and the lock goes only
     // once it has exited. `--no-fork` makes it the process holding the lock.
     first.kill();
     first.wait().unwrap();
->>>>>>> origin/main
     assert hold(&path).is_ok();
 }
 
