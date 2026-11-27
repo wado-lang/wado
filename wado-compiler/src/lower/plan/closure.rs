@@ -1634,7 +1634,8 @@ impl ClosureCallSiteLowerer<'_> {
     fn pass_as_functor(&self, expr: &mut TirExpr) -> TypeId {
         let ref_type_id = match &mut expr.kind {
             TirExprKind::Block(block) => {
-                let Some(TirStmtKind::Expr(tail)) = block.stmts.last_mut().map(|stmt| &mut stmt.kind)
+                let Some(TirStmtKind::Expr(tail)) =
+                    block.stmts.last_mut().map(|stmt| &mut stmt.kind)
                 else {
                     unreachable!("`yielded` reads past a block only through its tail");
                 };

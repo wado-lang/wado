@@ -24,8 +24,13 @@ fn shift_for(slots: i32) -> i64 {
 }
 
 impl HashIndex {
+    /// An empty index.
     pub fn new() -> HashIndex {
-        return HashIndex { slots: Array::<i64>::filled(MIN_SLOTS, EMPTY), count: 0, shift: shift_for(MIN_SLOTS) };
+        return HashIndex {
+            slots: Array::<i64>::filled(MIN_SLOTS, EMPTY),
+            count: 0,
+            shift: shift_for(MIN_SLOTS),
+        };
     }
 
     /// The number of rows indexed.

@@ -1966,6 +1966,11 @@ server.stop(5_000_000_000)?;   // terminate, then kill after 5 s (a wasi:clocks 
 [`core:collections`](./stdlib-core-collections.md). `TreeMap` and `TreeSet`
 offer the same API for a key that is `Ord` but not `Hash`.
 
+`HashIndex` is the hash table without the keys, for an interner that keeps them
+in rows of its own. The caller hashes a key and says which row equals it:
+`index.find_or_insert(hash, |row| keys[row] == key, next_row)`. It is the fast
+one and the unguarded one: the hash is used unseeded and as it comes.
+
 `HashMap<K, V>` is also the Wado spelling of the Component Model `map<K, V>`, so
 it crosses a component boundary. There `K` must be `bool`, `char`, `String`, or
 an integer. A repeated key on the wire takes the last pair's value.
