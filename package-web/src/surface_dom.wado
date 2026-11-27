@@ -95,10 +95,18 @@ struct SurfaceWalker {
     current: Node,
 }
 
+// The DOM standard's node pointer.
+struct NodePointer {
+    node: Node,
+    before: bool,
+}
+
 struct SurfaceIterator {
     traverser: Traverser,
-    reference: Node,
-    pointer_before_reference: bool,
+    reference: NodePointer,
+    // Where a traversal has reached, which a removal its filter makes moves as
+    // it moves the reference.
+    candidate: Option<NodePointer>,
 }
 
 enum Direction {
@@ -347,46 +355,33 @@ fn preceding(node: Node, root: Node) -> Option<Node> {
     let Some(sibling) = here.previous_sibling else {
         return here.parent;
     };
-    return Option::Some(last_inclusive_descendant(sibling));
-}
-
-fn last_inclusive_descendant(node: Node) -> Node {
-    let mut at = node;
+    let mut at = sibling;
     while let Some(last) = surface_node(at).last_child {
         at = last;
     }
-    return at;
+    return Option::Some(at);
 }
 
-// Whether `later` comes after `earlier` in tree order, both in one tree.
-fn follows(later: Node, earlier: Node) -> bool {
-    let top = root_of(earlier);
-    let mut at = earlier;
-    while let Some(next) = following(at, top) {
-        if next == later {
-            return true;
-        }
-        at = next;
-    }
-    return false;
-}
-
-// The DOM standard's `NodeIterator` pre-removing steps, as `removed` leaves its
-// parent. A removed ancestor of the root moves the reference out of the root.
+// The DOM standard's `NodeIterator` pre-remove steps, as `removed` leaves its
+// parent.
 fn pre_remove(iterator: &mut SurfaceIterator, removed: Node) {
     let root = iterator.traverser.root;
-    if removed == root || !is_inclusive_ancestor(removed, iterator.reference) {
-        return;
+    iterator.reference = adjust(iterator.reference, root, removed);
+    if let Some(candidate) = iterator.candidate {
+        iterator.candidate = Option::Some(adjust(candidate, root, removed));
     }
-    if iterator.pointer_before_reference {
-        // Nothing of the root follows the subtree that takes the root along.
-        if !is_inclusive_ancestor(removed, root) && let Some(next) = following_past(removed, root) {
-            iterator.reference = next;
-            return;
-        }
-        iterator.pointer_before_reference = false;
+}
+
+// The DOM standard's adjust a node pointer.
+fn adjust(pointer: NodePointer, root: Node, removed: Node) -> NodePointer {
+    if !is_inclusive_ancestor(removed, pointer.node) || is_inclusive_ancestor(removed, root) {
+        return pointer;
     }
-    iterator.reference = preceding(removed, root).expect("a node being removed has a parent");
+    if pointer.before && let Some(next) = following_past(removed, root) {
+        return NodePointer { node: next, before: true };
+    }
+    let node = preceding(removed, root).expect("a node being removed has a parent");
+    return NodePointer { node, before: false };
 }
 
 fn is_element(node: &SurfaceNode) -> bool {
@@ -923,54 +918,37 @@ impl SurfaceDom {
     // The DOM standard's traverse, for a `NodeIterator`.
     fn iterate(&mut self, iterator: &mut SurfaceIterator, direction: Direction) -> Option<Node> {
         let root = iterator.traverser.root;
-        let mut node = iterator.reference;
-        let mut before = iterator.pointer_before_reference;
-        // A removal left the reference outside the root, so the walk enters the
-        // root at whichever end tree order puts beside the reference, if any.
-        if !is_inclusive_ancestor(root, node) {
-            match direction {
-                _::Next => {
-                    if !follows(root, node) {
-                        return null;
-                    }
-                    node = root;
-                    before = true;
-                },
-                _::Previous => {
-                    if !follows(node, root) {
-                        return null;
-                    }
-                    node = last_inclusive_descendant(root);
-                    before = false;
-                },
-            }
-        }
+        iterator.candidate = Option::Some(iterator.reference);
+        let mut result: Option<Node> = null;
         loop {
+            let mut at = iterator.candidate.unwrap();
             match direction {
-                _::Next => if before {
-                    before = false;
+                _::Next => if at.before {
+                    at.before = false;
                 } else {
-                    let Some(after) = following(node, root) else {
-                        return null;
+                    let Some(after) = following(at.node, root) else {
+                        break;
                     };
-                    node = after;
+                    at = NodePointer { node: after, before: false };
                 },
-                _::Previous => if before {
-                    let Some(prior) = preceding(node, root) else {
-                        return null;
+                _::Previous => if at.before {
+                    let Some(prior) = preceding(at.node, root) else {
+                        break;
                     };
-                    node = prior;
+                    at = NodePointer { node: prior, before: true };
                 } else {
-                    before = true;
+                    at.before = true;
                 },
             }
-            if self.accepts(&mut iterator.traverser, node) {
+            iterator.candidate = Option::Some(at);
+            if self.accepts(&mut iterator.traverser, at.node) {
+                iterator.reference = iterator.candidate.unwrap();
+                result = Option::Some(at.node);
                 break;
             }
         }
-        iterator.reference = node;
-        iterator.pointer_before_reference = before;
-        return Option::Some(node);
+        iterator.candidate = null;
+        return result;
     }
 
     fn traverser(&self, root: Node, what_to_show: u32, filter: NodeFilter) -> Traverser {
@@ -1108,8 +1086,8 @@ impl Document for SurfaceDom {
         self.own(*this);
         let iterator = NodeIterator::backed_by(SurfaceIterator {
             traverser: self.traverser(root, what_to_show, filter),
-            reference: root,
-            pointer_before_reference: true,
+            reference: NodePointer { node: root, before: true },
+            candidate: null,
         });
         surface_node(self.document).iterators.push(iterator);
         resume iterator;
@@ -1247,11 +1225,11 @@ impl NodeIterator for SurfaceDom {
     }
 
     fn reference_node(&mut self, this: &NodeIterator) -> Node {
-        resume surface_iterator(*this).reference;
+        resume surface_iterator(*this).reference.node;
     }
 
     fn pointer_before_reference_node(&mut self, this: &NodeIterator) -> bool {
-        resume surface_iterator(*this).pointer_before_reference;
+        resume surface_iterator(*this).reference.before;
     }
 
     fn what_to_show(&mut self, this: &NodeIterator) -> u32 {

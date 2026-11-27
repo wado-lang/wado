@@ -205,7 +205,7 @@ test "a node iterator before a reference nothing follows turns to the one before
     };
 }
 
-test "a node iterator whose root is removed with its reference passes no node outside the root" {
+test "a node iterator stays where an ancestor of its root is removed" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
@@ -214,14 +214,29 @@ test "a node iterator whose root is removed with its reference passes no node ou
         let iterator = doc.create_node_iterator(div, NodeFilter::SHOW_ELEMENT, |_| NodeFilter::FILTER_ACCEPT);
         iterator.next_node();
         assert name(iterator.next_node()) == "P";
-        let html = body.parent_node().unwrap();
-        html.remove_child(body);
-        assert iterator.reference_node().node_name() == "HEAD";
-        assert iterator.next_node() == null;
-        assert iterator.previous_node() == null;
-        // Back in one tree, the root follows the reference.
-        html.append_child(body);
-        assert name(iterator.next_node()) == "DIV";
+        body.parent_node().unwrap().remove_child(body);
+        assert iterator.reference_node().node_name() == "P";
+        assert name(iterator.next_node()) == "SPAN";
+    };
+}
+
+test "a removal its filter makes moves the node a traversal has reached" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let iterator = doc.create_node_iterator(traversal_tree(doc), NodeFilter::SHOW_ELEMENT, |node| {
+            if node.node_name() != "P" {
+                return NodeFilter::FILTER_ACCEPT;
+            }
+            node.parent_node().unwrap().remove_child(node);
+            return NodeFilter::FILTER_SKIP;
+        });
+        let mut names = "";
+        while let Some(node) = iterator.next_node() {
+            names.push_str(&node.node_name());
+            names.push_str(" ");
+        }
+        assert names == "BODY DIV SPAN EM ";
     };
 }
 
