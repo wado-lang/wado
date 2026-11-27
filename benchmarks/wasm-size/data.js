@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795796307530,
+  "lastUpdate": 1795817466103,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -83041,6 +83041,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/494b212bdc7351f798d2a9dcf6fac3086ca0e8d6"
         },
         "date": 1795796306653,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6de5f9736e14e0e0c943b852c6f6d4a9f4f5dcfb",
+          "message": "Merge pull request #2788 from wado-lang/ccr-06ec82c2-nz18ok\n\nfeat(web): bind every WebIDL overload under a name of its own",
+          "timestamp": "2026-11-28T06:54:19+09:00",
+          "tree_id": "d58b45963e8d316eca5c1a4176dd673be497db7f",
+          "url": "https://github.com/wado-lang/wado/commit/6de5f9736e14e0e0c943b852c6f6d4a9f4f5dcfb"
+        },
+        "date": 1795817465413,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
