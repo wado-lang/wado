@@ -2992,7 +2992,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
             } else {
                 0;
             });
-            if @unlikely(((0 <= index_71) & (index_71 < $mv$$match_46$1)) == 0) {
+            if @unlikely(index_71 >=u $mv$$match_46$1) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(index_71, $mv$$match_46$1);
                 unreachable;
@@ -3066,7 +3066,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
                 unreachable;
             } >> 16) & 65535) < 16 {
                 value_65 = value_65 & 65535;
-                if @unlikely(((0 <= $mv$$match_46$1) & ($mv$$match_46$1 < index_71)) == 0) {
+                if @unlikely($mv$$match_46$1 >=u index_71) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"($mv$$match_46$1, index_71);
                     unreachable;
@@ -3114,8 +3114,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
                 return 1, 12;
             }
             value_65 = (if value_65 == 16 -> u16 {
-                value_65 = $mv$$match_46$1 - 1;
-                if @unlikely(((0 <= value_65) & (value_65 < index_71)) == 0) {
+                if @unlikely(local.tee value_65($mv$$match_46$1 - 1) >=u index_71) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(value_65, index_71, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1193"), used: 14 });
                     unreachable;
@@ -3128,7 +3127,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
             b397: block {
                 l398: loop {
                     break_if b397 root >= op;
-                    if @unlikely(((0 <= $mv$$match_46$1) & ($mv$$match_46$1 < index_71)) == 0) {
+                    if @unlikely($mv$$match_46$1 >=u index_71) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"($mv$$match_46$1, index_71);
                         unreachable;

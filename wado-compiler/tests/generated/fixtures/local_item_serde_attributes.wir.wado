@@ -2465,7 +2465,7 @@ fn "core:prelude/numparse.wado/core:prelude/numparse.wado/lenient_int_preprocess
         return 1, ref.null none, struct.new "core:prelude/traits.wado//LenientParseError" {};
     }
     radix = 10;
-    if (if @unlikely(((0 <= first) & (first < $mv$text$used)) == 0) {
+    if (if @unlikely(first >=u $mv$text$used) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(first, $mv$text$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/numparse.wado:41"), used: 29 });
         unreachable;
@@ -3077,7 +3077,7 @@ fn "core:args/core:args/ArgvDeserializer::pull_option_value$sroa[return]"(self) 
     b387: block {
         l388: loop {
             if (if $hfs_pos_87 < $licm_used_15 -> i32 {
-                if @unlikely(((0 <= $hfs_pos_87) & ($hfs_pos_87 < $licm_used_16)) == 0) {
+                if @unlikely($hfs_pos_87 >=u $licm_used_16) {
                     cold_path;
                     self.pos = $hfs_pos_87;
                     "core:args/core:args/ArgvDeserializer::skip_consumed$cold0$sroa[self.pos]"($hfs_pos_87, $licm_used_16);
@@ -3192,7 +3192,7 @@ fn "core:args/core:args/ArgvDeserializer::take_value$sroa[return]"(self) {
     b409: block {
         l410: loop {
             if (if $hfs_pos_40 < $load_3 -> i32 {
-                if @unlikely(((0 <= $hfs_pos_40) & ($hfs_pos_40 < $licm_used_16)) == 0) {
+                if @unlikely($hfs_pos_40 >=u $licm_used_16) {
                     cold_path;
                     self.pos = $hfs_pos_40;
                     "core:args/core:args/ArgvDeserializer::skip_consumed$cold0$sroa[self.pos]"($hfs_pos_40, $licm_used_16);
@@ -3989,7 +3989,7 @@ fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_fiel
             b515: block {
                 l516: loop {
                     if (if $hfs_pos_347 < $licm_used_99 -> i32 {
-                        if @unlikely(((0 <= $hfs_pos_347) & ($hfs_pos_347 < $licm_used_120)) == 0) {
+                        if @unlikely($hfs_pos_347 >=u $licm_used_120) {
                             cold_path;
                             $hfs_pos_348 = $hfs_pos_347;
                             $licm_de_96.pos = $hfs_pos_348;

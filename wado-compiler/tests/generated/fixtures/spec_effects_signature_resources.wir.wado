@@ -3554,8 +3554,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$
     i = 0;
     b450: block {
         l451: loop {
-            break_if b450 i >= $mv$bytes$end;
-            if @unlikely(((0 <= i) & (i < $mv$bytes$end)) == 0) {
+            break_if b450 (i < $mv$bytes$end) == 0;
+            if @unlikely(0 > i) {
                 cold_path;
                 "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $mv$bytes$end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1036"), used: 29 });
                 unreachable;
@@ -3564,8 +3564,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$
                 i = i + 1;
                 b454: block {
                     l455: loop {
-                        break_if b454 (if i < $mv$bytes$end -> i32 {
-                            if @unlikely(((0 <= i) & (i < $mv$bytes$end)) == 0) {
+                        break_if b454 (if local.tee b0(i < $mv$bytes$end) -> i32 {
+                            if @unlikely(((0 <= i) & b0) == 0) {
                                 cold_path;
                                 "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $mv$bytes$end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1039"), used: 29 });
                                 unreachable;

@@ -337,14 +337,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::scan"(self) {
-    let $load_0: ref Array<u8>;
+    let raw: ref Array<u8>;
     let item: i64;
     let value_21: i64;
     let $sroa_out_repr_11: ref Array<i64>;
     let $sroa_out_used_12: i32;
     let $sroa_write_back_13: ref "core:prelude/list.wado//List<i64>";
     let $hfs_pos_36: i32;
-    $load_0 = self.repr;
+    raw = self.repr;
     $sroa_out_repr_11 = array.new_fixed<i64>();
     $sroa_out_used_12 = 0;
     $hfs_pos_36 = self.pos;
@@ -354,7 +354,7 @@ fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write
                 self.pos = $hfs_pos_36;
                 break b47;
             }
-            value_21 = builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_0, $hfs_pos_36));
+            value_21 = builtin::i64_extend_i32_u(builtin::array_get_value_u8(raw, $hfs_pos_36));
             if @unlikely($sroa_out_used_12 >= builtin::array_len($sroa_out_repr_11)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i64>::grow"(local.tee $sroa_write_back_13(struct.new "core:prelude/list.wado//List<i64>" { repr: $sroa_out_repr_11, used: $sroa_out_used_12 }));
@@ -395,7 +395,7 @@ fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write
             continue l54;
         };
     };
-    return value_21 + builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_0, 0));
+    return value_21 + builtin::i64_extend_i32_u(builtin::array_get_value_u8(raw, 0));
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>::grow"(self) {

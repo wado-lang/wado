@@ -226,8 +226,7 @@ fn "licm_hoist_across_indirect_call_of_other_signature.wado/scan"(a, n, f) {
     b0: block {
         l1: loop {
             break_if b0 i >= n;
-            $contract_arg_0 = i % 4;
-            if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < $licm_used_19)) == 0) {
+            if @unlikely(local.tee $contract_arg_0(i % 4) >=u $licm_used_19) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, $licm_used_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("licm_hoist_across_indirect_call_of_other_signature.wado:15"), used: 58 });
                 unreachable;

@@ -1086,7 +1086,7 @@ fn "core:prelude/async.wado/settled_copy"(handle, packed) {
     b103: block {
         l104: loop {
             break_if b103 packed >= global:core:prelude/async.wado::SETTLED_COPIES.used;
-            if self_32 = global:core:prelude/async.wado::SETTLED_COPIES; self_38 = global:core:prelude/async.wado::SETTLED_COPIES.used; if @unlikely(((0 <= packed) & (packed < self_38)) == 0) {
+            if self_32 = global:core:prelude/async.wado::SETTLED_COPIES; self_38 = global:core:prelude/async.wado::SETTLED_COPIES.used; if @unlikely(packed >=u self_38) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/async.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(packed, self_38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/async.wado:563"), used: 27 });
                 unreachable;
@@ -1515,8 +1515,7 @@ fn "core:prelude/async.wado/core:prelude/async.wado/take_written<u8>"(buffer, da
     builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_4)), 0, $array_clone_src_1, 0, $load_4);
     data.repr = elements;
     data.used = 0;
-    $contract_arg_0 = packed_2 >>u 4;
-    if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 <= $load_4)) == 0) {
+    if @unlikely(local.tee $contract_arg_0(packed_2 >>u 4) >u $load_4) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$contract_report0"($contract_arg_0, $load_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/async.wado:482"), used: 27 });
         unreachable;

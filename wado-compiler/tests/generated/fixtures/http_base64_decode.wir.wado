@@ -1210,7 +1210,7 @@ fn "core:prelude/async.wado/settled_copy"(handle, packed) {
     b105: block {
         l106: loop {
             break_if b105 packed >= global:core:prelude/async.wado::SETTLED_COPIES.used;
-            if self_32 = global:core:prelude/async.wado::SETTLED_COPIES; self_38 = global:core:prelude/async.wado::SETTLED_COPIES.used; if @unlikely(((0 <= packed) & (packed < self_38)) == 0) {
+            if self_32 = global:core:prelude/async.wado::SETTLED_COPIES; self_38 = global:core:prelude/async.wado::SETTLED_COPIES.used; if @unlikely(packed >=u self_38) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/async.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(packed, self_38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/async.wado:563"), used: 27 });
                 unreachable;
@@ -1741,8 +1741,7 @@ fn "core:prelude/async.wado/core:prelude/async.wado/take_written<u8>"(buffer, da
     builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_4)), 0, $array_clone_src_1, 0, $load_4);
     data.repr = elements;
     data.used = 0;
-    $contract_arg_0 = packed_2 >>u 4;
-    if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 <= $load_4)) == 0) {
+    if @unlikely(local.tee $contract_arg_0(packed_2 >>u 4) >u $load_4) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$contract_report0"($contract_arg_0, $load_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/async.wado:482"), used: 27 });
         unreachable;
@@ -2088,8 +2087,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
         b254: block {
             l255: loop {
                 break_if b254 ($contract_arg_0 + 3) >= end;
-                $m_3_28 = builtin::array_get_value<u8>(input, $contract_arg_0);
-                if @unlikely(((0 <= $m_3_28) & ($m_3_28 < $mv$table$used)) == 0) {
+                if @unlikely(builtin::array_get_value<u8>(input, $contract_arg_0) >=u $mv$table$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<u8>(input, $contract_arg_0), $mv$table$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:154"), used: 15 });
                     unreachable;
@@ -2097,8 +2095,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
                 $m_3_28 = builtin::array_get_value<u8>(input, $contract_arg_0);
                 $m_3_28 = builtin::array_get_value<u8>($mv$table$repr, $m_3_28);
                 $contract_arg_2 = $contract_arg_0 + 1;
-                $m_3_38 = builtin::array_get_value<u8>(input, $contract_arg_2);
-                if @unlikely(((0 <= $m_3_38) & ($m_3_38 < $mv$table$used)) == 0) {
+                if @unlikely(builtin::array_get_value<u8>(input, $contract_arg_2) >=u $mv$table$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<u8>(input, $contract_arg_2), $mv$table$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:155"), used: 15 });
                     unreachable;
@@ -2106,8 +2103,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
                 $contract_arg_2 = builtin::array_get_value<u8>(input, $contract_arg_2);
                 $contract_arg_2 = builtin::array_get_value<u8>($mv$table$repr, $contract_arg_2);
                 $m_3_38 = $contract_arg_0 + 2;
-                $m_3_48 = builtin::array_get_value<u8>(input, $m_3_38);
-                if @unlikely(((0 <= $m_3_48) & ($m_3_48 < $mv$table$used)) == 0) {
+                if @unlikely(builtin::array_get_value<u8>(input, $m_3_38) >=u $mv$table$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<u8>(input, $m_3_38), $mv$table$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:156"), used: 15 });
                     unreachable;
@@ -2115,8 +2111,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
                 $m_3_38 = builtin::array_get_value<u8>(input, $m_3_38);
                 $m_3_38 = builtin::array_get_value<u8>($mv$table$repr, $m_3_38);
                 $m_3_48 = $contract_arg_0 + 3;
-                $m_3_58 = builtin::array_get_value<u8>(input, $m_3_48);
-                if @unlikely(((0 <= $m_3_58) & ($m_3_58 < $mv$table$used)) == 0) {
+                if @unlikely(builtin::array_get_value<u8>(input, $m_3_48) >=u $mv$table$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<u8>(input, $m_3_48), $mv$table$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:157"), used: 15 });
                     unreachable;
@@ -2163,8 +2158,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:154"), used: 15 });
                     unreachable;
                 }
-                $m_3_28 = builtin::array_get_value<u8>(input, $contract_arg_0);
-                if @unlikely(((0 <= $m_3_28) & ($m_3_28 < $mv$table$used)) == 0) {
+                if @unlikely(builtin::array_get_value<u8>(input, $contract_arg_0) >=u $mv$table$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<u8>(input, $contract_arg_0), $mv$table$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:154"), used: 15 });
                     unreachable;
@@ -2172,8 +2166,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
                 $m_3_28 = builtin::array_get_value<u8>(input, $contract_arg_0);
                 $m_3_28 = builtin::array_get_value<u8>($mv$table$repr, $m_3_28);
                 $contract_arg_2 = $contract_arg_0 + 1;
-                $m_3_38 = builtin::array_get_value<u8>(input, $contract_arg_2);
-                if @unlikely(((0 <= $m_3_38) & ($m_3_38 < $mv$table$used)) == 0) {
+                if @unlikely(builtin::array_get_value<u8>(input, $contract_arg_2) >=u $mv$table$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<u8>(input, $contract_arg_2), $mv$table$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:155"), used: 15 });
                     unreachable;
@@ -2181,8 +2174,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
                 $contract_arg_2 = builtin::array_get_value<u8>(input, $contract_arg_2);
                 $contract_arg_2 = builtin::array_get_value<u8>($mv$table$repr, $contract_arg_2);
                 $m_3_38 = $contract_arg_0 + 2;
-                $m_3_48 = builtin::array_get_value<u8>(input, $m_3_38);
-                if @unlikely(((0 <= $m_3_48) & ($m_3_48 < $mv$table$used)) == 0) {
+                if @unlikely(builtin::array_get_value<u8>(input, $m_3_38) >=u $mv$table$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<u8>(input, $m_3_38), $mv$table$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:156"), used: 15 });
                     unreachable;
@@ -2190,8 +2182,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
                 $m_3_38 = builtin::array_get_value<u8>(input, $m_3_38);
                 $m_3_38 = builtin::array_get_value<u8>($mv$table$repr, $m_3_38);
                 $m_3_48 = $contract_arg_0 + 3;
-                $m_3_58 = builtin::array_get_value<u8>(input, $m_3_48);
-                if @unlikely(((0 <= $m_3_58) & ($m_3_58 < $mv$table$used)) == 0) {
+                if @unlikely(builtin::array_get_value<u8>(input, $m_3_48) >=u $mv$table$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<u8>(input, $m_3_48), $mv$table$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:base64:157"), used: 15 });
                     unreachable;
