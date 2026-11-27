@@ -26,7 +26,7 @@ reference held inside a value.
 
 | Position                  | Languages         | Rule                                                                            |
 | ------------------------- | ----------------- | ------------------------------------------------------------------------------- |
-| It cannot be held         | Swift, Hylo, Move | Write access is a parameter mode, not a type                                    |
+| It cannot be held         | Swift, Hylo, Move | A copyable value has no writable reference among its fields                     |
 | It weakens along the path | Rust, Pony, D     | Reached through a read-only view, it reads but does not write                   |
 | It is shallow             | C++, C#, Zig, Go  | A read-only view of the holder promises nothing about what the holder points to |
 
@@ -46,8 +46,7 @@ reference held inside a value.
 - Pony combines the capability of the path with the capability of the field at
   every field read: a `ref` field read through a `box` is a `box`.
 - D's `const` is transitive, and a `const(S)` converts to a mutable `S` only
-  when `S` holds no mutable indirection. Its users keep asking for head const
-  back, and the answer has stayed no.
+  when `S` holds no mutable indirection. Its users still ask for head const.
 - C# allows a `ref` field only in a `ref struct`, and the field says whether
   it writes (`ref` or `ref readonly`). A `readonly ref struct` must not rebind
   its `ref` fields, yet may write through them.
@@ -122,9 +121,9 @@ the struct holding it becomes affine.
 Nothing is chosen. It is a compiler-known type, so a keyword or a sigil is
 open to it as a name is. The spelling may sit at the use (a field's type says
 it is shared) or at the declaration (a type whose every value is shared, as
-Swift's `class` is and as an unrestricted resource already is). Swift's users
-name the second as a standing confusion: `let b = a` means two things, and the
-declaration that decides is elsewhere.
+Swift's `class` is and as an unrestricted resource already is). Under the
+second, `let b = a` copies or shares, and the declaration that decides is
+elsewhere.
 
 ### What a shared cell is made from
 
@@ -167,9 +166,9 @@ another path during the call sees the old value.
 
 ### `variant`
 
-A `variant` is replaced on assignment, yet its payload is written in place,
-and `if let Some(e) = &mut self.f` is how much of the corpus is written. It
-fits neither row above.
+A `variant` is replaced on assignment, yet its payload is written in place.
+Much of the corpus writes `if let Some(e) = &mut self.f` and depends on that.
+It fits neither row above.
 
 ### `&` of a type replaced on assignment
 
