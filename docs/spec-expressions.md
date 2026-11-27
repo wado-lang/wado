@@ -128,11 +128,11 @@ fn poke(holder: &Holder) {
 ```
 
 A generic body is checked before its type parameter is known, so it cannot read
-a `T` as a `&`. A call is an error where its type arguments put a `&mut` behind
-a `&` the caller holds, and a slot of the callee's signature that names a type
-parameter can hand a `&mut` back writable: the return, a `&mut` parameter or a
-function parameter. Only the instantiated types decide, so a type parameter
-reaching the `&` through another's bound alone counts too:
+a `T` as a `&`. A call is an error where a type argument that is a `&mut` sits
+behind a `&` the caller holds, and a slot of the callee's signature that names a
+type parameter can hand it back writable: the return, a `&mut` parameter or a
+function parameter. The instantiated types decide, so a `T` reaching the `&`
+through another parameter's bound alone counts too:
 
 <!-- {"fixture":"error_generic_call_hands_back_mut_through_shared.wado"} -->
 

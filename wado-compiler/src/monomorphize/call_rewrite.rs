@@ -171,14 +171,15 @@ fn instance_arg(
     key.method_type_args.get(at).copied()
 }
 
-/// The type parameter of `template`, and what `key` instantiates it to, that a
-/// `&` parameter mentions where the caller lends that argument shared and the
-/// instance reaches a `&mut` there, when the call has a generic slot holding a
-/// `&mut` to hand it back through: its result, the pointee of a `&mut`
-/// parameter, or a parameter of a function parameter. Judged on instantiated
-/// types, since a parameter may reach another through a bound alone. A
-/// subscript the elaborator read through a `&` types its result as the `&` it
-/// reads, so `returns` holds no `&mut` there.
+/// The type parameter of `template`, and the `&mut` `key` instantiates it to,
+/// that a generic `&` parameter's argument mentions where the caller lends it
+/// shared, and that a generic slot can hand back: the call's result, the
+/// pointee of a `&mut` parameter, or a parameter of a function parameter.
+/// Judged on the instantiated types, since a parameter may reach the `&` one
+/// through another's bound alone. A subscript the elaborator read through a
+/// `&` types its result as the `&` it reads, so `returns` mentions no `&mut`
+/// there. A `&mut` the instance holds inside a value is not judged: a copy out
+/// from behind a `&` is a value of its own.
 fn mut_leaked_through_shared(
     template: &TirFunction,
     key: &InstantiationKey,
@@ -188,37 +189,43 @@ fn mut_leaked_through_shared(
 ) -> Option<(String, TypeId)> {
     let head = |ty: TypeId| tt.get(tt.representation_head(ty));
     let generic = |ty: TypeId| !tt.type_params_in(ty).is_empty();
-    let slot_holds_mut = |arg: TypeId| match head(arg) {
-        ResolvedType::MutRef(pointee) => tt.reaches_mut_ref(*pointee),
-        ResolvedType::Function { params, .. } => params.iter().any(|&p| tt.reaches_mut_ref(p)),
-        _ => false,
-    };
-    let hands_back = (generic(template.return_type) && tt.reaches_mut_ref(returns))
-        || template
+    let generic_args = || {
+        template
             .params
             .iter()
             .zip(args)
-            .any(|(p, a)| generic(p.type_id) && slot_holds_mut(a.expr.type_id));
-    if !hands_back {
-        return None;
-    }
+            .filter(|(p, _)| generic(p.type_id))
+    };
     template
-        .params
+        .impl_type_params
         .iter()
-        .zip(args)
-        .filter(|(p, a)| {
-            matches!(head(p.type_id), ResolvedType::Ref(_)) && reaches_through_shared(&a.expr, tt)
+        .chain(&template.type_params)
+        .filter(|param| !param.is_pack)
+        .find_map(|param| {
+            let leaked = instance_arg(template, key, param.id)?;
+            if !matches!(head(leaked), ResolvedType::MutRef(_)) {
+                return None;
+            }
+            let mentions = |ty: TypeId| mentions_type(tt, ty, leaked);
+            let read_shared = generic_args().any(|(p, a)| {
+                matches!(head(p.type_id), ResolvedType::Ref(_))
+                    && reaches_through_shared(&a.expr, tt)
+                    && mentions(a.expr.type_id)
+            });
+            let carries = |arg: TypeId| match head(arg) {
+                ResolvedType::MutRef(pointee) => mentions(*pointee),
+                ResolvedType::Function { params, .. } => params.iter().any(|&p| mentions(p)),
+                _ => false,
+            };
+            let handed_back = (generic(template.return_type) && mentions(returns))
+                || generic_args().any(|(_, a)| carries(a.expr.type_id));
+            (read_shared && handed_back).then(|| (param.name.clone(), leaked))
         })
-        .flat_map(|(p, _)| tt.type_params_in(p.type_id))
-        .find_map(|id| {
-            let arg = instance_arg(template, key, id)?;
-            let param = template
-                .impl_type_params
-                .iter()
-                .chain(&template.type_params)
-                .find(|p| p.id == id)?;
-            tt.reaches_mut_ref(arg).then(|| (param.name.clone(), arg))
-        })
+}
+
+/// Whether `ty` is `target` or is built over it.
+fn mentions_type(tt: &TypeTable, ty: TypeId, target: TypeId) -> bool {
+    ty == target || tt.any_constituent(ty, &mut |t| mentions_type(tt, t, target))
 }
 
 /// Whether the argument `expr` lends a `&` its caller holds: a `&` value, or a
