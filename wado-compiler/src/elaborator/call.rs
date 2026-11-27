@@ -1757,7 +1757,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let prefix_receiver = if !effective_name.contains("::") {
             None
         } else if let Some(ty) = rewritten_prefix_type {
-            Some(self.receiver_of(ty).at_type(None))
+            Some(self.receiver_of(ty))
         } else {
             callee_kind
                 .receiver_segment()
@@ -2002,7 +2002,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let CalleeReceivers {
             prefix_receiver,
             static_method_receiver,
-            rewritten_prefix_type,
             ..
         } = receivers;
         // First, determine expected parameter types to handle coercion.
@@ -2103,11 +2102,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // phase 4): see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
         if let Some((receiver, method_name)) = static_method_receiver.as_ref().map(static_method) {
-            let typed = receiver.at_type(*rewritten_prefix_type);
             let preselected = self.preselect_static_args(
                 StaticReceiver {
                     expected_return: expected_type,
-                    ..StaticReceiver::of(&typed)
+                    ..StaticReceiver::of(receiver)
                 },
                 method_name,
                 &call.args,
@@ -4644,11 +4642,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )]
         let receiver = at_site.or_else(|| {
             let def = self.namespace_member(ident.id, prefix, type_name)?;
-            Some(ReceiverId::of_decl(
-                self.tysys.resolutions.defs(),
-                def,
-                self.monomorphic_declared_type(def),
-            ))
+            Some(self.receiver_declared(def))
         })?;
         Some(receiver.written_as(&format!("{prefix}::{type_name}")))
     }

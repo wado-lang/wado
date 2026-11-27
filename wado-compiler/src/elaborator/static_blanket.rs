@@ -27,6 +27,7 @@ use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::elaborator::call::slot_type_bindings;
 use crate::elaborator::trait_env::BlanketBound;
+use crate::elaborator::trait_env::BlanketImpl;
 use crate::elaborator::trait_env::BlanketReceiver;
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
@@ -78,24 +79,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .next()
                     .is_some()
             })
-            // The trait comes off the impl's own header, so the blanket
-            // index's bare-name key never reaches a mangled name.
-            .filter_map(|(_, b)| {
-                let header = &self.tysys.trait_env.impl_headers[&b.def];
-                Some((
-                    BlanketStatic {
-                        trait_name: self
-                            .tysys
-                            .trait_env
-                            .fq_trait_of_impl(header, &self.tysys.resolutions)?,
-                        param: b.param.clone(),
-                        binder: b.receiver_binder(self.tysys.resolutions.defs()),
-                        module: b.module.clone(),
-                        def: b.def,
-                    },
-                    b.bounds.clone(),
-                ))
-            })
+            .filter_map(|(_, b)| Some((self.blanket_static(b)?, b.bounds.clone())))
             .collect();
 
         candidates
@@ -121,18 +105,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// The value blanket impl `blanket` the resolution picked for a static
-    /// `method_name`, as it is instantiated at `receiver_type_id`.
-    fn find_blanket_static_method(
-        &self,
-        receiver_type_id: TypeId,
-        method_name: &str,
-        blanket: DefId,
-    ) -> BlanketStatic {
-        self.applicable_blanket_statics(receiver_type_id, method_name, NewtypePeel::Follow)
-            .into_iter()
-            .find(|candidate| candidate.def == blanket)
-            .expect("the resolution picks a blanket whose bounds the receiver's chain meets")
+    /// `None` where the impl names a trait that does not resolve.
+    fn blanket_static(&self, blanket: &BlanketImpl) -> Option<BlanketStatic> {
+        // The trait comes off the impl's own header, so the blanket index's
+        // bare-name key never reaches a mangled name.
+        let header = &self.tysys.trait_env.impl_headers[&blanket.def];
+        Some(BlanketStatic {
+            trait_name: self
+                .tysys
+                .trait_env
+                .fq_trait_of_impl(header, &self.tysys.resolutions)?,
+            param: blanket.param.clone(),
+            binder: blanket.receiver_binder(self.tysys.resolutions.defs()),
+            module: blanket.module.clone(),
+            def: blanket.def,
+        })
+    }
+
+    /// The value blanket impl `blanket` the resolution picked. Its bounds held
+    /// at the link that owns the call, which need not be the receiver's head:
+    /// a newtype may withhold a trait its base derives.
+    fn picked_blanket_static(&self, blanket: DefId) -> BlanketStatic {
+        self.tysys
+            .trait_env
+            .blanket_of_block(blanket)
+            .and_then(|candidate| self.blanket_static(candidate))
+            .expect("the resolution picks a blanket the index holds")
     }
 
     /// The value parameters and the result of the blanket's static `method`
@@ -158,18 +156,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let template_params = sig.value_param_types();
         let template_return = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         let blanket_slot = self.tysys.blanket_param_slot(blanket, blanket_param);
-        let receiver_slot = self
-            .tysys
-            .type_table
-            .borrow()
-            .bind_params(&[blanket_slot], &[receiver_type_id]);
+        // The receiver settles the block's other parameters through its
+        // bounds: `A` in `impl<A, T: Holder<Item = A>> Trait<A> for T`.
+        let block_slots = {
+            let mut table = self.tysys.type_table.borrow_mut();
+            let mut slots = table.bind_params(&[blanket_slot], &[receiver_type_id]);
+            table.project_impl_slots(blanket, &mut slots);
+            slots
+        };
         let param_types = template_params
             .iter()
-            .map(|&pt| self.substitute_map_in_frame(&receiver_slot, pt))
+            .map(|&pt| self.substitute_map_in_frame(&block_slots, pt))
             .collect();
         (
             param_types,
-            self.substitute_map_in_frame(&receiver_slot, template_return),
+            self.substitute_map_in_frame(&block_slots, template_return),
         )
     }
 
@@ -181,8 +182,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method: &str,
         receiver_type_id: TypeId,
     ) -> (Vec<TypeId>, TypeId) {
-        let BlanketStatic { param, def, .. } =
-            self.find_blanket_static_method(receiver_type_id, method, blanket);
+        let BlanketStatic { param, def, .. } = self.picked_blanket_static(blanket);
         self.blanket_static_at_receiver(def, &param, method, receiver_type_id)
     }
 
@@ -214,7 +214,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             binder,
             module: blanket_module,
             def: blanket_def,
-        } = self.find_blanket_static_method(receiver_type_id, method, blanket);
+        } = self.picked_blanket_static(blanket);
 
         let template_name = MethodName::format_local(&binder, Some(&trait_name), method);
         // The blanket's own declaration of the method: its bucket is keyed by

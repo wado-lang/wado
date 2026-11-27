@@ -456,8 +456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolutions = &self.tysys.resolutions;
         let key = match resolutions.walked(segment.id)? {
             Resolution::Def(def) if resolutions.defs().kind(def).is_type() => {
-                let ty = self.monomorphic_declared_type(def);
-                return Some(ReceiverId::of_decl(resolutions.defs(), def, ty));
+                return Some(self.receiver_declared(def));
             }
             Resolution::Def(_) => return None,
             Resolution::Binder(binder) => ImplTargetKey::TypeParam {
@@ -469,9 +468,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(ReceiverId::keyed(key, None))
     }
 
+    /// The type `def` declares, as a call spelling its bare name knows it.
+    pub(super) fn receiver_declared(&self, def: DefId) -> ReceiverId {
+        let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
+        let ty = primitive_receiver_type(&key).or_else(|| self.monomorphic_declared_type(def));
+        ReceiverId::keyed(key, ty)
+    }
+
     /// The type `def` declares where it declares no parameter, so the name
     /// alone is the whole type.
-    pub(super) fn monomorphic_declared_type(&self, def: DefId) -> Option<TypeId> {
+    fn monomorphic_declared_type(&self, def: DefId) -> Option<TypeId> {
         let lookup = self.type_lookup();
         if let Some(newtype) = lookup.newtype_of(def) {
             return Some(newtype);

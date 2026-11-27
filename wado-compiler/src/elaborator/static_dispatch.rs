@@ -678,17 +678,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // No bound declares it, but a blanket over what the bounds admit may.
-        let args: Vec<TypeId> = match pretyped_args {
-            Some(args) => args.to_vec(),
-            None => call
-                .args
-                .iter()
-                .map(|arg| self.resolve_expr(arg, ctx, None))
-                .collect(),
-        };
         let receiver = self
             .receiver_of(type_param_type_id)
             .written_as(type_param_name);
+        let args: Vec<TypeId> = if let Some(args) = pretyped_args {
+            args.to_vec()
+        } else {
+            // The blanket's parameters type the arguments. One naming the
+            // method's own slot waits for the call to solve it.
+            let sig = self.blanket_static_signature(&receiver, method_name);
+            let expected_of = |e: &Self, i: usize| {
+                let sig = sig.as_ref()?;
+                let param = *sig.param_types.get(i)?;
+                let open = e.tysys.type_table.borrow().mentions_any(param, &sig.slots);
+                (!open).then_some(param)
+            };
+            call.args
+                .iter()
+                .enumerate()
+                .map(|(i, arg)| {
+                    let expected = expected_of(self, i);
+                    self.resolve_expr(arg, ctx, expected)
+                })
+                .collect()
+        };
         self.blanket_static_or_unknown(
             &receiver,
             method_name,

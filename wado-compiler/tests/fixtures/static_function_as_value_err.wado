@@ -1,6 +1,8 @@
-// A static function is called, never read: on a struct and on a resource
-// alike, the path says what it names where it is written.
+// A static function is called, never read: on a struct, on a resource and on
+// a type named through a namespace alike, the path says what it names where
+// it is written.
 use { Fields } from "wasi:http";
+use lib from "./sub/blanket_static_types_args_lib.wado";
 
 struct Point { x: i32 }
 
@@ -11,11 +13,12 @@ impl Point {
 export fn run() {
     let a = Point::origin;
     let b = Fields::new;
+    let c = lib::P::origin;
 }
 
 __DATA__
 {
   "compile_error": "is a static function: call it rather than read it as a value",
-  "compile_error_count": 2,
+  "compile_error_count": 3,
   "compile_errors_not_contains": ["operation", "unknown identifier"]
 }

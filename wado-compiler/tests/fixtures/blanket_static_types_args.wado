@@ -15,6 +15,7 @@ impl Base {
 type N = Base;
 
 trait Marked with () { fn mark(&self) -> i32; }
+impl Marked for i32 { fn mark(&self) -> i32 { return 0; } }
 impl Marked for S { fn mark(&self) -> i32 { return 1; } }
 impl Marked for N { fn mark(&self) -> i32 { return 2; } }
 impl Marked for Bx<i32> { fn mark(&self) -> i32 { return 3; } }
@@ -36,6 +37,61 @@ impl<T: Marked> Make for T {
     }
     fn named(s: String) -> i32 { return s.len(); }
     fn twice<U>(f: fn(U) -> U, v: U) -> U { return f(f(v)); }
+}
+
+impl S {
+    fn through_self() -> i32 { return Self::ap(|x| x + 5); }
+}
+
+fn through_param<T: Marked>() -> i64 {
+    return T::ap(|x| x + 6) as i64 + T::wide(5_000_000_000);
+}
+
+// A second parameter of the block, settled by the receiver's bound.
+trait Holder with () { type Item; }
+impl Holder for S { type Item = i64; }
+trait TakeIt<A> with () {
+    fn take(a: A) -> A;
+    fn many(xs: List<A>) -> i32;
+}
+impl<A, T: Holder<Item = A>> TakeIt<A> for T {
+    fn take(a: A) -> A { return a; }
+    fn many(xs: List<A>) -> i32 { return xs.len(); }
+}
+
+// `Narrow` withholds the `Ord` its base derives, so the blanket's bound holds
+// at `Wide` alone, the link that owns the call.
+struct Wide { v: i32 }
+type Narrow = Wide;
+impl Eq for Narrow {
+    fn eq(&self, other: &Narrow) -> bool { return self.v == other.v; }
+}
+trait Mk with () { fn mk(n: i64) -> i64; }
+impl<T: Ord> Mk for T {
+    fn mk(n: i64) -> i64 { return n; }
+}
+
+test "a primitive receiver" {
+    assert i32::ap(|x| x + 7) == 27;
+    assert i32::wide(5_000_000_000) == 5_000_000_000;
+}
+
+test "a receiver written `Self`" {
+    assert S::through_self() == 25;
+}
+
+test "a receiver that is a bound parameter" {
+    assert through_param::<S>() == 5_000_000_026;
+}
+
+test "a block parameter the receiver's bound settles" {
+    let n: i64 = S::take(5_000_000_000);
+    assert n == 5_000_000_000;
+    assert S::many([1, 5_000_000_000]) == 2;
+}
+
+test "a bound holding at a lower link of the chain" {
+    assert Narrow::mk(5_000_000_000) == 5_000_000_000;
 }
 
 test "a closure parameter" {
