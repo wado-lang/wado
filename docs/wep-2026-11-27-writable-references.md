@@ -80,7 +80,8 @@ writers a place has.
 A place reached through a dereference is writable only when every dereference
 on the way is of a `&mut`. Through `rr: &&mut T`, an assignment to `rr.x`, a
 `&mut **rr` and a `&mut self` call are errors. Affinity does not cover these,
-since none of them copies.
+since none of them copies. The dereference of a shared cell starts the path
+again: the place a cell holds is writable whatever reached the cell.
 
 ### A `&mut` is reborrowed where one is expected
 
@@ -157,9 +158,11 @@ the arm that stores it back.
 
 ### `&` of a type replaced on assignment is its value
 
-A primitive, `enum`, `flags`, `variant`, `fn` or reference has no storage a
-reference could share. A `&P` of one is a copy of the value, wherever it is
-taken from: a local, a field or an element. An assignment to the place
+A primitive, `enum`, `flags`, copyable `variant`, `fn` or `&` reference has no
+storage a reference could share. A `&P` of one is a copy of the value, wherever
+it is taken from: a local, a field or an element. An affine value is never
+copied, a `&mut` and an affine `variant` included, so a `&` of one names its
+place. An assignment to the place
 afterwards does not reach it, and for a `variant` neither does a write to its
 payload.
 
@@ -305,6 +308,12 @@ spare a call site. Each step leaves the tree building and its tests passing.
 - [ ] A place is writable only through writable steps.
 - [ ] `&mut T` is affine and reborrowed where one is expected, and every
   copyable struct holding one becomes affine.
+
+## Known gaps
+
+- Two scoped `&mut` of one place in one call, `f(&mut x, &mut x)` for a scalar
+  `x`, are each stored back after the call, and no rule orders the stores. The
+  value the place ends with is undecided.
 
 ## References
 

@@ -526,7 +526,9 @@ Under a `&mut` scrutinee, a payload of a replace-on-assign type (a primitive,
 `&mut Option<i32>` with `Some(x)` is an error. Match `*r` to bind the payload
 by value, or a `&` to the value to bind a `&i32`. A `variant` does bind, as a
 payload, a field, an element or the scrutinee whole, and a mutation of what it
-holds lands. Replacing it whole through the binding is an error. See
+holds lands. Replacing it whole through the binding is an error, except for an
+affine `variant` bound as a payload, a field or an element, where the
+replacement lands. See
 [Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements).
 
 A destructuring `let` or `for` binding follows the same rule, and so does a reference met below the top of a pattern: `for let [a, b] of &pairs` gives `a: &A`, and `[n, { x, .. }]` against `[i32, &Point]` gives `x: &i32`.

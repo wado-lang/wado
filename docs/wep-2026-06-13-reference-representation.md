@@ -206,7 +206,7 @@ fix to conform; none should be preserved.
   | the same, as a type parameter's field (`&mut self.v`, `v: T`)     | as a `variant`'s, below  |
   | `variant`, into a variable / aggregate / payload / `return`       | refused                  |
   | `variant`, reaching one of those through a variable               | refused                  |
-  | a pattern binding under a `&mut` scrutinee, written whole         | refused                  |
+  | a pattern binding of a fresh box, written whole                   | refused                  |
   | `variant` field / `&mut *p`, call argument                        | written back             |
   | `variant`, call argument at a retained position                   | refused                  |
   | `variant` element / whole capture / branch, at a written position | refused                  |
