@@ -880,9 +880,7 @@ fn has_safepoint(
                 NodeRef::Stmt(s) => match self.body.stmts[s].kind {
                     StmtKind::Return {
                         value: Some(Operand::Expr(e)),
-                    } if allocates(&self.body.exprs[e].kind) => {
-                        return self.children(NodeRef::Expr(e));
-                    }
+                    } => return self.returned(e),
                     StmtKind::Let {
                         local_index,
                         value: Some(value),
@@ -897,6 +895,51 @@ fn has_safepoint(
                 NodeRef::Expr(_) | NodeRef::Pat(_) => {}
             }
             self.children(node)
+        }
+
+        /// `e` as the value a `return` hands back: the literal it is, or the
+        /// one whichever arm of an `if` ends in.
+        fn returned(&self, e: ExprId) -> bool {
+            match &self.body.exprs[e].kind {
+                kind if allocates(kind) => self.children(NodeRef::Expr(e)),
+                &ExprKind::If {
+                    condition,
+                    then_branch,
+                    else_branch: Some(else_branch),
+                } => {
+                    self.operand(condition)
+                        || self.returned_by(then_branch)
+                        || self.returned_by(else_branch)
+                }
+                _ => self.node(NodeRef::Expr(e)),
+            }
+        }
+
+        fn returned_by(&self, arm: BlockId) -> bool {
+            let hot = self.cold.hot(self.body, arm);
+            let stmts = &self.body.blocks[arm].stmts;
+            let (tail, lead) = match hot.split_last() {
+                Some((&last, lead)) if hot.len() == stmts.len() => {
+                    match self.body.stmts[last].kind {
+                        StmtKind::Expr(Operand::Expr(e)) => (Some(e), lead),
+                        _ => (None, hot),
+                    }
+                }
+                _ => (None, hot),
+            };
+            for &stmt in lead {
+                if self.node(NodeRef::Stmt(stmt)) {
+                    return true;
+                }
+                if stmt_diverges(self.body, stmt, self.type_table) {
+                    return false;
+                }
+            }
+            tail.is_some_and(|e| self.returned(e))
+        }
+
+        fn operand(&self, op: Operand) -> bool {
+            op.as_expr().is_some_and(|e| self.node(NodeRef::Expr(e)))
         }
 
         fn children(&self, node: NodeRef) -> bool {
