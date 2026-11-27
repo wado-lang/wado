@@ -1,0 +1,20 @@
+// A blanket's block parameter that only the trait's argument names, and that
+// nothing in the call reaches, is reported as the call's to spell.
+
+trait Marked with () { fn mark(&self) -> i32; }
+struct S { v: i32 }
+impl Marked for S { fn mark(&self) -> i32 { return 1; } }
+
+trait TakeIt<A> with () { fn nothing() -> i32; }
+impl<A, T: Marked> TakeIt<A> for T {
+    fn nothing() -> i32 { return 3; }
+}
+
+export fn run() {
+    let n = S::nothing();
+}
+
+__DATA__
+{
+  "compile_error": ":14:13: analysis error: cannot infer type parameter `A` of `S::nothing`"
+}
