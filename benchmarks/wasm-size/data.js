@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795747835185,
+  "lastUpdate": 1795754437753,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82753,6 +82753,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 334351,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "64bf441d5846152033e28d2982222cecdd818e24",
+          "message": "Merge pull request #2770 from wado-lang/refactor/mutation-query\n\nfeat(lang)!: refuse a write through a `&`, and keep values across calls that cannot write them",
+          "timestamp": "2026-11-27T13:22:09+09:00",
+          "tree_id": "dbddc2b61e9d5690a069e04f0b0f808cf93b1a3b",
+          "url": "https://github.com/wado-lang/wado/commit/64bf441d5846152033e28d2982222cecdd818e24"
+        },
+        "date": 1795754436691,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334355,
             "unit": "bytes"
           }
         ]
