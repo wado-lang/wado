@@ -924,7 +924,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ArgClass::Exact(receiver) = self.synth(&call.receiver, scope) else {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
-        match self.method_return_type(receiver, &call.method, call.span) {
+        let classes: Vec<ArgClass> = call.args.iter().map(|arg| self.synth(arg, scope)).collect();
+        match self.method_return_type(receiver, &call.method, &classes, call.span) {
             Some(return_type) => self.class_of_type(return_type),
             None => ArgClass::Opaque(OpaqueReason::Unresolved),
         }
@@ -933,8 +934,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The declared return type of `receiver.method(…)`, read in the order the
     /// real dispatch uses — a concrete ref impl, the inherent method, the base
     /// type's trait impls. Another order would answer with a signature the call
-    /// never selects.
-    fn method_return_type(&mut self, receiver: TypeId, method: &str, span: Span) -> Option<TypeId> {
+    /// never selects. `classes` is what the call's own arguments select by,
+    /// among one trait's argument lists, as the real dispatch selects.
+    fn method_return_type(
+        &mut self,
+        receiver: TypeId,
+        method: &str,
+        classes: &[ArgClass],
+        span: Span,
+    ) -> Option<TypeId> {
+        let selecting = || {
+            Some(ArgSource::Classes {
+                classes: classes.to_vec(),
+                expected: None,
+            })
+        };
         let base = self.tysys.get_base_type(receiver);
         if !self.tysys.has_struct_head(base) {
             return None;
@@ -963,7 +977,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(base),
                     span,
                     None,
-                    None,
+                    selecting(),
                 );
                 self.decide_now(lookup, base, method, span).found()
             }
@@ -974,7 +988,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if found.answers_reference_receiver(ref_depth) {
                 return Some(self.return_type_for_receiver(return_type, owner, receiver));
             }
-            if ref_depth == 1 && found.answers_behind_referent() {
+            // A tie the call's arguments have yet to break names no one
+            // signature, so the class stays open.
+            if ref_depth == 1
+                && found.answers_behind_referent()
+                && found.tie_behind_referent.is_empty()
+            {
                 behind_referent = Some((return_type, owner));
             }
         }
@@ -989,7 +1008,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(base),
             span,
             None,
-            None,
+            selecting(),
         );
         let (return_type, owner) = match self.decide_now(lookup, base, method, span).found() {
             Some(found) => (found.method_info.return_type, found.method_info.owner),
