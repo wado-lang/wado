@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795758524182,
+  "lastUpdate": 1795759462044,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82821,6 +82821,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/01fdcf656fb4b190e681264d5b25d59c04b72b90"
         },
         "date": 1795758523452,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7505662101e9950b63703f403caa669725923f8d",
+          "message": "Merge pull request #2779 from wado-lang/ccr-c251af0f-jlnoi7\n\nfeat(elaborator): a bound's one impl settles the arguments it leaves open",
+          "timestamp": "2026-11-27T14:47:55+09:00",
+          "tree_id": "48ce28fd85326e3dc05a4b7a00405372be26b04a",
+          "url": "https://github.com/wado-lang/wado/commit/7505662101e9950b63703f403caa669725923f8d"
+        },
+        "date": 1795759460922,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
