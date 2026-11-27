@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795787890069,
+  "lastUpdate": 1795796307530,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82997,6 +82997,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/413713e8574552d8c5b7df489507e3eff488ed35"
         },
         "date": 1795787889367,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "494b212bdc7351f798d2a9dcf6fac3086ca0e8d6",
+          "message": "Merge pull request #2787 from wado-lang/ccr-20bd15ab-9i3f8w\n\nperf(collections): HashIndex, a keyless row index that speeds Gale's and package-re's interners",
+          "timestamp": "2026-11-28T01:04:12+09:00",
+          "tree_id": "f28a2337a30457e113ff7b29b6a605ae93d06ee9",
+          "url": "https://github.com/wado-lang/wado/commit/494b212bdc7351f798d2a9dcf6fac3086ca0e8d6"
+        },
+        "date": 1795796306653,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
