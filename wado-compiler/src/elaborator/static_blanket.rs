@@ -435,9 +435,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The signature of a blanket's static called on a generic type spelled
-    /// without its arguments (`Bx::collect(bx, [1, 2])`): the blanket's
-    /// receiver parameter is a slot the arguments settle, so one of them names
-    /// the instance while the rest take their parameters' types. Only where
+    /// without its arguments (`Bx::collect(bx, [1, 2])`): the block's
+    /// parameters are slots the arguments settle, so one of them names the
+    /// instance while the rest take their parameters' types. Only where
     /// nothing the receiver declares answers the name and a single value
     /// blanket does, since no instance says yet which blankets admit it.
     fn unapplied_blanket_static_signature(
