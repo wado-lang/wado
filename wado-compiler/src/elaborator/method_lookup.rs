@@ -4833,14 +4833,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_call_module_source =
             method_trait_impl_source.unwrap_or_else(|| output_module_source.clone());
 
-        let monomorph_info = if !impl_slot_args.is_empty() {
-            Some(MonomorphInfo {
-                generic_name: method_info.to_mangled_name(),
-                impl_type_args: self.apply_infer_holes_each(&impl_slot_args),
-                method_type_args: type_args.clone(),
-                is_blanket: false,
-            })
-        } else {
+        let monomorph_info = if impl_slot_args.is_empty() {
             blanket_template.map(|generic_name| {
                 let trait_args = self.apply_infer_holes_each(&trait_args);
                 self.blanket_monomorph_info(
@@ -4850,6 +4843,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &trait_args,
                     type_args.clone(),
                 )
+            })
+        } else {
+            Some(MonomorphInfo {
+                generic_name: method_info.to_mangled_name(),
+                impl_type_args: self.apply_infer_holes_each(&impl_slot_args),
+                method_type_args: type_args.clone(),
+                is_blanket: false,
             })
         };
         let func = FunctionRef {
