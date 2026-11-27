@@ -13,6 +13,7 @@ use {
     HtmlInputElement,
     Node,
     NodeFilter,
+    NodeIterator,
     Text,
     TreeWalker,
     Window,
@@ -144,6 +145,80 @@ test "a node iterator answers the node it passes, either way" {
         let texts = doc.create_node_iterator(body, NodeFilter::SHOW_TEXT, |_| NodeFilter::FILTER_ACCEPT);
         assert name(texts.next_node()) == "#text";
         assert texts.next_node() == null;
+    };
+}
+
+// <body><div><p></p><span>hi</span></div><em></em></body>, and an iterator over
+// its elements whose reference is `SPAN`, the pointer on the side `before` says.
+fn at_span(doc: Document, before: bool) -> NodeIterator with Dom {
+    let iterator = doc.create_node_iterator(
+        traversal_tree(doc),
+        NodeFilter::SHOW_ELEMENT,
+        |_| NodeFilter::FILTER_ACCEPT,
+    );
+    while iterator.next_node().unwrap().node_name() != "SPAN" {
+    }
+    if before {
+        iterator.previous_node();
+    }
+    assert name(Option::Some(iterator.reference_node())) == "SPAN";
+    return iterator;
+}
+
+test "a node iterator before a removed reference moves to the node after the subtree" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let before = at_span(Dom::document(), true);
+        let div = before.root().first_child().unwrap();
+        before.root().remove_child(div);
+        assert name(Option::Some(before.reference_node())) == "EM";
+        assert before.pointer_before_reference_node();
+        assert name(before.next_node()) == "EM";
+    };
+}
+
+test "a node iterator after a removed reference moves to the node before the subtree" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let after = at_span(Dom::document(), false);
+        let span = after.root().first_child().unwrap().last_child().unwrap();
+        span.parent_node().unwrap().remove_child(span);
+        assert name(Option::Some(after.reference_node())) == "P";
+        assert !after.pointer_before_reference_node();
+        assert name(after.next_node()) == "EM";
+    };
+}
+
+test "a node iterator before a reference nothing follows turns to the one before it" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let iterator = at_span(doc, true);
+        let em = iterator.root().last_child().unwrap();
+        while iterator.reference_node() != em {
+            iterator.next_node();
+        }
+        iterator.previous_node();
+        em.parent_node().unwrap().remove_child(em);
+        assert name(Option::Some(iterator.reference_node())) == "#text";
+        assert !iterator.pointer_before_reference_node();
+        assert iterator.next_node() == null;
+    };
+}
+
+test "a node iterator stays where neither its root nor its reference is removed" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let iterator = at_span(doc, false);
+        let root = iterator.root();
+        root.remove_child(root.last_child().unwrap());
+        root.parent_node().unwrap().remove_child(root);
+        assert name(Option::Some(iterator.reference_node())) == "SPAN";
+        // Moving a node removes it from where it was.
+        let span = iterator.reference_node();
+        root.append_child(span);
+        assert name(Option::Some(iterator.reference_node())) == "P";
     };
 }
 

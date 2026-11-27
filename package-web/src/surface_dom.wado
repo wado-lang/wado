@@ -56,6 +56,9 @@ struct SurfaceNode {
     referenced: HashMap<String, List<Element>>,
     value: String,
     listeners: List<Listener>,
+    // The document's node iterators, which a removal moves; empty on any
+    // other node.
+    iterators: List<NodeIterator>,
     parent: Option<Node>,
     first_child: Option<Node>,
     last_child: Option<Node>,
@@ -139,6 +142,7 @@ fn detached(content: Content, document: Option<Document>) -> SurfaceNode {
         referenced: HashMap::new(),
         value: "",
         listeners: [],
+        iterators: [],
         parent: null,
         first_child: null,
         last_child: null,
@@ -219,6 +223,10 @@ fn detach(child: Node) {
     let Some(parent) = node.parent else {
         return;
     };
+    let document = node.document.expect("a node with a parent is not the document");
+    for let iterator of surface_node(document).iterators {
+        pre_remove(surface_iterator(iterator), child);
+    }
     let previous = node.previous_sibling;
     let next = node.next_sibling;
     if let Some(before) = previous {
@@ -311,6 +319,15 @@ fn following(node: Node, root: Node) -> Option<Node> {
     if let Some(child) = surface_node(node).first_child {
         return Option::Some(child);
     }
+    return following_past(node, root);
+}
+
+// The node after `node`'s inclusive descendants in tree order, among `root`'s
+// inclusive descendants.
+fn following_past(node: Node, root: Node) -> Option<Node> {
+    if !is_inclusive_ancestor(root, node) {
+        return null;
+    }
     let mut at = node;
     while at != root {
         let here = surface_node(at);
@@ -339,6 +356,23 @@ fn preceding(node: Node, root: Node) -> Option<Node> {
         at = last;
     }
     return Option::Some(at);
+}
+
+// The DOM standard's `NodeIterator` pre-removing steps, as `removed` leaves its
+// parent. A removed ancestor of the root moves the reference out of the root.
+fn pre_remove(iterator: &mut SurfaceIterator, removed: Node) {
+    let root = iterator.traverser.root;
+    if removed == root || !is_inclusive_ancestor(removed, iterator.reference) {
+        return;
+    }
+    if iterator.pointer_before_reference {
+        if let Some(next) = following_past(removed, root) {
+            iterator.reference = next;
+            return;
+        }
+        iterator.pointer_before_reference = false;
+    }
+    iterator.reference = preceding(removed, root).expect("a node being removed has a parent");
 }
 
 fn is_element(node: &SurfaceNode) -> bool {
@@ -1038,11 +1072,13 @@ impl Document for SurfaceDom {
         filter: NodeFilter,
     ) -> NodeIterator {
         self.own(*this);
-        resume NodeIterator::backed_by(SurfaceIterator {
+        let iterator = NodeIterator::backed_by(SurfaceIterator {
             traverser: self.traverser(root, what_to_show, filter),
             reference: root,
             pointer_before_reference: true,
         });
+        surface_node(self.document).iterators.push(iterator);
+        resume iterator;
     }
 
     fn create_tree_walker(&mut self, this: &Document, root: Node, what_to_show: u32, filter: NodeFilter) -> TreeWalker {
