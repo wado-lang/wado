@@ -1139,9 +1139,10 @@ impl HeapEffects<'_> {
 /// parameter, if the table holds it.
 fn instantiated_reference(tt: &TypeTable, payload: TypeId, arg: TypeId) -> Option<TypeId> {
     match tt.get(payload) {
-        ResolvedType::Ref(inner) => {
-            tt.find_ref(RefKind::Shared, instantiated_reference(tt, *inner, arg)?)
-        }
+        ResolvedType::Ref(inner) => tt.find_ref(
+            RefKind::ImmutableReference,
+            instantiated_reference(tt, *inner, arg)?,
+        ),
         ResolvedType::MutRef(inner) => {
             tt.find_ref(RefKind::Mut, instantiated_reference(tt, *inner, arg)?)
         }

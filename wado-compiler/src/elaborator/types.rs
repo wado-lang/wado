@@ -3159,7 +3159,7 @@ impl TypeError {
             } => (
                 Code::CmBoundaryType,
                 format!(
-                    "callback parameter '{param}' of `{function}` cannot cross the Component Model boundary: a callback takes only scalars and unrestricted handles, and returns nothing"
+                    "callback parameter '{param}' of `{function}` cannot cross the Component Model boundary: a callback takes and returns only scalars and unrestricted handles"
                 ),
                 *span,
             ),

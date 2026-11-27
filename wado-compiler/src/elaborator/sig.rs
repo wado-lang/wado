@@ -11,6 +11,7 @@ use crate::tir::{EffectParam, EffectRows, RowVar, TemplateId, TypeArgMap, TypeId
 use crate::type_table::TypeTable;
 
 use super::sem::decls::FunctionSig;
+use crate::Span;
 use crate::ast;
 use crate::ast::{SelfKind, Visibility};
 use crate::name::FqTypeName;
@@ -20,6 +21,7 @@ use crate::tir::SlotProjections;
 #[derive(Debug, Clone)]
 pub(crate) struct AssocConstSig {
     pub(crate) decl: AstId,
+    pub(crate) name_span: Span,
     /// The impl-declaring module; reify walks [`Self::value`] under it.
     pub(crate) module: ModuleSource,
     pub(crate) ty: TypeId,
@@ -118,6 +120,18 @@ impl Signatures {
     /// The constant `name` declared on the type `owner`.
     pub(crate) fn associated_constant(&self, owner: DefId, name: &str) -> Option<&AssocConstSig> {
         self.associated_constants.get(&(owner, name.to_string()))
+    }
+
+    /// The constant `ancestors` hand down as `name`, with the resource
+    /// declaring it. A trait impl is not inherited, so its constant is not.
+    pub(crate) fn inherited_constant(
+        &self,
+        ancestors: impl Iterator<Item = DefId>,
+        name: &str,
+    ) -> Option<(DefId, &AssocConstSig)> {
+        ancestors
+            .filter_map(|ancestor| Some((ancestor, self.associated_constant(ancestor, name)?)))
+            .find(|(_, constant)| constant.inherent_visibility.is_some())
     }
 
     /// The `__DATA__` section of `module`, if it declares one.

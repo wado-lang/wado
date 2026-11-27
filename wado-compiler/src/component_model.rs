@@ -2100,7 +2100,9 @@ impl CmInterfaceRegistry {
                 Some(source) => format!("{source}#{}", n.name),
                 None => n.name.clone(),
             },
-            Type::Reference(inner) => ref_type_name(RefKind::Shared, &self.type_key(inner)),
+            Type::Reference(inner) => {
+                ref_type_name(RefKind::ImmutableReference, &self.type_key(inner))
+            }
             Type::MutReference(inner) => ref_type_name(RefKind::Mut, &self.type_key(inner)),
             Type::Generic(g) => format!("{}:{}", g.name, keys(&g.args)),
             Type::NamespacedGeneric(g) => {
@@ -2185,10 +2187,13 @@ impl CmInterfaceRegistry {
             let local_names = build_local_name_resolver(path, &module, &defs_by_module);
             let sources = collect_named_type_sources(&module, &local_names);
             registry.extend_source_interfaces(sources);
-            if let Err(msg) = registry.register_module_decls(&module, &CmDeclScope::Module) {
+            registry.register_module_types(&module, &CmDeclScope::Module);
+            resolved_modules.push((path, module));
+        }
+        for (_, module) in &resolved_modules {
+            if let Err(msg) = registry.register_module_functions(module, &CmDeclScope::Module) {
                 panic!("the stdlib binds each `Interface::method` once: {msg}");
             }
-            resolved_modules.push((path, module));
         }
 
         // Build interface lookup from accumulated `pub interface Foo`
@@ -2213,6 +2218,15 @@ impl CmInterfaceRegistry {
         module: &ast::Module,
         scope: &CmDeclScope,
     ) -> Result<(), String> {
+        self.register_module_types(module, scope);
+        self.register_module_functions(module, scope)
+    }
+
+    /// Register the types `module` declares. A function's signature reads them,
+    /// so a caller registering several modules registers every module's types
+    /// before any module's functions: a signature may name a type another
+    /// module declares.
+    fn register_module_types(&mut self, module: &ast::Module, scope: &CmDeclScope) {
         self.known_names = OnceLock::new();
         for item in &module.items {
             let name = match item {
@@ -2400,7 +2414,14 @@ impl CmInterfaceRegistry {
                 );
             }
         }
+    }
 
+    /// Register the interface and resource functions `module` declares.
+    fn register_module_functions(
+        &mut self,
+        module: &ast::Module,
+        scope: &CmDeclScope,
+    ) -> Result<(), String> {
         self.register_interface_cm_methods(module, scope)?;
 
         // Register resource methods with resolved types for params but NOT for return type
@@ -2463,6 +2484,7 @@ impl CmInterfaceRegistry {
             resolutions,
             bound: &bound,
         };
+        let mut bound_modules = Vec::with_capacity(modules.len());
         for ((module_source, module), module_bound) in modules.iter().zip(&bound_by_module) {
             let mut module = (*module).clone();
             let sources = binder
@@ -2471,7 +2493,11 @@ impl CmInterfaceRegistry {
             self.register_user_cm_decls(module_bound.values(), module_source)
                 .map_err(UserCmError::Duplicate)?;
             self.extend_source_interfaces(sources);
-            self.register_module_decls(&module, &CmDeclScope::CmAttributed)
+            self.register_module_types(&module, &CmDeclScope::CmAttributed);
+            bound_modules.push(module);
+        }
+        for module in &bound_modules {
+            self.register_module_functions(module, &CmDeclScope::CmAttributed)
                 .map_err(UserCmError::Duplicate)?;
         }
         Ok(())
@@ -3162,6 +3188,15 @@ impl CmInterfaceRegistry {
         }
     }
 
+    /// The function type `ty` is, read through the newtypes naming it.
+    fn function_type(&self, ty: &Type) -> Option<Type> {
+        match ty {
+            Type::Function(_) => Some(ty.clone()),
+            Type::Named(named) => self.function_type(self.resolve_newtype_ref(named)?),
+            _ => None,
+        }
+    }
+
     /// The registration source and base type of a newtype the compiled package
     /// declares, which the boundary keeps as a named alias (issue #1456).
     pub fn local_newtype_base(&self, source: Option<&str>, name: &str) -> Option<(&str, &Type)> {
@@ -3607,13 +3642,13 @@ impl CmInterfaceRegistry {
                             .item_type(CompilerItem::List, g.args.clone(), ty.span());
                     return (name, cm_name, self.value_type(&list));
                 }
-                if !matches!(ty, Type::Function(_)) {
+                let Some(function) = self.function_type(&ty) else {
                     return (name, cm_name, self.value_type(&ty));
-                }
+                };
                 let closure =
                     self.type_decls
                         .item_type(CompilerItem::ExternObject, vec![], ty.span());
-                callbacks.push((i, ty));
+                callbacks.push((i, function));
                 (name, cm_name, closure)
             })
             .collect();

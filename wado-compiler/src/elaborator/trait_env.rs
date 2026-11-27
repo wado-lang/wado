@@ -2809,7 +2809,7 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
     };
     match ty {
         ast::Type::Reference(inner) => {
-            written_type_arg(inner, resolutions).with_reference(name::RefKind::Shared)
+            written_type_arg(inner, resolutions).with_reference(name::RefKind::ImmutableReference)
         }
         ast::Type::MutReference(inner) => {
             written_type_arg(inner, resolutions).with_reference(name::RefKind::Mut)
@@ -2953,9 +2953,10 @@ pub(super) fn written_type_source(ty: &ast::Type) -> String {
                 .collect::<Vec<_>>(),
         ),
         ast::Type::Tuple(elems) => name::display_tuple_type(&list(elems)),
-        ast::Type::Reference(inner) => {
-            name::ref_type_name(name::RefKind::Shared, &written_type_source(inner))
-        }
+        ast::Type::Reference(inner) => name::ref_type_name(
+            name::RefKind::ImmutableReference,
+            &written_type_source(inner),
+        ),
         ast::Type::MutReference(inner) => {
             name::ref_type_name(name::RefKind::Mut, &written_type_source(inner))
         }

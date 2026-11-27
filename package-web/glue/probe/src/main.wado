@@ -1,9 +1,9 @@
 //! What only the host's own objects answer, which `glue/dom.test.mjs` reads
 //! back from the attributes of `<body>`: identity, narrowing through more than
 //! one level of `extends`, the name `Inspect` writes, a list of handles each
-//! way, an enum each way, a dictionary, a union, a promise settled and
-//! rejected, a listener entered while `run` waits, which waits itself, and what
-//! the collector reclaims.
+//! way, a callback's result, an enum each way, a dictionary, a union, a promise
+//! settled and rejected, a listener entered while `run` waits, which waits
+//! itself, and what the collector reclaims.
 
 use {
     AddEventListenerOptions,
@@ -16,6 +16,7 @@ use {
     HtmlElement,
     HtmlInputElement,
     Node,
+    NodeFilter,
     NodeOrString,
     SpatialNavigationDirection,
 } from "wado-lang:web";
@@ -39,6 +40,13 @@ export fn run() with (Dom, MonotonicClock) {
     div.set_aria_labelled_by_elements(Option::Some([input, div]));
     let labels = div.aria_labelled_by_elements().unwrap();
     report("labels", `${labels.len()} ${labels[0] == input} ${labels[1] == div}`);
+
+    // A callback's result crosses back: the filter rejects the `<input>`, so the
+    // walker reaches only the `<div>`.
+    let walker = doc.create_tree_walker(doc.body().unwrap(), NodeFilter::SHOW_ELEMENT, |n| {
+        return if n == input as Node { NodeFilter::FILTER_REJECT } else { NodeFilter::FILTER_ACCEPT };
+    });
+    report("walk", `${walker.next_node() == Option::Some(div as Node)} ${walker.next_node() == null}`);
 
     // An enum is a string to the host, and its case's index on the way.
     let found = div.spatial_navigation_search(SpatialNavigationDirection::Down);

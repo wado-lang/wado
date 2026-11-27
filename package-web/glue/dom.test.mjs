@@ -93,6 +93,7 @@ test("the host answers identity, narrowing and a listener while `run` waits", as
   assert.equal(found.inspect, "HtmlInputElement HtmlElement");
   // The list the program set is the list it read back, object for object.
   assert.equal(found.labels, "2 true true");
+  assert.equal(found.walk, "true true");
   assert.equal(found.enum, "DocumentReadyState::Interactive true");
   assert.equal(searched, "down");
   // Of two events, the one made with `bubbles` reached `<body>`, both were

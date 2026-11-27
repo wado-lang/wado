@@ -2613,7 +2613,7 @@ impl Monomorphizer {
             return false;
         };
         let (ref_kind, inner) = match type_table.get(reference) {
-            ResolvedType::Ref(inner) => (RefKind::Shared, *inner),
+            ResolvedType::Ref(inner) => (RefKind::ImmutableReference, *inner),
             ResolvedType::MutRef(inner) => (RefKind::Mut, *inner),
             other => unreachable!("a blanket over a reference answers {other:?}"),
         };

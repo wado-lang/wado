@@ -3,7 +3,9 @@
 //! hid from the reference site. See
 //! `docs/wep-2026-06-13-reference-representation.md`.
 
+use super::value_copy::analyze::{Slot, for_each_pattern_binding_in};
 use super::value_copy::callgraph::CallGraph;
+use super::value_copy::place::PlaceKind;
 use super::value_copy::reach::ClosureCaptures;
 use super::value_copy::retention::{CallRetention, FunctorRows, RefCarrying};
 use super::whole_value_writes::{self, WholeValueWrites};
@@ -14,10 +16,10 @@ use crate::logger::{Bail, ErrorSink};
 use crate::name::minted_name;
 use crate::synthesis::common::{handle_identical, not_expr};
 use crate::tir::{
-    LetStorage, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId,
+    LetStorage, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirPattern,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
-use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
+use crate::tir_visitor::{TirOptVisitor, TirRefVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -64,6 +66,7 @@ pub fn insert_write_backs(
             refused: None,
         };
         if let Some(body) = func.body.as_mut() {
+            pass.hold_pattern_bindings(whole_value_writes::Body::Block(body));
             pass.visit_block(body);
         }
         func.local_count = pass.local_count;
@@ -226,6 +229,35 @@ impl WriteBack<'_> {
         }
     }
 
+    /// Note that `local` holds a detached reference. Only a binding something
+    /// replaces through loses a write: one used to mutate a payload lands
+    /// through the box either way. Reading the binding hands the same
+    /// reference on, so a later sink is the same escape.
+    fn hold_detached(&mut self, local: u32, span: Span, holder: &str) {
+        if self.replaced_locals.contains(&local) {
+            self.refuse(span, format!("{holder} holds it past the reference"));
+        }
+        self.detached_locals.insert(local);
+    }
+
+    /// Note every pattern binding of `body` that holds a detached reference,
+    /// ahead of the walk: a sink is asked before the walk reaches a `match`
+    /// inside the value it holds.
+    fn hold_pattern_bindings(&mut self, body: whole_value_writes::Body<'_>) {
+        let mut bindings = PatternBindings {
+            type_table: self.type_table,
+            carrying: self.carrying,
+            detached: Vec::new(),
+        };
+        match body {
+            whole_value_writes::Body::Block(block) => bindings.visit_block(block),
+            whole_value_writes::Body::Expr(expr) => bindings.visit_expr(expr),
+        }
+        for (local, span) in bindings.detached {
+            self.hold_detached(local, span, "a pattern binding");
+        }
+    }
+
     /// Walk a closure body against its own local namespace, seeding its own
     /// address-taken set — which is what `boxing` reads on the way in.
     fn visit_closure(
@@ -257,6 +289,7 @@ impl WriteBack<'_> {
             ref_temps: Vec::new(),
             refused: None,
         };
+        inner.hold_pattern_bindings(whole_value_writes::Body::Expr(body));
         // An expression-bodied closure yields its body; a block-bodied one must
         // spell `return`, which `visit_stmt` catches.
         inner.refuse_stored(body, "the returned value");
@@ -723,26 +756,78 @@ fn place_root(expr: &TirExpr) -> Option<Root> {
     }
 }
 
+/// The pattern bindings of one body that hold a detached reference, each with
+/// the span of the statement or arm that binds it. A `&mut` scrutinee binds what
+/// it names by reference, the whole as well as each field, element and payload,
+/// and a value of a replace type is read into a fresh box. A field, element or
+/// payload [`TypeTable::boxes_slot`] boxes is its own box, which the binding
+/// reaches; the whole never is. A binding whose slot already holds a `&mut`
+/// binds that reference by value.
+struct PatternBindings<'a> {
+    type_table: &'a TypeTable,
+    carrying: &'a RefCarrying<'a>,
+    detached: Vec<(u32, Span)>,
+}
+
+impl PatternBindings<'_> {
+    fn bind(&mut self, pattern: &TirPattern, scrutinee: &TirExpr, span: Span) {
+        let type_table = self.type_table;
+        let whole = Slot {
+            ty: Some(type_table.reference_path(scrutinee.type_id).1),
+            kind: PlaceKind::Storage,
+        };
+        let detached = &mut self.detached;
+        for_each_pattern_binding_in(
+            pattern,
+            whole,
+            self.carrying,
+            &mut |local, type_id, slot| {
+                if let ResolvedType::MutRef(pointee) = type_table.get(type_id)
+                    && slot.ty.is_none_or(|held| held == *pointee)
+                    && type_table.is_boxed_reference_target(*pointee)
+                    && (slot.kind == PlaceKind::Storage || !type_table.boxes_slot(*pointee))
+                {
+                    detached.push((local, span));
+                }
+            },
+        );
+    }
+}
+
+impl TirRefVisitor for PatternBindings<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::LetDestructure { pattern, value } = &stmt.kind {
+            self.bind(pattern, value, stmt.span);
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } = &expr.kind
+        {
+            for arm in arms {
+                self.bind(&arm.pattern, scrutinee, arm.span);
+            }
+        }
+        self.walk_expr_in_frame(expr);
+    }
+}
+
 impl TirOptVisitor for WriteBack<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         match &stmt.kind {
-            // A TIR `Let` is a single binding; a destructuring `let` lowered to
-            // a pattern, which binds through the reference rather than keeping it.
-            // Only a binding something replaces through loses a write — one used
-            // to mutate a payload lands through the box either way.
+            // A TIR `Let` is a single binding; a destructuring `let` is a
+            // pattern, whose bindings were noted ahead of the walk.
             TirStmtKind::Let {
                 value: Some(value),
                 local_index,
                 ..
             } => {
-                let local_index = *local_index;
-                if self.detached_in_value_position(value).is_some() {
-                    if self.replaced_locals.contains(&local_index) {
-                        self.refuse_stored(value, "a variable");
-                    }
-                    // Reading the binding hands the same detached reference on, so
-                    // a later sink is the same escape.
-                    self.detached_locals.insert(local_index);
+                if let Some(place) = self.detached_in_value_position(value) {
+                    self.hold_detached(*local_index, place, "a variable");
                 }
             }
             TirStmtKind::Return { value: Some(value) } => {

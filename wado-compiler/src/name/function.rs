@@ -206,7 +206,7 @@ pub struct LocalMethodName {
 /// The reference kind of a `&` / `&mut` method receiver.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum RefKind {
-    Shared,
+    ImmutableReference,
     Mut,
 }
 
@@ -215,7 +215,7 @@ impl RefKind {
     #[must_use]
     pub fn prefix(self) -> &'static str {
         match self {
-            RefKind::Shared => "&",
+            RefKind::ImmutableReference => "&",
             RefKind::Mut => "&mut",
         }
     }
@@ -224,7 +224,7 @@ impl RefKind {
     #[must_use]
     pub fn from_ast(ty: &ast::Type) -> Option<Self> {
         match ty {
-            ast::Type::Reference(_) => Some(RefKind::Shared),
+            ast::Type::Reference(_) => Some(RefKind::ImmutableReference),
             ast::Type::MutReference(_) => Some(RefKind::Mut),
             _ => None,
         }
@@ -234,7 +234,7 @@ impl RefKind {
     #[must_use]
     pub fn from_resolved(ty: &ResolvedType) -> Option<Self> {
         match ty {
-            ResolvedType::Ref(_) => Some(RefKind::Shared),
+            ResolvedType::Ref(_) => Some(RefKind::ImmutableReference),
             ResolvedType::MutRef(_) => Some(RefKind::Mut),
             _ => None,
         }
@@ -909,7 +909,7 @@ mod tests {
 
     #[test]
     fn test_receiver_mangle() {
-        let shared = Receiver::Ref(RefKind::Shared);
+        let shared = Receiver::Ref(RefKind::ImmutableReference);
         assert_eq!(shared.mangle(&["i32".into()]), "&i32");
         assert_eq!(shared.mangle(&["List<i32>".into()]), "&List<i32>");
         let mutable = Receiver::Ref(RefKind::Mut);
@@ -922,7 +922,7 @@ mod tests {
         );
         // A reference to a named head keeps the head, its arguments applied.
         let list = FqTypeName::builtin("List");
-        let shared_list = Receiver::RefTo(RefKind::Shared, list.clone());
+        let shared_list = Receiver::RefTo(RefKind::ImmutableReference, list.clone());
         assert_eq!(shared_list.mangle(&["i32".into()]), "&List<i32>");
         assert_eq!(shared_list.head_key().as_mangled_str(), "&List");
         let mut_list = Receiver::RefTo(RefKind::Mut, list);
@@ -935,8 +935,8 @@ mod tests {
         let item = FqTypeName::builtin("Item");
         let template = LocalMethodName::of(
             Receiver::of_ref_impl(
-                RefKind::Shared,
-                &item.clone().with_reference(RefKind::Shared),
+                RefKind::ImmutableReference,
+                &item.clone().with_reference(RefKind::ImmutableReference),
             ),
             None,
             "eq".into(),
@@ -954,7 +954,7 @@ mod tests {
         let at_owner = template.at_owner(
             &item
                 .with_args(vec![FqTypeName::builtin("bool")])
-                .with_reference(RefKind::Shared),
+                .with_reference(RefKind::ImmutableReference),
         );
         assert_eq!(
             at_owner,

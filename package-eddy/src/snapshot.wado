@@ -53,7 +53,7 @@ impl Tree {
 /// run that dies leaves no lock behind.
 fn hold(path: &String) -> Result<Option<Child>, String> with Process {
     let started = Command::new("flock")
-        .args(["--nonblock", "--conflict-exit-code", "75", *path, "sh", "-c", "echo held && exec cat"])
+        .args(["--nonblock", "--no-fork", "--conflict-exit-code", "75", *path, "sh", "-c", "echo held && exec cat"])
         .stdin_piped()
         .stdout_piped()
         .spawn();
@@ -82,9 +82,18 @@ test "a run holds the tree until it lets go" {
     let path = "build/hold-test.lock";
     let first = hold(&path).unwrap().unwrap();
     assert hold(&path).unwrap_err().contains("another run");
+<<<<<<< HEAD
     // The lock goes when the child has exited, which dropping it does not
     // wait for.
     first.stop(5_000_000_000).unwrap();
+||||||| 750566210
+    builtin::drop(first);
+=======
+    // Dropping the child kills it without waiting, and the lock goes only
+    // once it has exited. `--no-fork` makes it the process holding the lock.
+    first.kill();
+    first.wait().unwrap();
+>>>>>>> origin/main
     assert hold(&path).is_ok();
 }
 

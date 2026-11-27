@@ -80,9 +80,17 @@ fn namespace(name: &str, members: &[String]) -> String {
 }
 
 fn const_member(name: &str) -> String {
+    typed_const(
+        name,
+        "unsigned short",
+        r#"{"type": "number", "value": "1"}"#,
+    )
+}
+
+fn typed_const(name: &str, ty: &str, value: &str) -> String {
     format!(
-        r#"{{"type": "const", "name": "{name}", "idlType": {}, "extAttrs": [], "value": {{"type": "number", "value": "1"}}}}"#,
-        plain("unsigned short")
+        r#"{{"type": "const", "name": "{name}", "idlType": {}, "extAttrs": [], "value": {value}}}"#,
+        plain(ty)
     )
 }
 
@@ -335,8 +343,9 @@ fn an_optional_argument_takes_its_webidl_default_or_null() {
             )],
             "",
         ),
-        // A number is read by WebIDL's grammar, where a leading `0` is octal
-        // and a float may start or end at its `.`, and written in Wado's.
+        // A number keeps its WebIDL spelling where Wado reads it the same.
+        // It does not for a leading `0`, which is octal in WebIDL, nor for a
+        // float starting or ending at its `.`.
         operation(
             "setMode",
             &plain("undefined"),
@@ -409,7 +418,7 @@ fn an_optional_argument_takes_its_webidl_default_or_null() {
         ),
         "{code}"
     );
-    assert!(code.contains("fn step_up(&self, n: i32 = 255);"), "{code}");
+    assert!(code.contains("fn step_up(&self, n: i32 = 0xFF);"), "{code}");
     assert!(
         code.contains("fn set_mode(&self, mode: i32 = -493, ratio: f64 = 0.5, scale: f64 = 5.0);"),
         "{code}"
@@ -1258,18 +1267,115 @@ fn a_callback_is_a_closure_the_host_calls_back_with_scalars_and_handles() {
     ];
     defs.interfaces.push(partial("Element", &members));
     let (code, skipped) = defs.generate();
-    assert!(code.contains("callback: fn mut(Node) with Dom);"), "{code}");
+    assert!(code.contains("callback: EventListener);"), "{code}");
+    assert!(
+        code.contains(
+            "\
+#[cm(\"wado-lang:web/types#event-listener\")]
+pub type EventListener = fn mut(Node) with Dom;
+"
+        ),
+        "{code}"
+    );
     assert!(
         code.contains("callback: fn mut(f64) with Dom) -> u32;"),
+        "{code}"
+    );
+    assert!(code.contains("fn filter(&self, filter: fn mut("), "{code}");
+    assert_eq!(
+        skipped,
+        [
+            "Element.on_text: `callback`: callback argument `text`: neither a scalar nor a handle",
+            "Element.on_maybe: `callback`: callback argument `count`: optional",
+            "Element.current_listener: a callback in a result",
+        ]
+    );
+}
+
+/// A callback interface has no object for a resource to stand for, so its
+/// constants sit on the function type its one operation is.
+#[test]
+fn a_callback_interface_is_a_named_function_type_holding_its_constants() {
+    let number = |value: &str| format!(r#"{{"type": "number", "value": "{value}"}}"#);
+    let interface = |name: &str, members: &[String]| {
+        definition("callback interface", name, "null", "", false, members)
+    };
+    let accept = operation(
+        "acceptNode",
+        &plain("unsigned short"),
+        &[argument("node", &plain("Node"), false, "null")],
+        "",
+    );
+    let mut defs = chain();
+    defs.callbacks = vec![
+        interface(
+            "NodeFilter",
+            &[
+                typed_const("FILTER_ACCEPT", "unsigned short", &number("1")),
+                typed_const("SHOW_ALL", "unsigned long", &number("0xFFFFFFFF")),
+                accept.clone(),
+            ],
+        ),
+        // Nothing names this one, and it holds no constant.
+        interface("Unused", std::slice::from_ref(&accept)),
+        interface(
+            "Uncallable",
+            &[
+                const_member("LEVEL"),
+                operation(
+                    "handle",
+                    &plain("undefined"),
+                    &[argument("text", &plain("DOMString"), false, "null")],
+                    "",
+                ),
+            ],
+        ),
+        interface(
+            "Undecidable",
+            &[
+                const_member("LEVEL"),
+                operation("decide", &plain("Decision"), &[], ""),
+            ],
+        ),
+    ];
+    defs.enums = vec![string_enum("Decision", &["accept", "skip"])];
+    defs.interfaces.push(partial(
+        "Element",
+        &[operation(
+            "walk",
+            &plain("undefined"),
+            &[argument("filter", &plain("NodeFilter"), false, "null")],
+            "",
+        )],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "\
+#[cm(\"wado-lang:web/types#node-filter\")]
+pub type NodeFilter = fn mut(Node) -> u16 with Dom;
+
+impl NodeFilter {
+    pub const FILTER_ACCEPT: u16 = 1;
+    pub const SHOW_ALL: u32 = 0xFFFFFFFF;
+}
+"
+        ),
+        "{code}"
+    );
+    assert!(!code.contains("Unused"), "{code}");
+    assert!(!code.contains("Uncallable"), "{code}");
+    assert!(!code.contains("Undecidable"), "{code}");
+    assert!(!code.contains("enum Decision"), "{code}");
+    assert!(
+        code.contains("fn walk(&self, filter: NodeFilter);"),
         "{code}"
     );
     assert_eq!(
         skipped,
         [
-            "Element.filter: `filter`: a callback returning a value",
-            "Element.on_text: `callback`: callback argument `text`: neither a scalar nor a handle",
-            "Element.on_maybe: `callback`: callback argument `count`: optional",
-            "Element.current_listener: a callback in a result",
+            "Uncallable.LEVEL: callback argument `text`: neither a scalar nor a handle",
+            "Undecidable.LEVEL: a result neither a scalar nor a handle",
         ]
     );
 }
@@ -1797,9 +1903,49 @@ fn parameters_past_sixteen_core_values_are_read_from_memory() {
 }
 
 #[test]
+fn a_constant_is_an_associated_constant_of_its_resource() {
+    let number = |value: &str| format!(r#"{{"type": "number", "value": "{value}"}}"#);
+    let mut defs = chain();
+    defs.typedefs = vec![typedef("GLenum", &plain("unsigned long"))];
+    defs.interfaces.push(partial(
+        "Node",
+        &[
+            const_member("ELEMENT_NODE"),
+            typed_const("SHOW_ALL", "GLenum", &number("0xFFFFFFFF")),
+            typed_const("TIMEOUT_IGNORED", "long long", &number("-1")),
+            typed_const("STRICT", "boolean", r#"{"type": "boolean", "value": true}"#),
+            typed_const(
+                "LIMIT",
+                "double",
+                r#"{"type": "Infinity", "negative": false}"#,
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "\
+impl Node {
+    pub const ELEMENT_NODE: u16 = 1;
+    pub const SHOW_ALL: u32 = 0xFFFFFFFF;
+    pub const TIMEOUT_IGNORED: i64 = -1;
+    pub const STRICT: bool = true;
+}
+"
+        ),
+        "{code}"
+    );
+    assert!(!code.contains("impl Element"), "{code}");
+    assert_eq!(
+        skipped,
+        ["Node.LIMIT: a constant whose value `f64` cannot spell"]
+    );
+}
+
+#[test]
 fn every_member_kind_parses_and_one_without_a_binding_is_reported() {
     let members = [
-        const_member("ELEMENT_NODE"),
+        typed_const("LIMIT", "double", r#"{"type": "NaN"}"#),
         iteration("iterable"),
         iteration("maplike"),
         iteration("setlike"),
@@ -1812,7 +1958,7 @@ fn every_member_kind_parses_and_one_without_a_binding_is_reported() {
     let mut defs = chain();
     defs.interfaces.push(partial("Node", &members));
     let (code, skipped) = defs.transform();
-    assert!(!code.contains("ELEMENT_NODE"), "{code}");
+    assert!(!code.contains("LIMIT"), "{code}");
     let reported: Vec<(String, Cause)> = skipped
         .iter()
         .map(|s| {
@@ -1821,7 +1967,10 @@ fn every_member_kind_parses_and_one_without_a_binding_is_reported() {
         })
         .collect();
     let expected = [
-        ("Node.ELEMENT_NODE: a constant", Cause::Constant),
+        (
+            "Node.LIMIT: a constant whose value `f64` cannot spell",
+            Cause::Constant,
+        ),
         (
             "Node.(iterable): an iteration declaration",
             Cause::Iteration,

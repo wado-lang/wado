@@ -170,6 +170,8 @@ pub struct WadoNewtype {
     pub name: String,
     pub cm_attr: Option<String>,
     pub target: WadoType,
+    /// The constants of the `impl` block following the newtype.
+    pub constants: Vec<WadoConstant>,
 }
 
 #[derive(Debug, Clone)]
@@ -189,6 +191,16 @@ pub struct WadoResource {
     /// The inherited instance methods a handle of this resource must not
     /// reach, each with the reason its `#[unavailable]` gives.
     pub unavailable: Vec<(String, String)>,
+    /// The constants of the `impl` block following the resource.
+    pub constants: Vec<WadoConstant>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WadoConstant {
+    pub name: String,
+    pub ty: WadoType,
+    /// The value, as Wado source.
+    pub value: String,
 }
 
 #[derive(Debug, Clone)]
@@ -314,9 +326,12 @@ pub enum WadoType {
     // References
     Borrow(Box<WadoType>),
 
-    /// `fn mut(params) with effect`, which the host calls back.
+    /// `fn mut(params) -> result with effect`, which the host calls back.
     Callback {
+        /// The newtype naming the function type, where one does.
+        name: Option<String>,
         params: Vec<WadoType>,
+        result: Option<Box<WadoType>>,
         effect: Option<String>,
     },
 }
@@ -369,8 +384,13 @@ impl WadoType {
                     side.walk(visit);
                 }
             }
-            Self::Tuple(types) | Self::Callback { params: types, .. } => {
+            Self::Tuple(types) => {
                 for ty in types {
+                    ty.walk(visit);
+                }
+            }
+            Self::Callback { params, result, .. } => {
+                for ty in params.iter().chain(result.as_deref()) {
                     ty.walk(visit);
                 }
             }
@@ -404,9 +424,9 @@ impl WadoType {
         }
     }
 
-    /// What a callback export's name calls an argument of this type; `None`
-    /// where the host cannot call a closure back with one.
-    pub fn callback_argument_word(&self) -> Option<&'static str> {
+    /// What a callback export's name calls an argument or a result of this
+    /// type; `None` where neither crosses as one core value.
+    pub fn callback_value_word(&self) -> Option<&'static str> {
         match self {
             Self::Named(_) => Some(CALLBACK_HANDLE_WORD),
             _ => self.primitive_name(),

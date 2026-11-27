@@ -1,0 +1,8 @@
+use { Listener } from "./cm_callback_newtype_later_module_types.wado";
+
+#[cm("example:demo/target", linearity = "unrestricted", repr = "externref")]
+pub resource Target {
+    #[cm("example:demo/target#listen")]
+    #[cm_params("self", "listener")]
+    fn listen(&self, listener: Listener);
+}
