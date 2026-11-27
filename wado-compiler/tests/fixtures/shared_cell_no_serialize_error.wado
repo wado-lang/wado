@@ -1,0 +1,14 @@
+use { to_string } from "core:json";
+
+struct Holder {
+    c: Shared<i32>,
+}
+
+export fn run() {
+    let a = Holder { c: Shared::new(1) };
+    let text = to_string(&a);
+    assert text.is_ok();
+}
+
+__DATA__
+{"compile_error": ":9:16: analysis error: type 'Holder' does not implement trait 'Serialize' required by bound on 'T'\n  note: `Holder` does not implement `Serialize` because field `c` of type `Shared<i32>` does not implement `Serialize`"}

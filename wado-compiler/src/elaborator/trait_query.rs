@@ -1544,7 +1544,8 @@ impl TypeSystem {
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Function { .. }
             | ResolvedType::Ref(_)
-            | ResolvedType::MutRef(_) => true,
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Shared(_) => true,
             ResolvedType::Newtype { base_type, .. } => {
                 let base = self.type_table.borrow().get(*base_type).clone();
                 self.is_ref_identity(&base)
@@ -1576,7 +1577,8 @@ impl TypeSystem {
             ResolvedType::Variant { .. }
             | ResolvedType::Function { .. }
             | ResolvedType::Ref(_)
-            | ResolvedType::MutRef(_) => false,
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Shared(_) => false,
             ResolvedType::Newtype { base_type, .. } => {
                 let base = self.type_table.borrow().get(*base_type).clone();
                 self.is_ref_mut_identity(&base)

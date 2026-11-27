@@ -1539,6 +1539,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             | tir::ResolvedType::Never
             | tir::ResolvedType::Tuple(_)
             | tir::ResolvedType::BuiltinArray(_)
+            | tir::ResolvedType::Shared(_)
             | tir::ResolvedType::Struct { .. }
             | tir::ResolvedType::Enum { .. }
             | tir::ResolvedType::Resource { .. }
@@ -2442,6 +2443,7 @@ impl TypeSystem {
             ResolvedType::Unit => Some(name::UNIT_TYPE_NAME.to_string()),
             ResolvedType::Never => Some(name::NEVER_TYPE_NAME.to_string()),
             ResolvedType::BuiltinArray(_) => Some(name::ARRAY_TYPE_NAME.to_string()),
+            ResolvedType::Shared(_) => Some(name::SHARED_TYPE_NAME.to_string()),
             _ => None,
         }
     }

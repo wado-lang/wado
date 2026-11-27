@@ -625,6 +625,7 @@ fn check_cm_boundary_representable_inner(
             | ResolvedType::PackVar { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Shared(_)
             | ResolvedType::Unknown
             | ResolvedType::Error => Err(format!(
                 "type `{}` has no Component Model value representation",
@@ -1249,6 +1250,7 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::Never
         | ResolvedType::Function { .. }
         | ResolvedType::BuiltinArray(_)
+        | ResolvedType::Shared(_)
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::InferVar(_)

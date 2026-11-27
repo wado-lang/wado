@@ -682,6 +682,27 @@ Key differences from Rust:
 - Can return references to local variables
 - No lifetime annotations needed
 
+### Shared Cells
+
+A `Shared<T>` is one object under every copy, written through a `&` and without
+`mut`. See [the spec](./spec-memory.md#shared-cells).
+
+```wado
+let hits = Shared::new(0);     // the only way to make a cell
+let same = hits;               // a copy is the same cell
+*same += 1;                    // `*c` is what it holds; no `mut` needed
+assert *hits == 1;
+
+let p = Shared::new(Point { x: 1, y: 2 });
+p.x = 10;                      // fields and methods dereference
+hits == same;                  // true: `==` asks whether two cells are one
+*hits == *Shared::new(1);      // true: compare what they hold
+`${hits:?}`;                   // "Shared(1)"
+```
+
+A cell has no `Ord`, `Hash` or `Serialize`, holds no affine value, and does not
+cross a component boundary.
+
 ## Operators
 
 See the spec on [precedence](./spec-expressions.md#precedence) and [overloading](./spec-standard-traits.md#arithmetic-operator-traits).

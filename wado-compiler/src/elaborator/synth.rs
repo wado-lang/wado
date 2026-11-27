@@ -776,10 +776,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let ArgClass::Exact(t) = operand else {
                     return open;
                 };
-                match self.tysys.type_table.borrow().get(t) {
-                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                        ArgClass::Exact(*inner)
-                    }
+                let tt = self.tysys.type_table.borrow();
+                match tt.get(tt.representation_head(t)) {
+                    ResolvedType::Ref(inner)
+                    | ResolvedType::MutRef(inner)
+                    | ResolvedType::Shared(inner) => ArgClass::Exact(*inner),
                     _ => open,
                 }
             }

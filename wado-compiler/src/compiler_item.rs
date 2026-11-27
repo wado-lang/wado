@@ -824,6 +824,9 @@ pub enum CompilerItem {
     /// name are recorded so the type resolver can bind the name to the
     /// `ResolvedType::BuiltinArray` builtin.
     Array,
+    /// `Shared<T>` — the shared cell, declared definition-less
+    /// (`pub type Shared<T>;`) and bound to `ResolvedType::Shared`.
+    Shared,
 }
 
 impl CompilerItem {
@@ -1088,6 +1091,7 @@ impl CompilerItem {
         Self::Bf16FromU128,
         Self::Tuple,
         Self::Array,
+        Self::Shared,
     ];
 
     /// Total number of variants. `ALL.len()` at compile time.
@@ -1381,6 +1385,7 @@ impl CompilerItem {
             Self::DeserializeVariantEnd => "deserialize_variant_end",
             Self::Tuple => "tuple",
             Self::Array => "array",
+            Self::Shared => "shared",
         }
     }
 
@@ -1583,6 +1588,7 @@ impl CompilerItem {
             | Self::U128AsF32
             | Self::Tuple
             | Self::Array
+            | Self::Shared
             // Variant cases of always-loaded variants/enums travel with
             // their parents — Option, Result, and Ordering are all in
             // the auto-loaded prelude, so their cases are always
@@ -1998,7 +2004,7 @@ impl CompilerItem {
             | Self::DeserializeVariantPayload
             | Self::DeserializeVariantEnd => CompilerItemKind::Method,
             Self::Tuple => CompilerItemKind::TupleFamily,
-            Self::Array => CompilerItemKind::BuiltinType,
+            Self::Array | Self::Shared => CompilerItemKind::BuiltinType,
             Self::OptionSome | Self::OptionNone | Self::ResultOk | Self::ResultErr => {
                 CompilerItemKind::VariantCase
             }

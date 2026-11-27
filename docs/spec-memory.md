@@ -391,11 +391,36 @@ no cell is taken from a variable or a field, so no cell aliases one.
 `c`, a `&` included, and `c` needs no `mut`: the dereference of a cell starts
 [the path a write goes through](./spec-expressions.md#variable-mutability)
 again. A field access and a method call dereference a cell as they do a
-reference.
+reference. A method the cell implements itself, such as `eq`, is the cell's;
+any other name is a method of what the cell holds.
 
 A copy of a cell is the same cell, so the deep copy of a value stops at one.
 `Shared::new(*c)` makes a separate cell. `T` is not affine: an affine value has
 one owner, which drops it, and a cell every copy shares has none.
+
+<!-- {"fixture": "shared_cell.wado"} -->
+
+```wado
+test "a copy of a cell is the same cell" {
+    let a = Shared::new(1);
+    let b = a;
+    *b = 5;
+    assert *a == 5;
+
+    let counter = Counter { hits: a };
+    let copy = counter;
+    *copy.hits = 9;
+    assert *counter.hits == 9;
+    assert *a == 9;
+
+    let separate = Shared::new(*a);
+    *separate = 0;
+    assert *a == 9;
+}
+```
+
+A cast makes no cell and unwraps none, so a cell never names a variable's
+storage and no `&mut` outlives the rules of one by coming out of a cell.
 
 What a cell implements follows from its copies being one object:
 
@@ -417,9 +442,6 @@ has.
 
 A cell does not cross a component boundary, for the reason it is not
 serialized.
-
-> Not yet implemented: `Shared<T>` is not declared. A value shares state by
-> holding a `&mut`.
 
 Rationale: [WEP: Writable References](./wep-2026-11-27-writable-references.md).
 

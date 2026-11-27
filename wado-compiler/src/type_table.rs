@@ -18,12 +18,12 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name;
 use crate::name::{
-    ARRAY_TYPE_NAME, FqTraitName, FqTypeName, NEVER_TYPE_NAME, Receiver, RefKind, TUPLE_TYPE_NAME,
-    TypeHead, TypeNameInfo, UNIT_TYPE_NAME, anonymous_struct_name, assoc_type_projection_name,
-    display_assoc_type_projection, display_generic_name, display_tuple_type, format_type_name,
-    mangle_builtin_array_type, mangle_declared, mangle_generic_name, mangle_local_item_name,
-    mangle_tuple_type, minted_name, pack_element_name, ref_type_name, repeated_element,
-    template_shape_name, type_pack_name,
+    ARRAY_TYPE_NAME, FqTraitName, FqTypeName, NEVER_TYPE_NAME, Receiver, RefKind, SHARED_TYPE_NAME,
+    TUPLE_TYPE_NAME, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, anonymous_struct_name,
+    assoc_type_projection_name, display_assoc_type_projection, display_generic_name,
+    display_tuple_type, format_type_name, mangle_builtin_array_type, mangle_declared,
+    mangle_generic_name, mangle_local_item_name, mangle_tuple_type, minted_name, pack_element_name,
+    ref_type_name, repeated_element, template_shape_name, type_pack_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -314,6 +314,7 @@ impl TypeTable {
         }
         match self.get(type_id) {
             ResolvedType::BuiltinArray(elem) => Some((ARRAY_TYPE_NAME.to_string(), vec![*elem])),
+            ResolvedType::Shared(held) => Some((SHARED_TYPE_NAME.to_string(), vec![*held])),
             _ => None,
         }
     }
@@ -440,7 +441,9 @@ impl TypeTable {
                 type_args: self.erase_types(type_args),
             },
             ResolvedType::Ref(inner) => ResolvedType::Ref(self.erase_type(*inner)),
-            ResolvedType::MutRef(inner) => ResolvedType::MutRef(self.erase_type(*inner)),
+            ResolvedType::MutRef(inner) | ResolvedType::Shared(inner) => {
+                ResolvedType::MutRef(self.erase_type(*inner))
+            }
             ResolvedType::BuiltinArray(elem) => ResolvedType::BuiltinArray(self.erase_type(*elem)),
             // The effect check has run: a row distinguishes nothing any later
             // phase reads.
@@ -611,6 +614,7 @@ impl TypeTable {
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
             ResolvedType::Newtype { .. } => unreachable!("strip_handles removes every newtype"),
+            ResolvedType::Shared(_) => unreachable!("erasure makes every cell a `MutRef`"),
             ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
                 panic!("{var} reached heap-effect analysis")
             }
@@ -1077,6 +1081,7 @@ impl TypeTable {
             | ResolvedType::Never
             | ResolvedType::Ref(_)
             | ResolvedType::MutRef(_)
+            | ResolvedType::Shared(_)
             | ResolvedType::Enum { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Variant { .. }
@@ -1687,6 +1692,12 @@ impl TypeTable {
             ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
             ResolvedType::Unit | ResolvedType::Never => Some(ModuleSource::primitive()),
             ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
+            ResolvedType::Shared(_) => Some(
+                self.compiler_items
+                    .require(CompilerItem::Shared)
+                    .module_source()
+                    .clone(),
+            ),
             ResolvedType::Struct { .. }
             | ResolvedType::Enum { .. }
             | ResolvedType::Resource { .. }
@@ -1795,8 +1806,10 @@ impl TypeTable {
         // `symbol_by_type` does not key. The `array` compiler item names its
         // declaration by identity — a primitive needs no such step because its
         // declaration and its instantiation are the same type.
-        if matches!(self.get(type_id), ResolvedType::BuiltinArray(_)) {
-            return self.compiler_items.decl(CompilerItem::Array);
+        match self.get(type_id) {
+            ResolvedType::BuiltinArray(_) => return self.compiler_items.decl(CompilerItem::Array),
+            ResolvedType::Shared(_) => return self.compiler_items.decl(CompilerItem::Shared),
+            _ => {}
         }
         // An instantiation records the declaration it came from, so the
         // answer is read off the type rather than re-derived from a spelling
@@ -1948,7 +1961,9 @@ impl TypeTable {
                         components.extend(type_args.iter().copied());
                         components.push(*base_type);
                     }
-                    ResolvedType::BuiltinArray(inner) => components.push(*inner),
+                    ResolvedType::BuiltinArray(inner) | ResolvedType::Shared(inner) => {
+                        components.push(*inner);
+                    }
                     ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                         components.push(*inner);
                         components.push(self.immutable_form(id));
@@ -2035,6 +2050,11 @@ impl TypeTable {
     /// Create a raw GC array type (`Array<T>`)
     pub fn make_builtin_array(&mut self, element: TypeId) -> TypeId {
         self.intern(ResolvedType::BuiltinArray(element))
+    }
+
+    /// Create a shared cell type (`Shared<T>`)
+    pub fn make_shared(&mut self, held: TypeId) -> TypeId {
+        self.intern(ResolvedType::Shared(held))
     }
 
     /// Access the registry of compiler-recognised stdlib items.
@@ -2171,6 +2191,7 @@ impl TypeTable {
             CompilerItem::Future => Some(Self::make_future),
             CompilerItem::FutureWritable => Some(Self::make_future_writable),
             CompilerItem::Array => Some(Self::make_builtin_array),
+            CompilerItem::Shared => Some(Self::make_shared),
             _ => None,
         }
     }
@@ -2933,9 +2954,12 @@ impl TypeTable {
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. } => return false,
-            ResolvedType::MutRef(_) if target == Reach::MutRef => return true,
+            ResolvedType::MutRef(_) | ResolvedType::Shared(_) if target == Reach::MutRef => {
+                return true;
+            }
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
+            | ResolvedType::Shared(inner)
             | ResolvedType::BuiltinArray(inner) => {
                 return self.reaches_in(*inner, target, frame, walked);
             }
@@ -3130,7 +3154,9 @@ impl TypeTable {
     #[must_use]
     pub fn cast_read_through(&self, source: TypeId, target: TypeId) -> Vec<TypeId> {
         let mut referents = Vec::new();
-        if RefKind::from_resolved(self.get(self.representation_head(target))).is_some() {
+        if RefKind::from_resolved(self.get(self.representation_head(target))).is_some()
+            || self.cast_makes_cell(source, target)
+        {
             return referents;
         }
         let mut operand = source;
@@ -3141,6 +3167,25 @@ impl TypeTable {
             referents.push(operand);
         }
         referents
+    }
+
+    /// Whether `type_id` is a `Shared<T>`, or a newtype over one.
+    #[must_use]
+    pub fn is_cell(&self, type_id: TypeId) -> bool {
+        matches!(
+            self.get(self.representation_head(type_id)),
+            ResolvedType::Shared(_)
+        )
+    }
+
+    /// Whether a cast of `source` to `target` turns a `&mut T` into the
+    /// `Shared<T>` it is stored as: the step `Shared::new` is written with.
+    #[must_use]
+    pub fn cast_makes_cell(&self, source: TypeId, target: TypeId) -> bool {
+        matches!(
+            (self.get(source), self.get(self.representation_head(target))),
+            (ResolvedType::MutRef(referent), ResolvedType::Shared(held)) if referent == held
+        )
     }
 
     /// The type a cast of `source` to `target` converts: the last referent it
@@ -4624,7 +4669,7 @@ impl TypeTable {
             return Some(type_args.to_vec());
         }
         match self.get(type_id) {
-            ResolvedType::BuiltinArray(elem) => Some(vec![*elem]),
+            ResolvedType::BuiltinArray(arg) | ResolvedType::Shared(arg) => Some(vec![*arg]),
             _ => None,
         }
     }
@@ -5094,8 +5139,14 @@ impl TypeTable {
                 all(&[*dr], &[*ar], each);
             }
             (
-                ResolvedType::Ref(d) | ResolvedType::MutRef(d) | ResolvedType::BuiltinArray(d),
-                ResolvedType::Ref(a) | ResolvedType::MutRef(a) | ResolvedType::BuiltinArray(a),
+                ResolvedType::Ref(d)
+                | ResolvedType::MutRef(d)
+                | ResolvedType::Shared(d)
+                | ResolvedType::BuiltinArray(d),
+                ResolvedType::Ref(a)
+                | ResolvedType::MutRef(a)
+                | ResolvedType::Shared(a)
+                | ResolvedType::BuiltinArray(a),
             ) => all(&[*d], &[*a], each),
             _ => {
                 if let (Some(d), Some(a)) = (
@@ -5315,6 +5366,14 @@ impl TypeTable {
                     type_id
                 } else {
                     self.intern(ResolvedType::BuiltinArray(new_elem))
+                }
+            }
+            ResolvedType::Shared(held) => {
+                let new_held = self.subst_rec(held, leaves);
+                if new_held == held {
+                    type_id
+                } else {
+                    self.make_shared(new_held)
                 }
             }
             ResolvedType::Ref(inner) => {
@@ -6257,6 +6316,7 @@ impl TypeTable {
     pub(crate) fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
             ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Shared(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner) => f(*inner),
             ResolvedType::PackElement { pack, .. } => f(*pack),
@@ -6595,6 +6655,7 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 display_generic_name(ARRAY_TYPE_NAME, &[render(*elem)])
             }
+            ResolvedType::Shared(held) => display_generic_name(SHARED_TYPE_NAME, &[render(*held)]),
             ResolvedType::Struct {
                 def: StructDef::Anon(id),
                 ..
@@ -6726,8 +6787,8 @@ impl TypeTable {
 
     /// [`Self::mangle_type_arg_for_generic`] as it reads *after*
     /// [`Self::erase_newtypes_and_flags`]: every `Newtype` collapses to its
-    /// ultimate base, every `Flags` to `u32` and every function row to none,
-    /// recursively through composite types. Lets pre-erasure synthesis (the `StructField::get` bridge helpers) mint a
+    /// ultimate base, every `Flags` to `u32`, every `Shared<T>` to `&mut T`
+    /// and every function row to none, recursively through composite types. Lets pre-erasure synthesis (the `StructField::get` bridge helpers) mint a
     /// name that matches the post-erasure call site, whose `field_ty` is
     /// erased.
     pub fn mangle_type_arg_erased(&self, id: TypeId) -> String {
@@ -6758,7 +6819,7 @@ impl TypeTable {
                 RefKind::ImmutableReference,
                 &self.mangle_type_arg_erased(*inner),
             ),
-            ResolvedType::MutRef(inner) => {
+            ResolvedType::MutRef(inner) | ResolvedType::Shared(inner) => {
                 ref_type_name(RefKind::Mut, &self.mangle_type_arg_erased(*inner))
             }
             ResolvedType::BuiltinArray(elem) => {
@@ -6845,6 +6906,7 @@ impl TypeTable {
                 self.param_name(*id),
             )),
             ResolvedType::BuiltinArray(_) => builtin(ARRAY_TYPE_NAME),
+            ResolvedType::Shared(_) => builtin(SHARED_TYPE_NAME),
             ResolvedType::Unit => builtin(UNIT_TYPE_NAME),
             ResolvedType::Primitive(prim) => builtin(prim.as_str()),
             ResolvedType::Function { .. } => Receiver::Type(self.fn_receiver_name(self.get(id))),
@@ -6897,6 +6959,7 @@ impl TypeTable {
                 self.fq_base_type_name(*inner)
             }
             ResolvedType::BuiltinArray(_) => FqTypeName::builtin(ARRAY_TYPE_NAME),
+            ResolvedType::Shared(_) => FqTypeName::builtin(SHARED_TYPE_NAME),
             ResolvedType::Unit => FqTypeName::builtin(UNIT_TYPE_NAME),
             ResolvedType::Function { .. } => self.fn_receiver_name(self.get(id)),
             // Primitives are builtin shapes: no module declares them and every
@@ -6992,6 +7055,8 @@ impl TypeTable {
             ResolvedType::Tuple(elems) => FqTypeName::tuple(args_of(elems)),
             ResolvedType::BuiltinArray(elem) => FqTypeName::builtin(ARRAY_TYPE_NAME)
                 .with_args(vec![self.fq_type_name_spelled_in(*elem, rows)]),
+            ResolvedType::Shared(held) => FqTypeName::builtin(SHARED_TYPE_NAME)
+                .with_args(vec![self.fq_type_name_spelled_in(*held, rows)]),
             ResolvedType::Ref(inner) => self
                 .fq_type_name_spelled_in(*inner, rows)
                 .with_reference(RefKind::ImmutableReference),
@@ -7108,6 +7173,10 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 TypeNameInfo::BuiltinArray(self.mangle_type_name(*elem))
             }
+            ResolvedType::Shared(held) => TypeNameInfo::Generic {
+                name: SHARED_TYPE_NAME.to_string(),
+                args: self.mangle_type_args_solved(&[*held]),
+            },
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 // For references, use the inner type's name (strip reference)
                 TypeNameInfo::Ref(self.mangle_type_name(*inner))
@@ -7578,6 +7647,7 @@ impl TypeTable {
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Shared(_)
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Unknown
@@ -7948,6 +8018,7 @@ impl TypeTable {
         match (self.get(a), self.get(b)) {
             (ResolvedType::Ref(x), ResolvedType::Ref(y))
             | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))
+            | (ResolvedType::Shared(x), ResolvedType::Shared(y))
             | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
                 Some(all(&[*x], &[*y]))
             }
@@ -8054,6 +8125,7 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
+            | ResolvedType::Shared(inner)
             | ResolvedType::BuiltinArray(inner) => inside(&[*inner]),
             ResolvedType::Function {
                 params,

@@ -1,0 +1,12 @@
+type Slot = &mut i32;
+type View = &i32;
+
+test "a newtype over a reference dereferences as its base does" {
+    let mut x = 1;
+    let slot = &mut x as Slot;
+    *slot = 2;
+    assert x == 2;
+
+    let view = &x as View;
+    assert *view == 2;
+}

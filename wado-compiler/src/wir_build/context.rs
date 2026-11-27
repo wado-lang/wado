@@ -902,6 +902,7 @@ impl<'a> WirContext<'a> {
                 // Newtypes resolve to their base type
                 self.lookup_wir_type(type_table, *base_type)?
             }
+            ResolvedType::Shared(_) => unreachable!("erasure makes every cell a `MutRef`"),
             // Flags are bitmasks stored as i32
             ResolvedType::Flags { .. } => WirType::I32,
             // These should never reach codegen — must be resolved by monomorphization

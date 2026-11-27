@@ -239,7 +239,8 @@ pub(super) fn unify(
             }
         }
         // Raw builtin array (`Array<T>`).
-        (ResolvedType::BuiltinArray(expected_elem), ResolvedType::BuiltinArray(actual_elem)) => {
+        (ResolvedType::BuiltinArray(expected_elem), ResolvedType::BuiltinArray(actual_elem))
+        | (ResolvedType::Shared(expected_elem), ResolvedType::Shared(actual_elem)) => {
             unify(type_table, *expected_elem, *actual_elem, bindings);
         }
         // References: unify through. `&mut T` where `&T` is expected is the

@@ -1080,6 +1080,7 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> 
                 Some(type_table.cell_key(type_id))
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => key(*inner, true, type_table),
+            ResolvedType::Shared(_) => unreachable!("erasure makes every cell a `MutRef`"),
             ResolvedType::Newtype { .. } => key(
                 type_table.representation_head(type_id),
                 under_ref,
@@ -1183,6 +1184,7 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
         ResolvedType::MutRef(_) => type_table.cell_payload(type_id).is_some(),
+        ResolvedType::Shared(_) => unreachable!("erasure makes every cell a `MutRef`"),
         ResolvedType::Struct { .. } => is_list(type_id, type_table),
         ResolvedType::Primitive(_)
         | ResolvedType::Unit

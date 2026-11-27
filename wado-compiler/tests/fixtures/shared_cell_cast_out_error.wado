@@ -1,0 +1,11 @@
+fn expose(c: Shared<i32>) -> &mut i32 {
+    return c as &mut i32;
+}
+
+export fn run() {
+    let r = expose(Shared::new(1));
+    *r = 2;
+}
+
+__DATA__
+{"compile_error": ":2:12: analysis error: cannot cast 'Shared<i32>' to '&mut i32': a cell converts to no other type and from none"}

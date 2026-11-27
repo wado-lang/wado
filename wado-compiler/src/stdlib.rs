@@ -139,6 +139,7 @@ stdlib_table! {
     "core:prelude/primitive.wado" => "core/prelude/primitive.wado",
     "core:prelude/numeric.wado" => "core/prelude/numeric.wado",
     "core:prelude/range.wado" => "core/prelude/range.wado",
+    "core:prelude/shared.wado" => "core/prelude/shared.wado",
     "core:prelude/bytes.wado" => "core/prelude/bytes.wado",
     "core:prelude/string.wado" => "core/prelude/string.wado",
     "core:prelude/traits.wado" => "core/prelude/traits.wado",

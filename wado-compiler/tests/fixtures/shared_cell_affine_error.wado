@@ -1,0 +1,16 @@
+affine struct Conn {
+    id: i32,
+}
+
+impl Drop for Conn {
+    fn drop(self) {
+    }
+}
+
+export fn run() {
+    let c = Shared::new(Conn { id: 1 });
+    assert c.id == 1;
+}
+
+__DATA__
+{"compile_error": ":11:13: analysis error: affine type 'Conn' given for 'T', which may be copied; `affine T` would admit it"}

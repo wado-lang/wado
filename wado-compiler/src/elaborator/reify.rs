@@ -7971,6 +7971,11 @@ impl<'a> Reify<'a> {
         // direct TIR shape. See WEP §"Synthetic call sites stay
         // annotation-free by design".
         let raw_receiver = self.reify_expr(&method_call.receiver, ctx, None);
+        let raw_receiver = if self.ann_cell_receiver(method_call.id).is_some() {
+            tir::cell_reference(raw_receiver, &mut self.tysys.type_table.borrow_mut())
+        } else {
+            raw_receiver
+        };
         if matches!(method_call.method.as_str(), "len" | "zip") {
             // Auto-deref through `&`/`&mut` so tuple `.len()` / `.zip()` work
             // on a reference receiver, like any other method (mirrors the
@@ -8185,7 +8190,9 @@ impl<'a> Reify<'a> {
             // elaborator's `lookup_field_type`: `&Point`, `&mut Point`, a
             // newtype `Location = Point`, and chained newtypes / `&Location`
             // all resolve their fields against the ultimate underlying struct.
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Shared(inner) => {
                 return self.lookup_struct_field_index(inner, field_name);
             }
             ResolvedType::Newtype { base_type, .. } => {

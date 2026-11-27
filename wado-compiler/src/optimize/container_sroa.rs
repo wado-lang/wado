@@ -893,6 +893,7 @@ fn type_components(type_table: &TypeTable, ty: TypeId) -> Vec<TypeId> {
     match type_table.get(ty) {
         ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
+        | ResolvedType::Shared(inner)
         | ResolvedType::BuiltinArray(inner) => vec![*inner],
         ResolvedType::Struct { type_args, .. }
         | ResolvedType::Tuple(type_args)

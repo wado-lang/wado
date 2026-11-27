@@ -1,0 +1,12 @@
+struct Holder {
+    c: Shared<i32>,
+}
+
+export fn run() {
+    let a = Holder { c: Shared::new(1) };
+    let b = Holder { c: Shared::new(2) };
+    assert a < b;
+}
+
+__DATA__
+{"compile_error": ":8:12: analysis error: operator `<` cannot be applied to type `Holder`: type does not implement `Ord`\n  note: `Holder` does not implement `Ord` because field `c` of type `Shared<i32>` does not implement `Ord`"}

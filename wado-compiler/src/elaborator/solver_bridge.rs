@@ -7,7 +7,8 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    ARRAY_TYPE_NAME, FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME,
+    ARRAY_TYPE_NAME, FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, SHARED_TYPE_NAME, TypeHead,
+    UNIT_TYPE_NAME,
 };
 use crate::primitive::PrimitiveType;
 use crate::synthesis::traits::REFLECT_FIELD_INPUTS_ASSOC;
@@ -301,9 +302,14 @@ impl Lowering {
         }
         // `type_id` spells a resolved type under these heads whether or not a
         // written type names one.
-        for name in [ARRAY_TYPE_NAME, UNIT_TYPE_NAME, NEVER_TYPE_NAME]
-            .into_iter()
-            .chain(PrimitiveType::all_primitive_names())
+        for name in [
+            ARRAY_TYPE_NAME,
+            SHARED_TYPE_NAME,
+            UNIT_TYPE_NAME,
+            NEVER_TYPE_NAME,
+        ]
+        .into_iter()
+        .chain(PrimitiveType::all_primitive_names())
         {
             lowering.builtin(name);
         }
@@ -727,6 +733,10 @@ impl Lowering {
                 DeclKey::Builtin(ARRAY_TYPE_NAME.to_string()),
                 vec![lower(*elem)?],
             ),
+            ResolvedType::Shared(held) => decl(
+                DeclKey::Builtin(SHARED_TYPE_NAME.to_string()),
+                vec![lower(*held)?],
+            ),
             // `()` is the unit declaration, not the empty tuple
             // (WEP 2026-09-01, "The candidates").
             ResolvedType::Unit => decl(DeclKey::Builtin(UNIT_TYPE_NAME.into()), vec![]),
@@ -1065,7 +1075,11 @@ fn representative(
             if let Some(id) = TypeTable::primitive_by_name(name) {
                 return Some(table.get(id).clone());
             }
-            (name == ARRAY_TYPE_NAME).then_some(ResolvedType::BuiltinArray(TypeTable::UNIT))
+            match name.as_str() {
+                ARRAY_TYPE_NAME => Some(ResolvedType::BuiltinArray(TypeTable::UNIT)),
+                SHARED_TYPE_NAME => Some(ResolvedType::Shared(TypeTable::UNIT)),
+                _ => None,
+            }
         }
         DeclKey::FnShape { is_mut } => Some(ResolvedType::Function {
             is_mut: *is_mut,

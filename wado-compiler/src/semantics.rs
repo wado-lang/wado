@@ -763,7 +763,7 @@ impl Semantics {
 
     /// Where a write to `place` lands once it has gone down every field and
     /// index of a value it holds: `p` of `p.x[i]` where neither `p` nor `p.x`
-    /// is a reference, `r.x` where `r` is one.
+    /// is a reference, `r.x` where `r` is one or a cell.
     pub(crate) fn write_target<'e>(&self, place: &'e Expr) -> WriteTarget<'e> {
         let mut indexes = false;
         let mut at = place;
@@ -776,7 +776,7 @@ impl Semantics {
             if self
                 .expr_types(base)
                 .into_iter()
-                .any(|ty| self.types.is_reference(ty))
+                .any(|ty| self.types.is_reference(ty) || self.types.is_cell(ty))
             {
                 break;
             }

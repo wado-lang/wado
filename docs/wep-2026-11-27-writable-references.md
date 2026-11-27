@@ -341,7 +341,7 @@ spare a call site. Each step leaves the tree building and its tests passing.
 
 - [x] The specification states every rule above, each marked not yet
   implemented until its step lands.
-- [ ] `Shared<T>` exists: the type, `Shared::new`, `*c`, the automatic
+- [x] `Shared<T>` exists: the type, `Shared::new`, `*c`, the automatic
   dereference, and `==` as identity.
 - [ ] Every cell written as a `&mut` moves to `Shared<T>`: `Signal<T>` in Rill,
   `ValueSerializer { out: &mut v }` in `core:value`, and each `&mut` to a
@@ -373,6 +373,15 @@ Two items land with the step whose rule they serve:
 
 - Nothing detects a key holding a cell that is written while a map holds it.
   The lookup misses an entry the map still has.
+- A method name that both a cell and what it holds give is the cell's: `c.eq(&d)`
+  asks for identity where `T` has an `eq` of its own. Whether the cell's name
+  should win there is not decided.
+- Two errors about a cell give advice that does not apply to one. An affine
+  `T` is told `affine T` would admit it, and a cell under `<` is told to write
+  `cmp` beside `eq`.
+- A resource's and `Array`'s type parameter takes an affine argument their
+  declarations do not mark `affine`, so nothing checks what such a type does
+  with one.
 
 ## References
 

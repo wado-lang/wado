@@ -1,0 +1,43 @@
+#![no_prelude]
+#![stdlib("core:prelude/shared.wado")]
+// The shared cell: one object under every copy, which any path may write.
+// See WEP 2026-11-27.
+
+use { Default, Eq, Inspect } from "core:prelude/traits.wado";
+use { Formatter } from "core:prelude/format.wado";
+
+/// A value that is one object under every copy. `*c` is the place it holds,
+/// written through a `&` and without `mut`. Declared definition-less: the
+/// compiler stores it as it stores a `&mut T`.
+#[compiler_item("shared")]
+pub type Shared<T>;
+
+impl<T> Shared<T> {
+    /// Puts `value` into a new cell. Nothing else makes one, so no cell
+    /// aliases a variable or a field.
+    pub fn new(value: T) -> Shared<T> {
+        let mut held = value;
+        return &mut held as Shared<T>;
+    }
+}
+
+/// Whether two cells are one. `*a == *b` compares what they hold.
+impl<T> Eq for Shared<T> {
+    pub fn eq(&self, other: &Self) -> bool {
+        return builtin::ref_eq(*self, *other);
+    }
+}
+
+impl<T: Default> Default for Shared<T> {
+    pub fn default() -> Shared<T> {
+        return Shared::new(T::default());
+    }
+}
+
+impl<T: Inspect> Inspect for Shared<T> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_str("Shared(");
+        (**self).inspect(f);
+        f.write_str(")");
+    }
+}

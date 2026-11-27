@@ -918,6 +918,7 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             }
         }
         ResolvedType::Newtype { base_type, .. } => slot_shape(*base_type, type_table),
+        ResolvedType::Shared(_) => unreachable!("erasure makes every cell a `MutRef`"),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             if type_table.cell_payload(payload).is_some() =>
         {
@@ -955,6 +956,7 @@ fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_) => true,
         ResolvedType::Newtype { base_type, .. } => is_gc_ref(*base_type, type_table),
+        ResolvedType::Shared(_) => unreachable!("erasure makes every cell a `MutRef`"),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             type_table.cell_payload(type_id).is_some() || is_gc_ref(*inner, type_table)
         }

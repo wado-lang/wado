@@ -16,7 +16,8 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
+    ARRAY_TYPE_NAME, LocalMethodName, MethodName, SHARED_TYPE_NAME, TUPLE_TYPE_NAME,
+    display_generic_name,
 };
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
@@ -902,6 +903,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `None` module triggers "search all loaded modules".
             ResolvedType::BuiltinArray(elem) => {
                 (ARRAY_TYPE_NAME.to_string(), None, Some(vec![*elem]), None)
+            }
+            ResolvedType::Shared(held) => {
+                (SHARED_TYPE_NAME.to_string(), None, Some(vec![*held]), None)
             }
             // Unit type () - search for impl blocks in loaded modules
             ResolvedType::Unit => (UNIT_TYPE_NAME.to_string(), None, None, None),
@@ -2330,19 +2334,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether the pointee of `ty` can be written through it: every reference
     /// layer `&mut`, read through newtypes at each. One `&` anywhere, as in
-    /// `&mut &T` or `&&mut T`, makes it immutable. `None` for a type that is no
-    /// reference at all.
+    /// `&mut &T` or `&&mut T`, makes it immutable. A cell is a layer too, and
+    /// starts the answer again: what it holds is written whatever reached the
+    /// cell, so `&Shared<T>` is mutable and `Shared<&T>` is not. `None` for a
+    /// type that is neither a reference nor a cell.
     pub(super) fn reference_mutability(&self, ty: TypeId) -> Option<bool> {
         let table = self.tysys.type_table.borrow();
         let mut mutable = None;
         let mut layer = table.representation_head(ty);
         loop {
-            let (inner, layer_mutable) = match table.get(layer) {
-                ResolvedType::Ref(inner) => (*inner, false),
-                ResolvedType::MutRef(inner) => (*inner, true),
+            let inner = match table.get(layer) {
+                ResolvedType::Ref(inner) => {
+                    mutable = Some(false);
+                    *inner
+                }
+                ResolvedType::MutRef(inner) => {
+                    mutable = Some(mutable.unwrap_or(true));
+                    *inner
+                }
+                ResolvedType::Shared(inner) => {
+                    mutable = Some(true);
+                    *inner
+                }
                 _ => return mutable,
             };
-            mutable = Some(mutable.unwrap_or(true) && layer_mutable);
             layer = table.representation_head(inner);
         }
     }
@@ -2427,7 +2442,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             self.reference_mutability(inner_type) == Some(false)
         };
-        crosses_shared || self.place_roots_at_immutable_ref(inner)
+        // What a cell holds is written whatever reached the cell, so the walk
+        // ends at one.
+        crosses_shared
+            || (!self.crosses_cell(inner_type, explicit_deref)
+                && self.place_roots_at_immutable_ref(inner))
+    }
+
+    /// Whether a step out of a base of type `ty` dereferences a cell: an
+    /// explicit `*` crosses the outermost layer alone, a field or subscript
+    /// step every one.
+    fn crosses_cell(&self, ty: TypeId, explicit_deref: bool) -> bool {
+        let table = self.tysys.type_table.borrow();
+        let mut layer = table.representation_head(ty);
+        loop {
+            let inner = match table.get(layer) {
+                ResolvedType::Shared(_) => return true,
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) if !explicit_deref => *inner,
+                _ => return false,
+            };
+            layer = table.representation_head(inner);
+        }
     }
 
     /// Whether the value `id` evaluates to is mutated in place through a

@@ -1748,6 +1748,21 @@ impl TraitEnv {
             })
     }
 
+    /// Whether an `impl` written for `receiver` gives it `method_name`: its
+    /// own method, or a default of the trait it implements. A blanket impl is
+    /// written for no receiver, so it gives none.
+    pub(crate) fn has_method_by_receiver(
+        &self,
+        receiver: &name::Receiver,
+        method_name: &str,
+    ) -> bool {
+        self.all_by_receiver
+            .get(receiver)
+            .into_iter()
+            .flatten()
+            .any(|&block| self.method_template(block, method_name).is_some())
+    }
+
     /// Whether an inherent `impl` on `receiver` declares `method_name`.
     pub(crate) fn has_inherent_method_by_receiver(
         &self,

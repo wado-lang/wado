@@ -1399,6 +1399,125 @@ Drop the error context.
 
 ## Types
 
+### `pub type Array<T>`
+
+#### `pub fn new(len: i32) -> Array<T>`
+
+Creates a new array of `len` elements, each initialised to the
+default value of `T` (`array.new_default`).
+
+#### `pub fn len(&self) -> i32`
+
+Returns the number of elements (`array.len`).
+
+#### `pub fn set(&mut self, index: i32, value: T)`
+
+Sets the element at `index` to `value` (`array.set`).
+Traps if `index` is out of bounds.
+
+#### `pub fn filled(len: i32, value: T) -> Array<T>`
+
+Creates a new array of `len` elements, each set to a copy of `value`.
+
+#### `pub fn fill(&mut self, value: T)`
+
+Sets every element to a copy of `value`.
+
+#### `pub fn copy_from(&mut self, dst: i32, src: &Array<T>, src_off: i32, len: i32)`
+
+Copies `len` elements of `src` starting at `src_off` into self
+starting at `dst`, as if through a buffer, so `src` may be `self`.
+
+#### `pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T>`
+
+Yields `&mut T` only where `T: RefMut`: a scalar element has no
+addressable cell, so a write through the reference would be lost.
+
+#### `pub fn contains(&self, value: &T) -> bool`
+
+#### `impl Default for Array<T>`
+
+##### `pub fn default() -> Array<T>`
+
+#### `impl Sequence for Array<T>`
+
+##### `fn len(&self) -> i32`
+
+##### `fn at(&self, index: i32) -> T`
+
+- `contract 0 <= index < self.len()`
+
+#### `impl AsSlice for Array<T>`
+
+##### `fn as_slice(&self) -> Slice<T>`
+
+#### `impl IntoIterator for Array<T>`
+
+##### `fn into_iter(&self) -> Self::Iter`
+
+#### `impl IndexValue<i32> for Array<T>`
+
+##### `fn index_value(&self, index: i32) -> Self::Output`
+
+#### `impl IndexAssign<i32> for Array<T>`
+
+##### `fn index_assign(&mut self, index: i32, value: Self::Output)`
+
+#### `impl IndexSwap<i32> for Array<T>`
+
+##### `fn index_swap(&mut self, a: i32, b: i32)`
+
+#### `impl IndexRef<i32> for Array<T>`
+
+##### `fn index_ref(&self, index: i32) -> &T`
+
+#### `impl IndexRefMut<i32> for Array<T>`
+
+##### `fn index_ref_mut(&mut self, index: i32) -> &mut T`
+
+#### `impl IndexValue<RangeExclusive<i32>> for Array<T>`
+
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T>`
+
+#### `impl IndexValue<RangeInclusive<i32>> for Array<T>`
+
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
+
+#### `impl Eq for Array<T>`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for Array<T>`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Inspect for Array<T>`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl Display for Array<T>`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+### `pub type Shared<T>`
+
+#### `pub fn new(value: T) -> Shared<T>`
+
+Puts `value` into a new cell. Nothing else makes one, so no cell
+aliases a variable or a field.
+
+#### `impl Eq for Shared<T>`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Default for Shared<T>`
+
+##### `pub fn default() -> Shared<T>`
+
+#### `impl Inspect for Shared<T>`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
 ### `pub type ByteArray = Array<u8>`
 
 An owned, fixed-length byte buffer.

@@ -445,6 +445,8 @@ impl TypeSystem {
             // lowering for BuiltinArray"). Its comparison dispatches through the
             // element-wise `Eq` / `Ord` impls in `core:prelude/array.wado`.
             ResolvedType::BuiltinArray(_) => true,
+            // `==` on a cell is its `Eq`, which asks whether two cells are one.
+            ResolvedType::Shared(_) => true,
             // No Wasm instruction: `i32.eq` on a `v128` is invalid, and a half's
             // `u16` would add bit patterns. Their `core:prelude` impls answer.
             ResolvedType::Primitive(
@@ -615,6 +617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `fq_base_type_name` spells a raw GC array `Array` and the
                 // unit type `()`, the names their `Eq` / `Ord` impls attach to.
                 | ResolvedType::BuiltinArray(_)
+                | ResolvedType::Shared(_)
                 | ResolvedType::Unit => Some(
                     self.tysys
                         .type_table
@@ -1121,9 +1124,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             UnaryOp::Ref => self.tysys.type_table.borrow_mut().make_ref(expr_type),
             UnaryOp::MutRef => self.tysys.type_table.borrow_mut().make_mut_ref(expr_type),
             UnaryOp::Deref => {
-                let outer = self.tysys.type_table.borrow().get(expr_type).clone();
+                let outer = {
+                    let tt = self.tysys.type_table.borrow();
+                    tt.get(tt.representation_head(expr_type)).clone()
+                };
                 match outer {
-                    ResolvedType::MutRef(inner) => inner,
+                    ResolvedType::MutRef(inner) | ResolvedType::Shared(inner) => inner,
                     ResolvedType::Ref(inner) => self.tysys.shared_view(inner),
                     _ => {
                         let _ = self.emit(TypeError::TypeMismatch {

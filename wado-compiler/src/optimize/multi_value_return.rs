@@ -350,6 +350,7 @@ pub(super) fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) ->
         }
         | ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner) => is_eligible_field_type(*inner, type_table),
+        ResolvedType::Shared(_) => unreachable!("erasure makes every cell a `MutRef`"),
         ResolvedType::Unit
         | ResolvedType::Never
         | ResolvedType::Function { .. }

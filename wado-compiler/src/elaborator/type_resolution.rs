@@ -1058,7 +1058,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return TypeTable::ERROR;
             };
             let elem = self.resolve_type(arg);
-            return make(&mut self.tysys.type_table.borrow_mut(), elem);
+            let built = make(&mut self.tysys.type_table.borrow_mut(), elem);
+            // A copy of a cell is the same cell, so what it holds is never
+            // moved out: the other builders' types own what they hold.
+            let affine_params = self.annotate_ctx.trait_ctx.affine_params();
+            if self.tysys.type_table.borrow().is_cell(built)
+                && let Some(affine) = self.affine_subject(false, elem, &affine_params)
+            {
+                let _ = self.emit(TypeError::AffineArgument {
+                    type_name: self.tysys.type_id_to_string(affine),
+                    param_name: "T".to_string(),
+                    span,
+                });
+            }
+            return built;
         }
         // The kind of the declaration the head names decides which shape is built.
         let Some(def) = def else {

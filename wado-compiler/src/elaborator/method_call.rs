@@ -10,8 +10,8 @@ use crate::defs::DefId;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, UNIT_TYPE_NAME,
-    display_generic_name,
+    ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, SHARED_TYPE_NAME,
+    UNIT_TYPE_NAME, display_generic_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::tir::{
@@ -469,6 +469,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id
     }
 
+    /// The `&mut T` a receiver that is a `Shared<T>`, or a reference to one,
+    /// is called through, where no `impl` written for the cell gives it
+    /// `method_name`. `None` for any other receiver, and for the cell's own
+    /// methods.
+    fn cell_receiver_view(&self, receiver: TypeId, method_name: &str) -> Option<TypeId> {
+        let held = {
+            let tt = self.tysys.type_table.borrow();
+            let cell = tt.peel_refs(receiver);
+            let ResolvedType::Shared(held) = *tt.get(cell) else {
+                return None;
+            };
+            if self
+                .tysys
+                .trait_env
+                .has_method_by_receiver(&tt.impl_receiver_key(cell), method_name)
+            {
+                return None;
+            }
+            held
+        };
+        Some(self.tysys.type_table.borrow_mut().make_mut_ref(held))
+    }
+
     /// Dispatch a method call from an already-resolved receiver TIR. See
     /// [`MethodCallInput`] for the contract.
     pub(super) fn resolve_method_call_with(
@@ -497,6 +520,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.run_obligations();
             receiver = self.apply_infer_holes(receiver);
         }
+
+        // A method a cell does not have is the method of what it holds, called
+        // on the `&mut` the cell is stored as: no path to the cell refuses the
+        // write, so the receiver's own place is not judged.
+        let receiver_ast = match self.cell_receiver_view(receiver, method_name) {
+            Some(view) => {
+                receiver = view;
+                if let Some(call) = call_id {
+                    self.sem.types.cell_receivers.insert(call, ());
+                }
+                None
+            }
+            None => receiver_ast,
+        };
 
         // Base (non-ref) type for method lookup. `mut`: deferred-inference may
         // concretise the receiver below.
@@ -1410,6 +1447,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Shared(_)
                 if let Some(type_args) = self
                     .tysys
                     .type_table
@@ -4052,6 +4090,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 FqTypeName::builtin(ARRAY_TYPE_NAME).with_args(vec![table.fq_type_name(elem)]),
                 vec![elem],
             )),
+            &ResolvedType::Shared(held) => Some((
+                SHARED_TYPE_NAME.to_string(),
+                table.impl_home(ty).expect("a cell has a declaring module"),
+                FqTypeName::builtin(SHARED_TYPE_NAME).with_args(vec![table.fq_type_name(held)]),
+                vec![held],
+            )),
             _ => None,
         }
     }
@@ -4965,6 +5009,7 @@ impl TypeSystem {
             ResolvedType::BuiltinArray(_) => {
                 Some(ImplTargetKey::Builtin(ARRAY_TYPE_NAME.to_string()))
             }
+            ResolvedType::Shared(_) => Some(ImplTargetKey::Builtin(SHARED_TYPE_NAME.to_string())),
             ResolvedType::Unit => Some(ImplTargetKey::Builtin(UNIT_TYPE_NAME.to_string())),
             _ => table
                 .nominal_def(head)

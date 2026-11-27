@@ -27,7 +27,7 @@ use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::name::{ARRAY_TYPE_NAME, FqTypeName, TUPLE_TYPE_NAME};
+use crate::name::{ARRAY_TYPE_NAME, FqTypeName, SHARED_TYPE_NAME, TUPLE_TYPE_NAME};
 use crate::resolve::Resolutions;
 use crate::semantics::{Destination, Operand};
 
@@ -281,7 +281,11 @@ impl TypeSystem {
             | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => return false,
-            ResolvedType::BuiltinArray(inner) => (vec![inner], Vec::new()),
+            // A cell is made from a value and never from a place, so it points
+            // into nothing; what it holds may.
+            ResolvedType::BuiltinArray(inner) | ResolvedType::Shared(inner) => {
+                (vec![inner], Vec::new())
+            }
             ResolvedType::Newtype { base_type, .. } => (vec![base_type], Vec::new()),
             ResolvedType::Tuple(elems) => (elems, Vec::new()),
             ResolvedType::Struct { type_args, .. } => (
@@ -329,7 +333,7 @@ impl TypeSystem {
             return true;
         }
         let reached = match resolved {
-            ResolvedType::MutRef(inner) => vec![inner],
+            ResolvedType::MutRef(inner) | ResolvedType::Shared(inner) => vec![inner],
             ResolvedType::Function { .. } | ResolvedType::Resource { .. } => return false,
             // A parameter is answered where it is bound: an instance walks its
             // arguments.
@@ -494,7 +498,8 @@ impl TypeSystem {
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. }
-            | ResolvedType::BuiltinArray(_) => true,
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Shared(_) => true,
             _ => false,
         }
     }
@@ -510,6 +515,7 @@ impl TypeSystem {
             // `Array<T>` is declared definitionless, so it has no nominal head
             // to read; its declaration names it `Array` and carries its impls.
             ResolvedType::BuiltinArray(_) => Some(ARRAY_TYPE_NAME.to_string()),
+            ResolvedType::Shared(_) => Some(SHARED_TYPE_NAME.to_string()),
             _ => Some(
                 table
                     .nominal_head(type_id)
@@ -729,6 +735,7 @@ impl TypeSystem {
                 // (its type args are carried separately), not the full
                 // `type_name` spelling `Array<T>`.
                 ResolvedType::BuiltinArray(_) => return ARRAY_TYPE_NAME.to_string(),
+                ResolvedType::Shared(_) => return SHARED_TYPE_NAME.to_string(),
                 _ => return self.type_table.borrow().name(current),
             }
         }
@@ -1045,6 +1052,7 @@ fn constituents(table: &TypeTable, ty: TypeId) -> (Option<DefId>, Vec<TypeId>) {
         ResolvedType::Tuple(elems) => (None, elems.clone()),
         ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
+        | ResolvedType::Shared(inner)
         | ResolvedType::BuiltinArray(inner) => (None, vec![*inner]),
         ResolvedType::Function {
             params,
@@ -1164,7 +1172,10 @@ impl TypeSystem {
             };
         }
         match resolved {
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Held::Nothing,
+            // A cell holds no affine value: it has no one owner to drop one.
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::Shared(_) => {
+                Held::Nothing
+            }
             ResolvedType::BuiltinArray(element) => Held::Members {
                 decl: None,
                 args: Vec::new(),

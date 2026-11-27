@@ -1038,6 +1038,7 @@ impl HeapEffects<'_> {
                 out.insert(tt.cell_key(ty));
                 self.reach_into(*payload, seen, out);
             }
+            ResolvedType::Shared(_) => unreachable!("erasure makes every cell a `MutRef`"),
             ResolvedType::Newtype { .. } => {
                 unreachable!("strip_handles removes every newtype")
             }

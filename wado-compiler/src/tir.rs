@@ -638,6 +638,25 @@ pub fn wrapped_reference(expr: TirExpr, type_table: &TypeTable) -> TirExpr {
     expr
 }
 
+/// The `&mut T` the cell `expr` is stored as, read through any references to
+/// the cell. Erasure leaves the cast between one type.
+pub fn cell_reference(expr: TirExpr, type_table: &mut TypeTable) -> TirExpr {
+    let expr = deref_to_layers(expr, 0, type_table);
+    let ResolvedType::Shared(held) = *type_table.get(expr.type_id) else {
+        unreachable!("the caller passes a cell");
+    };
+    let reference = type_table.make_mut_ref(held);
+    let span = expr.span;
+    TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(expr),
+            target_type: reference,
+        },
+        reference,
+        span,
+    )
+}
+
 /// A written shape a substituted one is made from, and the substitution that
 /// makes it, over every parameter the origin mentions: what instantiating the
 /// origin's methods applies. Binding the two shapes again cannot recover it
@@ -717,6 +736,10 @@ pub enum ResolvedType {
     // take that route — its null would be ambiguous.
     Ref(TypeId),
     MutRef(TypeId),
+    /// A shared cell holding the type, `Shared<T>`: one object under every
+    /// copy, which any path may write. Erasure makes it the `MutRef` it is
+    /// stored as, so nothing from lower on meets one.
+    Shared(TypeId),
     Function {
         /// `true` for `fn mut(...)` (closure type that may mutate its captures).
         /// `false` for `fn(...)` (read-only).

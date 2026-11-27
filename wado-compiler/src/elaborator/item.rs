@@ -1653,7 +1653,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             (head, tt.get(head).clone())
         };
         let within = match resolved {
-            ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::BuiltinArray(t) => {
+            ResolvedType::Ref(t)
+            | ResolvedType::MutRef(t)
+            | ResolvedType::Shared(t)
+            | ResolvedType::BuiltinArray(t) => {
                 vec![t]
             }
             ResolvedType::Variant { type_args, .. } if type_args.is_empty() => {

@@ -364,6 +364,10 @@ pub fn mangle_builtin_array_type(elem_type: &str) -> String {
 /// (`impl Array<T>` in `core:prelude/array.wado`) the dispatch arms report.
 pub const ARRAY_TYPE_NAME: &str = "Array";
 
+/// The head name of the shared cell (`ResolvedType::Shared`), as
+/// [`ARRAY_TYPE_NAME`] is the array's.
+pub const SHARED_TYPE_NAME: &str = "Shared";
+
 /// A declaration's mangled name, qualified by the module declaring it:
 /// `{module}/{name}`.
 pub fn mangle_declared(module: impl fmt::Display, name: &str) -> String {
@@ -530,7 +534,12 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
         || PrimitiveType::is_primitive_name(head)
         || matches!(
             head,
-            UNIT_TYPE_NAME | NEVER_TYPE_NAME | ARRAY_TYPE_NAME | TUPLE_TYPE_NAME | "Fn"
+            UNIT_TYPE_NAME
+                | NEVER_TYPE_NAME
+                | ARRAY_TYPE_NAME
+                | SHARED_TYPE_NAME
+                | TUPLE_TYPE_NAME
+                | "Fn"
         )
 }
 

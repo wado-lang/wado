@@ -252,6 +252,7 @@ impl<'a> StorageReach<'a> {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Members::Reference(*inner),
             ResolvedType::BuiltinArray(inner) => Members::Held(vec![*inner]),
             ResolvedType::Newtype { base_type, .. } => Members::Held(vec![*base_type]),
+            ResolvedType::Shared(_) => unreachable!("erasure makes every cell a `MutRef`"),
             ResolvedType::Struct { def, type_args } => {
                 match self.fields.get(&(*def, type_args.clone())) {
                     Some(fields) => Members::Held(fields.iter().map(|f| f.type_id).collect()),

@@ -1090,6 +1090,7 @@ impl RefCarrying<'_> {
     fn members(&self, type_id: TypeId, walk: &mut Walk) -> bool {
         match self.type_table.get(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
+            ResolvedType::Shared(_) => unreachable!("erasure makes every cell a `MutRef`"),
             // What a type parameter stands for is not known here.
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }

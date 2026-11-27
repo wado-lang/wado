@@ -1,0 +1,14 @@
+type Tally = Shared<i32>;
+
+fn alias(x: &mut i32) -> Tally {
+    return x as Tally;
+}
+
+export fn run() {
+    let mut x = 1;
+    let t = alias(&mut x);
+    *t = 2;
+}
+
+__DATA__
+{"compile_error": ":4:12: analysis error: cannot cast '&mut i32' to 'Tally': a cell converts to no other type and from none"}

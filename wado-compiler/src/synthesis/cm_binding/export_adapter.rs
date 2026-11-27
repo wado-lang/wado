@@ -833,6 +833,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 | ResolvedType::Tuple(_)
                 | ResolvedType::Ref(_)
                 | ResolvedType::MutRef(_)
+                | ResolvedType::Shared(_)
                 | ResolvedType::Function { .. }
                 | ResolvedType::TypeParam { .. }
                 | ResolvedType::AssocParam { .. }

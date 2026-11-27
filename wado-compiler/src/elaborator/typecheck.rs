@@ -698,6 +698,7 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
         | ResolvedType::Function { .. }
         | ResolvedType::Tuple(_)
         | ResolvedType::BuiltinArray(_)
+        | ResolvedType::Shared(_)
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. } => Some(type_table.get(id)),
         _ => None,
@@ -743,7 +744,8 @@ fn same_constructor_args(
 ) -> Option<(&[TypeId], &[TypeId])> {
     match (type_table.get(actual), type_table.get(expected)) {
         (ResolvedType::Tuple(a), ResolvedType::Tuple(e)) => Some((a.as_slice(), e.as_slice())),
-        (ResolvedType::BuiltinArray(a), ResolvedType::BuiltinArray(e)) => {
+        (ResolvedType::BuiltinArray(a), ResolvedType::BuiltinArray(e))
+        | (ResolvedType::Shared(a), ResolvedType::Shared(e)) => {
             Some((std::slice::from_ref(a), std::slice::from_ref(e)))
         }
         _ => match (

@@ -2,9 +2,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use serde::Serialize;
 
 use crate::ast::{
-    AssociatedConst, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl, ImplBlock,
-    InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl, StructField,
-    TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, type_head_name, written_params,
+    AssociatedConst, BuiltinTypeDecl, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
+    ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
+    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, type_head_name,
+    written_params,
 };
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
@@ -158,7 +159,9 @@ pub struct DocFunction {
 #[derive(Debug, Clone, Serialize)]
 pub struct DocType {
     pub name: String,
-    pub base_type: String,
+    /// `None` for a type the compiler builds, which has no base.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_type: Option<String>,
     pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
@@ -376,6 +379,9 @@ fn extract_doc_filtered(
             Item::Trait(t) => traits.push(build_doc_trait(t)),
             Item::Struct(s) => structs.push(build_doc_struct(s, &impls, include_private)),
             Item::Newtype(t) => types.push(build_doc_type(t, &impls, include_private)),
+            Item::BuiltinTypeDecl(t) if !t.type_params.is_empty() => {
+                types.push(build_doc_builtin_type(t, &impls, include_private));
+            }
             Item::Global(g) => globals.push(build_doc_global(g)),
             Item::Enum(e) => enums.push(build_doc_enum(e, &impls, include_private)),
             Item::Variant(v) => variants.push(build_doc_variant(v, &impls, include_private)),
@@ -512,9 +518,30 @@ fn build_doc_type(t: &Newtype, impls: &[DocImpl], include_private: bool) -> DocT
 
     DocType {
         name: t.name.clone(),
-        base_type: render_type(&t.ty),
+        base_type: Some(render_type(&t.ty)),
         signature: sig,
         doc: t.doc.clone(),
+        impls: collect_impl_members(&t.name, impls, include_private),
+    }
+}
+
+/// A generic type the compiler builds, `Array<T>` or `Shared<T>`. One without
+/// parameters is a primitive, documented with the primitive types.
+fn build_doc_builtin_type(
+    t: &BuiltinTypeDecl,
+    impls: &[DocImpl],
+    include_private: bool,
+) -> DocType {
+    let visibility = if t.visibility.is_public() { "pub " } else { "" };
+    DocType {
+        name: t.name.clone(),
+        base_type: None,
+        signature: format!(
+            "{visibility}type {}{}",
+            t.name,
+            render_generic_params(&t.type_params)
+        ),
+        doc: None,
         impls: collect_impl_members(&t.name, impls, include_private),
     }
 }

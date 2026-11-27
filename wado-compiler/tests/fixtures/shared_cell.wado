@@ -1,0 +1,148 @@
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+
+    fn bump(&mut self) {
+        self.x += 1;
+    }
+}
+
+struct Counter {
+    hits: Shared<i32>,
+}
+
+fn hit(c: &Counter) {
+    *c.hits += 1;
+}
+
+test "a cell is written without mut, and through a &" {
+    let c = Shared::new(1);
+    *c = 2;
+    assert *c == 2;
+
+    let counter = Counter { hits: Shared::new(0) };
+    hit(&counter);
+    hit(&counter);
+    assert *counter.hits == 2;
+}
+
+test "a copy of a cell is the same cell" {
+    let a = Shared::new(1);
+    let b = a;
+    *b = 5;
+    assert *a == 5;
+
+    let counter = Counter { hits: a };
+    let copy = counter;
+    *copy.hits = 9;
+    assert *counter.hits == 9;
+    assert *a == 9;
+
+    let separate = Shared::new(*a);
+    *separate = 0;
+    assert *a == 9;
+}
+
+test "new takes a copy of its argument" {
+    let mut p = Point { x: 1, y: 2 };
+    let c = Shared::new(p);
+    p.x = 100;
+    assert c.x == 1;
+}
+
+test "== asks whether two cells are one" {
+    let a = Shared::new(1);
+    let b = a;
+    let c = Shared::new(1);
+    assert a == b;
+    assert a != c;
+    assert *a == *c;
+}
+
+test "a field access and a method call dereference a cell" {
+    let p = Shared::new(Point { x: 1, y: 2 });
+    p.x = 10;
+    assert p.sum() == 12;
+    p.bump();
+    assert p.x == 11;
+
+    let q = p;
+    q.y = 0;
+    assert p.sum() == 11;
+}
+
+test "a struct holding a cell compares its cells by identity" {
+    let hits = Shared::new(0);
+    let a = Counter { hits };
+    let b = Counter { hits };
+    let c = Counter { hits: Shared::new(0) };
+    assert a == b;
+    assert a != c;
+}
+
+test "a cell inspects as what it holds, and defaults where that does" {
+    let c = Shared::new(3);
+    assert `${c:?}` == "Shared(3)";
+    let p = Shared::new(Point { x: 1, y: 2 });
+    assert `${p:?}` == "Shared(Point { x: 1, y: 2 })";
+
+    let d: Shared<i32> = Shared::default();
+    assert *d == 0;
+}
+
+fn bump_all(cells: &List<Shared<i32>>) {
+    for let c of cells {
+        **c += 1;
+    }
+}
+
+test "a cell in a list is the one its copies are" {
+    let a = Shared::new(1);
+    let cells: List<Shared<i32>> = [a, Shared::new(10)];
+    bump_all(&cells);
+    assert *a == 2;
+    assert *cells[1] == 11;
+}
+
+struct Shape {
+    origin: Shared<Point>,
+}
+
+fn nudge(shape: &Shape) {
+    shape.origin.x += 1;
+    shape.origin.bump();
+}
+
+test "a path through a cell is writable under a &" {
+    let shape = Shape { origin: Shared::new(Point { x: 0, y: 0 }) };
+    nudge(&shape);
+    assert shape.origin.x == 2;
+
+    let points: List<Shared<Point>> = [shape.origin];
+    points[0].bump();
+    points[0].y = 7;
+    assert shape.origin.sum() == 10;
+}
+
+type Tally = Shared<i32>;
+
+test "a newtype over a cell is a cell" {
+    let t: Tally = Shared::new(1) as Tally;
+    let u = t;
+    *u += 1;
+    assert *t == 2;
+}
+
+test "a closure captures a cell and writes it without being fn mut" {
+    let c = Shared::new(0);
+    let inc = || { *c += 1; };
+    inc();
+    inc();
+    assert *c == 2;
+}

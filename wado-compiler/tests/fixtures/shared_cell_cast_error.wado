@@ -1,0 +1,12 @@
+fn alias(x: &mut i32) -> Shared<i32> {
+    return x as Shared<i32>;
+}
+
+export fn run() {
+    let mut x = 1;
+    let c = alias(&mut x);
+    *c = 2;
+}
+
+__DATA__
+{"compile_error": ":2:12: analysis error: cannot cast '&mut i32' to 'Shared<i32>': a cell converts to no other type and from none; `Shared::new(value)` makes one, and `*c` reads what it holds"}

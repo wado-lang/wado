@@ -561,6 +561,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
                         wado_compiler::tir::ResolvedType::Resource { .. } => "resource",
                         wado_compiler::tir::ResolvedType::Ref(_) => "ref",
                         wado_compiler::tir::ResolvedType::MutRef(_) => "mut_ref",
+                        wado_compiler::tir::ResolvedType::Shared(_) => "shared",
                         wado_compiler::tir::ResolvedType::Function { .. } => "fn",
                         wado_compiler::tir::ResolvedType::BuiltinArray(_) => "builtin_array",
                         wado_compiler::tir::ResolvedType::Tuple(_) => "tuple",

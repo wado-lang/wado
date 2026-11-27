@@ -305,6 +305,16 @@ fn handle_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<St
     }
 }
 
+/// The reason a cast to or from a cell is refused: a cell cast from a place
+/// would alias it, and one cast to a reference would outlive its `&mut`.
+fn cell_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    (tt.is_cell(source) || tt.is_cell(target)).then(|| {
+        "a cell converts to no other type and from none; `Shared::new(value)` makes one, and \
+         `*c` reads what it holds"
+            .to_string()
+    })
+}
+
 /// The reason Rust's `as` refuses a cast between scalars, which Wado refuses
 /// too: nothing casts to `bool`, a `bool` casts to no float, and an enum casts
 /// to no number and from none.
@@ -2063,8 +2073,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None => {}
                 }
             }
-            // Reference types - look through to inner type
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            // A reference or a cell: look through to what it holds.
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Shared(inner) => {
                 return self.lookup_field_type(inner, field_name, span);
             }
             // Newtype - look through to base type for field access
@@ -3837,6 +3849,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         collector.writes
     }
 
+    /// Whether the cast is the one `Shared::new` makes a cell with: a `&mut T`
+    /// to the `Shared<T>` it is stored as, in the module declaring `Shared`.
+    /// Anywhere else it would let a cell alias a variable.
+    fn cast_is_shared_new(&self, source: TypeId, target: TypeId) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        matches!(tt.get(target), ResolvedType::Shared(_))
+            && tt.cast_makes_cell(source, target)
+            && tt.impl_home(target).as_ref() == Some(&self.current_module_source)
+    }
+
     /// Whether the cast holds whatever the hints would say: an operand that
     /// yields no value or already failed, a newtype step, or one a
     /// `ReflectNewtype` bound proves for every type that settles it.
@@ -4054,11 +4076,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .cast_operand_type(source_type, target_type);
 
-        let refused_cast = if self.cast_needs_no_judgment(source_type, target_type) {
+        let refused_cast = if self.cast_needs_no_judgment(source_type, target_type)
+            || self.cast_is_shared_new(source_type, target_type)
+        {
             None
         } else {
             let tt = self.tysys.type_table.borrow();
-            handle_cast_hint(&tt, source_type, target_type)
+            cell_cast_hint(&tt, source_type, target_type)
+                .or_else(|| handle_cast_hint(&tt, source_type, target_type))
                 .or_else(|| scalar_cast_hint(&tt, source_type, target_type))
                 .or_else(|| ref_cast_hint(&tt, source_type, target_type))
                 .or_else(|| fn_cast_hint(&tt, source_type, target_type))
