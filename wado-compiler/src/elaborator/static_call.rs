@@ -22,7 +22,7 @@ use super::sig::MethodSig;
 use super::solver_bridge::Ordered;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
-use super::trait_query::{DerivedAt, NewtypePeel};
+use super::trait_query::DerivedAt;
 use super::types::{OverloadedCallForm, TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
