@@ -2320,7 +2320,13 @@ impl TypeSystem {
         owner: DefId,
         name: &str,
     ) -> Option<sig::AssocConstSig> {
-        self.signatures.associated_constant(owner, name).cloned()
+        // A resource holds the constants of every resource it extends, the
+        // nearest declaration winning.
+        self.type_table
+            .borrow()
+            .resource_chain(owner)
+            .find_map(|holder| self.signatures.associated_constant(holder, name))
+            .cloned()
     }
 
     /// [`Self::associated_constant_of`] for a qualified path in expression

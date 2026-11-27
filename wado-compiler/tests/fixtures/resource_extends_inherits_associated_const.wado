@@ -1,0 +1,40 @@
+// A constant of a resource is one of every resource extending it, as its
+// methods are.
+#[cm("test:dom/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
+resource Node {}
+
+#[cm("test:dom/dom#element", linearity = "unrestricted", repr = "externref", classes = "1..=2")]
+resource Element extends Node {}
+
+#[cm("test:dom/dom#html-element", linearity = "unrestricted", repr = "externref", classes = "2..=2")]
+resource HtmlElement extends Element {}
+
+impl Node {
+    pub const ELEMENT_NODE: u16 = 1;
+    pub const TEXT_NODE: u16 = 3;
+}
+
+impl Element {
+    pub const OWN: i32 = 7;
+}
+
+fn kind(n: u16) -> String {
+    return match n {
+        HtmlElement::ELEMENT_NODE => "element",
+        Element::TEXT_NODE => "text",
+        _ => "other",
+    };
+}
+
+test "a constant is read through a resource extending its owner" {
+    assert Node::ELEMENT_NODE == 1;
+    assert Element::ELEMENT_NODE == 1;
+    assert HtmlElement::TEXT_NODE == 3;
+    assert HtmlElement::OWN == 7;
+}
+
+test "a pattern names one through a child too" {
+    assert kind(builtin::black_box(1 as u16)) == "element";
+    assert kind(builtin::black_box(3 as u16)) == "text";
+    assert kind(builtin::black_box(9 as u16)) == "other";
+}

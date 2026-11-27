@@ -593,6 +593,10 @@ A method call resolves statically. `recv.m()` gathers every `m` declared along `
 - Static methods (no `&self`) are not inherited.
 - `Self` in an inherited method names the resource that declares it, not the receiver's type.
 
+#### Constants
+
+A resource holds the associated constants of every resource it extends: `Child::NAME` names the constant the nearest resource along the `extends` chain declares as `NAME`, in an expression and in a pattern alike.
+
 #### Handle Classes
 
 Every extern handle of an `extends` tree carries a class, a 16-bit number naming its runtime type. A backed handle carries the class of the resource `backed_by` was called on. An object of the host carries the class of the nearest ancestor of its runtime type that the program declares, so a type the program does not name reads as its nearest named ancestor.
