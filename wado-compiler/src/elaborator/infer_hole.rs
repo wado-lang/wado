@@ -1616,7 +1616,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn equate_open_parts(&mut self, asked: &FqTypeName, offered: TypeId) {
         let mut offered = offered;
         for kind in asked.references() {
-            let ((ResolvedType::Ref(behind), RefKind::Shared)
+            let ((ResolvedType::Ref(behind), RefKind::ImmutableReference)
             | (ResolvedType::MutRef(behind), RefKind::Mut)) =
                 (self.tysys.type_table.borrow().get(offered).clone(), kind)
             else {

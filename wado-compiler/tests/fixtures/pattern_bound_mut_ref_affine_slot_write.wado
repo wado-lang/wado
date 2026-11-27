@@ -1,0 +1,46 @@
+// An affine variant held as a field, an element or a payload is its own box,
+// so a write through a pattern binding of it lands.
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {}
+}
+
+affine variant Tray {
+    Full(Token),
+    Empty,
+}
+
+affine struct Shelf {
+    tray: Tray,
+}
+
+test "a write through a destructured field" {
+    let mut shelf = Shelf { tray: Tray::Full(Token { id: 1 }) };
+    let { tray } = &mut shelf;
+    *tray = Tray::Empty;
+    assert shelf.tray matches { _::Empty };
+}
+
+test "a write through a destructured tuple element" {
+    let mut pair: [Tray, i32] = [Tray::Full(Token { id: 1 }), 0];
+    let [tray, _] = &mut pair;
+    *tray = Tray::Empty;
+    assert pair.0 matches { _::Empty };
+}
+
+test "a write through a payload binding" {
+    let mut held: Option<Tray> = Option::Some(Tray::Full(Token { id: 1 }));
+    if let Some(tray) = &mut held {
+        *tray = Tray::Empty;
+    }
+    assert held matches { Some(_::Empty) };
+}
+
+__DATA__
+{
+    "test": {}
+}

@@ -1,0 +1,32 @@
+// A payload or field that already holds a `&mut` binds that reference by
+// value, so a write through the binding reaches what the reference names.
+
+struct Gate {
+    open: Option<&mut bool>,
+}
+
+struct Wire {
+    level: &mut i32,
+}
+
+test "a write through a reference a payload holds" {
+    let mut flag = false;
+    let gate = Gate { open: Option::Some(&mut flag) };
+    if let Some(open) = gate.open {
+        *open = true;
+    }
+    assert flag;
+}
+
+test "a write through a reference a field holds" {
+    let mut level = 1;
+    let wire = Wire { level: &mut level };
+    let { level: held } = wire;
+    *held = 5;
+    assert level == 5;
+}
+
+__DATA__
+{
+    "test": {}
+}
