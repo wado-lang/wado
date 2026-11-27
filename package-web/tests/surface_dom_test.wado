@@ -12,10 +12,17 @@ use {
     HtmlElement,
     HtmlInputElement,
     Node,
+    NodeFilter,
     Text,
     Window,
 } from "../src/dom.wado";
 use { SurfaceDom } from "../src/surface_dom.wado";
+
+test "a callback interface holds its constants" {
+    assert NodeFilter::SHOW_ALL == 0xFFFFFFFF;
+    assert NodeFilter::SHOW_ELEMENT == 1;
+    assert NodeFilter::FILTER_REJECT == 2;
+}
 
 test "a fresh document has a body" {
     let mut dom = SurfaceDom::new();
@@ -44,7 +51,8 @@ test "a fresh document starts with its doctype" {
     with &mut dom do {
         let doc = Dom::document();
         let doctype = doc.first_child().unwrap();
-        assert doctype.node_type() == 10;
+        assert doctype.node_type() == Node::DOCUMENT_TYPE_NODE;
+        assert Node::DOCUMENT_TYPE_NODE == 10;
         assert doctype.node_name() == "html";
         assert doctype.text_content() == null;
         assert doctype.next_sibling() == Option::Some(doc.document_element().unwrap() as Node);
@@ -292,7 +300,8 @@ test "a text node's data is its content, and changes in place" {
         let p = doc.create_element("p");
         let text = doc.create_text_node("a < b");
         assert text.data() == "a < b";
-        assert text.node_type() == 3;
+        assert text.node_type() == Text::TEXT_NODE;
+        assert Text::TEXT_NODE == 3;
         assert text.text_content() == Option::Some("a < b");
         p.append_child(doc.create_element("b"));
         p.insert_before(text, p.first_child());

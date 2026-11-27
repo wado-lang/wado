@@ -142,6 +142,8 @@ test {
 
 - A callback's parameters are scalars and handles, and it returns nothing. Any
   other function type on a `#[cm]` declaration is a compile error.
+- A newtype over a function type is a callback as the function type is. It is
+  bound to an interface with `#[cm]`, as any type a `#[cm]` declaration names.
 - The closure crosses as itself: one reference the host holds, and the
   collector reclaims the closure once the host lets go of it. An import that
   takes one is a core import of the main module, as an import of an
@@ -592,6 +594,10 @@ A method call resolves statically. `recv.m()` gathers every `m` declared along `
   answers through the resource that declares it.
 - Static methods (no `&self`) are not inherited.
 - `Self` in an inherited method names the resource that declares it, not the receiver's type.
+
+#### Constants
+
+A resource holds the associated constants of every resource it extends: `Child::NAME` names the constant a resource along the `extends` chain declares as `NAME`, in an expression and in a pattern alike. A child may not declare a constant under a name it inherits. A constant in a trait impl belongs to that impl and is not inherited.
 
 #### Handle Classes
 

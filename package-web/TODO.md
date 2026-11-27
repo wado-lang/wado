@@ -21,7 +21,6 @@ left before the slice can be everything:
 
 | Cause                                           | Definitions | Members | Overloads | Arguments |
 | ----------------------------------------------- | ----------- | ------- | --------- | --------- |
-| a constant                                      | 0           | 1261    | 0         | 0         |
 | a callback in a result                          | 5           | 954     | 0         | 0         |
 | a type outside the slice                        | 2           | 281     | 1         | 2         |
 | a union                                         | 15          | 200     | 0         | 0         |
@@ -44,7 +43,7 @@ left before the slice can be everything:
 | `ObservableArray<…>`                            | 0           | 4       | 0         | 0         |
 | `bigint`                                        | 0           | 2       | 0         | 0         |
 | `async_sequence<…>`                             | 0           | 1       | 0         | 0         |
-| Total                                           | 101         | 3682    | 20        | 72        |
+| Total                                           | 101         | 2421    | 20        | 72        |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
@@ -123,7 +122,11 @@ lower is then available to each interface the slice adds.
 - [ ] Name a case for the empty string and for a value starting with a digit
 - [x] Lower a `dictionary` to a `struct`, in the bindings and in the glue
 - [x] Read parameters that cross in memory, as more than sixteen core values do
-- [ ] Bind a constant
+- [x] Bind an interface's constant as an associated constant of its resource
+- [x] Bind a callback interface as a newtype over its closure type, holding
+  its constants: `NodeFilter::SHOW_ALL`
+- [ ] Let a callback return a value, as `NodeFilter`'s does: until then a
+  member taking one is skipped, and only its constants are bound
 
 ### 6. A wider slice
 

@@ -11,9 +11,9 @@ use wado_compiler::ast::HandleClasses;
 use crate::WadoCodeGenerator;
 use crate::glue;
 use crate::ir::{
-    DictionaryField, UnionCase, WadoDictionary, WadoEnum, WadoEnumVariant, WadoField, WadoFunction,
-    WadoInterface, WadoModule, WadoParam, WadoResource, WadoStruct, WadoType, WadoTypeDef,
-    WadoUnion, WadoVariant, WadoVariantCase,
+    DictionaryField, UnionCase, WadoConstant, WadoDictionary, WadoEnum, WadoEnumVariant, WadoField,
+    WadoFunction, WadoInterface, WadoModule, WadoNewtype, WadoParam, WadoResource, WadoStruct,
+    WadoType, WadoTypeDef, WadoUnion, WadoVariant, WadoVariantCase,
 };
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
@@ -183,7 +183,12 @@ pub enum Member {
         ext_attrs: Vec<ExtAttr>,
     },
     #[serde(rename = "const")]
-    Const { name: String },
+    Const {
+        name: String,
+        #[serde(rename = "idlType")]
+        idl_type: IdlType,
+        value: DefaultValue,
+    },
     #[serde(rename = "iterable")]
     Iterable,
     #[serde(rename = "maplike")]
@@ -198,7 +203,7 @@ impl Member {
     /// What a report calls the member: its `WebIDL` name, or what stands in for one.
     fn label(&self) -> String {
         match self {
-            Self::Attribute { name, .. } | Self::Const { name } => name.clone(),
+            Self::Attribute { name, .. } | Self::Const { name, .. } => name.clone(),
             Self::Operation { name, special, .. } if name.is_empty() => format!("({special})"),
             Self::Operation { name, .. } => name.clone(),
             Self::Constructor { .. } => "new".to_string(),
@@ -220,7 +225,8 @@ pub struct Argument {
     pub default: Option<DefaultValue>,
 }
 
-/// An optional argument's default, as the snapshot records it.
+/// An optional argument's default or a constant's value, as the snapshot
+/// records it.
 #[derive(Deserialize)]
 #[serde(tag = "type")]
 pub enum DefaultValue {
@@ -504,6 +510,44 @@ struct Merged<'a> {
     members: Vec<&'a Member>,
 }
 
+/// The types signatures name that the module declares, each once.
+#[derive(Default)]
+struct Named {
+    enums: IndexSet<String>,
+    dictionaries: IndexMap<String, WadoDictionary>,
+    unions: IndexMap<String, WadoUnion>,
+    /// The callback interfaces, by Wado name.
+    callbacks: IndexSet<String>,
+}
+
+impl Named {
+    fn collect(&mut self, ty: &WadoType) {
+        ty.walk(&mut |ty| match ty {
+            WadoType::StringEnum(name) => {
+                self.enums.insert(name.clone());
+            }
+            WadoType::Dictionary(dictionary) => {
+                self.dictionaries
+                    .insert(dictionary.name.clone(), dictionary.clone());
+            }
+            WadoType::Union(union) => {
+                let declared = self.unions.insert(union.name.clone(), union.clone());
+                assert!(
+                    declared.is_none_or(|declared| declared == *union),
+                    "two unions are named `{}`",
+                    union.name
+                );
+            }
+            WadoType::Callback {
+                name: Some(name), ..
+            } => {
+                self.callbacks.insert(name.clone());
+            }
+            _ => {}
+        });
+    }
+}
+
 /// A function, its JavaScript half, and why its trailing optional arguments
 /// were left out, where they were.
 struct Bound {
@@ -610,6 +654,14 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
             .map(|t| (t.name.as_str(), &t.idl_type))
             .collect(),
         callbacks: snapshot.callbacks.iter().map(Callback::signature).collect(),
+        callback_interfaces: snapshot
+            .callbacks
+            .iter()
+            .filter_map(|callback| match callback {
+                Callback::Interface { name, members } => Some((name.as_str(), members.as_slice())),
+                Callback::Function { .. } => None,
+            })
+            .collect(),
         global_interface: merged
             .values()
             .any(|iface| iface.global)
@@ -622,6 +674,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
         let path = lowering.interface_path(name);
+        let constants = lowering.constants(name, iface.members.iter().copied(), &mut skipped);
         let methods = split_js(
             lowering.methods_of(name, &path, iface, &mut skipped),
             &mut js,
@@ -637,6 +690,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 extends: iface.inheritance.as_deref().map(to_upper_camel_case),
                 methods,
                 unavailable: Vec::new(),
+                constants,
             },
         );
     }
@@ -669,7 +723,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         }
         module.resources.push(lowering.rejection(&mut js));
     }
-    let enums = lowering.declare_types(snapshot, &mut module);
+    let enums = lowering.declare_types(snapshot, &mut module, &mut skipped);
     Ok(WebIdlOutput {
         module,
         js,
@@ -975,6 +1029,8 @@ struct Lowering<'a> {
     enums: Enums<'a>,
     typedefs: IndexMap<&'a str, &'a IdlType>,
     callbacks: IndexMap<&'a str, Signature<'a>>,
+    /// The members of each callback that is a `callback interface`, by name.
+    callback_interfaces: IndexMap<&'a str, &'a [Member]>,
     /// The interface handing out the first handle, which a callback's body may
     /// perform. `None` without a `[Global]` interface.
     global_interface: Option<String>,
@@ -1085,43 +1141,83 @@ impl Lowering<'_> {
         Ok(fields)
     }
 
-    /// Declares in `module` each enum, dictionary and union a function of it
-    /// names, and answers each enum's values as the host spells them, in case order,
-    /// by Wado name.
+    /// Declares in `module` each enum, dictionary, union and callback
+    /// interface a function of it names, each callback interface holding a
+    /// constant, and each type a declared callback interface's function type
+    /// names. Answers each enum's values as the host spells them, in case
+    /// order, by Wado name.
     fn declare_types(
         &self,
         snapshot: &Snapshot,
         module: &mut WadoModule,
+        skipped: &mut Vec<Skip>,
     ) -> IndexMap<String, Vec<String>> {
-        let mut enums = IndexSet::new();
-        let mut dictionaries = IndexMap::new();
-        let mut unions = IndexMap::new();
+        let mut named = Named::default();
         let methods = module.resources.iter().flat_map(|r| &r.methods);
         let functions = module.interfaces.iter().flat_map(|i| &i.functions);
         for function in methods.chain(functions) {
             let params = function.params.iter().map(|p| &p.ty);
             for ty in params.chain(&function.return_type) {
-                ty.walk(&mut |ty| match ty {
-                    WadoType::StringEnum(name) => {
-                        enums.insert(name.clone());
-                    }
-                    WadoType::Dictionary(dictionary) => {
-                        dictionaries.insert(dictionary.name.clone(), dictionary.clone());
-                    }
-                    WadoType::Union(union) => {
-                        let declared = unions.insert(union.name.clone(), union.clone());
-                        assert!(
-                            declared.is_none_or(|declared| declared == *union),
-                            "two unions are named `{}`",
-                            union.name
-                        );
-                    }
-                    _ => {}
-                });
+                named.collect(ty);
             }
         }
         let type_path =
             |name: &str| format!("{}/{TYPES_INTERFACE}#{}", self.package, to_kebab_case(name));
+        let is_constant = |member: &&Member| matches!(member, Member::Const { .. });
+        // A function type may name a callback interface the snapshot declares
+        // before its own, so the walk runs until it reaches none.
+        let mut targets = IndexMap::new();
+        loop {
+            let reached: Vec<&str> = self
+                .callback_interfaces
+                .iter()
+                .filter(|&(&declared, &members)| {
+                    !targets.contains_key(declared)
+                        && (named.callbacks.contains(&to_upper_camel_case(declared))
+                            || members.iter().any(|m| is_constant(&m)))
+                })
+                .map(|(&declared, _)| declared)
+                .collect();
+            if reached.is_empty() {
+                break;
+            }
+            for declared in reached {
+                let signature = self.callbacks[declared].clone();
+                let target = signature.and_then(|s| self.callback_function(None, s));
+                if let Ok(target) = &target {
+                    named.collect(target);
+                }
+                targets.insert(declared, target);
+            }
+        }
+        let mut callback_interfaces = Vec::new();
+        for (&declared, &members) in &self.callback_interfaces {
+            let Some(target) = targets.swap_remove(declared) else {
+                continue;
+            };
+            match target {
+                Ok(target) => callback_interfaces.push(WadoNewtype {
+                    cm_attr: Some(type_path(declared)),
+                    target,
+                    constants: self.constants(declared, members, skipped),
+                    name: to_upper_camel_case(declared),
+                }),
+                // Its constants have no type to sit on.
+                Err(reason) => {
+                    skipped.extend(members.iter().filter(is_constant).map(|constant| Skip {
+                        item: format!("{declared}.{}", constant.label()),
+                        lost: Lost::Member,
+                        reason: reason.clone(),
+                    }));
+                }
+            }
+        }
+        let Named {
+            enums,
+            dictionaries,
+            mut unions,
+            ..
+        } = named;
         let mut values = IndexMap::new();
         for declared in &snapshot.enums {
             let name = to_upper_camel_case(&declared.name);
@@ -1191,6 +1287,9 @@ impl Lowering<'_> {
                     .collect(),
             }));
         }
+        module
+            .types
+            .extend(callback_interfaces.into_iter().map(WadoTypeDef::Newtype));
         values
     }
 
@@ -1225,7 +1324,52 @@ impl Lowering<'_> {
             extends: None,
             methods,
             unavailable: Vec::new(),
+            constants: Vec::new(),
         }
+    }
+
+    /// Every constant among the `members` of `iface` whose value its type can
+    /// spell, appending to `skipped` the ones it cannot.
+    fn constants<'m>(
+        &self,
+        iface: &str,
+        members: impl IntoIterator<Item = &'m Member>,
+        skipped: &mut Vec<Skip>,
+    ) -> Vec<WadoConstant> {
+        let mut constants = Vec::new();
+        for member in members {
+            let Member::Const {
+                name,
+                idl_type,
+                value,
+            } = member
+            else {
+                continue;
+            };
+            let written = self.lower_type(idl_type, Flow::Out).and_then(|ty| {
+                let Some(value) = literal(value, &ty) else {
+                    let text = format!(
+                        "a constant whose value `{}` cannot spell",
+                        WadoCodeGenerator::format_type(&ty)
+                    );
+                    return Err(Reason::new(Cause::Constant, text));
+                };
+                Ok(WadoConstant {
+                    name: name.clone(),
+                    ty,
+                    value,
+                })
+            });
+            match written {
+                Ok(constant) => constants.push(constant),
+                Err(reason) => skipped.push(Skip {
+                    item: format!("{iface}.{name}"),
+                    lost: Lost::Member,
+                    reason,
+                }),
+            }
+        }
+        constants
     }
 
     /// Every member of `iface` that lowers, appending to `skipped` the ones
@@ -1398,7 +1542,8 @@ impl Lowering<'_> {
                     None,
                 )]
             }
-            Member::Const { .. } => vec![Err((member.label(), Reason::of(Cause::Constant)))],
+            // `constants` binds these: a constant is no function.
+            Member::Const { .. } => Vec::new(),
             Member::Iterable | Member::Maplike | Member::Setlike | Member::AsyncIterable => {
                 vec![Err((member.label(), Reason::of(Cause::Iteration)))]
             }
@@ -1651,27 +1796,43 @@ impl Lowering<'_> {
                     });
                 }
                 return match self.callbacks.get(name) {
-                    Some(signature) => self.lower_callback(signature.clone()?, flow),
+                    Some(signature) => {
+                        let named = self.callback_interfaces.contains_key(name);
+                        let name = named.then(|| to_upper_camel_case(name));
+                        self.lower_callback(name, signature.clone()?, flow)
+                    }
                     None => is_a(Cause::OutsideSlice, "outside the slice"),
                 };
             }
         })
     }
 
-    /// A callback crosses only into the host, returns nothing, and takes only
-    /// what the host always calls a closure back with: scalars and handles.
+    /// A callback crosses only into the host and returns nothing. `name` is
+    /// the newtype naming its function type, where one does.
     fn lower_callback(
         &self,
-        (return_type, arguments): (&IdlType, &[Argument]),
+        name: Option<String>,
+        signature: (&IdlType, &[Argument]),
         flow: Flow,
     ) -> std::result::Result<WadoType, Reason> {
         if flow == Flow::Out {
             return Err(Reason::of(Cause::CallbackResult));
         }
-        let uncallable = |why: String| Err(Reason::new(Cause::Callback, why));
-        if !is_undefined(return_type) {
-            return uncallable("a callback returning a value".to_string());
+        if !is_undefined(signature.0) {
+            let why = "a callback returning a value";
+            return Err(Reason::new(Cause::Callback, why));
         }
+        self.callback_function(name, signature)
+    }
+
+    /// The function type a callback is. It takes only what the host always
+    /// calls a closure back with: scalars and handles.
+    fn callback_function(
+        &self,
+        name: Option<String>,
+        (return_type, arguments): (&IdlType, &[Argument]),
+    ) -> std::result::Result<WadoType, Reason> {
+        let uncallable = |why: String| Err(Reason::new(Cause::Callback, why));
         let params = arguments
             .iter()
             .map(|arg| {
@@ -1689,8 +1850,15 @@ impl Lowering<'_> {
                 uncallable(argument("neither a scalar nor a handle"))
             })
             .collect::<std::result::Result<_, _>>()?;
+        let result = if is_undefined(return_type) {
+            None
+        } else {
+            Some(Box::new(self.lower_type(return_type, Flow::In)?))
+        };
         Ok(WadoType::Callback {
+            name,
             params,
+            result,
             effect: self.global_interface.clone(),
         })
     }
@@ -1864,13 +2032,23 @@ fn optional(ty: WadoType, wrap: bool) -> WadoType {
 /// written out; any other is `None`, which crosses as `undefined`, so the
 /// browser applies its own default. A callback has no default to write.
 fn optional_argument(ty: WadoType, default: Option<&DefaultValue>) -> (WadoType, Option<String>) {
-    let written = match (default, &ty) {
-        (Some(DefaultValue::Boolean { value }), WadoType::Bool) => Some(value.to_string()),
-        (Some(DefaultValue::Number { value }), WadoType::F32 | WadoType::F64) => {
+    let written = default.and_then(|value| literal(value, &ty));
+    match (written, ty) {
+        (Some(written), ty) => (ty, Some(written)),
+        (None, ty @ WadoType::Callback { .. }) => (ty, None),
+        (None, ty) => (optional(ty, true), Some("null".to_string())),
+    }
+}
+
+/// `value` as Wado source of type `ty`; `None` where `ty` cannot spell it.
+fn literal(value: &DefaultValue, ty: &WadoType) -> Option<String> {
+    match (value, ty) {
+        (DefaultValue::Boolean { value }, WadoType::Bool) => Some(value.to_string()),
+        (DefaultValue::Number { value }, WadoType::F32 | WadoType::F64) => {
             Some(format!("{:?}", float_value(value)))
         }
         (
-            Some(DefaultValue::Number { value }),
+            DefaultValue::Number { value },
             WadoType::I8
             | WadoType::I16
             | WadoType::I32
@@ -1881,17 +2059,24 @@ fn optional_argument(ty: WadoType, default: Option<&DefaultValue>) -> (WadoType,
             | WadoType::U32
             | WadoType::U64
             | WadoType::U128,
-        ) => Some(integer_value(value).to_string()),
-        (Some(DefaultValue::String { value }), WadoType::String) => Some(string_literal(value)),
-        (Some(DefaultValue::String { value }), WadoType::StringEnum(name)) => {
+        ) => Some(integer_literal(value)),
+        (DefaultValue::String { value }, WadoType::String) => Some(string_literal(value)),
+        (DefaultValue::String { value }, WadoType::StringEnum(name)) => {
             Some(format!("{name}::{}", to_upper_camel_case(value)))
         }
         _ => None,
-    };
-    match (written, ty) {
-        (Some(written), ty) => (ty, Some(written)),
-        (None, ty @ WadoType::Callback { .. }) => (ty, None),
-        (None, ty) => (optional(ty, true), Some("null".to_string())),
+    }
+}
+
+/// A `WebIDL` `integer` token as Wado source: the token itself, hexadecimal
+/// included, except an octal one, which Wado would read as decimal.
+fn integer_literal(token: &str) -> String {
+    let digits = token.strip_prefix('-').unwrap_or(token);
+    let octal = digits.len() > 1 && digits.starts_with('0') && !digits[1..].starts_with(['x', 'X']);
+    if octal {
+        integer_value(token).to_string()
+    } else {
+        token.to_string()
     }
 }
 
