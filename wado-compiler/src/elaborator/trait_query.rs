@@ -1171,14 +1171,23 @@ impl TypeSystem {
             return true;
         }
         let wanted = trait_.args();
-        let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+        // The newtype's own arguments: an impl naming `W<i32>` answers nothing
+        // at `W<String>`.
+        let (receiver, args) = {
+            let table = self.type_table.borrow();
+            (
+                table.impl_receiver_key(type_id),
+                table.declared_type_args(type_id),
+            )
+        };
         Self::asking(ctx, type_id, decl, wanted, || {
-            self.find_trait_impl_for_subject(
+            self.find_trait_impl_for_type_with_args(
                 ctx,
                 scope,
                 Some(type_id),
                 &receiver,
                 decl,
+                args.as_deref(),
                 NewtypePeel::Here,
                 wanted,
             )
