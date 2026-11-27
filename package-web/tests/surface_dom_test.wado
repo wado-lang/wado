@@ -12,10 +12,161 @@ use {
     HtmlElement,
     HtmlInputElement,
     Node,
+    NodeFilter,
     Text,
+    TreeWalker,
     Window,
 } from "../src/dom.wado";
 use { SurfaceDom } from "../src/surface_dom.wado";
+
+test "a callback interface holds its constants" {
+    assert NodeFilter::SHOW_ALL == 0xFFFFFFFF;
+    assert NodeFilter::SHOW_ELEMENT == 1;
+    assert NodeFilter::FILTER_REJECT == 2;
+}
+
+// <body><div><p></p><span>hi</span></div><em></em></body>, by tag name.
+fn traversal_tree(doc: Document) -> Node with Dom {
+    let body = doc.body().unwrap();
+    let div = doc.create_element("div");
+    div.append_child(doc.create_element("p"));
+    let span = doc.create_element("span");
+    span.append_child(doc.create_text_node("hi"));
+    div.append_child(span);
+    body.append_child(div);
+    body.append_child(doc.create_element("em"));
+    return body;
+}
+
+fn name(node: Option<Node>) -> String with Dom {
+    return match node {
+        Some(found) => found.node_name(),
+        null => "-",
+    };
+}
+
+fn walk_forward(walker: TreeWalker) -> String with Dom {
+    let mut names = "";
+    while let Some(node) = walker.next_node() {
+        names.push_str(&node.node_name());
+        names.push_str(" ");
+    }
+    return names;
+}
+
+test "a tree walker goes through the nodes its filter accepts, in tree order" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = traversal_tree(doc);
+        let all = doc.create_tree_walker(body, NodeFilter::SHOW_ALL, |_| NodeFilter::FILTER_ACCEPT);
+        assert walk_forward(all) == "DIV P SPAN #text EM ";
+        assert name(all.previous_node()) == "#text";
+        assert name(all.parent_node()) == "SPAN";
+        assert name(all.parent_node()) == "DIV";
+        assert name(all.parent_node()) == "BODY";
+        assert all.parent_node() == null;
+        assert all.current_node() == body;
+        let elements = doc.create_tree_walker(body, NodeFilter::SHOW_ELEMENT, |_| NodeFilter::FILTER_ACCEPT);
+        assert walk_forward(elements) == "DIV P SPAN EM ";
+        assert elements.what_to_show() == NodeFilter::SHOW_ELEMENT;
+        assert elements.root() == body;
+    };
+}
+
+test "a tree walker skips a node but not its children, and rejects a subtree" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = traversal_tree(doc);
+        let skipping = doc.create_tree_walker(body, NodeFilter::SHOW_ELEMENT, |node| {
+            return if node.node_name() == "DIV" { NodeFilter::FILTER_SKIP } else { NodeFilter::FILTER_ACCEPT };
+        });
+        assert walk_forward(skipping) == "P SPAN EM ";
+        let rejecting = doc.create_tree_walker(body, NodeFilter::SHOW_ELEMENT, |node| {
+            return if node.node_name() == "DIV" { NodeFilter::FILTER_REJECT } else { NodeFilter::FILTER_ACCEPT };
+        });
+        assert walk_forward(rejecting) == "EM ";
+        assert name(rejecting.previous_node()) == "BODY";
+        skipping.set_current_node(body);
+        assert name(skipping.first_child()) == "P";
+    };
+}
+
+test "a tree walker moves among children and siblings" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = traversal_tree(doc);
+        let walker = doc.create_tree_walker(body, NodeFilter::SHOW_ELEMENT, |_| NodeFilter::FILTER_ACCEPT);
+        assert name(walker.last_child()) == "EM";
+        assert name(walker.previous_sibling()) == "DIV";
+        assert walker.previous_sibling() == null;
+        assert name(walker.last_child()) == "SPAN";
+        assert walker.first_child() == null;
+        assert name(walker.previous_sibling()) == "P";
+        assert name(walker.next_sibling()) == "SPAN";
+        walker.set_current_node(body);
+        assert walker.next_sibling() == null;
+    };
+}
+
+test "a tree walker never steps back past its root" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = traversal_tree(doc);
+        let div = body.first_child().unwrap();
+        let walker = doc.create_tree_walker(div, NodeFilter::SHOW_ELEMENT, |node| {
+            return if node.node_name() == "DIV" { NodeFilter::FILTER_REJECT } else { NodeFilter::FILTER_ACCEPT };
+        });
+        walker.set_current_node(div.next_sibling().unwrap());
+        assert walker.previous_node() == null;
+    };
+}
+
+test "a node iterator answers the node it passes, either way" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = traversal_tree(doc);
+        let iterator = doc.create_node_iterator(body, NodeFilter::SHOW_ELEMENT, |_| NodeFilter::FILTER_ACCEPT);
+        assert iterator.reference_node() == body;
+        assert iterator.pointer_before_reference_node();
+        assert name(iterator.next_node()) == "BODY";
+        assert name(iterator.next_node()) == "DIV";
+        assert !iterator.pointer_before_reference_node();
+        assert name(iterator.previous_node()) == "DIV";
+        assert iterator.pointer_before_reference_node();
+        assert name(iterator.previous_node()) == "BODY";
+        assert iterator.previous_node() == null;
+        iterator.detach();
+        let texts = doc.create_node_iterator(body, NodeFilter::SHOW_TEXT, |_| NodeFilter::FILTER_ACCEPT);
+        assert name(texts.next_node()) == "#text";
+        assert texts.next_node() == null;
+    };
+}
+
+#[expect_trap]
+test "a filter reentering its traverser traps" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = traversal_tree(doc);
+        let mut walker: Option<TreeWalker> = null;
+        // Once, so a missing guard returns rather than overflowing the stack.
+        let mut reentered = false;
+        let reentering = doc.create_tree_walker(body, NodeFilter::SHOW_ALL, |_| {
+            if !reentered {
+                reentered = true;
+                walker.unwrap().next_node();
+            }
+            return NodeFilter::FILTER_ACCEPT;
+        });
+        walker = Option::Some(reentering);
+        reentering.next_node();
+    };
+}
 
 test "a fresh document has a body" {
     let mut dom = SurfaceDom::new();
@@ -44,7 +195,8 @@ test "a fresh document starts with its doctype" {
     with &mut dom do {
         let doc = Dom::document();
         let doctype = doc.first_child().unwrap();
-        assert doctype.node_type() == 10;
+        assert doctype.node_type() == Node::DOCUMENT_TYPE_NODE;
+        assert Node::DOCUMENT_TYPE_NODE == 10;
         assert doctype.node_name() == "html";
         assert doctype.text_content() == null;
         assert doctype.next_sibling() == Option::Some(doc.document_element().unwrap() as Node);
@@ -292,7 +444,8 @@ test "a text node's data is its content, and changes in place" {
         let p = doc.create_element("p");
         let text = doc.create_text_node("a < b");
         assert text.data() == "a < b";
-        assert text.node_type() == 3;
+        assert text.node_type() == Text::TEXT_NODE;
+        assert Text::TEXT_NODE == 3;
         assert text.text_content() == Option::Some("a < b");
         p.append_child(doc.create_element("b"));
         p.insert_before(text, p.first_child());

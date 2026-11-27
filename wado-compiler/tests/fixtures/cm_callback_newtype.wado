@@ -1,0 +1,53 @@
+// A newtype over a function type crosses as the closure it is, and holds
+// constants as any newtype does: what a WebIDL callback interface lowers to.
+
+#[cm("example:demo/event", linearity = "unrestricted", repr = "externref")]
+resource Event {}
+
+#[cm("example:demo/types#listener")]
+type Listener = fn mut(Event);
+
+impl Listener {
+    pub const CAPTURE: u32 = 0x1;
+}
+
+#[cm("example:demo/target", linearity = "unrestricted", repr = "externref")]
+resource Target {
+    #[cm("example:demo/target#listen")]
+    #[cm_params("self", "phase", "listener")]
+    fn listen(&self, phase: u32, listener: Listener);
+}
+
+struct Echo {}
+
+impl Target for Echo {
+    fn listen(&mut self, this: &Target, phase: u32, listener: Listener) {
+        let mut l = listener;
+        if phase == Listener::CAPTURE {
+            l(Event::backed_by("event"));
+        }
+        resume ();
+    }
+}
+
+export fn run() {
+    let mut echo = Echo {};
+    let target = Target::backed_by("target");
+    let mut events = 0;
+    with Target => &mut echo do {
+        target.listen(Listener::CAPTURE, |_| events += 1);
+        let named: Listener = |_| events += 10;
+        target.listen(Listener::CAPTURE, named);
+        target.listen(0, |_| events += 100);
+    }
+    assert events == 11;
+}
+
+__DATA__
+{
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(import \"extern\" \"$example:demo/target#listen\"", "(param (ref extern) i32 (ref extern))"], "count": 1 },
+    { "contains": ["(export \"$cm_callback__call-handle\""], "count": 1 }
+  ]
+}

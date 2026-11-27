@@ -1,0 +1,16 @@
+variant Shape {
+    Circle(i32),
+    Dot,
+}
+
+test "a write through a destructured tuple element" {
+    let mut pair: [Shape, i32] = [Shape::Circle(1), 0];
+    let [shape, _] = &mut pair;
+    *shape = Shape::Dot;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+}

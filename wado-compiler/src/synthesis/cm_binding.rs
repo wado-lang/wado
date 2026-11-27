@@ -1058,7 +1058,7 @@ fn validate_imports_representable(project: &Package) -> Result<(), SynthesisErro
             // shape. A synchronous operation's own `&ListView<T>` parameter
             // crosses as the `list<T>` it lends, so only its `T` is checked.
             let values = op.params.iter().filter_map(|p| {
-                if matches!(tt.get(p.type_id), ResolvedType::Function { .. }) {
+                if tt.function_signature(p.type_id).is_some() {
                     return None;
                 }
                 let lent = (!op.is_async)

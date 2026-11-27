@@ -254,16 +254,41 @@ pub variant TogglePopoverOptionsOrBool {
     AsBool(bool),
 }
 
+#[cm("wado-lang:web/types#event-listener")]
+pub type EventListener = fn mut(Event) with Dom;
+
+#[cm("wado-lang:web/types#node-filter")]
+pub type NodeFilter = fn mut(Node) -> u16 with Dom;
+
+impl NodeFilter {
+    pub const FILTER_ACCEPT: u16 = 1;
+    pub const FILTER_REJECT: u16 = 2;
+    pub const FILTER_SKIP: u16 = 3;
+    pub const SHOW_ALL: u32 = 0xFFFFFFFF;
+    pub const SHOW_ELEMENT: u32 = 0x1;
+    pub const SHOW_ATTRIBUTE: u32 = 0x2;
+    pub const SHOW_TEXT: u32 = 0x4;
+    pub const SHOW_CDATA_SECTION: u32 = 0x8;
+    pub const SHOW_ENTITY_REFERENCE: u32 = 0x10;
+    pub const SHOW_ENTITY: u32 = 0x20;
+    pub const SHOW_PROCESSING_INSTRUCTION: u32 = 0x40;
+    pub const SHOW_COMMENT: u32 = 0x80;
+    pub const SHOW_DOCUMENT: u32 = 0x100;
+    pub const SHOW_DOCUMENT_TYPE: u32 = 0x200;
+    pub const SHOW_DOCUMENT_FRAGMENT: u32 = 0x400;
+    pub const SHOW_NOTATION: u32 = 0x800;
+}
+
 #[cm("wado-lang:web/event-target", linearity = "unrestricted", repr = "externref", classes = "0..=8")]
 pub resource EventTarget {
     #[cm("wado-lang:web/event-target#new")]
     fn new() -> EventTarget;
     #[cm("wado-lang:web/event-target#add-event-listener")]
     #[cm_params("self", "type", "callback", "options")]
-    fn add_event_listener(&self, type: String, callback: fn mut(Event) with Dom, options: Option<AddEventListenerOptionsOrBool> = null);
+    fn add_event_listener(&self, type: String, callback: EventListener, options: Option<AddEventListenerOptionsOrBool> = null);
     #[cm("wado-lang:web/event-target#remove-event-listener")]
     #[cm_params("self", "type", "callback", "options")]
-    fn remove_event_listener(&self, type: String, callback: fn mut(Event) with Dom, options: Option<EventListenerOptionsOrBool> = null);
+    fn remove_event_listener(&self, type: String, callback: EventListener, options: Option<EventListenerOptionsOrBool> = null);
     #[cm("wado-lang:web/event-target#dispatch-event")]
     #[cm_params("self", "event")]
     fn dispatch_event(&self, event: Event) -> bool;
@@ -334,6 +359,13 @@ pub resource Event {
     #[cm("wado-lang:web/event#init-event")]
     #[cm_params("self", "type", "bubbles", "cancelable")]
     fn init_event(&self, type: String, bubbles: bool = false, cancelable: bool = false);
+}
+
+impl Event {
+    pub const NONE: u16 = 0;
+    pub const CAPTURING_PHASE: u16 = 1;
+    pub const AT_TARGET: u16 = 2;
+    pub const BUBBLING_PHASE: u16 = 3;
 }
 
 #[cm("wado-lang:web/node", linearity = "unrestricted", repr = "externref", classes = "1..=7")]
@@ -428,6 +460,27 @@ pub resource Node extends EventTarget {
     #[cm("wado-lang:web/node#remove-child")]
     #[cm_params("self", "child")]
     fn remove_child(&self, child: Node) -> Node;
+}
+
+impl Node {
+    pub const ELEMENT_NODE: u16 = 1;
+    pub const ATTRIBUTE_NODE: u16 = 2;
+    pub const TEXT_NODE: u16 = 3;
+    pub const CDATA_SECTION_NODE: u16 = 4;
+    pub const ENTITY_REFERENCE_NODE: u16 = 5;
+    pub const ENTITY_NODE: u16 = 6;
+    pub const PROCESSING_INSTRUCTION_NODE: u16 = 7;
+    pub const COMMENT_NODE: u16 = 8;
+    pub const DOCUMENT_NODE: u16 = 9;
+    pub const DOCUMENT_TYPE_NODE: u16 = 10;
+    pub const DOCUMENT_FRAGMENT_NODE: u16 = 11;
+    pub const NOTATION_NODE: u16 = 12;
+    pub const DOCUMENT_POSITION_DISCONNECTED: u16 = 0x01;
+    pub const DOCUMENT_POSITION_PRECEDING: u16 = 0x02;
+    pub const DOCUMENT_POSITION_FOLLOWING: u16 = 0x04;
+    pub const DOCUMENT_POSITION_CONTAINS: u16 = 0x08;
+    pub const DOCUMENT_POSITION_CONTAINED_BY: u16 = 0x10;
+    pub const DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC: u16 = 0x20;
 }
 
 #[cm("wado-lang:web/character-data", linearity = "unrestricted", repr = "externref", classes = "2..=3")]
@@ -1561,6 +1614,12 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#create-event")]
     #[cm_params("self", "interface")]
     fn create_event(&self, interface_: String) -> Event;
+    #[cm("wado-lang:web/document#create-node-iterator")]
+    #[cm_params("self", "root", "what-to-show", "filter")]
+    fn create_node_iterator(&self, root: Node, what_to_show: u32, filter: NodeFilter) -> NodeIterator;
+    #[cm("wado-lang:web/document#create-tree-walker")]
+    #[cm_params("self", "root", "what-to-show", "filter")]
+    fn create_tree_walker(&self, root: Node, what_to_show: u32, filter: NodeFilter) -> TreeWalker;
     #[cm("wado-lang:web/document#fullscreen-enabled")]
     #[cm_params("self")]
     fn fullscreen_enabled(&self) -> bool;
@@ -1943,6 +2002,68 @@ pub resource Window extends EventTarget {
     #[cm("wado-lang:web/window#cancel-animation-frame")]
     #[cm_params("self", "handle")]
     fn cancel_animation_frame(&self, handle: u32);
+}
+
+#[cm("wado-lang:web/node-iterator", linearity = "unrestricted", repr = "externref", classes = "10..=10")]
+pub resource NodeIterator {
+    #[cm("wado-lang:web/node-iterator#root")]
+    #[cm_params("self")]
+    fn root(&self) -> Node;
+    #[cm("wado-lang:web/node-iterator#reference-node")]
+    #[cm_params("self")]
+    fn reference_node(&self) -> Node;
+    #[cm("wado-lang:web/node-iterator#pointer-before-reference-node")]
+    #[cm_params("self")]
+    fn pointer_before_reference_node(&self) -> bool;
+    #[cm("wado-lang:web/node-iterator#what-to-show")]
+    #[cm_params("self")]
+    fn what_to_show(&self) -> u32;
+    #[cm("wado-lang:web/node-iterator#next-node")]
+    #[cm_params("self")]
+    fn next_node(&self) -> Option<Node>;
+    #[cm("wado-lang:web/node-iterator#previous-node")]
+    #[cm_params("self")]
+    fn previous_node(&self) -> Option<Node>;
+    #[cm("wado-lang:web/node-iterator#detach")]
+    #[cm_params("self")]
+    fn detach(&self);
+}
+
+#[cm("wado-lang:web/tree-walker", linearity = "unrestricted", repr = "externref", classes = "11..=11")]
+pub resource TreeWalker {
+    #[cm("wado-lang:web/tree-walker#root")]
+    #[cm_params("self")]
+    fn root(&self) -> Node;
+    #[cm("wado-lang:web/tree-walker#what-to-show")]
+    #[cm_params("self")]
+    fn what_to_show(&self) -> u32;
+    #[cm("wado-lang:web/tree-walker#current-node")]
+    #[cm_params("self")]
+    fn current_node(&self) -> Node;
+    #[cm("wado-lang:web/tree-walker#set-current-node")]
+    #[cm_params("self", "value")]
+    fn set_current_node(&self, value: Node);
+    #[cm("wado-lang:web/tree-walker#parent-node")]
+    #[cm_params("self")]
+    fn parent_node(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#first-child")]
+    #[cm_params("self")]
+    fn first_child(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#last-child")]
+    #[cm_params("self")]
+    fn last_child(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#previous-sibling")]
+    #[cm_params("self")]
+    fn previous_sibling(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#next-sibling")]
+    #[cm_params("self")]
+    fn next_sibling(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#previous-node")]
+    #[cm_params("self")]
+    fn previous_node(&self) -> Option<Node>;
+    #[cm("wado-lang:web/tree-walker#next-node")]
+    #[cm_params("self")]
+    fn next_node(&self) -> Option<Node>;
 }
 
 /// Why a promise was rejected: any value, which need not be an `Error`.

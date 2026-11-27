@@ -1,0 +1,24 @@
+// A function type's newtype is a callback whichever module declares it: the
+// import's module is registered before the newtype's here.
+use { Target } from "./sub/cm_callback_newtype_later_module_target.wado";
+use { Event, Listener } from "./sub/cm_callback_newtype_later_module_types.wado";
+
+struct Echo {}
+
+impl Target for Echo {
+    fn listen(&mut self, this: &Target, listener: Listener) {
+        let mut l = listener;
+        l(Event::backed_by("event"));
+        resume ();
+    }
+}
+
+test "a callback newtype from another module crosses as a callback" {
+    let mut echo = Echo {};
+    let target = Target::backed_by("target");
+    let mut events = 0;
+    with Target => &mut echo do {
+        target.listen(|_| events += 1);
+    }
+    assert events == 1;
+}

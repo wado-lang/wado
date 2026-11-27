@@ -1,0 +1,22 @@
+// A newtype over a function type with an effect is one type from every
+// module: an impl elsewhere writes the parameter the trait declares.
+use { println, Stdout } from "core:cli";
+use { Handler, Runs } from "./sub/newtype_fn_effect_cross_module_lib.wado";
+
+struct Twice {}
+
+impl Runs for Twice {
+    fn run(&self, handler: Handler) with Stdout {
+        handler(1);
+        handler(2);
+    }
+}
+
+export fn run() with Stdout {
+    Twice {}.run(|n| println(`${n}`));
+}
+
+__DATA__
+{
+    "stdout": "1\n2\n"
+}

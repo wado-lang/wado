@@ -1,0 +1,25 @@
+// A sink is asked before the walk reaches a `match` inside the value it holds.
+
+variant Shape {
+    Circle(i32),
+    Dot,
+}
+
+fn payload(held: &mut Option<Shape>) -> &mut Shape {
+    return match held {
+        Some(shape) => shape,
+        _ => panic("empty"),
+    };
+}
+
+test "a write through a binding a match returns" {
+    let mut held: Option<Shape> = Option::Some(Shape::Circle(1));
+    let shape = payload(&mut held);
+    *shape = Shape::Dot;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+}

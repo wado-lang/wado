@@ -388,7 +388,7 @@ impl TypeTable {
             let id = self.types.next_id();
             self.index_type(id, &ty);
             self.push_type(ty.clone());
-            let shared = self.shared_spelling(&ty);
+            let shared = self.immutable_spelling(&ty);
             self.intern_map.insert(ty, id);
             if let Some(shared) = shared {
                 self.intern(shared);
@@ -486,7 +486,7 @@ impl TypeTable {
         }
         let id = self.types.next_id();
         self.push_type(spelling.clone());
-        let shared = self.shared_spelling(&spelling);
+        let shared = self.immutable_spelling(&spelling);
         self.intern_map.insert(spelling, id);
         self.erasures.set_growing(id, id);
         if let Some(shared) = shared {
@@ -543,32 +543,32 @@ impl TypeTable {
     }
 
     /// The type a cell `cell` names its object by: `cell` with every layer
-    /// shared, so a `&X` and a `&mut X` name one cell at each depth, as a
-    /// reference coerces under a shared one, while cells of two depths, whose
+    /// immutable, so a `&X` and a `&mut X` name one cell at each depth, as a
+    /// reference coerces under an immutable one, while cells of two depths, whose
     /// payloads lower apart, stay apart. No struct, variant or function object
     /// is named by a reference, so none shares it.
     #[must_use]
     pub fn cell_key(&self, cell: TypeId) -> TypeId {
         assert!(self.cell_payload(cell).is_some(), "a cell reference");
-        self.shared_form(cell)
+        self.immutable_form(cell)
     }
 
-    /// `ty` with every reference layer shared, interned beside `ty`.
-    fn shared_form(&self, ty: TypeId) -> TypeId {
+    /// `ty` with every reference layer immutable, interned beside `ty`.
+    fn immutable_form(&self, ty: TypeId) -> TypeId {
         match self.get(ty) {
             ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => self
-                .find_ref(RefKind::Shared, self.shared_form(*pointee))
-                .expect("interning a reference interns its shared form"),
+                .find_ref(RefKind::ImmutableReference, self.immutable_form(*pointee))
+                .expect("interning a reference interns its immutable form"),
             _ => ty,
         }
     }
 
-    /// The spelling of `ty`'s shared form, where it is another type.
-    fn shared_spelling(&self, ty: &ResolvedType) -> Option<ResolvedType> {
+    /// The spelling of `ty`'s immutable form, where it is another type.
+    fn immutable_spelling(&self, ty: &ResolvedType) -> Option<ResolvedType> {
         match ty {
             ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => {
-                let shared = ResolvedType::Ref(self.shared_form(*pointee));
-                (shared != *ty).then_some(shared)
+                let immutable = ResolvedType::Ref(self.immutable_form(*pointee));
+                (immutable != *ty).then_some(immutable)
             }
             _ => None,
         }
@@ -579,7 +579,7 @@ impl TypeTable {
     #[must_use]
     pub fn find_ref(&self, kind: RefKind, pointee: TypeId) -> Option<TypeId> {
         let spelling = match kind {
-            RefKind::Shared => ResolvedType::Ref(pointee),
+            RefKind::ImmutableReference => ResolvedType::Ref(pointee),
             RefKind::Mut => ResolvedType::MutRef(pointee),
         };
         self.intern_map.get(&spelling).copied()
@@ -1951,7 +1951,7 @@ impl TypeTable {
                     ResolvedType::BuiltinArray(inner) => components.push(*inner),
                     ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                         components.push(*inner);
-                        components.push(self.shared_form(id));
+                        components.push(self.immutable_form(id));
                     }
                     ResolvedType::Function {
                         params,
@@ -3166,7 +3166,7 @@ impl TypeTable {
     /// Which reference `type_id` is, or `None` for a non-reference.
     pub fn ref_kind(&self, type_id: TypeId) -> Option<RefKind> {
         match self.get(type_id) {
-            ResolvedType::Ref(_) => Some(RefKind::Shared),
+            ResolvedType::Ref(_) => Some(RefKind::ImmutableReference),
             ResolvedType::MutRef(_) => Some(RefKind::Mut),
             _ => None,
         }
@@ -3184,7 +3184,7 @@ impl TypeTable {
     }
 
     /// The references holding `type_id`'s pointee, outermost first, and the
-    /// pointee: `&&mut X` is `[Shared, Mut]` and `X`. A newtype over a
+    /// pointee: `&&mut X` is `[ImmutableReference, Mut]` and `X`. A newtype over a
     /// reference is that reference, at any depth.
     pub fn reference_path(&self, mut type_id: TypeId) -> (Vec<RefKind>, TypeId) {
         let mut kinds = Vec::new();
@@ -3343,7 +3343,7 @@ impl TypeTable {
     /// A reference of `kind` to `inner`.
     pub fn make_ref_of(&mut self, kind: RefKind, inner: TypeId) -> TypeId {
         match kind {
-            RefKind::Shared => self.make_ref(inner),
+            RefKind::ImmutableReference => self.make_ref(inner),
             RefKind::Mut => self.make_mut_ref(inner),
         }
     }
@@ -5869,6 +5869,19 @@ impl TypeTable {
         current
     }
 
+    /// The parameters and result of the function type `id` is, read through
+    /// the newtypes naming it. `None` for any other type.
+    pub fn function_signature(&self, id: TypeId) -> Option<(&[TypeId], TypeId)> {
+        match self.get(self.representation_head(id)) {
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => Some((params, *return_type)),
+            _ => None,
+        }
+    }
+
     /// The function type `receiver` is, read through references and newtypes:
     /// what fills the one position a function-type impl target writes, which
     /// is itself. `None` for a receiver of any other shape.
@@ -6621,7 +6634,7 @@ impl TypeTable {
                     &effect_names,
                 )
             }
-            ResolvedType::Ref(inner) => ref_type_name(RefKind::Shared, &render(*inner)),
+            ResolvedType::Ref(inner) => ref_type_name(RefKind::ImmutableReference, &render(*inner)),
             ResolvedType::MutRef(inner) => ref_type_name(RefKind::Mut, &render(*inner)),
             ResolvedType::TypeParam { id } => self.param_name(*id).to_string(),
             ResolvedType::AssocParam(id) => self.assoc_param_name(id).to_string(),
@@ -6741,9 +6754,10 @@ impl TypeTable {
                 let unqualified = mangle_generic_name(&self.decl_mangled_name(*def), &args);
                 mangle_declared(self.def_module(*def), &unqualified)
             }
-            ResolvedType::Ref(inner) => {
-                ref_type_name(RefKind::Shared, &self.mangle_type_arg_erased(*inner))
-            }
+            ResolvedType::Ref(inner) => ref_type_name(
+                RefKind::ImmutableReference,
+                &self.mangle_type_arg_erased(*inner),
+            ),
             ResolvedType::MutRef(inner) => {
                 ref_type_name(RefKind::Mut, &self.mangle_type_arg_erased(*inner))
             }
@@ -6980,7 +6994,7 @@ impl TypeTable {
                 .with_args(vec![self.fq_type_name_spelled_in(*elem, rows)]),
             ResolvedType::Ref(inner) => self
                 .fq_type_name_spelled_in(*inner, rows)
-                .with_reference(RefKind::Shared),
+                .with_reference(RefKind::ImmutableReference),
             ResolvedType::MutRef(inner) => self
                 .fq_type_name_spelled_in(*inner, rows)
                 .with_reference(RefKind::Mut),

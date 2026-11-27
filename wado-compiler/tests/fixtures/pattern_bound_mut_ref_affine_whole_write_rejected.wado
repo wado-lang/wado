@@ -1,0 +1,34 @@
+// An affine variant is its own box as a field, an element or a payload, but a
+// binding of the whole scrutinee is a fresh one.
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {}
+}
+
+affine variant Tray {
+    Full(Token),
+    Empty,
+}
+
+fn clear(tray: &mut Tray) {
+    match tray {
+        whole => {
+            *whole = Tray::Empty;
+        },
+    }
+}
+
+test "a write through a binding of a whole affine scrutinee" {
+    let mut tray = Tray::Full(Token { id: 1 });
+    clear(&mut tray);
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+}

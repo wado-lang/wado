@@ -221,6 +221,7 @@
 - [HTTP Client (`core:http_client`)](./wep-2026-11-24-core-http-client.md)
 - [Every Package Has a Coordinate](./wep-2026-11-24-required-namespace.md)
 - [Test Timeout in Seconds](./wep-2026-11-26-test-timeout.md)
+- [Writable References — A Borrow That Is Not Copied, and a Shared Cell](./wep-2026-11-27-writable-references.md)
 
 ## Standard Library
 

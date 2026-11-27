@@ -2310,9 +2310,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Ref(_)
         );
         let kinds: &[RefKind] = match kind {
-            RefKind::Shared => &[RefKind::Shared],
-            RefKind::Mut if right_is_shared => &[RefKind::Shared, RefKind::Mut],
-            RefKind::Mut => &[RefKind::Mut, RefKind::Shared],
+            RefKind::ImmutableReference => &[RefKind::ImmutableReference],
+            RefKind::Mut if right_is_shared => &[RefKind::ImmutableReference, RefKind::Mut],
+            RefKind::Mut => &[RefKind::Mut, RefKind::ImmutableReference],
         };
         let (kind, info) = kinds.iter().find_map(|&kind| {
             let info = self.find_operator_impl_on(
@@ -2326,7 +2326,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })?;
         // The block's `Self` is the reference it is written for, which a
         // coerced `&mut` left operand is not.
-        let receiver = if kind == RefKind::Shared {
+        let receiver = if kind == RefKind::ImmutableReference {
             let pointee = self.tysys.pointee_of(left).expect("`left` is a reference");
             self.tysys.type_table.borrow_mut().make_ref(pointee)
         } else {
