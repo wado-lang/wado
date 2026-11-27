@@ -1,8 +1,9 @@
 # Affine Types
 
 An affine type is move-only: a value of it is used by value at most once. An
-affine resource is one, as is a type that implements [`Drop`](#drop), and so is
-every type that holds one at any depth. The rest of this chapter follows from
+affine resource is one, as is a type that implements [`Drop`](#drop) and a
+[`&mut T`](./spec-memory.md#writable-references), and so is every type that
+holds one at any depth. The rest of this chapter follows from
 four rules:
 
 - A position that takes a value moves it. Every other position reads the value

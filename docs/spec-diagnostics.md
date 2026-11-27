@@ -39,6 +39,8 @@ The lints are:
 | [`dead_code`](#the-dead_code-lint)                         | an unused or test-only free function or global                                  |
 | [`unused_imports`](#the-unused_imports-lint)               | a `use` bringing in a name its module never refers to                           |
 | [`unused_variables`](#the-unused_variables-lint)           | a variable or parameter nothing reads                                           |
+| [`stale_reference`](#the-stale_reference-lint)             | a read of a `&` that an assignment to its place left behind                     |
+| [`lost_write`](#the-lost_write-lint)                       | a write that a scoped `&mut` may overwrite when it stores back                  |
 
 ## The `shadowed_name` Lint
 
@@ -546,6 +548,50 @@ The alternatives of an or-pattern bind one variable, so `A(n) | B(n)` is read
 when either `n` is.
 
 Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+
+## The `stale_reference` Lint
+
+A `&P` of a type replaced on assignment
+[is a copy of the value](./spec-memory.md#-is-the-value), so an assignment to
+the place it was taken from leaves it holding the old value. The
+`stale_reference` lint warns at a read of such a reference after the
+assignment, and names the assignment.
+
+It reports where the compiler is certain: the reference, the assignment and the
+later read are in one body, and the type is known to be replaced on assignment.
+It stays silent across a call. A body generic over the type is checked per
+instance, and the warning names the type argument that made the reference a
+copy: the body reads right for a `struct` and stale for an `i32`, and nothing
+in its source says so.
+
+It also warns about a read of a place inside the scope of a
+[scoped `&mut`](./spec-memory.md#mut-lasts-for-a-scope) of it, where one body
+shows both and a write through the binding comes first: the read sees the value
+from before that write.
+
+The lint is best effort and promises to find nothing, so no program is refused
+over it.
+
+> Not yet implemented: the lint is not declared.
+
+Rationale: [WEP: Writable References](./wep-2026-11-27-writable-references.md).
+
+## The `lost_write` Lint
+
+A [scoped `&mut`](./spec-memory.md#mut-lasts-for-a-scope) stores its value back
+when its scope ends, over whatever the place then holds. An assignment the
+compiler can place inside the scope is an error. The `lost_write` lint warns at
+a write it cannot place, which the store may overwrite:
+
+- one a callee makes;
+- one through a reference that may name the same object;
+- one to an element whose index may be the current one.
+
+It is best effort, as `stale_reference` is.
+
+> Not yet implemented: the lint is not declared.
+
+Rationale: [WEP: Writable References](./wep-2026-11-27-writable-references.md).
 
 ## Known Gaps
 

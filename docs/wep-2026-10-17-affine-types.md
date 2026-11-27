@@ -481,7 +481,7 @@ What follows for references:
 - `&mut` of a field, a tuple element, a payload or an element holding an affine
   variant is the slot's box, a real place. `opt.take()` on `h.slot` or on
   `list[i]` writes into it. For a copyable variant the rule of
-  [Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements)
+  [References to a Value Replaced on Assignment](./spec-memory.md#references-to-a-value-replaced-on-assignment)
   is unchanged.
 - An affine value is `Ref` and `RefMut` in every instantiation where it is
   affine, since it is an object there. `Option<Fields>` is `RefMut` and
@@ -918,7 +918,7 @@ it does.
 In [WEP: Reference Representation](./wep-2026-06-13-reference-representation.md),
 D6 is settled: a resource is boxed, and the box is its object.
 
-In [Memory Model](./spec-memory.md#mutable-references-to-fields-and-elements),
+In [Memory Model](./spec-memory.md#references-to-a-value-replaced-on-assignment),
 the unsettled rule for `&mut` of a variant field or element is settled for an
 affine variant: the reference is a place. Its
 [Reference Identity](./spec-memory.md#reference-identity) gains the affine

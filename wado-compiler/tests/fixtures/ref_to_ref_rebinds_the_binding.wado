@@ -12,6 +12,19 @@ test "a write through `&mut &T` rebinds the reference" {
     assert x == 1;
 }
 
+fn retarget(rr: &mut &i32, to: &i32) {
+    *rr = to;
+}
+
+test "a call rebinds the reference it is handed" {
+    let x = builtin::black_box(1);
+    let y = builtin::black_box(2);
+    let mut r = &x;
+    retarget(&mut r, &y);
+    assert *r == 2;
+    assert x == 1;
+}
+
 test "a closure reads a reference rebound after it was built" {
     let mut a = builtin::black_box(1);
     let mut b = builtin::black_box(2);

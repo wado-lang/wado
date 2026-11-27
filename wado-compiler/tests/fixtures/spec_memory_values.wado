@@ -22,10 +22,10 @@ test "basic references" {
     let v = *r;           // Dereference
     assert v == 42;
 
-    let mut y = 0;
-    let mr = &mut y;      // Mutable reference
-    *mr = 10;             // Assign through reference
-    assert y == 10;
+    let mut p = Point { x: 0, y: 0 };
+    let mr = &mut p;      // Mutable reference
+    mr.x = 10;            // Write through reference
+    assert p.x == 10;
 }
 
 test "reference to reference" {
@@ -56,13 +56,13 @@ test {
 }
 
 test "multiple mutable references" {
-    let mut x = 10;
-    let r1 = &mut x;
-    let r2 = &mut x;  // OK in Wado (no borrow checker)
+    let mut p = Point { x: 10, y: 0 };
+    let r1 = &mut p;
+    let r2 = &mut p;  // OK in Wado (no borrow checker)
 
-    *r1 = 20;
-    *r2 = 30;
-    assert x == 30;
+    r1.x = 20;
+    r2.x = 30;
+    assert p.x == 30;
 }
 
 impl Point {

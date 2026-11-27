@@ -30,7 +30,7 @@ reach one slot.
 Rust's answer is `std::mem::swap(&mut a, &mut b)`. That shape does not fit Wado:
 
 - `&mut` of a primitive, `enum` or `flags` element is an error
-  ([spec-memory § Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements)),
+  ([spec-memory § References to a Value Replaced on Assignment](./spec-memory.md#references-to-a-value-replaced-on-assignment)),
   so `swap(&mut xs[i], &mut xs[j])` cannot be written on a `List<i32>`.
 - `&mut` of a `variant` element points to a copy, so replacing the value
   through it would not reach the list.

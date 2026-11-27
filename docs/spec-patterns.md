@@ -521,15 +521,22 @@ When the scrutinee of `if let`, `match`, or `matches` is a reference (`&T` or
 become references. Matching `&Option<T>` with `Some(x)` gives `x: &T`, not
 `x: T`, as Rust's match ergonomics (RFC 2005) do.
 
-Under a `&mut` scrutinee, a payload of a replace-on-assign type (a primitive,
-`enum`, `flags`, `fn` or reference) cannot bind at all, even to be read: matching
-`&mut Option<i32>` with `Some(x)` is an error. Match `*r` to bind the payload
-by value, or a `&` to the value to bind a `&i32`. A `variant` does bind, as a
-payload, a field, an element or the scrutinee whole, and a mutation of what it
-holds lands. Replacing it whole through the binding is an error, except for an
-affine `variant` bound as a payload, a field or an element, where the
-replacement lands. See
-[Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements).
+Under a `&mut` scrutinee, a binding of a type written in place is a `&mut` to
+the object the place holds. A binding of a type replaced on assignment (a
+primitive, `enum`, `flags`, copyable `variant`, `fn` or `&` reference) is a
+[scoped `&mut`](./spec-memory.md#mut-lasts-for-a-scope): it holds the value for
+the arm, and a write through it reaches the scrutinee when the arm ends. An
+affine `variant` bound as a payload, a field or an element is a place of its
+own, so a replacement through the binding lands at once.
+
+> Not yet implemented: a payload of a primitive, `enum`, `flags`, `fn` or
+> reference type cannot bind under a `&mut` scrutinee, even to be read:
+> matching `&mut Option<i32>` with `Some(x)` is an error. Match `*r` to bind
+> the payload by value, or a `&` to the value to bind a `&i32`. A copyable
+> `variant` does bind, as a payload, a field, an element or the scrutinee
+> whole, and a mutation of what it holds lands. Replacing it whole through the
+> binding is an error, and so is replacing an affine `variant` bound as the
+> scrutinee whole.
 
 A destructuring `let` or `for` binding follows the same rule, and so does a reference met below the top of a pattern: `for let [a, b] of &pairs` gives `a: &A`, and `[n, { x, .. }]` against `[i32, &Point]` gives `x: &i32`.
 

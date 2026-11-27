@@ -321,7 +321,7 @@ unspecified.
 The corpus is rewritten to the rules, whatever it takes: no rule above bends to
 spare a call site. Each step leaves the tree building and its tests passing.
 
-- [ ] The specification states every rule above, each marked not yet
+- [x] The specification states every rule above, each marked not yet
   implemented until its step lands.
 - [ ] `Shared<T>` exists: the type, `Shared::new`, `*c`, the automatic
   dereference, and `==` as identity.
@@ -338,7 +338,8 @@ spare a call site. Each step leaves the tree building and its tests passing.
   `lost_write` warns.
 - [x] A place is writable only through writable steps.
 - [ ] `&mut T` is affine and reborrowed where one is expected, and every
-  copyable struct holding one becomes affine.
+  copyable struct holding one becomes affine. Every affine value is `RefMut`,
+  an affine `variant` and a `&mut T` included.
 
 Two items land with the step whose rule they serve:
 

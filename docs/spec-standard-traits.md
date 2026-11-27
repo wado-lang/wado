@@ -193,7 +193,7 @@ assert total == Option::Some(9);
 
 By-value iteration (`into_iter()`, `iter_value()`, `for let x of list`) returns copies of elements. Reference iteration yields references instead: `iter_ref()` and `for let x of &list` yield `&T`, and `iter_ref_mut()` and `for let x of &mut list` yield `&mut T`.
 
-`&mut` iteration mutates elements in place. It needs an element type that is `RefMut` (see [Dispatch](#dispatch)), such as a `struct`, `List`, `String`, or `i128`/`u128`. A write through the `&mut T` lands on the element:
+`&mut` iteration mutates elements in place where the element type is `RefMut` (see [Dispatch](#dispatch)), such as a `struct`, `List`, `String`, or `i128`/`u128`. A write through the `&mut T` lands on the element:
 
 <!-- {"fixture":"spec_traits_iter_mut.wado"} -->
 
@@ -205,7 +205,11 @@ for let p of &mut points {
 assert points[0].x == 2 && points[1].x == 3;
 ```
 
-An element type that is replaced on assignment (a primitive, `enum`, `flags`, `variant`, `fn`, or a reference) is not `RefMut`, so a write through `&mut T` would be lost. `&mut` iteration over such a list is a compile error; use indexed access instead:
+An element type that is replaced on assignment (a primitive, `enum`, `flags`, a copyable `variant`, `fn`, or a `&` reference) is not `RefMut`, so `iter_ref_mut()` does not walk it. `for let v of &mut xs` does: `v` is a [scoped `&mut`](./spec-memory.md#mut-lasts-for-a-scope), and each turn stores its value back to the element.
+
+> Not yet implemented: `&mut` iteration over such a list is a compile error.
+
+Indexed access writes such an element too:
 
 <!-- {"fixture":"spec_traits_iter_mut.wado"} -->
 
@@ -216,10 +220,6 @@ for let mut i = 0; i < arr.len(); i += 1 {
 }
 assert arr == [2, 4, 6];
 ```
-
-Outside iteration too, `&mut` of such a field or element is an error, a
-`variant` excepted
-([Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements)).
 
 ### Custom Iterables
 
@@ -1161,14 +1161,21 @@ eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:
 | Types                                                              | `Ref` | `RefMut` |
 | ------------------------------------------------------------------ | ----- | -------- |
 | `struct`, `List<T>`, `String`, tuples, maps, sets, `i128` / `u128` | yes   | yes      |
-| `variant`, `fn`, `&T`, `&mut T`                                    | yes   | no       |
+| an affine `variant`, `&mut T`                                      | yes   | yes      |
+| a copyable `variant`, `fn`, `&T`                                   | yes   | no       |
 | scalars, `enum`, `flags`                                           | no    | no       |
 | `resource`                                                         | no    | no       |
 | `()`, `!`                                                          | no    | no       |
 
 `Ref` holds for a type whose value `&T` can alias. `RefMut` holds for the `Ref`
-types mutated in place rather than replaced on assignment, which excludes
-`variant`, `fn` and a reference. A `resource` is a handle that cannot be
+types mutated in place rather than replaced on assignment, which excludes a
+copyable `variant`, `fn` and a `&` reference. An affine value is never copied,
+so it is `RefMut` whatever its kind
+([References to a Value Replaced on Assignment](./spec-memory.md#references-to-a-value-replaced-on-assignment)).
+
+> Not yet implemented: an affine `variant` and `&mut T` are not `RefMut`.
+
+A `resource` is a handle that cannot be
 aliased, so a resource element is read by value. A newtype follows its base.
 Neither marker asks whether a value holds references: a `struct` with `&T`
 fields is `Ref`, and `i32` is not `Ref`, although `&i32` is.

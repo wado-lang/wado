@@ -9,7 +9,7 @@ section covers the linear memory beside them.
 
 Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, variants, `String`, and `List<T>` all follow this rule.
 
-The copy stops at a reference. A `&T` or `&mut T`, wherever it appears, is copied as a reference, and the copy aliases the same value. So a `Slice<T>` or a `StrSlice`, which is a struct holding a reference to its backing array, shares its elements with the value it views.
+The copy stops at a reference. A `&T`, wherever it appears, is copied as a reference, and the copy aliases the same value. So a `Slice<T>` or a `StrSlice`, which is a struct holding a reference to its backing array, shares its elements with the value it views. It stops at a [shared cell](#shared-cells) too: a copy of a cell is the same cell. A `&mut T` is not copied at all: it [moves](#writable-references).
 
 A resource is a handle to something the host owns, not a Wado value, so it is never deep-copied. A value of an [affine type](./spec-affine.md) is moved, never copied, and a reference to one names the value itself.
 
@@ -80,10 +80,10 @@ let r = &x;           // Immutable reference
 let v = *r;           // Dereference
 assert v == 42;
 
-let mut y = 0;
-let mr = &mut y;      // Mutable reference
-*mr = 10;             // Assign through reference
-assert y == 10;
+let mut p = Point { x: 0, y: 0 };
+let mr = &mut p;      // Mutable reference
+mr.x = 10;            // Write through reference
+assert p.x == 10;
 ```
 
 A reference is never null, and there is no arithmetic on it. A reference that
@@ -103,20 +103,25 @@ let val = **rr;       // double dereference
 assert val == 42;
 ```
 
-A reference is a value that assignment replaces, as a primitive is. So a
-`&mut &T` points to the variable holding the reference, and a write through it
-makes that variable refer elsewhere, leaving the old referent alone:
+A reference is a value that assignment replaces, as a primitive is. So a write
+through a `&mut &T` makes the variable holding the reference refer elsewhere,
+and leaves the old referent alone:
 
 <!-- {"fixture":"ref_to_ref_rebinds_the_binding.wado"} -->
 
 ```wado
-let x = builtin::black_box(1);
-let y = builtin::black_box(2);
-let mut r = &x;
-let rr = &mut r;
-*rr = &y;
-assert *r == 2;
-assert x == 1;
+fn retarget(rr: &mut &i32, to: &i32) {
+    *rr = to;
+}
+
+test "a call rebinds the reference it is handed" {
+    let x = builtin::black_box(1);
+    let y = builtin::black_box(2);
+    let mut r = &x;
+    retarget(&mut r, &y);
+    assert *r == 2;
+    assert x == 1;
+}
 ```
 
 ### Automatic Coercion (`&mut` to `&`)
@@ -135,6 +140,37 @@ test {
     assert read_value(&mut x) == 10;   // OK: &mut i32 coerces to &i32
 }
 ```
+
+### Writable References
+
+A `&mut T` is [affine](./spec-affine.md): it moves and is never copied, and so
+is every type holding one. No affine value
+[moves out of a reference](./spec-affine.md#no-move-out-of-a-reference), so a
+`&mut T` is not read out of a `&&mut T`, nor is a struct holding one read out
+of a `&`. With the rule that
+[a `&T` grants reading alone](./spec-expressions.md#variable-mutability),
+nothing a `&T` reaches is written through it.
+
+That promise ends at a [shared cell](#shared-cells) and at a closure. A closure
+may write a variable it captured or a cell it holds, whichever of `fn` and
+`fn mut` it is, and it stays copyable. A closure that captures a `&mut`
+[refers into an affine local](./spec-affine.md#references-into-affine-values),
+so it does not outlive that local's scope.
+
+Where the expected type is `&mut T`, a `&mut T` reached through a writable
+place is reborrowed: the position takes a second reference to the same
+referent, and the original stays usable. So a `&mut` parameter is handed to two
+calls in a row. Only an expected type reborrows. `let b = a;` moves `a`, and
+`let b: &mut T = a;` reborrows it, as in Rust.
+
+A type parameter takes a `&mut F` only where it is declared `affine`
+([Generic Code](./spec-affine.md#generic-code)).
+
+> Not yet implemented: a `&mut T` is copied as a `&T` is, and a struct holding
+> one is copyable. So a `&mut T` copied out of a `&&mut T`, or held by a struct
+> copied out of a `&`, writes its referent.
+
+Rationale: [WEP: Writable References](./wep-2026-11-27-writable-references.md).
 
 ### Returning References to Local Variables
 
@@ -161,14 +197,17 @@ Wado allows multiple mutable references to the same value:
 <!-- {"fixture":"spec_memory_values.wado"} -->
 
 ```wado
-let mut x = 10;
-let r1 = &mut x;
-let r2 = &mut x;  // OK in Wado (no borrow checker)
+let mut p = Point { x: 10, y: 0 };
+let r1 = &mut p;
+let r2 = &mut p;  // OK in Wado (no borrow checker)
 
-*r1 = 20;
-*r2 = 30;
-assert x == 30;
+r1.x = 20;
+r2.x = 30;
+assert p.x == 30;
 ```
+
+A place may have any number of writers. The one limit is on two
+[scoped `&mut`](#mut-lasts-for-a-scope) of one place in one call.
 
 ### Reference Retention
 
@@ -188,28 +227,90 @@ A declaration with no body has nothing to infer from, so it states what it keeps
 
 Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
-### Mutable References to Fields and Elements
+### References to a Value Replaced on Assignment
 
-A primitive, `enum`, `flags`, `fn` or reference field or element keeps nothing
-that a write through a `&mut` could reach, since assignment replaces it. So
-taking `&mut` of one is an error. That holds whether it is written `&mut x.f` or
-`&mut xs[i]`, or taken implicitly by a `&mut self` receiver. A `&mut` of a local
-is fine, since it writes to the variable itself. A `&mut self` method called on
-a reference field reaches the referent, not the field, so it is fine too.
+A primitive, `enum`, `flags`, copyable `variant`, `fn` or `&` reference is
+replaced on assignment: it has no storage a reference could share. These are
+the types that are not
+[`RefMut`](./spec-standard-traits.md#dispatch). A `struct`, a tuple, a `List`
+and a `String` are written in place, and a reference to one shares its storage.
 
-A `variant` field or element admits `&mut`. The reference points to a copy of
-the variant that shares its payload with the original. So a mutation reached
-through [match ergonomics](./spec-patterns.md#match-ergonomics), such as
-`if let A(b) = r { b.n = 1; }`, lands. Replacing the whole value through the
-reference would not, so it is an error.
+An affine value is never copied, a `&mut` and an affine `variant` included, so
+a reference to one names its place. A field, tuple element, payload or element
+holding an affine variant is a place of its own, so `&mut` of it is the slot
+itself. Replacing the value through the reference lands in the slot, and
+`opt.take()` on `h.slot` or on `list[i]` leaves `None` there.
 
-A field, tuple element, payload or element holding an affine variant is a place
-of its own, so `&mut` of it is the slot itself. Replacing the value through the
-reference lands in the slot, and `opt.take()` on `h.slot` or on `list[i]` leaves
-`None` there.
+#### `&` Is the Value
 
-These rules for references to replace-on-assign values are not settled. They are
-being relaxed toward what Rust allows, so expect them to change.
+A `&P` of a type replaced on assignment is a copy of the value, taken where the
+`&` is written. That holds for a local, a field and an element alike. An
+assignment to the place afterwards does not reach the reference, and for a
+`variant` neither does a write to its payload. The lint
+[`stale_reference`](./spec-diagnostics.md#the-stale_reference-lint) warns about
+a read the assignment left behind.
+
+A generic body that holds a `&T` across an assignment to its place therefore
+answers by the kind of `T`: it reads the new value of a `struct` and the old
+value of an `i32`.
+
+A closure's capture is not a `&P`. A closure captures the variable, and reads
+what the variable holds when it runs
+([Closures Are Values](./spec-functions.md#closures-are-values)).
+
+> Not yet implemented: a `&P` of a local sees a later assignment to the local.
+
+#### `&mut` Lasts for a Scope
+
+A `&mut P` of a type replaced on assignment is taken only where the syntax
+fixes the point its value goes back to the place:
+
+- A call argument or a receiver: `f(&mut place)`, `place.take()`. The value is
+  copied in before the call and copied out after it.
+- The scrutinee of a pattern: `if let Some(p) = &mut place { … }`. A binding of
+  such a type holds the value for the arm, and the arm's end rebuilds what was
+  matched around it and stores that back
+  ([Match Ergonomics](./spec-patterns.md#match-ergonomics)).
+- A `for let v of &mut xs`, where one turn of the loop is the scope.
+
+Binding one to a variable, storing one in a value and returning one are compile
+errors. State that outlives a scope is a [shared cell](#shared-cells). The rule
+is by type alone: a local, a field and an element take the same `&mut`.
+
+A generic body that only uses a `p: &mut T` takes every `T`. One that stores or
+returns a `&mut T` needs `T: RefMut`. A `&mut self` method called on a reference
+field reaches the referent, so it takes no `&mut` of the field.
+
+A scope stores back at every exit, whether or not its binding was written: its
+end, a `return`, a `break`, a `continue` and a `?`. A trap is no exit: it
+stores nothing back, as it runs no [drop](./spec-affine.md#drop). So a write to
+the place by another route inside the scope is overwritten, and a read of the
+place there sees the value from before the binding was written.
+
+Where the loss is certain it is a compile error:
+
+- An assignment inside the scope, in the same body, to the scope's place, to a
+  place holding it or to a part of it.
+- A second scoped `&mut` of the same place in one call: `f(&mut x, &mut x)` has
+  two stores to one place and no order between them.
+- A call of a `&mut self` method on `xs`, or an assignment to it, inside
+  `for let v of &mut xs`. It may change the length, and the turn's store would
+  land on another element.
+
+A write the compiler cannot place warns under the lint
+[`lost_write`](./spec-diagnostics.md#the-lost_write-lint), and the read warns
+under `stale_reference`.
+
+> Not yet implemented: a `&mut` of a local of such a type is an ordinary
+> reference, which a variable holds and a function returns. A `&mut` of a
+> field or an element is an error for a primitive, `enum`, `flags`, `fn` or
+> reference, a `&mut self` receiver's included, and so is
+> `for let v of &mut xs` over such elements. A `variant` field or element
+> admits `&mut`: a mutation of its payload lands, and replacing it whole
+> through the reference is an error. Nothing is stored back, and none of the
+> errors above is reported.
+
+Rationale: [WEP: Writable References](./wep-2026-11-27-writable-references.md).
 
 ### Reference Identity
 
@@ -240,10 +341,9 @@ ref_eq(&xs, &ys);               // false or true: the two may be stored once
 ref_eq(&xs, &zs);               // false or true: the copy may be elided
 ```
 
-A `&` to a `List` element or a struct field of a type that assignment replaces
-(a primitive, `enum`, `flags`, `variant`, `fn` or reference) points to a copy
-of the value, taken where the `&` is written. It does not see a later
-assignment to the element or field, and two such references are two places:
+A `&` of a type replaced on assignment
+[is a copy of the value](#-is-the-value), so two such references are two
+places:
 
 <!-- {"fixture": "spec_memory_ref_identity.wado"} -->
 
@@ -255,7 +355,10 @@ ref_eq(&xs[0], &xs[0]);         // false or true: each `&` takes its own copy
 ```
 
 An affine variant is the exception: its slot is a place, as
-[the previous section](#mutable-references-to-fields-and-elements) states.
+[the previous section](#references-to-a-value-replaced-on-assignment) states.
+
+Two [shared cells](#shared-cells) are compared with `==`, which is their
+identity.
 
 A closure's identity stays unobservable. `ref_eq` takes references only, and a
 reference to a closure points to the place holding it, not to the closure:
@@ -268,6 +371,50 @@ let g = f;
 assert ref_eq(&f, &f);          // always
 ref_eq(&f, &g);                 // false or true: two places holding one closure
 ```
+
+## Shared Cells
+
+A shared cell is a value that is one object under every copy, and that a `&`
+may write. Its type is `Shared<T>`, a prelude type the compiler knows.
+`Shared::new(value)` puts a value into a new cell, and nothing else makes one:
+no cell is taken from a variable or a field, so a `let mut` variable changes
+only through its name or through a `&mut` written at a call.
+
+`*c` is the place the cell holds. It reads and writes whatever path reached
+`c`, a `&` included, and `c` needs no `mut`: the dereference of a cell starts
+[the path a write goes through](./spec-expressions.md#variable-mutability)
+again. A field access and a method call dereference a cell as they do a
+reference.
+
+A copy of a cell is the same cell, so the deep copy of a value stops at one.
+`Shared::new(*c)` makes a separate cell. `T` is not affine: an affine value has
+one owner, which drops it, and a cell every copy shares has none.
+
+What a cell implements follows from its copies being one object:
+
+| Trait                       | A `Shared<T>`                                             |
+| --------------------------- | --------------------------------------------------------- |
+| `Eq`                        | `==` asks whether two cells are one; `*a == *b` compares  |
+| `Ord`                       | not implemented: a cell has no order                      |
+| `Hash`                      | not implemented: identity has no address to hash          |
+| `Default`                   | where `T` is, as `Shared::new(T::default())`              |
+| `Inspect`                   | `${c:?}` writes what the cell holds, as `Shared(…)`       |
+| `Serialize` / `Deserialize` | not implemented: two holders of one cell would become two |
+
+So a struct holding a cell derives `Eq`, and derives none of `Hash`,
+`Serialize` and `Deserialize`. A type that wants one of them writes it. A hash
+it writes over what the cell holds agrees with `==`, since one cell holds one
+value. A write to the cell changes that hash, so a key holding a cell is not
+written while a map holds it: a lookup would then miss an entry the map still
+has.
+
+A cell does not cross a component boundary, for the reason it is not
+serialized.
+
+> Not yet implemented: `Shared<T>` is not declared. A value shares state by
+> holding a `&mut`.
+
+Rationale: [WEP: Writable References](./wep-2026-11-27-writable-references.md).
 
 ## Parameters
 
@@ -370,7 +517,7 @@ test {
 }
 ```
 
-Writing a `mut` parameter changes only the callee's copy ([Value Semantics](#value-semantics)). A `&mut T` parameter holds a copy of the reference, so a write through it (`*p = v`) reaches the referent.
+Writing a `mut` parameter changes only the callee's copy ([Value Semantics](#value-semantics)). A `&mut T` parameter holds the reference, so a write through it (`*p = v`) reaches the referent.
 
 <!-- {"fixture":"spec_memory_values.wado"} -->
 
