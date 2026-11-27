@@ -2422,17 +2422,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             slot_instantiation,
             ..
         } = resolved_args;
-        // Record the method segment (suffix) as a reference to the
-        // declaration this call resolves to. The impl selection knows
-        // which one answered — two conversion impls on a type declare
-        // the same `from`, and only the argument's type separates
-        // them. It covers trait impls only; an inherent static has no
-        // selection and reaches the index instead.
-        //
-        // The same resolution the call itself uses, not a second one:
-        // two resolutions of one call disagree, which is what the edge
-        // then records.
-        //
         // At the receiver's type, since no blanket is asked of a receiver
         // without one: a blanket whose bound holds there owns the call, and
         // the static a newtype inherits a link below is not the one named.
@@ -2463,6 +2452,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return return_type;
         }
+        // Record the method segment (suffix) as a reference to the
+        // declaration this call resolves to. The impl selection knows
+        // which one answered — two conversion impls on a type declare
+        // the same `from`, and only the argument's type separates
+        // them. It covers trait impls only; an inherent static has no
+        // selection and reaches the index instead.
+        //
+        // The same resolution the call itself uses, not a second one:
+        // two resolutions of one call disagree, which is what the edge
+        // then records.
         let selection = resolved
             .found()
             .and_then(|callee| callee.method_ref.method_id);
