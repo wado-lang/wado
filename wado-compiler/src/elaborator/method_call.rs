@@ -471,14 +471,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The `&mut T` a receiver that is a `Shared<T>`, a newtype over one or a
     /// reference to either is called through, where no `impl` written for the
-    /// cell or for a newtype naming it gives it `method_name`. `None` for any
-    /// other receiver, and for the cell's own methods.
-    fn cell_receiver_view(&self, receiver: TypeId, method_name: &str) -> Option<TypeId> {
-        let held = {
+    /// cell or for a newtype naming it gives it `method_name`, and the number
+    /// of cells read through to reach it: a `T` that is itself such a cell is
+    /// read through in turn. `None` for any other receiver, and for the cell's
+    /// own methods.
+    fn cell_receiver_view(&self, receiver: TypeId, method_name: &str) -> Option<(TypeId, usize)> {
+        let mut held = receiver;
+        let mut cells = 0;
+        'cells: loop {
             let tt = self.tysys.type_table.borrow();
-            let mut link = tt.peel_refs(receiver);
+            let mut link = tt.peel_refs(held);
             if !tt.is_cell(link) {
-                return None;
+                break;
             }
             loop {
                 if self
@@ -486,15 +490,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .trait_env
                     .has_method_by_receiver(&tt.impl_receiver_key(link), method_name)
                 {
-                    return None;
+                    break 'cells;
                 }
                 match tt.get(link) {
-                    ResolvedType::Shared(held) => break *held,
+                    ResolvedType::Shared(inner) => {
+                        held = *inner;
+                        cells += 1;
+                        break;
+                    }
                     _ => link = tt.link_below(link).expect("a cell's chain ends at it"),
                 }
             }
-        };
-        Some(self.tysys.type_table.borrow_mut().make_mut_ref(held))
+        }
+        (cells > 0).then(|| (self.tysys.type_table.borrow_mut().make_mut_ref(held), cells))
     }
 
     /// Dispatch a method call from an already-resolved receiver TIR. See
@@ -528,13 +536,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A method a cell does not have is the method of what it holds, called
         // on the `&mut` the cell is stored as: no path to the cell refuses the
-        // write, so the receiver's own place is not judged.
-        let receiver_ast = match self.cell_receiver_view(receiver, method_name) {
-            Some(view) => {
+        // write, so the receiver's own place is not judged. Reify reads the
+        // cells through where it replays the call: under the method call, or
+        // under the `CallExpr` a qualified call is filed at. A synthetic call
+        // has neither, so it sees the cell itself.
+        let cell_view = call_id
+            .or(defaults_site)
+            .and_then(|site| Some((site, self.cell_receiver_view(receiver, method_name)?)));
+        let receiver_ast = match cell_view {
+            Some((site, (view, cells))) => {
                 receiver = view;
-                if let Some(call) = call_id {
-                    self.sem.types.cell_receivers.insert(call, ());
-                }
+                self.sem.types.cell_receivers.insert(site, cells);
                 None
             }
             None => receiver_ast,

@@ -1971,10 +1971,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.read_through(self.reads_through_shared(base, base_type), part_type)
     }
 
-    /// Whether a part of `base` of `base_type` is read behind a `&`.
+    /// Whether a part of `base` of `base_type` is read behind a `&`. Past a
+    /// cell, the path that reached `base` no longer counts.
     fn reads_through_shared(&self, base: &ast::Expr, base_type: TypeId) -> bool {
         self.reference_mutability(base_type) == Some(false)
-            || self.place_roots_at_immutable_ref(base)
+            || (!self.crosses_cell(base_type, false) && self.place_roots_at_immutable_ref(base))
     }
 
     pub(super) fn read_through(&self, through_shared: bool, part_type: TypeId) -> TypeId {

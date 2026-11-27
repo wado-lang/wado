@@ -5154,6 +5154,7 @@ pub struct BuiltinTypeDecl {
     pub visibility: Visibility,
     pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 

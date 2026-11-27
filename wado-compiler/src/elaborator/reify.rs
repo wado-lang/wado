@@ -2911,16 +2911,12 @@ impl<'a> Reify<'a> {
                     return inner;
                 }
                 // A field is read through the one reference that is the
-                // struct's handle: any further layer is dereferenced to it,
-                // and a newtype over that reference is cast to it. A cell is
-                // that handle itself.
-                let through_cell = {
-                    let tt = self.tysys.type_table.borrow();
-                    tt.is_cell(tt.peel_refs(inner.type_id))
-                };
-                let inner = if through_cell {
-                    tir::cell_reference(inner, &mut self.tysys.type_table.borrow_mut())
-                } else {
+                // struct's handle: every cell on the way is read as the
+                // reference it is stored as, any further layer is
+                // dereferenced to the handle, and a newtype over that
+                // reference is cast to it.
+                let inner = tir::through_cells(inner, &mut self.tysys.type_table.borrow_mut());
+                let inner = {
                     let tt = self.tysys.type_table.borrow();
                     let inner = if self.tysys.wraps_reference(tt.peel_refs(inner.type_id)) {
                         wrapped_reference(inner, &tt)
@@ -5464,12 +5460,13 @@ impl<'a> Reify<'a> {
         )
     }
 
-    /// A receiver spelled as the first argument (`Trait::method(recv)`) given
-    /// the references its `self` declares.
+    /// A receiver spelled as the first argument (`Trait::method(recv)`) of the
+    /// call `call` given the references its `self` declares.
     fn adjust_receiver_in_args(
         &self,
         args: &mut [CallArg],
         dispatch: &StaticMethodDispatch,
+        call: AstId,
         span: Span,
     ) {
         if !dispatch.self_in_args {
@@ -5483,7 +5480,18 @@ impl<'a> Reify<'a> {
             &mut receiver.expr,
             TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
         );
+        let spelled = self.read_through_cells(spelled, call);
         receiver.expr = to_layers_of(spelled, self_type, &self.tysys.type_table.borrow());
+    }
+
+    /// `receiver` read as the `&mut` the innermost of the cells the call
+    /// `call` was dispatched through is stored as, or itself where it was
+    /// dispatched on no cell.
+    fn read_through_cells(&self, mut receiver: TirExpr, call: AstId) -> TirExpr {
+        for _ in 0..self.ann_cell_receiver(call).unwrap_or(0) {
+            receiver = tir::cell_reference(receiver, &mut self.tysys.type_table.borrow_mut());
+        }
+        receiver
     }
 
     /// [`adjust_receiver_for_self_kind`] for a dispatched receiver. A
@@ -7153,7 +7161,7 @@ impl<'a> Reify<'a> {
                 )
                 .map(|(a, is_mut)| CallArg::new(self.reify_expr(a, ctx, None), is_mut))
                 .collect();
-            self.adjust_receiver_in_args(&mut args, &dispatch, static_call.span);
+            self.adjust_receiver_in_args(&mut args, &dispatch, static_call.id, static_call.span);
 
             let prelude = self.reify_apply_param_defaults(
                 &mut args,
@@ -7634,7 +7642,7 @@ impl<'a> Reify<'a> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
-            self.adjust_receiver_in_args(&mut arg_exprs, &dispatch, span);
+            self.adjust_receiver_in_args(&mut arg_exprs, &dispatch, call.id, span);
             let prelude = self.reify_pad_dispatch_defaults(
                 &call.callee,
                 &mut arg_exprs,
@@ -7978,11 +7986,7 @@ impl<'a> Reify<'a> {
         // direct TIR shape. See WEP §"Synthetic call sites stay
         // annotation-free by design".
         let raw_receiver = self.reify_expr(&method_call.receiver, ctx, None);
-        let raw_receiver = if self.ann_cell_receiver(method_call.id).is_some() {
-            tir::cell_reference(raw_receiver, &mut self.tysys.type_table.borrow_mut())
-        } else {
-            raw_receiver
-        };
+        let raw_receiver = self.read_through_cells(raw_receiver, method_call.id);
         if matches!(method_call.method.as_str(), "len" | "zip") {
             // Auto-deref through `&`/`&mut` so tuple `.len()` / `.zip()` work
             // on a reference receiver, like any other method (mirrors the

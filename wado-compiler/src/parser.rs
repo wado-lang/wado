@@ -1514,9 +1514,9 @@ impl Parser {
             Item::Trait(d) => &mut d.doc,
             Item::Resource(d) => &mut d.doc,
             Item::Global(d) => &mut d.doc,
+            Item::BuiltinTypeDecl(d) => &mut d.doc,
             Item::Use(_)
             | Item::TupleTypeDecl(_)
-            | Item::BuiltinTypeDecl(_)
             | Item::Impl(_)
             | Item::World(_)
             | Item::Test(_)
@@ -6728,6 +6728,7 @@ impl Parser {
                     visibility,
                     type_params: Vec::new(),
                     attrs,
+                    doc: None,
                     span,
                 })),
                 other => Err(self.error_at_span(other.span(), "this type cannot be declared")),
@@ -6747,6 +6748,7 @@ impl Parser {
                 visibility,
                 type_params,
                 attrs,
+                doc: None,
                 span: start_span.merge(&end_span),
             }));
         }

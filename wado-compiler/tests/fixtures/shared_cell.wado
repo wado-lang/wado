@@ -130,6 +130,58 @@ test "a path through a cell is writable under a &" {
     assert shape.origin.sum() == 10;
 }
 
+test "a field access and a method call read through every cell and reference" {
+    let mut p = Point { x: 1, y: 2 };
+    let through_ref = Shared::new(&mut p);
+    through_ref.x = 5;
+    through_ref.bump();
+    assert p.x == 6;
+
+    let read_only = Shared::new(&p);
+    assert read_only.sum() == 8;
+
+    let inner = Shared::new(Point { x: 1, y: 2 });
+    let outer = Shared::new(inner);
+    outer.x = 5;
+    outer.bump();
+    assert inner.x == 6;
+}
+
+trait Area with () {
+    fn area(&self) -> i32;
+}
+
+impl Area for Point {
+    fn area(&self) -> i32 {
+        return self.x * self.y;
+    }
+}
+
+test "a qualified call takes a cell as the receiver it holds" {
+    let c = Shared::new(Point { x: 2, y: 3 });
+    assert Area::area(&c) == 6;
+    assert Area::area(&Shared::new(c)) == 6;
+}
+
+struct Slot {
+    r: &mut i32,
+}
+
+struct Holder {
+    c: Shared<Slot>,
+}
+
+fn poke(h: &Holder) {
+    *h.c.r = 7;
+}
+
+test "a &mut a cell holds is written under a &" {
+    let mut n = 0;
+    let h = Holder { c: Shared::new(Slot { r: &mut n }) };
+    poke(&h);
+    assert n == 7;
+}
+
 type Tally = Shared<i32>;
 type Origin = Shared<Point>;
 

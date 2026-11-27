@@ -541,7 +541,7 @@ fn build_doc_builtin_type(
             t.name,
             render_generic_params(&t.type_params)
         ),
-        doc: None,
+        doc: t.doc.clone(),
         impls: collect_impl_members(&t.name, impls, include_private),
     }
 }

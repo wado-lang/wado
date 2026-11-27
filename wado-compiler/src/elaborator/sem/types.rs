@@ -158,10 +158,11 @@ macro_rules! with_body_facts {
             /// the data shape and the recording contract.
             ann_method_dispatch => method_dispatch: $crate::elaborator::sem::types::MethodDispatch,
             /// The method calls on a cell that reach a method of what it holds,
-            /// keyed by the call's [`AstId`]: the call was dispatched on the
-            /// `&mut T` a `Shared<T>` is stored as, and reify passes the
+            /// keyed by the method call's [`AstId`], or the `CallExpr`'s for a
+            /// qualified call: the call was dispatched on the `&mut T` the
+            /// innermost of this many cells is stored as, and reify passes the
             /// receiver as that.
-            ann_cell_receiver => cell_receivers: (),
+            ann_cell_receiver => cell_receivers: usize,
             /// Coercion decisions recorded for each expression that
             /// [`super::super::Elaborator::try_coerce`] adapted into its
             /// expected type, keyed by the source-expression's [`AstId`].

@@ -656,15 +656,16 @@ let x = 42;
 let r = &x;           // immutable reference
 let v = *r;           // dereference
 
-let mut y = 0;
-let mr = &mut y;      // mutable reference
-*mr = 10;             // assign through reference
+let mut p = Point { x: 0, y: 0 };
+let mr = &mut p;      // mutable reference
+mr.x = 10;            // write through reference
 
 let rr = &r;          // &&i32
 let val = **rr;       // double dereference
 
 // &mut to & coercion (automatic)
 fn read(r: &i32) { ... }
+let mut y = 0;
 read(&mut y);         // OK: &mut i32 coerced to &i32
 
 // == compares the values, as in Rust; ref_eq asks for one place
@@ -1122,14 +1123,14 @@ let unit = || { 1 };                        // fn() -> (): the `1` is a statemen
 // Struct literal return
 let make_point = |x: i32, y: i32| Point { x, y };
 
-// Capturing outer variables: auto-by-reference
+// Capturing outer variables: by reference, read at call time
 let multiplier = 10;
-let scale = |x: i32| x * multiplier;        // captures &multiplier; type fn(i32) -> i32
+let scale = |x: i32| x * multiplier;        // reads multiplier; type fn(i32) -> i32
 
 // Mutating capture: closure type is fn mut, binding must be mut
 let mut count = 0;
-let mut inc = || count += 1;                // captures &mut count; type fn mut() -> ()
-let get = || count;                          // captures &count; type fn() -> i32
+let mut inc = || count += 1;                // writes count; type fn mut() -> ()
+let get = || count;                          // reads count; type fn() -> i32
 inc();
 inc();
 assert get() == 2;

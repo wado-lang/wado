@@ -2469,7 +2469,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether a step out of a base of type `ty` dereferences a cell: an
     /// explicit `*` crosses the outermost layer alone, a field or subscript
     /// step every one.
-    fn crosses_cell(&self, ty: TypeId, explicit_deref: bool) -> bool {
+    pub(super) fn crosses_cell(&self, ty: TypeId, explicit_deref: bool) -> bool {
         let table = self.tysys.type_table.borrow();
         let mut layer = table.representation_head(ty);
         loop {

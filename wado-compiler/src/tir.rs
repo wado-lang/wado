@@ -659,6 +659,16 @@ pub fn cell_reference(expr: TirExpr, type_table: &mut TypeTable) -> TirExpr {
     )
 }
 
+/// `expr` read through every cell its references reach, as a field access
+/// reads it: each cell becomes the `&mut` it is stored as, until what that
+/// points at is no cell. `expr` itself where it reaches none.
+pub fn through_cells(mut expr: TirExpr, type_table: &mut TypeTable) -> TirExpr {
+    while type_table.is_cell(type_table.peel_refs(expr.type_id)) {
+        expr = cell_reference(expr, type_table);
+    }
+    expr
+}
+
 /// A written shape a substituted one is made from, and the substitution that
 /// makes it, over every parameter the origin mentions: what instantiating the
 /// origin's methods applies. Binding the two shapes again cannot recover it

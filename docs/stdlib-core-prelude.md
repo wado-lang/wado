@@ -1401,6 +1401,9 @@ Drop the error context.
 
 ### `pub type Array<T>`
 
+Fixed-length GC array — the builtin storage primitive. Declared
+definition-less; its storage and instructions live in the compiler.
+
 #### `pub fn new(len: i32) -> Array<T>`
 
 Creates a new array of `len` elements, each initialised to the
@@ -1500,6 +1503,10 @@ addressable cell, so a write through the reference would be lost.
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
 ### `pub type Shared<T>`
+
+A value that is one object under every copy. `*c` is the place it holds,
+written through a `&` and without `mut`. Declared definition-less: the
+compiler stores it as it stores a `&mut T`.
 
 #### `pub fn new(value: T) -> Shared<T>`
 
