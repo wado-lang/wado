@@ -20,9 +20,7 @@ use crate::tir::{
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::call::{
-    ArgSite, CallSolve, CaseSite, DefaultTypeBinding, InheritedStatic, SigChoice, bind_nearer,
-};
+use super::call::{ArgSite, CallSolve, CaseSite, InheritedStatic, SigChoice, bind_nearer};
 use super::callee::StaticMethodRef;
 use super::coercion::ExpectedReturn;
 use super::expr::IndexAccess;
@@ -34,7 +32,7 @@ use super::scope::{BoundsOf, ParamRef, ScopedBound};
 use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
 use super::sig::MethodSig;
 use super::solver_bridge::Reach;
-use super::static_call::{ReceiverId, Selector, StaticLookup, StaticQuery};
+use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::{OnBoundTrait, SelfBinding};
 use super::typecheck::Settles;
@@ -43,7 +41,6 @@ use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator, WrittenHead, util};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
-use crate::elaborator::call::slot_type_bindings;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
@@ -2356,66 +2353,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// `param_types` read at the receiver's arguments `declaring_args` and the
-    /// method's `method_type_args`, where either list writes any, and as the
-    /// newtype `inheriting` reads its base's static, and as the caller's
-    /// bounds answer a projection off its own parameter.
-    fn instantiate_static_params(
-        &mut self,
-        sig: Option<&MethodSig>,
-        declaring_args: &[TypeId],
-        method_type_args: &[TypeId],
-        self_in_args: bool,
-        inheriting: Option<TypeId>,
-        param_types: &mut [TypeId],
-    ) {
-        if let Some(sig) = sig
-            && !(declaring_args.is_empty() && method_type_args.is_empty())
-            && !param_types.is_empty()
-        {
-            // `TreeMap::<String, i32>` spells the *target's* arguments;
-            // `impl … for TreeMap<String, V>` numbers only `V`. The declaring
-            // block is what aligns the two.
-            let declaring = sig
-                .declaring_impl
-                .map(|id| self.tysys.signatures.impl_sig(id));
-            let instantiated = sig.instantiate_call_with(
-                &self.tysys.type_table,
-                declaring,
-                declaring_args,
-                method_type_args,
-            );
-            // `param_types` leads with the receiver exactly where the spelling
-            // wrote one, so the instantiated list must start at the same
-            // parameter.
-            let skip = if self_in_args {
-                0
-            } else {
-                sig.first_value_param().min(instantiated.param_types.len())
-            };
-            for (param_type, &instantiated_type) in param_types
-                .iter_mut()
-                .zip(&instantiated.param_types[skip..])
-            {
-                *param_type = instantiated_type;
-            }
-        }
-        if let Some(newtype) = inheriting {
-            let declared_on = sig
-                .and_then(|sig| sig.declaring_impl)
-                .and_then(|block| self.tysys.type_table.borrow().impl_target_decl(block));
-            let base = self
-                .tysys
-                .type_table
-                .borrow()
-                .inherited_base(newtype, declared_on);
-            for ty in param_types.iter_mut() {
-                *ty = self.tysys.substitute_newtype_in_type(*ty, base, newtype);
-            }
-        }
-        self.answer_frame_projections_in(param_types);
-    }
-
     /// The instance a call on `receiver` reaches through the blanket `block`,
     /// whose template `generic_name` names by the blanket's binder where the
     /// call site names the concrete receiver. It is keyed by the receiver, or
@@ -2457,26 +2394,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_type_args,
             is_blanket: true,
         }
-    }
-
-    /// The type parameters of the block `declaring_impl` as the static's
-    /// receiver `target` settles them: the arguments, then the bindings.
-    fn static_impl_bindings(
-        &self,
-        target: TypeId,
-        declaring_impl: Option<DefId>,
-    ) -> (Vec<TypeId>, Vec<DefaultTypeBinding>) {
-        let declaring_args = self
-            .tysys
-            .receiver_args_at_impl(Some(target), &[], declaring_impl)
-            .unwrap_or_default();
-        let impl_bindings = declaring_impl
-            .map(|id| {
-                let table = &self.tysys.type_table;
-                slot_type_bindings(table, table.borrow().impl_target_args(id), &declaring_args)
-            })
-            .unwrap_or_default();
-        (declaring_args, impl_bindings)
     }
 
     /// `written`, the arguments `target` spells, as the block declaring `sig`
@@ -3594,52 +3511,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args >= params.saturating_sub(optional) && args <= params
     }
 
-    /// Report an argument list a static method's signature cannot accept,
-    /// returning `false` once a diagnostic was emitted. Shared by the three
-    /// spellings that reach one: `Type::method(…)`, `Type::<T>::method(…)` and
-    /// `ns::Type::method(…)`. A parameter still carrying a type param the
-    /// caller does not declare belongs to a blanket's pack, which the call
-    /// site cannot pin: it counts toward arity but its type is not compared.
-    pub(super) fn check_static_call_args(
-        &mut self,
-        param_types: &[TypeId],
-        args: &[TypeId],
-        arg_sites: &[ArgSite],
-        static_method_defaults: &[(String, Option<ast::Expr>)],
-        span: Span,
-    ) -> bool {
-        assert_eq!(
-            args.len(),
-            arg_sites.len(),
-            "every resolved argument carries the span it was written at"
-        );
-        let optional = static_method_defaults
-            .iter()
-            .filter(|(_, d)| d.is_some())
-            .count();
-        if !Self::arg_count_fits(args.len(), param_types.len(), optional) {
-            let _ = self.emit(TypeError::ArgumentCountMismatch {
-                expected: param_types.len(),
-                found: args.len(),
-                span,
-            });
-            return false;
-        }
-        let scope = self.scope_type_param_ids();
-        for (i, (arg, &expected)) in args.iter().zip(param_types).enumerate() {
-            if !self
-                .tysys
-                .type_table
-                .borrow()
-                .type_params_all_in(expected, scope.ids())
-            {
-                continue;
-            }
-            self.typecheck_arg(*arg, expected, arg_sites[i]);
-        }
-        true
-    }
-
     /// Whether some declaration may offer `target` a static `method_name` at
     /// an instance of its open variables: a block on its head, or an impl of
     /// a trait in scope whose target and bounds may hold. Where none may, no
@@ -3851,324 +3722,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         keys
     }
 
-    /// Report why a static call's arguments matched no impl, when the
-    /// receiver's impls explain it: a blanket impl this path cannot
-    /// instantiate, or concrete impls none of which accept the arguments'
-    /// types. Returns whether an error was emitted — the caller then stops
-    /// instead of building an unresolvable mangled name (an ICE at WIR build).
-    pub(super) fn report_unmatched_static_arg(
-        &mut self,
-        recv: StaticReceiver<'_>,
-        method_name: &str,
-        arg_types: &[TypeId],
-        span: Span,
-    ) -> bool {
-        // A newtype inheriting the static answers with the impls of the link
-        // that owns it, as the resolution does, so the survey reads them there.
-        if let Some(owner_key) = self.newtype_static_target(recv.receiver, method_name) {
-            let (owner_type, owner_arg_types) =
-                self.at_owner_link(recv.receiver.ty(), &owner_key, arg_types);
-            let owner = ReceiverId::keyed(owner_key, owner_type);
-            let owner_recv = StaticReceiver {
-                receiver: &owner,
-                ..recv
-            };
-            return self.report_unmatched_static_arg(
-                owner_recv,
-                method_name,
-                &owner_arg_types,
-                span,
-            );
-        }
-        let struct_name = recv
-            .receiver
-            .spelled(self.tysys.resolutions.defs())
-            .to_string();
-        let survey = self.static_arg_survey(recv, method_name);
-        let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
-        // The trait the first candidate names. Where several traits supply the
-        // name the call is an overload, reported before it reaches here.
-        let Some(trait_name) = survey.candidates.first().map(|c| c.trait_name.clone()) else {
-            return false;
-        };
-        // An impl the first argument matches is one the selection kept, so the
-        // call did not fail on that argument: it failed on the list. Reporting
-        // the unmatched case here named the argument as both unaccepted and
-        // available.
-        if survey
-            .candidates
-            .iter()
-            .any(|c| c.params.first() == arg_types.first())
-        {
-            let _ = self.emit(TypeError::NoMatchingArgumentList {
-                trait_name,
-                receiver: struct_name,
-                method: method_name.to_string(),
-                span,
-            });
-            return true;
-        }
-        let mut candidates: Vec<String> = survey
-            .candidates
-            .iter()
-            .map(|c| c.spelling.clone())
-            .collect();
-        let mut arg_type = spelled;
-        // Two modules' same-named types spell alike, and the message would
-        // name the argument as both unaccepted and available.
-        if candidates.contains(&arg_type) {
-            let table = self.tysys.type_table.borrow();
-            arg_type = render_type_list_qualified(&table, arg_types);
-            candidates = survey
-                .candidates
-                .iter()
-                .map(|c| render_type_list_qualified(&table, &c.params))
-                .collect();
-        }
-        let _ = self.emit(TypeError::NoMatchingTraitArgument {
-            trait_name,
-            receiver: struct_name,
-            method: method_name.to_string(),
-            arg_type,
-            candidates,
-            span,
-        });
-        true
-    }
-
-    /// The shared preselect entry for a static call (`Wrapper::from(42)`, in
-    /// either its static-call or plain-call spelling). It runs before the
-    /// callee is resolved, and its answer is what the resolution keys on:
-    /// resolving without the arguments and mangling with them is two answers
-    /// for one call.
-    pub(super) fn preselect_static_args(
-        &mut self,
-        recv: StaticReceiver<'_>,
-        method_name: &str,
-        args: &[ast::Expr],
-        span: Span,
-        ctx: &FunctionContext,
-    ) -> PreselectedArg {
-        if args.is_empty() || self.has_inherent_static_method(recv.receiver.key(), method_name) {
-            return PreselectedArg::Undecided;
-        }
-        let classes: Vec<ArgClass> = args
-            .iter()
-            .map(|arg| self.synthesize_arg_class(arg, ctx))
-            .collect();
-        // A trait's default body reads `Self` off the receiver's type. Resolved
-        // here rather than asked of every caller: it costs a scope, and the
-        // returns above are the calls that never survey (WEP: "Resolving is not
-        // free").
-        let receiver_type = match recv.receiver.ty() {
-            Some(ty) => Some(ty),
-            None => self
-                .declared_type_at_variables(recv.receiver.key())
-                .map(|(instance, _)| instance)
-                .or_else(|| self.static_receiver_type(recv.receiver)),
-        };
-        let Some(receiver_type) = receiver_type else {
-            return PreselectedArg::Undecided;
-        };
-        let typed = recv.receiver.at_type(Some(receiver_type));
-        let recv = StaticReceiver {
-            receiver: &typed,
-            ..recv
-        };
-        match self.static_arg_preselect(recv, method_name, &classes) {
-            ArgPreselect::Selected(params) => PreselectedArg::Types(params),
-            ArgPreselect::Ambiguous(candidates) => {
-                let _ = self.emit(TypeError::AmbiguousStaticArgument {
-                    receiver: recv
-                        .receiver
-                        .spelled(self.tysys.resolutions.defs())
-                        .to_string(),
-                    method: method_name.to_string(),
-                    candidates,
-                    span,
-                });
-                PreselectedArg::Reported
-            }
-            ArgPreselect::Pass => PreselectedArg::Undecided,
-        }
-    }
-
-    /// Whether an inherent impl (`impl Type { … }`) declares a no-self method
-    /// of this name. A conversion-call guard needs the distinction: a trait
-    /// lookup returning `None` is a failure only when no inherent static can
-    /// answer instead.
-    pub(super) fn has_inherent_static_method(
-        &self,
-        target: &ImplTargetKey,
-        method_name: &str,
-    ) -> bool {
-        self.tysys.inherent_shadows(target, method_name, false)
-    }
-
-    /// The argument preselect over a receiver's impls: `Selected` and
-    /// `Ambiguous` short-circuit resolution, so it decides calls. It must run
-    /// *before* the argument is elaborated — the expected type shaping a literal
-    /// comes from the selected impl. Admissibility is [`Elaborator::class_admits`]
-    /// over each impl's *resolved* parameter type, since spelling under-admits.
-    pub(super) fn static_arg_preselect(
-        &self,
-        recv: StaticReceiver<'_>,
-        method_name: &str,
-        classes: &[ArgClass],
-    ) -> ArgPreselect {
-        // An opaque argument admits every parameter, so the rest decide. Every
-        // argument opaque selects nothing, and shapes the arguments only where
-        // the impls all declare one parameter list.
-        let all_opaque = classes.iter().all(|c| matches!(c, ArgClass::Opaque(_)));
-        let mut admitted: Vec<ArgCandidate> = self
-            .static_arg_survey(recv, method_name)
-            .candidates
-            .into_iter()
-            .filter(|c| self.params_admit(&c.params, classes))
-            .collect();
-        if let Some(expected) = recv.expected_return {
-            self.narrow_to_expected_return(&mut admitted, expected, |c| c.return_type);
-        }
-        // An impl leaving a slot to the call is told from another by the
-        // arguments' types, which the resolution reads once they are
-        // elaborated; only a numeric literal, whose width it would choose,
-        // leaves that question open.
-        if let [_, _, ..] = admitted.as_slice()
-            && !classes.iter().any(ArgClass::leaves_width_open)
-            && admitted.iter().any(|c| {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .impl_trait_sets_params(c.block)
-            })
-        {
-            return ArgPreselect::Pass;
-        }
-        match admitted.as_slice() {
-            [] => ArgPreselect::Pass,
-            [only] => ArgPreselect::Selected(only.params.clone()),
-            // A `Head` names a family, not a type — `Pair { a: 5 }` is a
-            // `Pair` of something — so several same-head impls are the expected
-            // answer, not a tie. Only classes each denoting one type may call
-            // two candidates ambiguous; elaborating the arguments decides the
-            // rest.
-            _ if all_opaque || classes.iter().any(|c| matches!(c, ArgClass::Head(_))) => {
-                ArgPreselect::Pass
-            }
-            _ => ArgPreselect::Ambiguous(admitted.into_iter().map(|c| c.spelling).collect()),
-        }
-    }
-
     /// Whether an impl's parameters admit the call's argument classes, each
     /// against the one written for it. A call supplying fewer than the
     /// declaration takes is checked as far as it goes: the rest are defaults.
-    fn params_admit(&self, params: &[TypeId], classes: &[ArgClass]) -> bool {
+    pub(super) fn params_admit(&self, params: &[TypeId], classes: &[ArgClass]) -> bool {
         classes.len() <= params.len()
             && params.iter().zip(classes).all(|(&param, class)| {
                 param != TypeTable::UNKNOWN
                     && param != TypeTable::ERROR
                     && self.class_admits(param, class)
             })
-    }
-
-    /// The first-parameter types the receiver's trait impls declare for
-    /// `method_name` (`From<String>`'s `String` beside `From<i64>`'s `i64`,
-    /// `Enc<A>`'s `A` beside `Enc<B>`'s `B`), in candidate order, plus the
-    /// trait of any blanket among them. The parameter is read from the
-    /// declaration rather than off the trait reference: a conversion trait's
-    /// source type is also its trait argument, but no other trait's is.
-    ///
-    /// It walks the impls directly rather than reading the resolution, because
-    /// its consumers need every candidate and the resolution keeps one.
-    pub(super) fn static_arg_survey(
-        &self,
-        recv: StaticReceiver<'_>,
-        method_name: &str,
-    ) -> StaticArgSurvey {
-        let mut survey = StaticArgSurvey::default();
-        let receiver = recv.receiver;
-        let receiver_args = self
-            .tysys
-            .receiver_declaring_args(receiver.ty(), recv.args, receiver.key().decl())
-            .unwrap_or_default();
-        for impl_def in self.trait_impls_for_receiver(receiver, &receiver_args) {
-            let Some(trait_decl) = self.tysys.signatures.impl_trait(impl_def) else {
-                continue;
-            };
-            // A qualified spelling names a trait, so another trait's impl is
-            // not a candidate to weigh against: the same rule the resolution
-            // applies, asked where the arguments are surveyed.
-            let answers = match recv.required_trait {
-                Some(required) => required == trait_decl,
-                // A trait's declarations answer only where the trait is in
-                // scope, as the resolution reads them.
-                None => self
-                    .tysys
-                    .resolutions
-                    .decl_in_scope(self.frame_module(), trait_decl),
-            };
-            if !answers {
-                continue;
-            }
-            if !recv.required_args.is_empty()
-                && !self
-                    .tysys
-                    .impl_answers_trait_args(impl_def, receiver.ty(), recv.required_args)
-            {
-                continue;
-            }
-            let header = &self.tysys.trait_env.impl_headers[&impl_def];
-            // The same walk the rules read, so a body the block inherits is a
-            // candidate here too.
-            let Some(offer) =
-                self.tysys
-                    .impl_static_offer(header, impl_def, trait_decl, method_name)
-            else {
-                continue;
-            };
-            let trait_name = || {
-                header
-                    .trait_head_name()
-                    .expect("trait_impls_for_receiver yields trait impls alone")
-                    .to_string()
-            };
-            // The selection's own question, asked through the selection's own
-            // answer: a blanket accepts a family rather than a type, so the
-            // blanket resolver answers such a call and it is never an unmatched
-            // alternative worth listing. Asking it a second way here is what
-            // let the two disagree.
-            let params = match offer.selector {
-                Selector::Absent => continue,
-                Selector::Blanket(_) => {
-                    unreachable!("a block offers the body it wrote or inherits, never a blanket's")
-                }
-                Selector::Params(params) => params,
-            };
-            // By the types, as `Selector` is: two distinct types printing one
-            // name are two candidates, not one.
-            // The parameters as the impl's own frame resolved them, so a
-            // private or aliased name means what the impl wrote.
-            let spelling = render_type_list(&self.tysys.type_table.borrow(), &params);
-            // At the receiver, so a literal argument is shaped by what the
-            // receiver places in the impl's slots rather than by the slots.
-            let at_receiver = |ty: TypeId| match receiver.ty() {
-                Some(receiver) => self.tysys.at_receiver(impl_def, receiver, ty),
-                None => ty,
-            };
-            let params: Vec<TypeId> = params.into_iter().map(at_receiver).collect();
-            if survey.candidates.iter().any(|c| c.params == params) {
-                continue;
-            }
-            let return_type = at_receiver(offer.return_type);
-            survey.candidates.push(ArgCandidate {
-                spelling,
-                params,
-                return_type,
-                trait_name: trait_name(),
-                block: impl_def,
-            });
-        }
-        survey
     }
 
     /// The `Default::default` no declaration backs, which bound-driven
@@ -4688,9 +4251,9 @@ pub(super) struct ArgCandidate {
     pub(super) spelling: String,
     pub(super) params: Vec<TypeId>,
     /// Its result at the receiver.
-    return_type: TypeId,
+    pub(super) return_type: TypeId,
     pub(super) trait_name: String,
-    block: DefId,
+    pub(super) block: DefId,
 }
 
 /// A parameter or argument list as one spelling: the type alone where there is
@@ -4700,7 +4263,7 @@ pub(super) fn render_type_list(table: &TypeTable, types: &[TypeId]) -> String {
 }
 
 /// [`render_type_list`], each type qualified by its declaring module.
-fn render_type_list_qualified(table: &TypeTable, types: &[TypeId]) -> String {
+pub(super) fn render_type_list_qualified(table: &TypeTable, types: &[TypeId]) -> String {
     render_names(types.iter().map(|&t| table.canonical_name(t)).collect())
 }
 
