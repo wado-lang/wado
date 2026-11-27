@@ -838,7 +838,8 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
 /// the collector may run. A copying collector moves objects there, so every
 /// reference live across one is spilled and reloaded, and a loop holds more of
 /// them than the callee does. `safepoint_calls` says which calls are one. The
-/// literal a `return` hands back is not: it is the body's last act, so what is
+/// literal a `return` hands back, on whichever path a branch or a labeled block
+/// takes, is not: it is the body's last act, so what is
 /// live across it is what was live across the call it replaces, and a caller
 /// that takes it apart deletes it. Nor is a literal of constants that a `let`
 /// binds to a local the body never writes (none in `written`), or that a
@@ -858,35 +859,30 @@ fn has_safepoint(
         cold: &'a RareRuns,
         safepoint_calls: &'a [CallSafepoint],
         written: &'a IndexSet<u32>,
+        /// The literals a `return` hands back, on whichever path it takes.
+        returned: IndexSet<ExprId>,
     }
     impl Walk<'_> {
         fn block(&self, block: BlockId) -> bool {
-            self.run(self.cold.hot(self.body, block)) == Some(true)
-        }
-
-        /// Whether `stmts` reach a safepoint before one of them diverges, or
-        /// `None` where they do neither and run on.
-        fn run(&self, stmts: &[StmtId]) -> Option<bool> {
-            for &stmt in stmts {
+            for &stmt in self.cold.hot(self.body, block) {
                 if self.node(NodeRef::Stmt(stmt)) {
-                    return Some(true);
+                    return true;
                 }
                 if stmt_diverges(self.body, stmt, self.type_table) {
-                    return Some(false);
+                    break;
                 }
             }
-            None
+            false
         }
 
         fn node(&self, node: NodeRef) -> bool {
             match node {
                 NodeRef::Block(b) => return self.block(b),
                 NodeRef::Expr(e) if self.lends_constant(e) => return false,
-                NodeRef::Expr(e) if self.is_safepoint(e) => return true,
+                NodeRef::Expr(e) if !self.returned.contains(&e) && self.is_safepoint(e) => {
+                    return true;
+                }
                 NodeRef::Stmt(s) => match self.body.stmts[s].kind {
-                    StmtKind::Return {
-                        value: Some(Operand::Expr(e)),
-                    } => return self.returned(e),
                     StmtKind::Let {
                         local_index,
                         value: Some(value),
@@ -901,42 +897,6 @@ fn has_safepoint(
                 NodeRef::Expr(_) | NodeRef::Pat(_) => {}
             }
             self.children(node)
-        }
-
-        /// `e` as the value a `return` hands back: the literal it is, or the
-        /// one whichever arm of an `if` ends in.
-        fn returned(&self, e: ExprId) -> bool {
-            match &self.body.exprs[e].kind {
-                kind if allocates(kind) => self.children(NodeRef::Expr(e)),
-                &ExprKind::If {
-                    condition,
-                    then_branch,
-                    else_branch: Some(else_branch),
-                } => {
-                    self.operand(condition)
-                        || self.returned_by(then_branch)
-                        || self.returned_by(else_branch)
-                }
-                _ => self.node(NodeRef::Expr(e)),
-            }
-        }
-
-        fn returned_by(&self, arm: BlockId) -> bool {
-            let hot = self.cold.hot(self.body, arm);
-            let whole = hot.len() == self.body.blocks[arm].stmts.len();
-            let (tail, lead) = match hot.split_last() {
-                Some((&last, lead)) if whole => match self.body.stmts[last].kind {
-                    StmtKind::Expr(Operand::Expr(e)) => (Some(e), lead),
-                    _ => (None, hot),
-                },
-                _ => (None, hot),
-            };
-            self.run(lead)
-                .unwrap_or_else(|| tail.is_some_and(|e| self.returned(e)))
-        }
-
-        fn operand(&self, op: Operand) -> bool {
-            op.as_expr().is_some_and(|e| self.node(NodeRef::Expr(e)))
         }
 
         fn children(&self, node: NodeRef) -> bool {
@@ -979,12 +939,27 @@ fn has_safepoint(
                 | ExprKind::VariantConstruct { .. }
         )
     }
+    let mut returned = IndexSet::default();
+    body.for_each_node_under(NodeRef::Block(body.root()), |node| {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Return {
+                value: Some(Operand::Expr(e)),
+            } = body.stmts[s].kind
+        {
+            body.for_each_value_leaf(e, &mut |leaf| {
+                if allocates(&body.exprs[leaf].kind) {
+                    returned.insert(leaf);
+                }
+            });
+        }
+    });
     Walk {
         body,
         type_table,
         cold,
         safepoint_calls,
         written,
+        returned,
     }
     .block(body.root())
 }

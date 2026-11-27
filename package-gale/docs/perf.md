@@ -969,20 +969,16 @@ linking the rest. `core:collections`' `HashIndex` replaces both. It holds one
 word per slot, an entry's number under the top half of its hash, and asks
 `AtnKeyLists` which entry equals the pending key.
 
-| grammar    | heap | chain | `HashIndex` |
-| ---------- | ---: | ----: | ----------: |
-| TypeScript | 192m | 165.2 |       140.6 |
-| TypeScript | 256m | 187.6 |       203.5 |
-| TypeScript | 384m | 182.9 |       154.2 |
-| TypeScript | 512m | 168.3 |       159.2 |
-| TypeScript | 768m | 152.2 |       139.0 |
-| Rust       | 192m |  57.1 |        50.3 |
-| Rust       | 256m |  56.8 |        51.2 |
-| Rust       | 384m |  55.4 |        49.7 |
-| Rust       | 512m |  56.6 |        51.4 |
-| Rust       | 768m |  63.4 |        54.6 |
+| heap | TypeScript |  Rust |
+| ---: | ---------: | ----: |
+| 192m |      1.17× | 1.14× |
+| 256m |      0.92× | 1.11× |
+| 384m |      1.19× | 1.11× |
+| 512m |      1.06× | 1.10× |
+| 768m |      1.09× | 1.16× |
 
-Each figure is ms/iter, the mean of two alternating runs of
+Each figure is the chain's time over `HashIndex`'s, so above 1× is faster,
+each time the mean of two alternating runs of
 `wado run -O2 --gc-heap-initial <heap> package-gale/benchmark/<grammar>/<grammar>.wado`
 on the dev build. SQLite does not move.
 
@@ -995,9 +991,8 @@ default heap.
 multiply carries a difference only upward, so two keys that differ in an
 edge's high bits differ only in the hash's top few bits, and two that differ in
 a small state number do not differ there at all. `hash_from` therefore ends
-in `HashIndex::spread`. Without that a
-lookup walks a run of full slots, and the TypeScript benchmark no longer
-finishes an iteration in the time a whole run took.
+in `HashIndex::spread`. Without it a lookup walks a run of full slots, and the
+TypeScript benchmark runs about thirty times slower.
 
 `AtnKeyMap` stays a `HashMap<i64, i32>`: it maps a key to a value and keeps no
 rows, so there is nothing for the index to leave out.

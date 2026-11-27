@@ -294,7 +294,7 @@ impl Dfa {
             h = (h ^ *k as i64) * 1099511628211;
         }
         let next = self.bounds.len() - 1;
-        let row = self.index.find_or_insert(HashIndex::spread(h as u64), |row| self.key_is(row, &key), next);
+        let row = unchecked self.index.find_or_insert(HashIndex::spread(h as u64), |row| self.key_is(row, &key), next);
         let state = row << 2 | flags;
         if row != next {
             return state;

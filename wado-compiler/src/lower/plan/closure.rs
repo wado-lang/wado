@@ -2075,10 +2075,7 @@ fn functor_arg_type(
 /// it, and a contract's clauses ride ahead of the last argument the same way.
 fn yielded(expr: &TirExpr) -> &TirExpr {
     match &expr.kind {
-        TirExprKind::Block(block) => match block.stmts.last().map(|stmt| &stmt.kind) {
-            Some(TirStmtKind::Expr(tail)) => yielded(tail),
-            _ => expr,
-        },
+        TirExprKind::Block(block) => block.tail_expr().map_or(expr, yielded),
         _ => expr,
     }
 }

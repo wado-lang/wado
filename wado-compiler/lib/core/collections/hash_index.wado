@@ -99,7 +99,7 @@ impl HashIndex {
     fn put(&mut self, empty: i32, slot: i64) {
         let mut s = empty;
         if (self.count + 1) * 2 > self.slots.len() {
-            self.resize(self.slots.len() * 2);
+            unchecked self.resize(self.slots.len() * 2);
             s = self.empty_slot(slot);
         }
         self.slots[s] = slot;
