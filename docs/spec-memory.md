@@ -357,9 +357,6 @@ ref_eq(&xs[0], &xs[0]);         // false or true: each `&` takes its own copy
 An affine variant is the exception: its slot is a place, as
 [the previous section](#references-to-a-value-replaced-on-assignment) states.
 
-Two [shared cells](#shared-cells) are compared with `==`, which is their
-identity.
-
 A closure's identity stays unobservable. `ref_eq` takes references only, and a
 reference to a closure points to the place holding it, not to the closure:
 

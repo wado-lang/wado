@@ -566,8 +566,8 @@ in its source says so.
 
 It also warns about a read of a place inside the scope of a
 [scoped `&mut`](./spec-memory.md#mut-lasts-for-a-scope) of it, where one body
-shows both and a write through the binding comes first: the read sees the value
-from before that write.
+shows both: the read sees the value from before the binding was written. It is
+no error, since a read ahead of any write through the binding is harmless.
 
 The lint is best effort and promises to find nothing, so no program is refused
 over it.
