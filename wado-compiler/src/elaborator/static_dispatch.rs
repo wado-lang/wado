@@ -184,6 +184,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
         }
         self.enforce_static_method_bounds(&static_args, Some(receiver_type), call.span);
+        // A generic receiver spelled without its arguments names a block only
+        // by the ones the call inferred, else the ones its expected type holds.
+        if self.receiver_generic_arity(receiver).is_some() {
+            let inferred = self.apply_infer_holes_each(&static_args.impl_args);
+            let instance = if inferred.is_empty() {
+                &receiver_args
+            } else {
+                &inferred
+            };
+            self.check_static_call_visibility(receiver, instance, suffix, Some(call.id), call.span);
+        }
         let StaticTypeArgs {
             impl_args: impl_type_args_inferred,
             method_args: method_type_args,
@@ -388,9 +399,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Enforce the visibility ladder on a qualified `Type::method(...)` call.
     /// `receiver` is the key the neighbouring lookups resolved, not one
     /// re-derived from the spelling, which a splice can make mean another type.
+    /// `receiver_args` are the ones the call inferred for a generic receiver
+    /// spelled without them.
     pub(super) fn check_static_call_visibility(
         &mut self,
         receiver: &ReceiverId,
+        receiver_args: &[TypeId],
         method_name: &str,
         node: Option<AstId>,
         span: token::Span,
@@ -398,7 +412,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // At the link the resolution reaches: checking the spelled receiver
         // alone found an empty bucket, so `type Q = P` passed a call the same
         // call through `P` is rejected for.
-        let Some(entry) = self.reached_static_entry(receiver, method_name) else {
+        let Some(entry) = self.reached_static_entry(receiver, receiver_args, method_name) else {
             return;
         };
         let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);
@@ -853,6 +867,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(receiver) = &lookup_receiver {
             self.check_static_call_visibility(
                 &receiver.at_type(Some(declaring_type)),
+                &[],
                 &static_call.method,
                 Some(static_call.id),
                 static_call.span,

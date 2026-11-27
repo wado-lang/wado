@@ -864,11 +864,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The index entry of the inherent `method_name` a call on `receiver`
     /// reaches: at the link owning the static, in the block written for the
-    /// instance the call names. Blocks for two instances of one generic type
-    /// share a key, and each declares a visibility of its own.
+    /// instance the call names: `receiver_args` where it inferred them, else
+    /// the receiver's own. Blocks for two instances of one generic type share
+    /// a key, and each declares a visibility of its own.
     pub(super) fn reached_static_entry(
         &mut self,
         receiver: &ReceiverId,
+        receiver_args: &[TypeId],
         method_name: &str,
     ) -> Option<&ImplMethodEntry> {
         let owner = self
@@ -876,7 +878,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(|| receiver.clone());
         let instance = self
             .tysys
-            .receiver_declaring_args(owner.ty, &[], owner.key.decl())
+            .receiver_declaring_args(owner.ty, receiver_args, owner.key.decl())
             .unwrap_or_default();
         self.impl_method_entries(&owner.key, method_name)
             .find(|entry| self.declaration_reaches(entry.method_id, &instance))

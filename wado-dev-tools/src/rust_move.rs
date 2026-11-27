@@ -560,14 +560,19 @@ impl Move {
                 .map(|reference| (uri_path(&reference.uri), reference.position))
                 .collect();
             // A path the destination names a free item by goes through the
-            // file the item leaves.
+            // file the item leaves, and so does an import of it, where a
+            // group may hold the name far from its path.
             if item.header.is_none() {
                 for (_, at) in references
                     .iter()
                     .filter(|(path, _)| *path == destination.path)
                 {
                     let before = destination.lines[at.line].get(..at.column);
-                    if before.is_some_and(|before| before.ends_with("::")) {
+                    let imported = self
+                        .destination_uses
+                        .iter()
+                        .any(|item| item.lines.contains(&at.line));
+                    if imported || before.is_some_and(|before| before.trim_end().ends_with("::")) {
                         fixes.by_hand(format!(
                             "{} names `{}` by a path",
                             display_position(&destination.path, *at),
@@ -1382,6 +1387,20 @@ fn helper(n: usize) -> i32 {
         assert!(
             b.starts_with("#![allow(dead_code)]\n\nuse super::a::base;\n\npub fn twice"),
             "{b}"
+        );
+    }
+
+    #[test]
+    fn a_stale_grouped_import_is_reported() {
+        let (_dir, report) = a_to_b(
+            "pub fn make() -> i32 {\n    1\n}\n\npub fn other() -> i32 {\n    2\n}\n",
+            "use super::a::{\n    make,\n    other,\n};\n\npub fn twice() -> i32 {\n    make() + other()\n}\n",
+            "b::twice()",
+            &["probe::a::make"],
+        );
+        assert!(
+            report.contains("src/b.rs:2:5 names `make` by a path"),
+            "{report}"
         );
     }
 

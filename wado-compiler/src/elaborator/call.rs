@@ -1922,12 +1922,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.resolve_call_if_callee_is_instance_method(site, ctx)?;
         }
         // A case is reachable wherever its type is; only a static method has
-        // a visibility of its own to check.
-        if let Some(receiver) = &receivers.static_method_receiver {
+        // a visibility of its own to check. A generic receiver spelled without
+        // its arguments is checked once the call has inferred them.
+        if let Some(receiver) = &receivers.static_method_receiver
+            && self.receiver_generic_arity(receiver).is_none()
+        {
             let (_, method_name) = effective_name
                 .rsplit_once("::")
                 .expect("a receiver comes with a qualified name");
-            self.check_static_call_visibility(receiver, method_name, Some(call.id), call.span);
+            self.check_static_call_visibility(receiver, &[], method_name, Some(call.id), call.span);
         }
         if let Some(case) = self.case_of_callee(&callee_kind, ident) {
             return ControlFlow::Break(self.resolve_case_constructor_call(
