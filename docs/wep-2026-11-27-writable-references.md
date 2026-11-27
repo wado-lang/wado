@@ -343,7 +343,7 @@ spare a call site. Each step leaves the tree building and its tests passing.
   implemented until its step lands.
 - [x] `Shared<T>` exists: the type, `Shared::new`, `*c`, the automatic
   dereference, and `==` as identity.
-- [ ] Every cell written as a `&mut` moves to `Shared<T>`: `Signal<T>` in Rill,
+- [x] Every cell written as a `&mut` moves to `Shared<T>`: `Signal<T>` in Rill,
   `ValueSerializer { out: &mut v }` in `core:value`, and each `&mut` to a
   type replaced on assignment that a variable, a value or a `return` holds.
 - [ ] The scoped forms store back from every place: a call argument and a
