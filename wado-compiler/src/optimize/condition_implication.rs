@@ -745,6 +745,29 @@ pub(super) fn parse_cmp(
 /// a single-statement break then-block. Returns the guard's statement index and
 /// the (still-negated) condition operand. One shared definition keeps the two
 /// passes from drifting on what a loop guard looks like.
+/// The block whose head holds `loop_body`'s guard: `loop_body`, or the labeled
+/// block opening it, innermost first. An inlined `Iterator::next` leaves its
+/// range guard there, and the statements past a guard are past it whichever
+/// label its `break` leaves.
+fn guard_block(engine: &Engine, loop_body: BlockId) -> BlockId {
+    let mut block = loop_body;
+    while let Some(&first) = engine.body.blocks[block].stmts.first()
+        && let StmtKind::LabeledBlock { block: inner, .. } = engine.body.stmts[first].kind
+    {
+        block = inner;
+    }
+    block
+}
+
+/// How many times `block`'s statements write `var`.
+fn writes_in(engine: &Engine, block: BlockId, var: u32) -> usize {
+    engine.body.blocks[block]
+        .stmts
+        .iter()
+        .map(|&s| write_count(engine, s, var))
+        .sum()
+}
+
 pub(super) fn parse_break_guard_head(
     engine: &Engine,
     loop_body: BlockId,
@@ -1058,10 +1081,11 @@ fn structural_loop_guard(
     loop_body: BlockId,
     binds: &Binds,
 ) -> bool {
-    let Some((guard_idx, gcond)) = parse_break_guard_head(engine, loop_body) else {
+    let head = guard_block(engine, loop_body);
+    let Some((guard_idx, gcond)) = parse_break_guard_head(engine, head) else {
         return false;
     };
-    let stmts = engine.body.blocks[loop_body].stmts.clone();
+    let stmts = engine.body.blocks[head].stmts.clone();
     // What holds past the guard: the operand of `!(…)`, or a comparison
     // `if var >= bound { break }` turned round.
     let inner = negated_operand(engine, binds, gcond);
@@ -1122,8 +1146,10 @@ fn structural_loop_guard(
         GuardStrategy::SameOffset => below_type_max(engine, var),
         GuardStrategy::LeLocal(_) => None,
     };
-    let floor = (goff == 0 && (alone || matches!(strategy, GuardStrategy::LeLocal(_))))
-        .then(|| induction_entry(engine, binds, parent, loop_stmt, loop_body, var))
+    let floor = (goff == 0
+        && (alone || matches!(strategy, GuardStrategy::LeLocal(_)))
+        && writes_in(engine, loop_body, var) == writes_in(engine, head, var))
+        .then(|| induction_entry(engine, binds, parent, loop_stmt, head, var))
         .flatten()
         .map(|lo| Floor { var, lo, alone, hi });
     // A `let c = var` under the guard holds what the guard proved of `var` for

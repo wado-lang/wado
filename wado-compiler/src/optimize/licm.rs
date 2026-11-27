@@ -402,6 +402,7 @@ fn licm_block(
         };
 
         if let Some(lb) = loop_body {
+            changed |= share_preheader_reads(engine, &new_stmts);
             let preheader = preheader_field_hoists(engine.body, &new_stmts);
             let (hoist_stmts, loop_changed) = licm_loop(engine, lb, ctx, outer_aliases, &preheader);
             changed |= loop_changed;
@@ -651,6 +652,44 @@ fn preheader_field_hoists(body: &Body, ahead: &[StmtId]) -> Vec<HoistedField> {
         rebound.push(*local_index);
     }
     held
+}
+
+/// Turn a later `let` of [`preheader_field_hoists`]'s run that reads the same
+/// field as an earlier one into a copy of it. A hoist made while the field was
+/// still out of sight (inside a range literal a value copy took) lands beside
+/// the program's own read, and a guard reading one and a check the other never
+/// meet.
+fn share_preheader_reads(engine: &mut Engine, ahead: &[StmtId]) -> bool {
+    // Nearest the loop first, so the last of a field's entries is its earliest.
+    let held = preheader_field_hoists(engine.body, ahead);
+    let mut changed = false;
+    for (i, later) in held.iter().enumerate() {
+        let Some(first) = held[i + 1..]
+            .iter()
+            .rev()
+            .find(|h| (h.local_index, h.field_index) == (later.local_index, later.field_index))
+        else {
+            continue;
+        };
+        let value = ahead.iter().find_map(|&s| match &engine.body.stmts[s].kind {
+            StmtKind::Let {
+                local_index,
+                value: Some(value),
+                ..
+            } if *local_index == later.new_local_index => value.as_expr(),
+            _ => None,
+        });
+        let value = value.expect("a held read is a let of the run");
+        engine.replace_expr_kind(
+            value,
+            ExprKind::Local {
+                index: first.new_local_index,
+                name: first.name.clone(),
+            },
+        );
+        changed = true;
+    }
+    changed
 }
 
 /// Type of the source local a candidate reads, falling back to the field type
