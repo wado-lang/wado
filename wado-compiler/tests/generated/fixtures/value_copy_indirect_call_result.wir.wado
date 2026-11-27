@@ -96,8 +96,7 @@ global global:value_copy_indirect_call_result.wado::HANDLER: ref "canonical//Can
 global global:value_copy_indirect_call_result.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "value_copy_indirect_call_result.wado/make"(n) {
-    let elements: ref Array<u8>;
-    return n = builtin::array_len(local.tee elements(array.new_fixed<u8>(n & 255, 2, 3))); struct.new "core:prelude/list.wado//List<u8>" { repr: elements, used: n };
+    return struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(n & 255, 2, 3), used: 3 };
 }
 
 fn "value_copy_indirect_call_result.wado/via_closure$dae[n]"() {

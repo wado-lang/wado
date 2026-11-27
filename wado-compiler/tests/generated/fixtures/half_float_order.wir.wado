@@ -538,11 +538,11 @@ global global:core:prelude/numeric.wado::$const_obj_6: ref "core:prelude/string.
 global global:core:prelude/numeric.wado::$const_obj_9: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 97, 78), used: 3 };
 
 fn "half_float_order.wado/run"() {
+    let $load_1: ref Array<f16>;
     let $v_2: bool;
     let xs: ref "core:prelude/list.wado//List<f16>";
     let self_104: f32;
     let other_105: f32;
-    let elements: ref Array<f16>;
     let self_188: u16;
     if @unlikely((local.tee $v_2($inline_f32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__8: block -> "core:prelude/traits.wado//enum:Ordering" {
         self_104 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(65024);
@@ -848,15 +848,14 @@ fn "half_float_order.wado/run"() {
         "half_float_order.wado/run$cold16"();
         unreachable;
     }
-    $v_2 = builtin::array_len(local.tee elements(array.new_fixed<u16>(31744, 32768, 32256, 15360, 65024, 0)));
-    "half_float_order.wado/core:prelude/list.wado/List<f16>::sort_bywith()$$Closure_0$dae[cmp]"(local.tee xs(struct.new "core:prelude/list.wado//List<f16>" { repr: elements, used: $v_2 }));
+    "half_float_order.wado/core:prelude/list.wado/List<f16>::sort_bywith()$$Closure_0$dae[cmp]"(local.tee xs(struct.new "core:prelude/list.wado//List<f16>" { repr: array.new_fixed<u16>(31744, 32768, 32256, 15360, 65024, 0), used: 6 }));
     $v_2 = xs.used;
     if @unlikely(0 >= $v_2) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<f16>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $v_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("half_float_order.wado:52"), used: 24 });
         unreachable;
     }
-    if @unlikely(local.tee self_188(builtin::array_get_value<u16>(local.tee elements(xs.repr), 0)) != 32768) {
+    if @unlikely(local.tee self_188(builtin::array_get_value<u16>(local.tee $load_1(xs.repr), 0)) != 32768) {
         cold_path;
         "half_float_order.wado/run$cold15"(self_188);
         unreachable;
@@ -866,7 +865,7 @@ fn "half_float_order.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<f16>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $v_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("half_float_order.wado:53"), used: 24 });
         unreachable;
     }
-    if @unlikely((local.tee self_188(builtin::array_get_value<u16>(elements, 1)) == 0) == 0) {
+    if @unlikely((local.tee self_188(builtin::array_get_value<u16>($load_1, 1)) == 0) == 0) {
         cold_path;
         "half_float_order.wado/run$cold14"(self_188);
         unreachable;
@@ -876,7 +875,7 @@ fn "half_float_order.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<f16>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(2, $v_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("half_float_order.wado:54"), used: 24 });
         unreachable;
     }
-    if @unlikely(local.tee self_188(builtin::array_get_value<u16>(elements, 2)) != 15360) {
+    if @unlikely(local.tee self_188(builtin::array_get_value<u16>($load_1, 2)) != 15360) {
         cold_path;
         "half_float_order.wado/run$cold13"(self_188);
         unreachable;
@@ -886,7 +885,7 @@ fn "half_float_order.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<f16>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(3, $v_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("half_float_order.wado:55"), used: 24 });
         unreachable;
     }
-    if @unlikely(local.tee self_188(builtin::array_get_value<u16>(elements, 3)) != 31744) {
+    if @unlikely(local.tee self_188(builtin::array_get_value<u16>($load_1, 3)) != 31744) {
         cold_path;
         "half_float_order.wado/run$cold12"(self_188);
         unreachable;
@@ -896,7 +895,7 @@ fn "half_float_order.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<f16>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(4, $v_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("half_float_order.wado:56"), used: 24 });
         unreachable;
     }
-    if @unlikely(local.tee self_188(builtin::array_get_value<u16>(elements, 4)) != 32256) {
+    if @unlikely(local.tee self_188(builtin::array_get_value<u16>($load_1, 4)) != 32256) {
         cold_path;
         "half_float_order.wado/run$cold11"(self_188);
         unreachable;
@@ -906,7 +905,7 @@ fn "half_float_order.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<f16>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(5, $v_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("half_float_order.wado:57"), used: 24 });
         unreachable;
     }
-    if @unlikely(local.tee $v_2(builtin::array_get_value<u16>(elements, 5)) != 65024) {
+    if @unlikely(local.tee $v_2(builtin::array_get_value<u16>($load_1, 5)) != 65024) {
         cold_path;
         "half_float_order.wado/run$cold10"($v_2);
         unreachable;

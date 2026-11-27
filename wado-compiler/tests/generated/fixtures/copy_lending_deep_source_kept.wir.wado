@@ -430,12 +430,10 @@ fn "copy_lending_deep_source_kept.wado/$template_segment$copy_lending_deep_sourc
 }
 
 fn "copy_lending_deep_source_kept.wado/$cm_export__$test_0_the_result_keeps_the_parameter_s_part_as_it_was"() {
-    let elements: ref Array<i32>;
-    let used: i32;
-    used = builtin::array_len(local.tee elements(array.new_fixed<i32>(black_box(1))));
-    if @unlikely(local.tee used("copy_lending_deep_source_kept.wado/read_after_write$sroa[&mut(q.inner)]"(struct.new "core:prelude/list.wado//List<i32>" { repr: elements, used: used })) != 1) {
+    let $v_0: i32;
+    if @unlikely(local.tee $v_0("copy_lending_deep_source_kept.wado/read_after_write$sroa[&mut(q.inner)]"(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(black_box(1)), used: 1 })) != 1) {
         cold_path;
-        "copy_lending_deep_source_kept.wado/$test_0_the_result_keeps_the_parameter_s_part_as_it_was$cold0"(used);
+        "copy_lending_deep_source_kept.wado/$test_0_the_result_keeps_the_parameter_s_part_as_it_was$cold0"($v_0);
         unreachable;
     }
     "wasi/task-return"(0);

@@ -854,10 +854,9 @@ fn "opt_copy_elision_borrowed_parts.wado/$cm_export__$test_0_the_parts_read_as_t
 
 fn "opt_copy_elision_borrowed_parts.wado/one_total$sroa[w.inner]"(w) {
     let elements: ref "Array<opt_copy_elision_borrowed_parts.wado/Elem>";
-    let used: i32;
-    used = builtin::array_len(local.tee elements(array.new_fixed<ref "opt_copy_elision_borrowed_parts.wado//Elem">(w)));
+    elements = array.new_fixed<ref "opt_copy_elision_borrowed_parts.wado//Elem">(w);
     return block -> i32 {
-        "opt_copy_elision_borrowed_parts.wado/total"(elements, used);
+        "opt_copy_elision_borrowed_parts.wado/total"(elements, 1);
     };
 }
 

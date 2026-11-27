@@ -2361,8 +2361,7 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
     p = builtin::i32_wrap_i64(below >>u builtin::i64_extend_i32_s($mv$format$precision - 1));
     below = select u64(p == 0, carry_54, carry_54 | (1_i64 << builtin::i64_extend_i32_s($mv$format$precision - 1)));
     $mv$digits$end = select i32(p == 0, 0 - $mv$digits$end, (p - $mv$digits$end) - 1);
-    p = builtin::array_len(local.tee $licm_repr_250(array.new_fixed<u32>(builtin::i32_wrap_i64(local.tee below((2_i64 * below) + 1_i64)), builtin::i32_wrap_i64(below >>u 32_i64))));
-    midpoint = struct.new "core:prelude/list.wado//List<u32>" { repr: $licm_repr_250, used: p };
+    midpoint = struct.new "core:prelude/list.wado//List<u32>" { repr: array.new_fixed<u32>(builtin::i32_wrap_i64(local.tee below((2_i64 * below) + 1_i64)), builtin::i32_wrap_i64(below >>u 32_i64)), used: 2 };
     p = 0;
     $mv$digits$end = $mv$digits$end - 1;
     if $mv$digits$start >= 0 {

@@ -277,25 +277,23 @@ fn "opt_dropped_value_in_if_let_arm.wado/distinct_names"($mv$elems$repr, $mv$ele
 }
 
 fn "opt_dropped_value_in_if_let_arm.wado/run"() with Stdout {
-    let elements: ref "Array<opt_dropped_value_in_if_let_arm.wado/Elem>";
-    let used: i32;
     let out_15: ref "core:prelude/string.wado//String";
     let is_negative_77: bool;
     let x: i64;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
+    let $sroa_t_h0_141: i32;
     let start_188: i32;
-    used = builtin::array_len(local.tee elements(array.new_fixed<ref "opt_dropped_value_in_if_let_arm.wado//Elem">(struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Name" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } }, struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Num" { discriminant: 1, payload_0: black_box(1) }, struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Name" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 } }, struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Name" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } })));
-    used = "opt_dropped_value_in_if_let_arm.wado/distinct_names"(struct.new "core:prelude/list.wado//List<opt_dropped_value_in_if_let_arm.wado/Elem>" { repr: elements, used: used }.repr, used);
+    $sroa_t_h0_141 = "opt_dropped_value_in_if_let_arm.wado/distinct_names"(struct.new "core:prelude/list.wado//List<opt_dropped_value_in_if_let_arm.wado/Elem>" { repr: array.new_fixed<ref "opt_dropped_value_in_if_let_arm.wado//Elem">(struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Name" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } }, struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Num" { discriminant: 1, payload_0: black_box(1) }, struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Name" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 } }, struct.new "opt_dropped_value_in_if_let_arm.wado//Elem::Name" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } }), used: 4 }.repr, 4);
     out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_24: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_24;
     };
-    is_negative_77 = used < 0;
-    x = builtin::i64_extend_i32_s(used);
+    is_negative_77 = $sroa_t_h0_141 < 0;
+    x = builtin::i64_extend_i32_s($sroa_t_h0_141);
     x = select i64(x < 0_i64, 0_i64 - x, x);
-    used = $inline_count_digits_u64_0: block -> i32 {
+    $sroa_t_h0_141 = $inline_count_digits_u64_0: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
                 if x <u 10_i64 {
@@ -365,35 +363,35 @@ fn "opt_dropped_value_in_if_let_arm.wado/run"() with Stdout {
         builtin::array_set_u8(out_15.repr, start_188, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_77(out_15.used + used) > builtin::array_len(out_15.repr)) {
+    if @unlikely(local.tee is_negative_77(out_15.used + $sroa_t_h0_141) > builtin::array_len(out_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, is_negative_77);
     }
     start_188 = out_15.used;
     out_15.used = is_negative_77;
     arr = out_15.repr;
-    used = start_188 + used;
+    $sroa_t_h0_141 = start_188 + $sroa_t_h0_141;
     b27: block {
         l28: loop {
-            break_if b27 (used - start_188) < 2;
+            break_if b27 ($sroa_t_h0_141 - start_188) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_77(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, used - 1, (48 + is_negative_77) - (tens * 10));
-            builtin::array_set_u8(arr, used - 2, 48 + tens);
-            used = used - 2;
+            builtin::array_set_u8(arr, $sroa_t_h0_141 - 1, (48 + is_negative_77) - (tens * 10));
+            builtin::array_set_u8(arr, $sroa_t_h0_141 - 2, 48 + tens);
+            $sroa_t_h0_141 = $sroa_t_h0_141 - 2;
             x = q;
             continue l28;
         };
     };
-    if used > start_188 {
+    if $sroa_t_h0_141 > start_188 {
         builtin::array_set_u8(arr, start_188, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
     };
-    used = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    $sroa_t_h0_141 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_77 = builtin::i32_wrap_i64(x >> 32_i64);
-    used = "opt_dropped_value_in_if_let_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used);
+    $sroa_t_h0_141 = "opt_dropped_value_in_if_let_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_141);
     builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_188(out_15.used) + 1)), 0, out_15.repr, 0, start_188);
     builtin::array_set_u8(arr, start_188, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
@@ -409,7 +407,7 @@ fn "opt_dropped_value_in_if_let_arm.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_141);
     }
 }
 

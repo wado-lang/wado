@@ -579,18 +579,16 @@ global global:core:builtin::$unit_case$core:prelude/option.wado//Option<core:pre
 fn "waitable_set_delivered_call.wado/delivered"() with MonotonicClock {
     let set: ref null "core:prelude/async.wado//WaitableSet<core:prelude/async.wado/AsyncCall<()>>";
     let ready: ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/AsyncCall<()>>";
+    let state: "core:prelude/async.wado//enum:CallState";
     let $moved_3: ref null "core:prelude/async.wado//AsyncCall<()>";
-    let elements_10: ref null "Array<core:prelude/async.wado/Ready<core:prelude/async.wado/AsyncCall<()>>>";
-    let elements_14: ref null "Array<core:prelude/async.wado/AsyncCall<()>>";
-    let used_15: i32;
-    "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<core:prelude/async.wado/AsyncCall<()>>::insert"(local.tee set(struct.new "core:prelude/async.wado//WaitableSet<core:prelude/async.wado/AsyncCall<()>>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: used_15 = builtin::array_len(local.tee elements_14(array.new_fixed<ref null "core:prelude/async.wado//AsyncCall<()>">())); struct.new "core:prelude/list.wado//List<core:prelude/async.wado/AsyncCall<()>>" { repr: elements_14, used: used_15 }, ready: used_15 = builtin::array_len(local.tee elements_10(array.new_fixed<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/AsyncCall<()>>">())); struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/AsyncCall<()>>>" { repr: elements_10, used: used_15 } }), "waitable_set_delivered_call.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for"(1000000_i64));
+    "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<core:prelude/async.wado/AsyncCall<()>>::insert"(local.tee set(struct.new "core:prelude/async.wado//WaitableSet<core:prelude/async.wado/AsyncCall<()>>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: struct.new "core:prelude/list.wado//List<core:prelude/async.wado/AsyncCall<()>>" { repr: array.new_fixed<ref null "core:prelude/async.wado//AsyncCall<()>">(), used: 0 }, ready: struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/AsyncCall<()>>>" { repr: array.new_fixed<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/AsyncCall<()>>">(), used: 0 } }), "waitable_set_delivered_call.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for"(1000000_i64));
     block {
         l1: loop {
             ready = "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<core:prelude/async.wado/AsyncCall<()>>::wait"(set);
             let $match_scrut_0: ref "core:prelude/async.wado//ReadyEvent";
             if (if ref.test "core:prelude/async.wado//ReadyEvent::Call"(local.tee $match_scrut_0(ready.event)) -> bool {
-                used_15 = ref.cast "core:prelude/async.wado//ReadyEvent::Call"($match_scrut_0).payload_0;
-                (0 | (used_15 == 0)) | (used_15 == 1) == 0;
+                state = ref.cast "core:prelude/async.wado//ReadyEvent::Call"($match_scrut_0).payload_0;
+                (0 | (state == 0)) | (state == 1) == 0;
             } else {
                 0;
             }) {
@@ -630,17 +628,15 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
     let $sroa_$pattern_temp_0_0_13_149: i32;
     let $sroa_$pattern_temp_0_1_14_150: i32;
     let new_repr_155: ref Array<u8>;
-    let elements_223: ref null "Array<core:prelude/async.wado/Ready<core:prelude/async.wado/AsyncCall<()>>>";
-    let elements_227: ref null "Array<core:prelude/async.wado/AsyncCall<()>>";
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let elements_276: ref null "Array<core:prelude/async.wado/Ready<waitable_set_delivered_call.wado/Timer>>";
-    let elements_280: ref null "Array<waitable_set_delivered_call.wado/Timer>";
     let self_290: ref null "core:prelude/list.wado//List<waitable_set_delivered_call.wado/Timer>";
+    let $arg_4_300: ref null "Array<waitable_set_delivered_call.wado/Timer>";
     let $held_7_303: ref null "waitable_set_delivered_call.wado//Timer";
     let self_309: ref null "core:prelude/list.wado//List<core:prelude/async.wado/Ready<waitable_set_delivered_call.wado/Timer>>";
     let value_310: ref null "core:prelude/async.wado//Ready<waitable_set_delivered_call.wado/Timer>";
+    let $arg_4_319: ref null "Array<core:prelude/async.wado/Ready<waitable_set_delivered_call.wado/Timer>>";
     let $held_7_322: ref null "core:prelude/async.wado//Ready<waitable_set_delivered_call.wado/Timer>";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:waitable_set_delivered_call.wado::$modules_initialized);
@@ -698,7 +694,7 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_149);
     }
-    "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<core:prelude/async.wado/AsyncCall<()>>::insert"(local.tee again(struct.new "core:prelude/async.wado//WaitableSet<core:prelude/async.wado/AsyncCall<()>>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: $sroa_$pattern_temp_0_0_13_149 = builtin::array_len(local.tee elements_227(array.new_fixed<ref null "core:prelude/async.wado//AsyncCall<()>">())); struct.new "core:prelude/list.wado//List<core:prelude/async.wado/AsyncCall<()>>" { repr: elements_227, used: $sroa_$pattern_temp_0_0_13_149 }, ready: $sroa_$pattern_temp_0_0_13_149 = builtin::array_len(local.tee elements_223(array.new_fixed<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/AsyncCall<()>>">())); struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/AsyncCall<()>>>" { repr: elements_223, used: $sroa_$pattern_temp_0_0_13_149 } }), "waitable_set_delivered_call.wado/delivered"());
+    "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<core:prelude/async.wado/AsyncCall<()>>::insert"(local.tee again(struct.new "core:prelude/async.wado//WaitableSet<core:prelude/async.wado/AsyncCall<()>>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: struct.new "core:prelude/list.wado//List<core:prelude/async.wado/AsyncCall<()>>" { repr: array.new_fixed<ref null "core:prelude/async.wado//AsyncCall<()>">(), used: 0 }, ready: struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/AsyncCall<()>>>" { repr: array.new_fixed<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/AsyncCall<()>>">(), used: 0 } }), "waitable_set_delivered_call.wado/delivered"());
     $moved_7 = local.tee ready("core:prelude/async.wado/core:prelude/async.wado/WaitableSet<core:prelude/async.wado/AsyncCall<()>>::wait"(again)).member;
     ready.member = ref.null none;
     "core:prelude/async.wado/core:prelude/async.wado/AsyncCall<()>::wait"($moved_7);
@@ -828,7 +824,7 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_149);
     }
-    timers = struct.new "core:prelude/async.wado//WaitableSet<waitable_set_delivered_call.wado/Timer>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: $sroa_$pattern_temp_0_0_13_149 = builtin::array_len(local.tee elements_280(array.new_fixed<ref null "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>">())); struct.new "core:prelude/list.wado//List<waitable_set_delivered_call.wado/Timer>" { repr: elements_280, used: $sroa_$pattern_temp_0_0_13_149 }, ready: $sroa_$pattern_temp_0_0_13_149 = builtin::array_len(local.tee elements_276(array.new_fixed<ref null "core:prelude/async.wado//Ready<waitable_set_delivered_call.wado/Timer>">())); struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<waitable_set_delivered_call.wado/Timer>>" { repr: elements_276, used: $sroa_$pattern_temp_0_0_13_149 } };
+    timers = struct.new "core:prelude/async.wado//WaitableSet<waitable_set_delivered_call.wado/Timer>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: struct.new "core:prelude/list.wado//List<waitable_set_delivered_call.wado/Timer>" { repr: array.new_fixed<ref null "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>">(), used: 0 }, ready: struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<waitable_set_delivered_call.wado/Timer>>" { repr: array.new_fixed<ref null "core:prelude/async.wado//Ready<waitable_set_delivered_call.wado/Timer>">(), used: 0 } };
     member = struct.new "waitable_set_delivered_call.wado//Timer::Only" { discriminant: 0, payload_0: "waitable_set_delivered_call.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for"(1000000_i64) };
     if local.tee $sroa_$pattern_temp_0_0_13_149(local.tee $match_7($moved_7 = ref.cast "waitable_set_delivered_call.wado//Timer::Only"(member).payload_0; let $mv_1_22: ref null "core:prelude/async.wado//ResourceId"; let $mv_2_23: ref null "core:prelude/async.wado//ReadyEvent"; multivalue_bind [$sroa_$pattern_temp_0_0_13_149, $mv_1_22, $mv_2_23] = "core:prelude/async.wado/core:prelude/async.wado/AsyncCall<()>^core:prelude/async.wado/Waitable::wait_on$sroa[return]"($moved_7); struct.new "tuple//[i32, core:prelude/option.wado/Option<core:prelude/async.wado/ResourceId>, core:prelude/option.wado/Option<core:prelude/async.wado/ReadyEvent>]" { 0: $sroa_$pattern_temp_0_0_13_149, 1: $mv_1_22, 2: $mv_2_23 }).0) == 0 {
         "wasi/waitable-join"($match_7.1.handle, let $host_resource_36: ref null "core:prelude//$Resource"; if @unlikely(ref.is_null(local.tee $host_resource_36(timers.raw).backing) == 0) {
@@ -841,17 +837,17 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<waitable_set_delivered_call.wado/Timer>::grow"(self_290);
         }
-        elements_280 = self_290.repr;
+        $arg_4_300 = self_290.repr;
         let $slot_box_37: ref null "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>";
-        if ref.is_null(local.tee $held_7_303((if ref.is_null(local.tee $slot_box_37(builtin::array_get_value<ref null "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>">(elements_280, $sroa_$pattern_temp_0_0_13_149))) -> ref null "waitable_set_delivered_call.wado//Timer" {
+        if ref.is_null(local.tee $held_7_303((if ref.is_null(local.tee $slot_box_37(builtin::array_get_value<ref null "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>">($arg_4_300, $sroa_$pattern_temp_0_0_13_149))) -> ref null "waitable_set_delivered_call.wado//Timer" {
             ref.null none;
         } else {
             $slot_box_37.value;
         }))) == 0 {
             "core:prelude/async.wado/core:prelude/async.wado/AsyncCall<()>^core:prelude/traits.wado/Drop::drop"(ref.cast "waitable_set_delivered_call.wado//Timer::Only"($held_7_303).payload_0);
         }
-        if ref.is_null(local.tee $slot_box_37(builtin::array_get_value<ref null "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>">(elements_280, $sroa_$pattern_temp_0_0_13_149))) {
-            builtin::array_set<ref null "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>">(elements_280, $sroa_$pattern_temp_0_0_13_149, struct.new "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>" { value: $moved_4_119 });
+        if ref.is_null(local.tee $slot_box_37(builtin::array_get_value<ref null "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>">($arg_4_300, $sroa_$pattern_temp_0_0_13_149))) {
+            builtin::array_set<ref null "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>">($arg_4_300, $sroa_$pattern_temp_0_0_13_149, struct.new "core:prelude//$Cell<waitable_set_delivered_call.wado/Timer>" { value: $moved_4_119 });
         } else {
             $slot_box_37.value = $moved_4_119;
         }
@@ -864,8 +860,8 @@ fn "waitable_set_delivered_call.wado/run"() with Stdout, MonotonicClock {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/async.wado/Ready<waitable_set_delivered_call.wado/Timer>>::grow"(self_309);
         }
-        if ref.is_null(local.tee $held_7_322(builtin::array_get_value<ref null "core:prelude/async.wado//Ready<waitable_set_delivered_call.wado/Timer>">(local.tee elements_276(self_309.repr), $sroa_$pattern_temp_0_0_13_149))) {
-            builtin::array_set<ref null "core:prelude/async.wado//Ready<waitable_set_delivered_call.wado/Timer>">(elements_276, $sroa_$pattern_temp_0_0_13_149, value_310);
+        if ref.is_null(local.tee $held_7_322(builtin::array_get_value<ref null "core:prelude/async.wado//Ready<waitable_set_delivered_call.wado/Timer>">(local.tee $arg_4_319(self_309.repr), $sroa_$pattern_temp_0_0_13_149))) {
+            builtin::array_set<ref null "core:prelude/async.wado//Ready<waitable_set_delivered_call.wado/Timer>">($arg_4_319, $sroa_$pattern_temp_0_0_13_149, value_310);
         } else {
             if ref.is_null((if ref.is_null(local.tee $slot_box_37($held_7_322.member)) -> ref null "waitable_set_delivered_call.wado//Timer" {
                 ref.null none;

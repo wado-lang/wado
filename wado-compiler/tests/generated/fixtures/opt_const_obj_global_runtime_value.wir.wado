@@ -103,16 +103,13 @@ fn "opt_const_obj_global_runtime_value.wado/sum"($mv$xs$repr, $mv$xs$used) {
 
 fn "opt_const_obj_global_runtime_value.wado/recur"(depth) {
     let xs: ref "core:prelude/list.wado//List<i32>";
-    let elements: ref Array<i32>;
-    let used: i32;
-    used = builtin::array_len(local.tee elements(array.new_fixed<i32>(depth * 2, 7)));
-    xs = struct.new "core:prelude/list.wado//List<i32>" { repr: elements, used: used };
+    xs = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(depth * 2, 7), used: 2 };
     depth = (if depth > 0 -> i32 {
         "opt_const_obj_global_runtime_value.wado/recur"(depth - 1);
     } else {
         0;
     });
-    return "opt_const_obj_global_runtime_value.wado/sum"(xs.repr, used) + depth;
+    return "opt_const_obj_global_runtime_value.wado/sum"(xs.repr, 2) + depth;
 }
 
 fn "opt_const_obj_global_runtime_value.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

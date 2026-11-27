@@ -377,12 +377,10 @@ fn "bug_shared_field_written_through_capture.wado/$template_segment$bug_shared_f
 }
 
 fn "bug_shared_field_written_through_capture.wado/$cm_export__$test_0_a_write_through_a_closure_capture_reaches_the_field"() {
-    let elements: ref Array<i32>;
-    let used: i32;
-    used = builtin::array_len(local.tee elements(array.new_fixed<i32>(1, 2, black_box(3))));
-    if @unlikely(local.tee used("bug_shared_field_written_through_capture.wado/bug_shared_field_written_through_capture.wado/Holder::read_it$sroa[&mut(self.items)]"(struct.new "core:prelude/list.wado//List<i32>" { repr: elements, used: used })) != 3) {
+    let $v_0: i32;
+    if @unlikely(local.tee $v_0("bug_shared_field_written_through_capture.wado/bug_shared_field_written_through_capture.wado/Holder::read_it$sroa[&mut(self.items)]"(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, black_box(3)), used: 3 })) != 3) {
         cold_path;
-        "bug_shared_field_written_through_capture.wado/$test_0_a_write_through_a_closure_capture_reaches_the_field$cold0"(used);
+        "bug_shared_field_written_through_capture.wado/$test_0_a_write_through_a_closure_capture_reaches_the_field$cold0"($v_0);
         unreachable;
     }
     "wasi/task-return"(0);

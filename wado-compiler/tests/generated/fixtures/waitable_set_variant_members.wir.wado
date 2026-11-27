@@ -566,15 +566,13 @@ fn "waitable_set_variant_members.wado/first_ready"() with MonotonicClock {
     let name: ref "core:prelude/string.wado//String";
     let out_18: ref "core:prelude/string.wado//String";
     let x_188: i64;
-    let elements_224: ref null "Array<core:prelude/async.wado/Ready<waitable_set_variant_members.wado/Timer>>";
-    let elements_228: ref null "Array<waitable_set_variant_members.wado/Timer>";
-    let used_229: i32;
     let q: u64;
     let tens: i32;
     let n_303: i32;
     let new_used_307: i32;
     let start_308: i32;
-    "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<waitable_set_variant_members.wado/Timer>::insert"(local.tee set(struct.new "core:prelude/async.wado//WaitableSet<waitable_set_variant_members.wado/Timer>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: used_229 = builtin::array_len(local.tee elements_228(array.new_fixed<ref null "core:prelude//$Cell<waitable_set_variant_members.wado/Timer>">())); struct.new "core:prelude/list.wado//List<waitable_set_variant_members.wado/Timer>" { repr: elements_228, used: used_229 }, ready: used_229 = builtin::array_len(local.tee elements_224(array.new_fixed<ref null "core:prelude/async.wado//Ready<waitable_set_variant_members.wado/Timer>">())); struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<waitable_set_variant_members.wado/Timer>>" { repr: elements_224, used: used_229 } }), struct.new "waitable_set_variant_members.wado//Timer::Long" { discriminant: 1, payload_0: "waitable_set_variant_members.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for$spec0"(60000000000_i64) });
+    let $sroa_t_h1_903: i32;
+    "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<waitable_set_variant_members.wado/Timer>::insert"(local.tee set(struct.new "core:prelude/async.wado//WaitableSet<waitable_set_variant_members.wado/Timer>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: struct.new "core:prelude/list.wado//List<waitable_set_variant_members.wado/Timer>" { repr: array.new_fixed<ref null "core:prelude//$Cell<waitable_set_variant_members.wado/Timer>">(), used: 0 }, ready: struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<waitable_set_variant_members.wado/Timer>>" { repr: array.new_fixed<ref null "core:prelude/async.wado//Ready<waitable_set_variant_members.wado/Timer>">(), used: 0 } }), struct.new "waitable_set_variant_members.wado//Timer::Long" { discriminant: 1, payload_0: "waitable_set_variant_members.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for$spec0"(60000000000_i64) });
     "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<waitable_set_variant_members.wado/Timer>::insert"(set, struct.new "waitable_set_variant_members.wado//Timer::Short" { discriminant: 0, payload_0: "waitable_set_variant_members.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#wait-for$spec1"(0_i64) });
     ready = "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<waitable_set_variant_members.wado/Timer>::wait"(set);
     let $match_scrut_0: ref null "waitable_set_variant_members.wado//Timer";
@@ -601,7 +599,7 @@ fn "waitable_set_variant_members.wado/first_ready"() with MonotonicClock {
         "core:prelude/async.wado/core:prelude/async.wado/AsyncCall<()>::wait"(call_2);
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 111, 110, 103), used: 4 };
     });
-    used_229 = set.members.used + set.ready.used;
+    $sroa_t_h1_903 = set.members.used + set.ready.used;
     out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(45), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_19: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_19;
@@ -629,10 +627,10 @@ fn "waitable_set_variant_members.wado/first_ready"() with MonotonicClock {
     new_used_307 = out_18.used;
     out_18.used = n_303;
     builtin::array_copy<u8>(local.tee $load_20(out_18.repr), new_used_307, global:waitable_set_variant_members.wado::$const_obj_1, 0, 8);
-    new_used_307 = used_229 < 0;
-    x_188 = builtin::i64_extend_i32_s(used_229);
+    new_used_307 = $sroa_t_h1_903 < 0;
+    x_188 = builtin::i64_extend_i32_s($sroa_t_h1_903);
     x_188 = select i64(x_188 < 0_i64, 0_i64 - x_188, x_188);
-    used_229 = $inline_count_digits_u64_10: block -> i32 {
+    $sroa_t_h1_903 = $inline_count_digits_u64_10: block -> i32 {
         if x_188 <u 100000_i64 {
             if x_188 <u 100_i64 {
                 if x_188 <u 10_i64 {
@@ -702,35 +700,35 @@ fn "waitable_set_variant_members.wado/first_ready"() with MonotonicClock {
         builtin::array_set_u8(out_18.repr, new_used_307, 45);
     } else {
     }
-    if @unlikely(local.tee n_303(out_18.used + used_229) > builtin::array_len(out_18.repr)) {
+    if @unlikely(local.tee n_303(out_18.used + $sroa_t_h1_903) > builtin::array_len(out_18.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, n_303);
     }
     new_used_307 = out_18.used;
     out_18.used = n_303;
     $load_20 = out_18.repr;
-    used_229 = new_used_307 + used_229;
+    $sroa_t_h1_903 = new_used_307 + $sroa_t_h1_903;
     b28: block {
         l29: loop {
-            break_if b28 (used_229 - new_used_307) < 2;
+            break_if b28 ($sroa_t_h1_903 - new_used_307) < 2;
             q = x_188 /u 100_i64;
             tens = local.tee start_308(builtin::i32_wrap_i64(x_188 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_20, used_229 - 1, (48 + start_308) - (tens * 10));
-            builtin::array_set_u8($load_20, used_229 - 2, 48 + tens);
-            used_229 = used_229 - 2;
+            builtin::array_set_u8($load_20, $sroa_t_h1_903 - 1, (48 + start_308) - (tens * 10));
+            builtin::array_set_u8($load_20, $sroa_t_h1_903 - 2, 48 + tens);
+            $sroa_t_h1_903 = $sroa_t_h1_903 - 2;
             x_188 = q;
             continue l29;
         };
     };
-    if used_229 > new_used_307 {
+    if $sroa_t_h1_903 > new_used_307 {
         builtin::array_set_u8($load_20, new_used_307, 48 + builtin::i32_wrap_i64(x_188 %u 10_i64));
     }
-    if @unlikely(local.tee used_229(n_303 + 5) > builtin::array_len($load_20)) {
+    if @unlikely(local.tee $sroa_t_h1_903(n_303 + 5) > builtin::array_len($load_20)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, used_229);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, $sroa_t_h1_903);
     }
     n_303 = out_18.used;
-    out_18.used = used_229;
+    out_18.used = $sroa_t_h1_903;
     builtin::array_copy<u8>(out_18.repr, n_303, global:waitable_set_variant_members.wado::$const_obj_0, 0, 5);
     if ref.is_null(ready) == 0 {
         if ref.is_null((if ref.is_null(local.tee $load_0(ready.member)) -> ref null "waitable_set_variant_members.wado//Timer" {

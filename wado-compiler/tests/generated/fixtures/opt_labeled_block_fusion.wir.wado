@@ -154,7 +154,6 @@ fn "opt_labeled_block_fusion.wado/run"() with Stdout {
     let $cm_pair_7: i64;
     let item: i32;
     let new_repr: ref Array<u8>;
-    let $sroa_$iter_0_index_64: i32;
     $fused_$inline_maybe_double_sroa_return__1: block {
         if local.tee n_10(black_box(5)) > 0 {
             if @unlikely(local.tee n_10(n_10 * 2) != 10) {
@@ -176,14 +175,14 @@ fn "opt_labeled_block_fusion.wado/run"() with Stdout {
         "opt_labeled_block_fusion.wado/run$cold2"();
         unreachable;
     }
-    n_10 = builtin::array_len(local.tee elements_12(array.new_fixed<i32>(-1, -2, black_box(3), 4)));
+    elements_12 = array.new_fixed<i32>(-1, -2, black_box(3), 4);
     $fused_$inline_first_positive_sroa_return__1: block {
-        $sroa_$iter_0_index_64 = 0;
+        n_10 = 0;
         b4: block {
             l5: loop {
-                break_if b4 $sroa_$iter_0_index_64 >= n_10;
-                item = builtin::array_get_value<i32>(elements_12, $sroa_$iter_0_index_64);
-                $sroa_$iter_0_index_64 = $sroa_$iter_0_index_64 + 1;
+                break_if b4 n_10 >= 4;
+                item = builtin::array_get_value<i32>(elements_12, n_10);
+                n_10 = n_10 + 1;
                 if item > 0 {
                     if @unlikely(item != 3) {
                         cold_path;
@@ -198,16 +197,16 @@ fn "opt_labeled_block_fusion.wado/run"() with Stdout {
         break $fused_$inline_first_positive_sroa_return__1;
     };
     n_10 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$iter_0_index_64 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    item = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     n_10 = "opt_labeled_block_fusion.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_10);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:opt_labeled_block_fusion.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
-    }; $sroa_$iter_0_index_64, new_repr);
+    }; item, new_repr);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$iter_0_index_64);
+        "wasi/stream-drop-writable"(item);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {

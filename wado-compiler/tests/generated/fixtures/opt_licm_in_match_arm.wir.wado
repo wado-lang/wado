@@ -224,19 +224,16 @@ fn "opt_licm_in_match_arm.wado/run"() with Stdout {
     let n: i32;
     let configs: ref "core:prelude/list.wado//List<opt_licm_in_match_arm.wado/Config>";
     let mode: i32;
-    let elements: ref "Array<opt_licm_in_match_arm.wado/Config>";
-    let used: i32;
     let $cm_pair_7_12: i64;
     let $sroa_$pattern_temp_0_0_13_18: i32;
     let $sroa_$pattern_temp_0_1_14_19: i32;
     let new_repr_24: ref Array<u8>;
     n = black_box(5);
-    used = builtin::array_len(local.tee elements(array.new_fixed<ref "opt_licm_in_match_arm.wado//Config">(struct.new "opt_licm_in_match_arm.wado//Config" { threshold: black_box(100), scale: 2 })));
-    configs = struct.new "core:prelude/list.wado//List<opt_licm_in_match_arm.wado/Config>" { repr: elements, used: used };
+    configs = struct.new "core:prelude/list.wado//List<opt_licm_in_match_arm.wado/Config>" { repr: array.new_fixed<ref "opt_licm_in_match_arm.wado//Config">(struct.new "opt_licm_in_match_arm.wado//Config" { threshold: black_box(100), scale: 2 }), used: 1 };
     mode = black_box(0);
     let $mv$message_5$repr: ref Array<u8>;
     let $mv$message_5$used: i32;
-    multivalue_bind [$mv$message_5$repr, $mv$message_5$used] = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_in_match_arm.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_licm_in_match_arm.wado/accumulate"(mode, n, configs.repr, used));
+    multivalue_bind [$mv$message_5$repr, $mv$message_5$used] = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_in_match_arm.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_licm_in_match_arm.wado/accumulate"(mode, n, configs.repr, 1));
     $sroa_$pattern_temp_0_0_13_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_19 = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_18 = "opt_licm_in_match_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_18);
@@ -257,7 +254,7 @@ fn "opt_licm_in_match_arm.wado/run"() with Stdout {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_18);
     }
-    multivalue_bind [$mv$message_5$repr, $mv$message_5$used] = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_in_match_arm.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_licm_in_match_arm.wado/accumulate"(mode + 1, n, configs.repr, used));
+    multivalue_bind [$mv$message_5$repr, $mv$message_5$used] = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_in_match_arm.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_licm_in_match_arm.wado/accumulate"(mode + 1, n, configs.repr, 1));
     $sroa_$pattern_temp_0_0_13_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_19 = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_18 = "opt_licm_in_match_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_18);
@@ -278,7 +275,7 @@ fn "opt_licm_in_match_arm.wado/run"() with Stdout {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_18);
     }
-    multivalue_bind [$mv$message_5$repr, $mv$message_5$used] = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_in_match_arm.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_licm_in_match_arm.wado/accumulate"(mode + 2, n, configs.repr, used));
+    multivalue_bind [$mv$message_5$repr, $mv$message_5$used] = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_in_match_arm.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_licm_in_match_arm.wado/accumulate"(mode + 2, n, configs.repr, 1));
     $sroa_$pattern_temp_0_0_13_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_19 = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_18 = "opt_licm_in_match_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_18);
@@ -299,10 +296,10 @@ fn "opt_licm_in_match_arm.wado/run"() with Stdout {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_18);
     }
-    multivalue_bind [$mv$message_5$repr, n] = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_in_match_arm.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_licm_in_match_arm.wado/accumulate"(mode + 9, n, configs.repr, used));
-    used = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
-    mode = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
-    used = "opt_licm_in_match_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used);
+    multivalue_bind [$mv$message_5$repr, n] = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_in_match_arm.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("opt_licm_in_match_arm.wado/accumulate"(mode + 9, n, configs.repr, 1));
+    mode = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
+    $mv$message_5$used = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
+    mode = "opt_licm_in_match_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(mode);
     builtin::array_copy<u8>(local.tee new_repr_24(builtin::array_new<u8>(n + 1)), 0, $mv$message_5$repr, 0, n);
     builtin::array_set_u8(new_repr_24, n, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
@@ -310,15 +307,15 @@ fn "opt_licm_in_match_arm.wado/run"() with Stdout {
             unreachable;
         }
         n = n + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(mode, new_repr_24, 0, n);
+        "core:rt/cm_stream_write_raw_all_u8"($mv$message_5$used, new_repr_24, 0, n);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"(mode);
+        "wasi/stream-drop-writable"($mv$message_5$used);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(mode);
     }
 }
 

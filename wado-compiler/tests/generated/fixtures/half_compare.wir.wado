@@ -536,9 +536,9 @@ fn "half_compare.wado/run"() {
     let $v_1: u16;
     let xs: ref "core:prelude/list.wado//List<f16>";
     let $v_48: ref "core:prelude/list.wado//List<f16>";
-    let elements_101: ref Array<f16>;
     let self_116: u16;
     let other_117: u16;
+    let $licm_repr_239: ref Array<f16>;
     let $licm_repr_240: ref Array<f16>;
     let exp_244: i32;
     let kept_250: u16;
@@ -749,27 +749,25 @@ fn "half_compare.wado/run"() {
         "half_compare.wado/run$cold8"();
         unreachable;
     }
-    $v_0 = builtin::array_len(local.tee elements_101(array.new_fixed<u16>("core:prelude/half.wado/f16::from_f32$spec5$dae[v]"(), "core:prelude/half.wado/f16::from_f32$spec3$dae[v]"(), "core:prelude/half.wado/f16::from_f32$spec1$dae[v]"())));
-    "half_compare.wado/core:prelude/list.wado/List<f16>::sort_bywith()$$Closure_0$dae[cmp]"(local.tee xs(struct.new "core:prelude/list.wado//List<f16>" { repr: elements_101, used: $v_0 }));
+    "half_compare.wado/core:prelude/list.wado/List<f16>::sort_bywith()$$Closure_0$dae[cmp]"(local.tee xs(struct.new "core:prelude/list.wado//List<f16>" { repr: array.new_fixed<u16>("core:prelude/half.wado/f16::from_f32$spec5$dae[v]"(), "core:prelude/half.wado/f16::from_f32$spec3$dae[v]"(), "core:prelude/half.wado/f16::from_f32$spec1$dae[v]"()), used: 3 }));
     $v_0 = "core:prelude/half.wado/f16::from_f32$spec3$dae[v]"();
     $v_1 = "core:prelude/half.wado/f16::from_f32$spec1$dae[v]"();
     exp_244 = "core:prelude/half.wado/f16::from_f32$spec5$dae[v]"();
-    kept_250 = builtin::array_len(local.tee elements_101(array.new_fixed<u16>($v_0, $v_1, exp_244)));
-    $v_48 = struct.new "core:prelude/list.wado//List<f16>" { repr: elements_101, used: kept_250 };
+    $v_48 = struct.new "core:prelude/list.wado//List<f16>" { repr: array.new_fixed<u16>($v_0, $v_1, exp_244), used: 3 };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_f16__29: block -> bool {
-        if local.tee half_261(xs.used) != kept_250 {
+        if local.tee kept_250(xs.used) != 3 {
             break $inline_core_prelude_array_wado_seq_eq_f16__29: 0;
         }
-        kept_250 = 0;
-        elements_101 = xs.repr;
+        half_261 = 0;
+        $licm_repr_239 = xs.repr;
         $licm_repr_240 = $v_48.repr;
         b39: block {
             l40: loop {
-                break_if b39 kept_250 >= half_261;
-                if self_116 = builtin::array_get_value<u16>(elements_101, kept_250); other_117 = builtin::array_get_value<u16>($licm_repr_240, kept_250); $float_cmp_1 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(self_116); $float_cmp_2 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(other_117); ($float_cmp_1 == $float_cmp_2) | (($float_cmp_1 != $float_cmp_1) & ($float_cmp_2 != $float_cmp_2)) == 0 {
+                break_if b39 half_261 >= kept_250;
+                if self_116 = builtin::array_get_value<u16>($licm_repr_239, half_261); other_117 = builtin::array_get_value<u16>($licm_repr_240, half_261); $float_cmp_1 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(self_116); $float_cmp_2 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(other_117); ($float_cmp_1 == $float_cmp_2) | (($float_cmp_1 != $float_cmp_1) & ($float_cmp_2 != $float_cmp_2)) == 0 {
                     break $inline_core_prelude_array_wado_seq_eq_f16__29: 0;
                 }
-                kept_250 = kept_250 + 1;
+                half_261 = half_261 + 1;
                 continue l40;
             };
         };

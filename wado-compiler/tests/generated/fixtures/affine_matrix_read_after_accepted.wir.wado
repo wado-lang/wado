@@ -203,17 +203,16 @@ fn "affine_matrix_read_after_accepted.wado/case_13"(flag) {
     let $iter_0: ref null "core:prelude/list.wado//ListCursor<affine_matrix_read_after_accepted.wado/Tok>";
     let $temp_8: ref null "core:prelude/option.wado//Option<affine_matrix_read_after_accepted.wado/Tok>";
     let self_13: ref null "core:prelude/list.wado//List<affine_matrix_read_after_accepted.wado/Tok>";
-    let elements: ref null "Array<affine_matrix_read_after_accepted.wado/Tok>";
+    let $licm_repr_36: ref null "Array<affine_matrix_read_after_accepted.wado/Tok>";
     let $hfs_at_43: i32;
     let $mv_arg_1: ref "core:prelude/string.wado//String";
     "core:rt/log_stdout$spec2"(local.tee $mv_arg_1(global:affine_matrix_read_after_accepted.wado::$const_obj_2).repr, $mv_arg_1.used);
     t = struct.new "affine_matrix_read_after_accepted.wado//Tok" { id: 13 };
     "core:rt/log_stdout$spec0"(local.tee $mv_arg_1(global:affine_matrix_read_after_accepted.wado::$const_obj_1).repr, $mv_arg_1.used);
     if flag {
-        flag = builtin::array_len(local.tee elements(array.new_fixed<ref null "affine_matrix_read_after_accepted.wado//Tok">(t)));
-        $iter_0 = struct.new "core:prelude/list.wado//ListCursor<affine_matrix_read_after_accepted.wado/Tok>" { list: local.tee self_13(struct.new "core:prelude/list.wado//List<affine_matrix_read_after_accepted.wado/Tok>" { repr: elements, used: flag }), at: 0 };
+        $iter_0 = struct.new "core:prelude/list.wado//ListCursor<affine_matrix_read_after_accepted.wado/Tok>" { list: local.tee self_13(struct.new "core:prelude/list.wado//List<affine_matrix_read_after_accepted.wado/Tok>" { repr: array.new_fixed<ref null "affine_matrix_read_after_accepted.wado//Tok">(t), used: 1 }), at: 0 };
         flag = self_13.used;
-        elements = self_13.repr;
+        $licm_repr_36 = self_13.repr;
         $hfs_at_43 = 0;
         b1: block {
             l2: loop {
@@ -221,8 +220,8 @@ fn "affine_matrix_read_after_accepted.wado/case_13"(flag) {
                     if $hfs_at_43 >= flag {
                         break $inline_core_prelude_list_wado_ListCursor_affine_matrix_read_after_accepted_wado_Tok___next_1: global:core:builtin::$unit_case$core:prelude/option.wado//Option<affine_matrix_read_after_accepted.wado/Tok>$0;
                     }
-                    t = builtin::array_get_value<ref null "affine_matrix_read_after_accepted.wado//Tok">(elements, $hfs_at_43);
-                    builtin::array_set<ref null "affine_matrix_read_after_accepted.wado//Tok">(elements, $hfs_at_43, ref.null none);
+                    t = builtin::array_get_value<ref null "affine_matrix_read_after_accepted.wado//Tok">($licm_repr_36, $hfs_at_43);
+                    builtin::array_set<ref null "affine_matrix_read_after_accepted.wado//Tok">($licm_repr_36, $hfs_at_43, ref.null none);
                     $hfs_at_43 = $hfs_at_43 + 1;
                     break $inline_core_prelude_list_wado_ListCursor_affine_matrix_read_after_accepted_wado_Tok___next_1: struct.new "core:prelude/option.wado//Option<affine_matrix_read_after_accepted.wado/Tok>::Some" { discriminant: 1, payload_0: t };
                 })) {
@@ -256,13 +255,13 @@ fn "affine_matrix_read_after_accepted.wado/case_13"(flag) {
         };
         if ref.is_null($iter_0) == 0 {
             if ref.is_null(self_13) == 0 {
-                elements = self_13.repr;
+                $licm_repr_36 = self_13.repr;
                 flag = self_13.used;
                 $hfs_at_43 = 0;
                 b12: block {
                     l13: loop {
                         break_if b12 $hfs_at_43 >= flag;
-                        if ref.is_null(local.tee t(builtin::array_get_value<ref null "affine_matrix_read_after_accepted.wado//Tok">(elements, $hfs_at_43))) == 0 {
+                        if ref.is_null(local.tee t(builtin::array_get_value<ref null "affine_matrix_read_after_accepted.wado//Tok">($licm_repr_36, $hfs_at_43))) == 0 {
                             multivalue_bind [$mv_repr_5, $mv_used_6] = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_matrix_read_after_accepted.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t.id);
                             "core:rt/log_stdout"($mv_repr_5, $mv_used_6);
                         }
@@ -293,7 +292,7 @@ fn "affine_matrix_read_after_accepted.wado/run"() {
     let $local_1_100: ref "affine_matrix_read_after_accepted.wado//$Dispatch_affine_matrix_read_after_accepted.wado/Ask";
     let sink: ref "affine_matrix_read_after_accepted.wado//Sink";
     let $local_4_109: ref null "affine_matrix_read_after_accepted.wado//$Dispatch_affine_matrix_read_after_accepted.wado/SinkTok";
-    let elements: ref null "Array<affine_matrix_read_after_accepted.wado/Tok>";
+    let $arg_4: ref null "Array<affine_matrix_read_after_accepted.wado/Tok>";
     let $held_7: ref null "affine_matrix_read_after_accepted.wado//Tok";
     let $local_1_143: ref null "affine_matrix_read_after_accepted.wado//$Dispatch_affine_matrix_read_after_accepted.wado/SinkTok";
     let $local_2_144: ref "affine_matrix_read_after_accepted.wado//$Dispatch_affine_matrix_read_after_accepted.wado/SinkTok";
@@ -471,33 +470,31 @@ fn "affine_matrix_read_after_accepted.wado/run"() {
         t_1 = struct.new "affine_matrix_read_after_accepted.wado//Tok" { id: 11 };
         "core:rt/log_stdout$spec0"(local.tee $mv_arg_1(global:affine_matrix_read_after_accepted.wado::$const_obj_1).repr, $mv_arg_1.used);
         if flag_0 {
-            flag_0 = builtin::array_len(local.tee elements(array.new_fixed<ref null "affine_matrix_read_after_accepted.wado//Tok">()));
-            xs = struct.new "core:prelude/list.wado//List<affine_matrix_read_after_accepted.wado/Tok>" { repr: elements, used: flag_0 };
-            if @unlikely(flag_0 >= builtin::array_len(xs.repr)) {
+            xs = struct.new "core:prelude/list.wado//List<affine_matrix_read_after_accepted.wado/Tok>" { repr: array.new_fixed<ref null "affine_matrix_read_after_accepted.wado//Tok">(), used: 0 };
+            if @unlikely(0 >= builtin::array_len(xs.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<affine_matrix_read_after_accepted.wado/Tok>::grow"(xs);
             }
-            if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "affine_matrix_read_after_accepted.wado//Tok">(local.tee elements(xs.repr), flag_0))) {
-                builtin::array_set<ref null "affine_matrix_read_after_accepted.wado//Tok">(elements, flag_0, t_1);
+            if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "affine_matrix_read_after_accepted.wado//Tok">(local.tee $arg_4(xs.repr), 0))) {
+                builtin::array_set<ref null "affine_matrix_read_after_accepted.wado//Tok">($arg_4, 0, t_1);
             } else {
-                let $mv_used_73: i32;
-                multivalue_bind [$mv_repr_3, $mv_used_73] = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_matrix_read_after_accepted.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($held_7.id);
-                "core:rt/log_stdout"($mv_repr_3, $mv_used_73);
+                multivalue_bind [$mv_repr_3, flag_0] = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_matrix_read_after_accepted.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($held_7.id);
+                "core:rt/log_stdout"($mv_repr_3, flag_0);
                 $held_7.id = 11;
             }
-            xs.used = local.tee flag_0(flag_0 + 1);
+            xs.used = 1;
             if ref.is_null(xs) == 0 {
-                elements = xs.repr;
-                $mv_used_73 = 0;
+                $arg_4 = xs.repr;
+                flag_0 = 0;
                 b45: block {
                     l46: loop {
-                        break_if b45 $mv_used_73 >= flag_0;
-                        if ref.is_null(local.tee t_1(builtin::array_get_value<ref null "affine_matrix_read_after_accepted.wado//Tok">(elements, $mv_used_73))) == 0 {
+                        break_if b45 flag_0 >= 1;
+                        if ref.is_null(local.tee t_1(builtin::array_get_value<ref null "affine_matrix_read_after_accepted.wado//Tok">($arg_4, flag_0))) == 0 {
                             let $mv_used_75: i32;
                             multivalue_bind [$mv_repr_3, $mv_used_75] = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_matrix_read_after_accepted.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t_1.id);
                             "core:rt/log_stdout"($mv_repr_3, $mv_used_75);
                         }
-                        $mv_used_73 = $mv_used_73 + 1;
+                        flag_0 = flag_0 + 1;
                         continue l46;
                     };
                 };

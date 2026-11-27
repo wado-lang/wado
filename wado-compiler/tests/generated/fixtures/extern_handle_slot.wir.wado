@@ -581,8 +581,6 @@ fn "extern_handle_slot.wado/$cm_export__run"() {
     let n: ref extern;
     let pair: ref "extern_handle_slot.wado//Pair";
     let all: ref "core:prelude/list.wado//List<extern_handle_slot.wado/Node>";
-    let elements: ref "Array<extern_handle_slot.wado/Node>";
-    let used: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:extern_handle_slot.wado::$modules_initialized);
         cold_path;
@@ -597,7 +595,7 @@ fn "extern_handle_slot.wado/$cm_export__run"() {
         n = "extern_handle_slot.wado/$cm_binding__example:demo/global#root"();
         pair = "extern_handle_slot.wado/$cm_binding__example:demo/global#make-pair"();
         all = "extern_handle_slot.wado/$cm_binding__example:demo/global#all"();
-        drop(("extern_handle_slot.wado/$cm_binding__example:demo/global#touch-pair"(struct.new "extern_handle_slot.wado//Pair" { a: n, b: pair.b }) + "extern_handle_slot.wado/$cm_binding__example:demo/global#touch-all"(all)) + "extern_handle_slot.wado/$cm_binding__example:demo/global#touch-all"(used = builtin::array_len(local.tee elements(array.new_fixed<ref extern>(pair.a))); struct.new "core:prelude/list.wado//List<extern_handle_slot.wado/Node>" { repr: elements, used: used }));
+        drop(("extern_handle_slot.wado/$cm_binding__example:demo/global#touch-pair"(struct.new "extern_handle_slot.wado//Pair" { a: n, b: pair.b }) + "extern_handle_slot.wado/$cm_binding__example:demo/global#touch-all"(all)) + "extern_handle_slot.wado/$cm_binding__example:demo/global#touch-all"(struct.new "core:prelude/list.wado//List<extern_handle_slot.wado/Node>" { repr: array.new_fixed<ref extern>(pair.a), used: 1 }));
     }
     "wasi/task-return"(0);
 }

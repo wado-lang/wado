@@ -648,9 +648,8 @@ fn "stream_http_read_request_body.wado/$cm_task_entry__handle"(request) with Req
     }
     $sroa_$pattern_temp_0_0_208 = body_stream.value;
     "wasi/task-return:handle"(0, $sroa_$pattern_temp_0_0_208, 0, 0_i64, 0, 0, 0, 0);
-    request = builtin::array_len(local.tee $mv_repr_1(array.new_fixed<u8>((request + 48) & 255)));
-    body_data = struct.new "core:prelude/list.wado//List<u8>" { repr: $mv_repr_1, used: request };
-    drop("core:prelude/async.wado/core:prelude/async.wado/StreamWritable<u8>::write_all"(resp_body_tx, body_data.repr, request));
+    body_data = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>((request + 48) & 255), used: 1 };
+    drop("core:prelude/async.wado/core:prelude/async.wado/StreamWritable<u8>::write_all"(resp_body_tx, body_data.repr, 1));
     if ref.is_null(ref.null eq) == 0 {
     } else {
         "wasi/stream-drop-writable"(resp_body_tx);

@@ -767,9 +767,8 @@ fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) with Re
             break_if b17 local.tee $sroa_$pattern_temp_0_0_242($iter_1.index) >= request;
             packed = builtin::array_get_value<u8>($sroa_body_repr_244, $sroa_$pattern_temp_0_0_242);
             $iter_1.index = $sroa_$pattern_temp_0_0_242 + 1;
-            $sroa_$pattern_temp_0_0_242 = builtin::array_len(local.tee $sroa_$iter_0_repr_309(array.new_fixed<u8>(packed)));
-            $load_9 = struct.new "core:prelude/list.wado//List<u8>" { repr: $sroa_$iter_0_repr_309, used: $sroa_$pattern_temp_0_0_242 };
-            drop("core:prelude/async.wado/core:prelude/async.wado/StreamWritable<u8>::write_all"($sroa_slot_19, $load_9.repr, $sroa_$pattern_temp_0_0_242));
+            $load_9 = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(packed), used: 1 };
+            drop("core:prelude/async.wado/core:prelude/async.wado/StreamWritable<u8>::write_all"($sroa_slot_19, $load_9.repr, 1));
             continue l18;
         };
     };

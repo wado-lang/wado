@@ -212,9 +212,9 @@ fn "affine_reference_ends_before_move.wado/run"() with Stdout {
     let $sroa_$pattern_temp_0_0_13_242: i32;
     let $sroa_$pattern_temp_0_1_14_243: i32;
     let new_repr_280: ref Array<u8>;
-    let elements: ref null "Array<affine_reference_ends_before_move.wado/Tok>";
     let $sroa_$pattern_temp_0_0_13_334: i32;
     let $sroa_$pattern_temp_0_1_14_335: i32;
+    let $sroa_$iter_1_repr_414: ref null "Array<affine_reference_ends_before_move.wado/Tok>";
     let $sroa_out_repr_1164: ref Array<u8>;
     let $sroa_write_back_1176: ref "core:prelude/string.wado//String";
     $sroa_out_repr_1164 = builtin::array_new<u8>(33);
@@ -271,16 +271,15 @@ fn "affine_reference_ends_before_move.wado/run"() with Stdout {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_242);
     }
-    $sroa_$pattern_temp_0_0_13_242 = builtin::array_len(local.tee elements(array.new_fixed<ref null "affine_reference_ends_before_move.wado//Tok">()));
-    "core:prelude/list.wado/core:prelude/list.wado/List<affine_reference_ends_before_move.wado/Tok>::push"(local.tee toks_4(struct.new "core:prelude/list.wado//List<affine_reference_ends_before_move.wado/Tok>" { repr: elements, used: $sroa_$pattern_temp_0_0_13_242 }), struct.new "affine_reference_ends_before_move.wado//Tok" { id: 2 });
+    "core:prelude/list.wado/core:prelude/list.wado/List<affine_reference_ends_before_move.wado/Tok>::push"(local.tee toks_4(struct.new "core:prelude/list.wado//List<affine_reference_ends_before_move.wado/Tok>" { repr: array.new_fixed<ref null "affine_reference_ends_before_move.wado//Tok">(), used: 0 }), struct.new "affine_reference_ends_before_move.wado//Tok" { id: 2 });
     "core:prelude/list.wado/core:prelude/list.wado/List<affine_reference_ends_before_move.wado/Tok>::push"(toks_4, struct.new "affine_reference_ends_before_move.wado//Tok" { id: 3 });
     $sroa_$pattern_temp_0_0_13_242 = toks_4.used;
-    elements = toks_4.repr;
+    $sroa_$iter_1_repr_414 = toks_4.repr;
     $sroa_$pattern_temp_0_1_14_243 = 0;
     b9: block {
         l10: loop {
             break_if b9 $sroa_$pattern_temp_0_1_14_243 >= $sroa_$pattern_temp_0_0_13_242;
-            ref_val = builtin::array_get_value<ref null "affine_reference_ends_before_move.wado//Tok">(elements, $sroa_$pattern_temp_0_1_14_243);
+            ref_val = builtin::array_get_value<ref null "affine_reference_ends_before_move.wado//Tok">($sroa_$iter_1_repr_414, $sroa_$pattern_temp_0_1_14_243);
             $sroa_$pattern_temp_0_1_14_243 = $sroa_$pattern_temp_0_1_14_243 + 1;
             let $mv$message_321$used: i32;
             multivalue_bind [$sroa_out_repr_1164, $mv$message_321$used] = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_reference_ends_before_move.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(ref_val.id);
@@ -340,13 +339,13 @@ fn "affine_reference_ends_before_move.wado/run"() with Stdout {
         "core:prelude/list.wado/core:prelude/list.wado/List<affine_reference_ends_before_move.wado/Tok>^core:prelude/traits.wado/IndexRef<i32>::index_ref$contract_report0"(0, $sroa_$pattern_temp_0_0_13_242, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("affine_reference_ends_before_move.wado:33"), used: 41 });
         unreachable;
     }
-    ref_val = builtin::array_get_value<ref null "affine_reference_ends_before_move.wado//Tok">(local.tee elements(toks_4.repr), 0);
+    ref_val = builtin::array_get_value<ref null "affine_reference_ends_before_move.wado//Tok">(local.tee $sroa_$iter_1_repr_414(toks_4.repr), 0);
     $sroa_$pattern_temp_0_1_14_243 = 0;
     b21: block {
         l22: loop {
             break_if b21 $sroa_$pattern_temp_0_1_14_243 >= $sroa_$pattern_temp_0_0_13_242;
             $sroa_$pattern_temp_0_1_14_243 = local.tee $mv$message_321$used($sroa_$pattern_temp_0_1_14_243) + 1;
-            ref_val = builtin::array_get_value<ref null "affine_reference_ends_before_move.wado//Tok">(elements, $mv$message_321$used);
+            ref_val = builtin::array_get_value<ref null "affine_reference_ends_before_move.wado//Tok">($sroa_$iter_1_repr_414, $mv$message_321$used);
             continue l22;
         };
     };

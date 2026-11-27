@@ -202,7 +202,6 @@ fn "value_copy_return_after_closure_capture.wado/collect"(n) {
     let out: ref "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>";
     let current: i32;
     let value_23: ref "core:prelude/list.wado//List<i32>";
-    let elements_25: ref Array<i32>;
     let $sroa_$iter_0_start_35: i32;
     out = struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude/list.wado//List<i32>">(), used: 0 };
     $sroa_$iter_0_start_35 = 0;
@@ -210,8 +209,7 @@ fn "value_copy_return_after_closure_capture.wado/collect"(n) {
         l1: loop {
             break_if b0 $sroa_$iter_0_start_35 >= n;
             $sroa_$iter_0_start_35 = local.tee current($sroa_$iter_0_start_35) + 1;
-            current = builtin::array_len(local.tee elements_25(array.new_fixed<i32>(current)));
-            value_23 = struct.new "core:prelude/list.wado//List<i32>" { repr: elements_25, used: current };
+            value_23 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(current), used: 1 };
             if @unlikely(local.tee current(out.used) >= builtin::array_len(out.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::grow"(out);

@@ -170,11 +170,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/numeric.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "scalar_read_keeps_move.wado/make"(k) {
-    let elements_1: ref "Array<scalar_read_keeps_move.wado/Item>";
-    let elements_3: ref Array<i32>;
-    let used_4: i32;
-    k = builtin::array_len(local.tee elements_1(array.new_fixed<ref "scalar_read_keeps_move.wado//Item">(struct.new "scalar_read_keeps_move.wado//Item" { ids: used_4 = builtin::array_len(local.tee elements_3(array.new_fixed<i32>(k))); struct.new "core:prelude/list.wado//List<i32>" { repr: elements_3, used: used_4 }, tag: k })));
-    return elements_1, k;
+    return array.new_fixed<ref "scalar_read_keeps_move.wado//Item">(struct.new "scalar_read_keeps_move.wado//Item" { ids: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(k), used: 1 }, tag: k }), 1;
 }
 
 fn "scalar_read_keeps_move.wado/$template_segment$scalar_read_keeps_move.wado/$tmpl$ebaa20f4a908b504"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {

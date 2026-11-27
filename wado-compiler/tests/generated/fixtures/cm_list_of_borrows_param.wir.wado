@@ -162,17 +162,15 @@ fn "cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#submit"(items
 
 fn "cm_list_of_borrows_param.wado/$cm_export__run"() {
     let a: ref null "core:prelude//$Resource";
-    let elements: ref "Array<&cm_list_of_borrows_param.wado/Item>";
-    let used: i32;
-    used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">(local.tee a("cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-item"()))));
-    "cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#submit"(struct.new "core:prelude/list.wado//List<&cm_list_of_borrows_param.wado/Item>" { repr: elements, used: used });
+    "cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#submit"(struct.new "core:prelude/list.wado//List<&cm_list_of_borrows_param.wado/Item>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(local.tee a("cm_list_of_borrows_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-item"())), used: 1 });
     if ref.is_null(a) == 0 {
         if ref.is_null(a.backing) == 0 {
         } else {
-            used = a.value;
+            let $cm_handle_2: i32;
+            $cm_handle_2 = a.value;
             a.value = 0;
             a.backing = ref.null eq;
-            "wasi/resource-drop:cm_list_of_borrows_param.wado#Item"(used);
+            "wasi/resource-drop:cm_list_of_borrows_param.wado#Item"($cm_handle_2);
         }
     }
     "wasi/task-return"(0);

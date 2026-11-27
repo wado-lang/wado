@@ -150,8 +150,7 @@ import fn wasi/task-return from "wasi/task-return";
 global global:opt_value_copy_unwrap_passes_through.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
-    let elements: ref "Array<core:prelude/string.wado/String>";
-    let used: i32;
+    let self_21: i32;
     let $contract_arg_0_25: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let self_40: i32;
     let is_negative_82: bool;
@@ -162,7 +161,7 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     let tens: i32;
     let start_381: i32;
     let v_1199: ref "core:prelude/string.wado//String";
-    used = local.tee $sroa_o_value_236(struct.new "opt_value_copy_unwrap_passes_through.wado//Shape" { axes: used = builtin::array_len(local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }))); struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: elements, used: used } }).axes.used;
+    self_21 = local.tee $sroa_o_value_236(struct.new "opt_value_copy_unwrap_passes_through.wado//Shape" { axes: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 } }).axes.used;
     self_40 = local.tee $contract_arg_0_25($sroa_o_value_236.axes).used;
     if @unlikely(0 >= self_40) {
         cold_path;
@@ -179,10 +178,10 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_23: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_23;
     };
-    is_negative_82 = used < 0;
-    x_86 = builtin::i64_extend_i32_s(used);
+    is_negative_82 = self_21 < 0;
+    x_86 = builtin::i64_extend_i32_s(self_21);
     x_86 = select i64(x_86 < 0_i64, 0_i64 - x_86, x_86);
-    used = $inline_count_digits_u64_8: block -> i32 {
+    self_21 = $inline_count_digits_u64_8: block -> i32 {
         if x_86 <u 100000_i64 {
             if x_86 <u 100_i64 {
                 if x_86 <u 10_i64 {
@@ -252,46 +251,46 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
         builtin::array_set_u8(v_1199.repr, start_381, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_82(v_1199.used + used) > builtin::array_len(v_1199.repr)) {
+    if @unlikely(local.tee is_negative_82(v_1199.used + self_21) > builtin::array_len(v_1199.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_1199, is_negative_82);
     }
     start_381 = v_1199.used;
     v_1199.used = is_negative_82;
     $array_clone_src_1 = v_1199.repr;
-    used = start_381 + used;
+    self_21 = start_381 + self_21;
     b23: block {
         l24: loop {
-            break_if b23 (used - start_381) < 2;
+            break_if b23 (self_21 - start_381) < 2;
             q = x_86 /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x_86 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($array_clone_src_1, used - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($array_clone_src_1, used - 2, 48 + tens);
-            used = used - 2;
+            builtin::array_set_u8($array_clone_src_1, self_21 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($array_clone_src_1, self_21 - 2, 48 + tens);
+            self_21 = self_21 - 2;
             x_86 = q;
             continue l24;
         };
     };
-    if used > start_381 {
+    if self_21 > start_381 {
         builtin::array_set_u8($array_clone_src_1, start_381, 48 + builtin::i32_wrap_i64(x_86 %u 10_i64));
     }
-    if @unlikely(local.tee used(is_negative_82 + 1) > builtin::array_len($array_clone_src_1)) {
+    if @unlikely(local.tee self_21(is_negative_82 + 1) > builtin::array_len($array_clone_src_1)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_1199, used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_1199, self_21);
     }
     is_negative_82 = v_1199.used;
-    v_1199.used = used;
+    v_1199.used = self_21;
     builtin::array_copy<u8>(local.tee $array_clone_src_1(v_1199.repr), is_negative_82, global:opt_value_copy_unwrap_passes_through.wado::$const_obj_0, 0, 1);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__63: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
                 break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 self_40 == 0;
-                if @unlikely(local.tee used(used + self_40) > builtin::array_len($array_clone_src_1)) {
+                if @unlikely(local.tee self_21(self_21 + self_40) > builtin::array_len($array_clone_src_1)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_1199, used);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_1199, self_21);
                 }
                 is_negative_82 = v_1199.used;
-                v_1199.used = used;
+                v_1199.used = self_21;
                 builtin::array_copy<u8>(v_1199.repr, is_negative_82, $array_clone_dst_2, 0, self_40);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
@@ -301,9 +300,9 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_80: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_80;
     };
-    used = builtin::i32_wrap_i64(local.tee x_86("wasi/stream-new"()));
+    self_21 = builtin::i32_wrap_i64(local.tee x_86("wasi/stream-new"()));
     self_40 = builtin::i32_wrap_i64(x_86 >> 32_i64);
-    used = "opt_value_copy_unwrap_passes_through.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used);
+    self_21 = "opt_value_copy_unwrap_passes_through.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_21);
     builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee is_negative_82(v_1199.used) + 1)), 0, v_1199.repr, 0, is_negative_82);
     builtin::array_set_u8($array_clone_src_1, is_negative_82, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
@@ -319,18 +318,18 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_21);
     }
-    used = local.tee $contract_arg_0_25($sroa_o_value_236.axes).used;
-    if @unlikely(1 >= used) {
+    self_21 = local.tee $contract_arg_0_25($sroa_o_value_236.axes).used;
+    if @unlikely(1 >= self_21) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_value_copy_unwrap_passes_through.wado:32"), used: 44 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, self_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_value_copy_unwrap_passes_through.wado:32"), used: 44 });
         unreachable;
     }
     v_1199 = builtin::array_get_value<ref "core:prelude/string.wado//String">($contract_arg_0_25.repr, 1);
-    used = builtin::i32_wrap_i64(local.tee x_86("wasi/stream-new"()));
+    self_21 = builtin::i32_wrap_i64(local.tee x_86("wasi/stream-new"()));
     self_40 = builtin::i32_wrap_i64(x_86 >> 32_i64);
-    used = "opt_value_copy_unwrap_passes_through.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used);
+    self_21 = "opt_value_copy_unwrap_passes_through.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_21);
     builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee is_negative_82(v_1199.used) + 1)), 0, v_1199.repr, 0, is_negative_82);
     builtin::array_set_u8($array_clone_src_1, is_negative_82, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
@@ -346,7 +345,7 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_21);
     }
 }
 

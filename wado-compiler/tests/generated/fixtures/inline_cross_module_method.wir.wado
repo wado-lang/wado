@@ -22,15 +22,9 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "inline_cross_module_method.wado/$cm_export__run"() {
-    let $sroa_arr_repr_13: ref Array<i32>;
     let $sroa_write_back_15: ref "core:prelude/list.wado//List<i32>";
-    $sroa_arr_repr_13 = array.new_fixed<i32>(10, 20, 30);
-    if @unlikely(3 >= builtin::array_len($sroa_arr_repr_13)) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_15(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_arr_repr_13, used: 3 }));
-        $sroa_arr_repr_13 = $sroa_write_back_15.repr;
-    }
-    builtin::array_set<i32>($sroa_arr_repr_13, 3, 40);
+    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_15(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 }));
+    builtin::array_set<i32>($sroa_write_back_15.repr, 3, 40);
     "wasi/task-return"(0);
 }
 

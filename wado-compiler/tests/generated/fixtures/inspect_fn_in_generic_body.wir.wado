@@ -604,25 +604,25 @@ fn "inspect_fn_in_generic_body.wado/$test_0"() {
     let c: ref "canonical//CanonicalClosure_1";
     let d: ref "canonical//CanonicalClosure_1";
     let elements_10: ref Array<fn(i64)->i32>;
-    let used_11: i32;
+    let a_end_16: i32;
     let i_21: i32;
     let elements_28: ref Array<fn(&i32)->i32>;
     let $licm_repr_42: ref Array<u8>;
     a_0 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_fn_in_generic_body.wado//$Closure_0" {}, inspect: ref.func "closure/inspect_fn_in_generic_body.wado/$closure_inspect_wrapper_0", func: ref.func "closure/inspect_fn_in_generic_body.wado/$closure_wrapper_0" };
     b_1 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_fn_in_generic_body.wado//$Closure_1" {}, inspect: ref.func "closure/inspect_fn_in_generic_body.wado/$closure_inspect_wrapper_1", func: ref.func "closure/inspect_fn_in_generic_body.wado/$closure_wrapper_1" };
-    used_11 = builtin::array_len(local.tee elements_10(array.new_fixed<ref "canonical//CanonicalClosure_0">(a_0, b_1)));
+    elements_10 = array.new_fixed<ref "canonical//CanonicalClosure_0">(a_0, b_1);
     $v_2 = block -> ref "core:prelude/string.wado//String" {
-        "inspect_fn_in_generic_body.wado/inspect_fn_in_generic_body.wado/describe_all<i64>"(elements_10, used_11);
+        "inspect_fn_in_generic_body.wado/inspect_fn_in_generic_body.wado/describe_all<i64>"(elements_10, 2);
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-        if local.tee used_11($v_2.used) != 26 {
+        if local.tee a_end_16($v_2.used) != 26 {
             break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
         i_21 = 0;
         $licm_repr_42 = $v_2.repr;
         b3: block {
             l4: loop {
-                break_if b3 (builtin::i64_extend_i32_s(i_21) + 3_i64) >= builtin::i64_extend_i32_s(used_11);
+                break_if b3 (builtin::i64_extend_i32_s(i_21) + 3_i64) >= builtin::i64_extend_i32_s(a_end_16);
                 if builtin::array_get_value<u8>($licm_repr_42, i_21) != builtin::array_get_value<u8>(global:inspect_fn_in_generic_body.wado::$const_obj_3, i_21) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
@@ -644,7 +644,7 @@ fn "inspect_fn_in_generic_body.wado/$test_0"() {
         };
         b9: block {
             l10: loop {
-                break_if b9 i_21 >= used_11;
+                break_if b9 i_21 >= a_end_16;
                 if builtin::array_get_value<u8>($licm_repr_42, i_21) != builtin::array_get_value<u8>(global:inspect_fn_in_generic_body.wado::$const_obj_3, i_21) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
@@ -666,19 +666,19 @@ describe_all([a, b]): "), used: 23 }, s3: struct.new "core:prelude/string.wado//
     }
     c = struct.new "canonical//CanonicalClosure_1" { env: struct.new "inspect_fn_in_generic_body.wado//$Closure_2" {}, inspect: ref.func "closure/inspect_fn_in_generic_body.wado/$closure_inspect_wrapper_2", func: ref.func "closure/inspect_fn_in_generic_body.wado/$closure_wrapper_2" };
     d = struct.new "canonical//CanonicalClosure_1" { env: struct.new "inspect_fn_in_generic_body.wado//$Closure_3" {}, inspect: ref.func "closure/inspect_fn_in_generic_body.wado/$closure_inspect_wrapper_3", func: ref.func "closure/inspect_fn_in_generic_body.wado/$closure_wrapper_3" };
-    used_11 = builtin::array_len(local.tee elements_28(array.new_fixed<ref "canonical//CanonicalClosure_1">(c, d)));
+    elements_28 = array.new_fixed<ref "canonical//CanonicalClosure_1">(c, d);
     $v_2 = block -> ref "core:prelude/string.wado//String" {
-        "inspect_fn_in_generic_body.wado/inspect_fn_in_generic_body.wado/describe_items<core:prelude/slice.wado/SliceRefIter<i32>>$dae[it]"(elements_28, used_11);
+        "inspect_fn_in_generic_body.wado/inspect_fn_in_generic_body.wado/describe_items<core:prelude/slice.wado/SliceRefIter<i32>>$dae[it]"(elements_28, 2);
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
-        if local.tee used_11($v_2.used) != 28 {
+        if local.tee a_end_16($v_2.used) != 28 {
             break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
         i_21 = 0;
         $licm_repr_42 = $v_2.repr;
         b15: block {
             l16: loop {
-                break_if b15 (builtin::i64_extend_i32_s(i_21) + 3_i64) >= builtin::i64_extend_i32_s(used_11);
+                break_if b15 (builtin::i64_extend_i32_s(i_21) + 3_i64) >= builtin::i64_extend_i32_s(a_end_16);
                 if builtin::array_get_value<u8>($licm_repr_42, i_21) != builtin::array_get_value<u8>(global:inspect_fn_in_generic_body.wado::$const_obj_1, i_21) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
@@ -700,7 +700,7 @@ describe_all([a, b]): "), used: 23 }, s3: struct.new "core:prelude/string.wado//
         };
         b21: block {
             l22: loop {
-                break_if b21 i_21 >= used_11;
+                break_if b21 i_21 >= a_end_16;
                 if builtin::array_get_value<u8>($licm_repr_42, i_21) != builtin::array_get_value<u8>(global:inspect_fn_in_generic_body.wado::$const_obj_1, i_21) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }

@@ -407,11 +407,10 @@ fn "opt_value_copy_share_past_disjoint_write.wado/$template_segment$opt_value_co
 }
 
 fn "opt_value_copy_share_past_disjoint_write.wado/$cm_export__$test_0_scan"() {
-    let elements: ref Array<i32>;
-    let used: i32;
-    if @unlikely(local.tee used("opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disjoint_write.wado/Reader::scan$spec0"(struct.new "opt_value_copy_share_past_disjoint_write.wado//Reader" { buf: used = builtin::array_len(local.tee elements(array.new_fixed<i32>(black_box(0), 7, 9))); struct.new "core:prelude/list.wado//List<i32>" { repr: elements, used: used }, pos: 0, len: 3 })) != 7) {
+    let $v_0: i32;
+    if @unlikely(local.tee $v_0("opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disjoint_write.wado/Reader::scan$spec0"(struct.new "opt_value_copy_share_past_disjoint_write.wado//Reader" { buf: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(black_box(0), 7, 9), used: 3 }, pos: 0, len: 3 })) != 7) {
         cold_path;
-        "opt_value_copy_share_past_disjoint_write.wado/$test_0_scan$cold0"(used);
+        "opt_value_copy_share_past_disjoint_write.wado/$test_0_scan$cold0"($v_0);
         unreachable;
     }
     "wasi/task-return"(0);

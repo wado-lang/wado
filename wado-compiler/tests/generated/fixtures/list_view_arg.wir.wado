@@ -1804,8 +1804,6 @@ fn "list_view_arg.wado/$test_6_a_list_of_any_plain_element_converts"() {
     let $temp_7: ref null "core:linear//ListView<f32>";
     let $temp_8: ref null "core:linear//ListView<f16>";
     let $temp_9: ref null "core:linear//ListView<f16>";
-    let elements_12: ref Array<f16>;
-    let used_13: i32;
     let $sroa_distances_repr_24: ref Array<f32>;
     let sum: f32;
     let current: i32;
@@ -1813,8 +1811,7 @@ fn "list_view_arg.wado/$test_6_a_list_of_any_plain_element_converts"() {
     let $licm_arith_48: bool;
     let $sroa_$iter_0_start_52: i32;
     $sroa_distances_repr_24 = array.new_fixed<f32>(1.5_f32, 2.5_f32);
-    used_13 = builtin::array_len(local.tee elements_12(array.new_fixed<u16>(14336, 15360, 16384)));
-    halves = struct.new "core:prelude/list.wado//List<f16>" { repr: elements_12, used: used_13 };
+    halves = struct.new "core:prelude/list.wado//List<f16>" { repr: array.new_fixed<u16>(14336, 15360, 16384), used: 3 };
     $temp_7 = ref.null none;
     let $mv_ptr_1: i32;
     let $mv_len_2: i32;
@@ -1851,7 +1848,7 @@ self.released: "), used: 43 }, s2: struct.new "core:prelude/string.wado//String"
     };
     if @unlikely(sum != 4_f32) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_6("core:prelude/string.wado/core:prelude/string.wado/String::format<list_view_arg.wado/$tmpl$2ce1fc053d179187,[&core:linear/ListView<list_view_arg.wado/Meters>,f32]>"(struct.new "list_view_arg.wado//$tmpl$2ce1fc053d179187" { h0: multivalue_bind [used_13, $mv_ptr_1, $mv_len_2, $mv_released_4, $mv_owner_5] = "core:linear/core:prelude/list.wado/List<list_view_arg.wado/Meters>^core:linear/ListArg<T#core:linear/263>::lowered$spec0$sroa[self.repr]"($sroa_distances_repr_24); struct.new "core:linear//ListView<f32>" { ptr: used_13, len: $mv_ptr_1, owned_bytes: $mv_len_2, released: $mv_released_4, owner: $mv_owner_5 }, h1: sum, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_list_of_any_plain_element_converts at list_view_arg.wado:108
+        "core:rt/panic"(local.tee $mv_arg_6("core:prelude/string.wado/core:prelude/string.wado/String::format<list_view_arg.wado/$tmpl$2ce1fc053d179187,[&core:linear/ListView<list_view_arg.wado/Meters>,f32]>"(struct.new "list_view_arg.wado//$tmpl$2ce1fc053d179187" { h0: multivalue_bind [$mv_ptr_1, $mv_len_2, $mv_owned_bytes_3, $mv_released_4, $mv_owner_5] = "core:linear/core:prelude/list.wado/List<list_view_arg.wado/Meters>^core:linear/ListArg<T#core:linear/263>::lowered$spec0$sroa[self.repr]"($sroa_distances_repr_24); struct.new "core:linear//ListView<f32>" { ptr: $mv_ptr_1, len: $mv_len_2, owned_bytes: $mv_owned_bytes_3, released: $mv_released_4, owner: $mv_owner_5 }, h1: sum, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_list_of_any_plain_element_converts at list_view_arg.wado:108
 condition: total(distances) == 4.0
 distances: "), used: 137 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_list_of_any_plain_element_converts at list_view_arg.wado:108
 condition: total(distances) == 4.0
@@ -1874,11 +1871,11 @@ total(distances): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
     }
     $temp_9 = ref.null none;
     let $mv_owner_17: ref "core:prelude/option.wado//Option<&core:linear/LinearArray<f16>>";
-    multivalue_bind [$mv_ptr_1, $mv_len_2, $mv_owned_bytes_3, $mv_released_4, $mv_owner_17] = "core:linear/core:prelude/list.wado/List<f16>^core:linear/ListArg<T#core:linear/263>::lowered"(halves.repr, used_13);
+    multivalue_bind [$mv_ptr_1, $mv_len_2, $mv_owned_bytes_3, $mv_released_4, $mv_owner_17] = "core:linear/core:prelude/list.wado/List<f16>^core:linear/ListArg<T#core:linear/263>::lowered"(halves.repr, 3);
     $temp_8 = struct.new "core:linear//ListView<f16>" { ptr: $mv_ptr_1, len: $mv_len_2, owned_bytes: $mv_owned_bytes_3, released: $mv_released_4, owner: $mv_owner_17 };
     if @unlikely($mv_len_2 != 3) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_6("core:prelude/string.wado/core:prelude/string.wado/String::format<list_view_arg.wado/$tmpl$4d1e62ee1950f02d,[&core:linear/ListView<f16>,i32]>"(struct.new "list_view_arg.wado//$tmpl$4d1e62ee1950f02d" { h0: multivalue_bind [used_13, $mv_ptr_1, $mv_owned_bytes_3, $mv_released_4, $mv_owner_17] = "core:linear/core:prelude/list.wado/List<f16>^core:linear/ListArg<T#core:linear/263>::lowered"(halves.repr, used_13); struct.new "core:linear//ListView<f16>" { ptr: used_13, len: $mv_ptr_1, owned_bytes: $mv_owned_bytes_3, released: $mv_released_4, owner: $mv_owner_17 }, h1: $mv_len_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_list_of_any_plain_element_converts at list_view_arg.wado:109
+        "core:rt/panic"(local.tee $mv_arg_6("core:prelude/string.wado/core:prelude/string.wado/String::format<list_view_arg.wado/$tmpl$4d1e62ee1950f02d,[&core:linear/ListView<f16>,i32]>"(struct.new "list_view_arg.wado//$tmpl$4d1e62ee1950f02d" { h0: multivalue_bind [$mv_ptr_1, $mv_owned_bytes_3, $sroa_$iter_0_start_52, $mv_released_4, $mv_owner_17] = "core:linear/core:prelude/list.wado/List<f16>^core:linear/ListArg<T#core:linear/263>::lowered"(halves.repr, 3); struct.new "core:linear//ListView<f16>" { ptr: $mv_ptr_1, len: $mv_owned_bytes_3, owned_bytes: $sroa_$iter_0_start_52, released: $mv_released_4, owner: $mv_owner_17 }, h1: $mv_len_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_list_of_any_plain_element_converts at list_view_arg.wado:109
 condition: count::<f16>(halves) == 3
 halves: "), used: 136 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_list_of_any_plain_element_converts at list_view_arg.wado:109
 condition: count::<f16>(halves) == 3
@@ -1889,8 +1886,8 @@ count::<f16>(halves): "), used: 23 }, s2: struct.new "core:prelude/string.wado//
     }
     if ref.is_null($temp_9) == 0 {
         $temp_9.released.value = 1;
-        if local.tee used_13($temp_9.owned_bytes) > 0 {
-            drop("mem/realloc"($temp_9.ptr, used_13, 2, 0));
+        if local.tee $mv_len_2($temp_9.owned_bytes) > 0 {
+            drop("mem/realloc"($temp_9.ptr, $mv_len_2, 2, 0));
         }
     }
     if ref.is_null($temp_8) == 0 {

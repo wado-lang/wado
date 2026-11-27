@@ -1023,13 +1023,13 @@ fn "spec_components_async_import.wado/$test_0"() {
     let mock: ref null "spec_components_async_import.wado//MockClient";
     let $local_4: ref null "spec_components_async_import.wado//$Dispatch_wasi:http/client.wado/Client";
     let $temp_7: ref null "core:prelude/option.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
+    let $block_v_9: bool;
     let req: ref null "core:prelude//$Resource";
-    let elements: ref null "Array<core:prelude/async.wado/FutureWritable<core:prelude/option.wado/Result<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
-    let used: i32;
+    let $slots_1: ref null "Array<core:prelude/async.wado/FutureWritable<core:prelude/option.wado/Result<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
     let $local_1: ref null "spec_components_async_import.wado//$Dispatch_wasi:http/client.wado/Client";
     let $local_2: ref "spec_components_async_import.wado//$Dispatch_wasi:http/client.wado/Client";
     let $local_3_36: ref null "core:prelude/async.wado//AsyncCall<core:prelude/option.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";
-    mock = struct.new "spec_components_async_import.wado//MockClient" { ends: used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">())); struct.new "core:prelude/list.wado//List<core:prelude/async.wado/FutureWritable<core:prelude/option.wado/Result<core:prelude/option.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>" { repr: elements, used: used } };
+    mock = struct.new "spec_components_async_import.wado//MockClient" { ends: struct.new "core:prelude/list.wado//List<core:prelude/async.wado/FutureWritable<core:prelude/option.wado/Result<core:prelude/option.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 } };
     global:spec_components_async_import.wado::$effect_wasi:http/client.wado/Client = struct.new "spec_components_async_import.wado//$Dispatch_wasi:http/client.wado/Client" { outer: local.tee $local_4(global:spec_components_async_import.wado::$effect_wasi:http/client.wado/Client), op_send: struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_components_async_import.wado//$Closure_1" { $capture_0: ref.as_non_null(mock) }, func: ref.func "closure/spec_components_async_import.wado/$closure_wrapper_0" } };
     req = "spec_components_async_import.wado/spec_components_async_import.wado/MockClient::new_request$sroa[&mut(self.ends)]"(mock.ends);
     $temp_7 = "core:prelude/async.wado/core:prelude/async.wado/AsyncCall<core:prelude/option.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"($inline__effect_dispatch__wasi_http_client_wado_Client__send_1: block -> ref null "core:prelude/async.wado//AsyncCall<core:prelude/option.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>" {
@@ -1046,7 +1046,7 @@ fn "spec_components_async_import.wado/$test_0"() {
         }
         unreachable;
     });
-    used = ref.test "core:prelude/option.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($temp_7);
+    $block_v_9 = ref.test "core:prelude/option.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($temp_7);
     if ref.is_null($temp_7) == 0 {
         if ref.test "core:prelude/option.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($temp_7) {
             if ref.is_null(local.tee req(ref.cast "core:prelude/option.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($temp_7).payload_0).backing) == 0 {
@@ -1061,7 +1061,7 @@ fn "spec_components_async_import.wado/$test_0"() {
         }
     }
     global:spec_components_async_import.wado::$effect_wasi:http/client.wado/Client = $local_4;
-    if @unlikely(used == 0) {
+    if @unlikely($block_v_9 == 0) {
         cold_path;
         "spec_components_async_import.wado/$test_0$cold0"();
         unreachable;
@@ -1069,13 +1069,13 @@ fn "spec_components_async_import.wado/$test_0"() {
     "spec_components_async_import.wado/spec_components_async_import.wado/MockClient::end_writes$sroa[&mut(self.ends)]"(mock.ends);
     if ref.is_null(mock) == 0 {
         if ref.is_null(local.tee $load_10(mock.ends)) == 0 {
-            elements = $load_10.repr;
-            used = $load_10.used;
+            $slots_1 = $load_10.repr;
+            $block_v_9 = $load_10.used;
             $cm_handle_3 = 0;
             b8: block {
                 l9: loop {
-                    break_if b8 $cm_handle_3 >= used;
-                    if @unlikely(ref.is_null(builtin::array_get_value<ref null "core:prelude//$Resource">(elements, $cm_handle_3)) == 0) {
+                    break_if b8 $cm_handle_3 >= $block_v_9;
+                    if @unlikely(ref.is_null(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1, $cm_handle_3)) == 0) {
                         let $mv_arg_4: ref "core:prelude/string.wado//String";
                         if ref.is_null(global:spec_components_async_import.wado::$const_obj_0) {
                             global:spec_components_async_import.wado::$const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`FutureWritable<Result<Option<Trailers>, ErrorCode>>` dropped before its write: its reader would wait forever"), used: 109 };
@@ -1098,14 +1098,13 @@ fn "spec_components_async_import.wado/$test_1"() {
     let $save_wasi:http/client.wado/Client: ref null "spec_components_async_import.wado//$Dispatch_wasi:http/client.wado/Client";
     let $moved_6: ref null "core:prelude/async.wado//AsyncCall<core:prelude/option.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";
     let $temp_7: ref null "core:prelude/option.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
+    let $slots_1: ref null "Array<core:prelude/async.wado/FutureWritable<core:prelude/option.wado/Result<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
     let $index_3: i32;
-    let elements: ref null "Array<core:prelude/async.wado/FutureWritable<core:prelude/option.wado/Result<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
-    let used: i32;
     let request: ref null "core:prelude//$Resource";
     let $local_1: ref null "spec_components_async_import.wado//$Dispatch_wasi:http/client.wado/Client";
     let $local_2: ref "spec_components_async_import.wado//$Dispatch_wasi:http/client.wado/Client";
     let $local_3: ref null "core:prelude/async.wado//AsyncCall<core:prelude/option.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";
-    mock = struct.new "spec_components_async_import.wado//MockClient" { ends: used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">())); struct.new "core:prelude/list.wado//List<core:prelude/async.wado/FutureWritable<core:prelude/option.wado/Result<core:prelude/option.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>" { repr: elements, used: used } };
+    mock = struct.new "spec_components_async_import.wado//MockClient" { ends: struct.new "core:prelude/list.wado//List<core:prelude/async.wado/FutureWritable<core:prelude/option.wado/Result<core:prelude/option.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 } };
     global:spec_components_async_import.wado::$effect_wasi:http/client.wado/Client = struct.new "spec_components_async_import.wado//$Dispatch_wasi:http/client.wado/Client" { outer: local.tee $save_wasi:http/client.wado/Client(global:spec_components_async_import.wado::$effect_wasi:http/client.wado/Client), op_send: struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_components_async_import.wado//$Closure_2" { $capture_0: ref.as_non_null(mock) }, func: ref.func "closure/spec_components_async_import.wado/$closure_wrapper_1" } };
     $local_3 = $inline__effect_dispatch__wasi_http_client_wado_Client__send_1: block -> ref null "core:prelude/async.wado//AsyncCall<core:prelude/option.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>" {
         request = "spec_components_async_import.wado/spec_components_async_import.wado/MockClient::new_request$sroa[&mut(self.ends)]"(mock.ends);
@@ -1131,10 +1130,11 @@ fn "spec_components_async_import.wado/$test_1"() {
         if ref.test "core:prelude/option.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($temp_7) {
             if ref.is_null(local.tee request(ref.cast "core:prelude/option.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($temp_7).payload_0).backing) == 0 {
             } else {
-                used = request.value;
+                let $cm_handle_3: i32;
+                $cm_handle_3 = request.value;
                 request.value = 0;
                 request.backing = ref.null eq;
-                "wasi/resource-drop:wasi:http/types.wado#Response"(used);
+                "wasi/resource-drop:wasi:http/types.wado#Response"($cm_handle_3);
             }
         } else {
         }
@@ -1146,13 +1146,13 @@ fn "spec_components_async_import.wado/$test_1"() {
     "spec_components_async_import.wado/spec_components_async_import.wado/MockClient::end_writes$sroa[&mut(self.ends)]"(mock.ends);
     if ref.is_null(mock) == 0 {
         if ref.is_null(local.tee $load_10(mock.ends)) == 0 {
-            elements = $load_10.repr;
-            used = $load_10.used;
+            $slots_1 = $load_10.repr;
+            $cm_handle_3 = $load_10.used;
             $index_3 = 0;
             b21: block {
                 l22: loop {
-                    break_if b21 $index_3 >= used;
-                    if @unlikely(ref.is_null(builtin::array_get_value<ref null "core:prelude//$Resource">(elements, $index_3)) == 0) {
+                    break_if b21 $index_3 >= $cm_handle_3;
+                    if @unlikely(ref.is_null(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1, $index_3)) == 0) {
                         let $mv_arg_4: ref "core:prelude/string.wado//String";
                         if ref.is_null(global:spec_components_async_import.wado::$const_obj_1) {
                             global:spec_components_async_import.wado::$const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`FutureWritable<Result<Option<Trailers>, ErrorCode>>` dropped before its write: its reader would wait forever"), used: 109 };

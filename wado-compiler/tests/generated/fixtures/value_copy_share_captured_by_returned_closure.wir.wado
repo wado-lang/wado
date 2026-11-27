@@ -448,20 +448,21 @@ global global:core:prelude/numeric.wado::$const_obj_0: ref "core:prelude/string.
 
 fn "value_copy_share_captured_by_returned_closure.wado/$test_0_a_closure_returned_by_a_capturing_closure_keeps_the_copy"() {
     let $load_0: ref "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>";
-    let elements: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>";
-    let used: i32;
+    let $load_2: i32;
     let ref_val: ref "value_copy_share_captured_by_returned_closure.wado//Range";
-    elements = local.tee $load_0(struct.new "value_copy_share_captured_by_returned_closure.wado//Class" { ranges: used = builtin::array_len(local.tee elements(array.new_fixed<ref "value_copy_share_captured_by_returned_closure.wado//Range">(struct.new "value_copy_share_captured_by_returned_closure.wado//Range" { lo: 1, hi: black_box(3) }))); struct.new "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>" { repr: elements, used: used }, neg: 0 }.ranges).repr;
-    used = $load_0.used;
+    $load_0 = struct.new "value_copy_share_captured_by_returned_closure.wado//Class" { ranges: struct.new "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>" { repr: array.new_fixed<ref "value_copy_share_captured_by_returned_closure.wado//Range">(struct.new "value_copy_share_captured_by_returned_closure.wado//Range" { lo: 1, hi: black_box(3) }), used: 1 }, neg: 0 }.ranges;
+    let $array_clone_src_1: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>";
+    $array_clone_src_1 = $load_0.repr;
+    $load_2 = $load_0.used;
     let $array_clone_dst_2: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>";
-    $array_clone_dst_2 = builtin::array_new<ref "value_copy_share_captured_by_returned_closure.wado//Range">(used);
+    $array_clone_dst_2 = builtin::array_new<ref "value_copy_share_captured_by_returned_closure.wado//Range">($load_2);
     let $array_clone_i_4: i32;
     $array_clone_i_4 = 0;
     let $array_clone_elem_5: ref null "value_copy_share_captured_by_returned_closure.wado//Range";
     $array_clone_deep_prefix: block {
         l0: loop {
-            break_if $array_clone_deep_prefix $array_clone_i_4 >= used;
-            $array_clone_elem_5 = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">(elements, $array_clone_i_4);
+            break_if $array_clone_deep_prefix $array_clone_i_4 >= $load_2;
+            $array_clone_elem_5 = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_src_1, $array_clone_i_4);
             builtin::array_set<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_dst_2, $array_clone_i_4, (if ref.is_null($array_clone_elem_5) -> ref null "value_copy_share_captured_by_returned_closure.wado//Range" {
                 $array_clone_elem_5;
             } else {
@@ -476,11 +477,11 @@ fn "value_copy_share_captured_by_returned_closure.wado/$test_0_a_closure_returne
         "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_share_captured_by_returned_closure.wado/Range>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$contract_report0"(0, $array_clone_i_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_share_captured_by_returned_closure.wado:26"), used: 53 });
         unreachable;
     }; builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($load_0.repr, 0).hi = 100;
-    if @unlikely((local.tee used($inline_holds_1: block -> bool {
+    if @unlikely((local.tee $load_2($inline_holds_1: block -> bool {
         $array_clone_i_4 = 0;
         b4: block {
             l5: loop {
-                break_if b4 (builtin::i64_extend_i32_s($array_clone_i_4) + 3_i64) >= builtin::i64_extend_i32_s(used);
+                break_if b4 (builtin::i64_extend_i32_s($array_clone_i_4) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
                 ref_val = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_dst_2, $array_clone_i_4);
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 if (ref_val.lo <= 5) & (5 <= ref_val.hi) {
@@ -506,7 +507,7 @@ fn "value_copy_share_captured_by_returned_closure.wado/$test_0_a_closure_returne
         };
         b10: block {
             l11: loop {
-                break_if b10 $array_clone_i_4 >= used;
+                break_if b10 $array_clone_i_4 >= $load_2;
                 ref_val = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_dst_2, $array_clone_i_4);
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 if (ref_val.lo <= 5) & (5 <= ref_val.hi) {
@@ -518,27 +519,28 @@ fn "value_copy_share_captured_by_returned_closure.wado/$test_0_a_closure_returne
         break $inline_holds_1: 0;
     }) == 0) == 0) {
         cold_path;
-        "value_copy_share_captured_by_returned_closure.wado/$test_0_a_closure_returned_by_a_capturing_closure_keeps_the_copy$cold0"(used);
+        "value_copy_share_captured_by_returned_closure.wado/$test_0_a_closure_returned_by_a_capturing_closure_keeps_the_copy$cold0"($load_2);
         unreachable;
     }
 }
 
 fn "value_copy_share_captured_by_returned_closure.wado/$test_1_a_closure_returned_through_a_named_call_keeps_the_copy"() {
     let $load_0: ref "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>";
-    let elements: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>";
-    let used: i32;
+    let $load_2: i32;
     let ref_val: ref "value_copy_share_captured_by_returned_closure.wado//Range";
-    elements = local.tee $load_0(struct.new "value_copy_share_captured_by_returned_closure.wado//Class" { ranges: used = builtin::array_len(local.tee elements(array.new_fixed<ref "value_copy_share_captured_by_returned_closure.wado//Range">(struct.new "value_copy_share_captured_by_returned_closure.wado//Range" { lo: 1, hi: black_box(3) }))); struct.new "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>" { repr: elements, used: used }, neg: 0 }.ranges).repr;
-    used = $load_0.used;
+    $load_0 = struct.new "value_copy_share_captured_by_returned_closure.wado//Class" { ranges: struct.new "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>" { repr: array.new_fixed<ref "value_copy_share_captured_by_returned_closure.wado//Range">(struct.new "value_copy_share_captured_by_returned_closure.wado//Range" { lo: 1, hi: black_box(3) }), used: 1 }, neg: 0 }.ranges;
+    let $array_clone_src_1: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>";
+    $array_clone_src_1 = $load_0.repr;
+    $load_2 = $load_0.used;
     let $array_clone_dst_2: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>";
-    $array_clone_dst_2 = builtin::array_new<ref "value_copy_share_captured_by_returned_closure.wado//Range">(used);
+    $array_clone_dst_2 = builtin::array_new<ref "value_copy_share_captured_by_returned_closure.wado//Range">($load_2);
     let $array_clone_i_4: i32;
     $array_clone_i_4 = 0;
     let $array_clone_elem_5: ref null "value_copy_share_captured_by_returned_closure.wado//Range";
     $array_clone_deep_prefix: block {
         l13: loop {
-            break_if $array_clone_deep_prefix $array_clone_i_4 >= used;
-            $array_clone_elem_5 = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">(elements, $array_clone_i_4);
+            break_if $array_clone_deep_prefix $array_clone_i_4 >= $load_2;
+            $array_clone_elem_5 = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_src_1, $array_clone_i_4);
             builtin::array_set<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_dst_2, $array_clone_i_4, (if ref.is_null($array_clone_elem_5) -> ref null "value_copy_share_captured_by_returned_closure.wado//Range" {
                 $array_clone_elem_5;
             } else {
@@ -553,11 +555,11 @@ fn "value_copy_share_captured_by_returned_closure.wado/$test_1_a_closure_returne
         "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_share_captured_by_returned_closure.wado/Range>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$contract_report0"(0, $array_clone_i_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_share_captured_by_returned_closure.wado:38"), used: 53 });
         unreachable;
     }; builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($load_0.repr, 0).hi = 100;
-    if @unlikely((local.tee used($inline_value_copy_share_captured_by_returned_closure_wado__Closure_3___call_0__$inline_holds_0: block -> bool {
+    if @unlikely((local.tee $load_2($inline_value_copy_share_captured_by_returned_closure_wado__Closure_3___call_0__$inline_holds_0: block -> bool {
         $array_clone_i_4 = 0;
         b17: block {
             l18: loop {
-                break_if b17 (builtin::i64_extend_i32_s($array_clone_i_4) + 3_i64) >= builtin::i64_extend_i32_s(used);
+                break_if b17 (builtin::i64_extend_i32_s($array_clone_i_4) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
                 ref_val = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_dst_2, $array_clone_i_4);
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 if (ref_val.lo <= 5) & (5 <= ref_val.hi) {
@@ -583,7 +585,7 @@ fn "value_copy_share_captured_by_returned_closure.wado/$test_1_a_closure_returne
         };
         b23: block {
             l24: loop {
-                break_if b23 $array_clone_i_4 >= used;
+                break_if b23 $array_clone_i_4 >= $load_2;
                 ref_val = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_dst_2, $array_clone_i_4);
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 if (ref_val.lo <= 5) & (5 <= ref_val.hi) {
@@ -595,20 +597,19 @@ fn "value_copy_share_captured_by_returned_closure.wado/$test_1_a_closure_returne
         break $inline_value_copy_share_captured_by_returned_closure_wado__Closure_3___call_0__$inline_holds_0: 0;
     }) == 0) == 0) {
         cold_path;
-        "value_copy_share_captured_by_returned_closure.wado/$test_1_a_closure_returned_through_a_named_call_keeps_the_copy$cold0"(used);
+        "value_copy_share_captured_by_returned_closure.wado/$test_1_a_closure_returned_through_a_named_call_keeps_the_copy$cold0"($load_2);
         unreachable;
     }
 }
 
 fn "value_copy_share_captured_by_returned_closure.wado/$test_2_a_closure_stored_in_a_global_keeps_the_copy"() {
     let $load_0: ref "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>";
-    let elements: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>";
-    let used: i32;
+    let $load_2: i32;
     let self_21: ref null "canonical//CanonicalClosure_0";
-    global:value_copy_share_captured_by_returned_closure.wado::STASHED = struct.new "canonical//CanonicalClosure_0" { env: struct.new "value_copy_share_captured_by_returned_closure.wado//$Closure_5" { $capture_0: struct.new "value_copy_share_captured_by_returned_closure.wado//Class" { ranges: struct.new "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>" { repr: elements = local.tee $load_0(struct.new "value_copy_share_captured_by_returned_closure.wado//Class" { ranges: used = builtin::array_len(local.tee elements(array.new_fixed<ref "value_copy_share_captured_by_returned_closure.wado//Range">(struct.new "value_copy_share_captured_by_returned_closure.wado//Range" { lo: 1, hi: black_box(3) }))); struct.new "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>" { repr: elements, used: used }, neg: 0 }.ranges).repr; used = $load_0.used; let $array_clone_dst_2: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>"; $array_clone_dst_2 = builtin::array_new<ref "value_copy_share_captured_by_returned_closure.wado//Range">(used); let $array_clone_i_4: i32; $array_clone_i_4 = 0; let $array_clone_elem_5: ref null "value_copy_share_captured_by_returned_closure.wado//Range"; $array_clone_deep_prefix: block {
+    global:value_copy_share_captured_by_returned_closure.wado::STASHED = struct.new "canonical//CanonicalClosure_0" { env: struct.new "value_copy_share_captured_by_returned_closure.wado//$Closure_5" { $capture_0: struct.new "value_copy_share_captured_by_returned_closure.wado//Class" { ranges: $load_0 = struct.new "value_copy_share_captured_by_returned_closure.wado//Class" { ranges: struct.new "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>" { repr: array.new_fixed<ref "value_copy_share_captured_by_returned_closure.wado//Range">(struct.new "value_copy_share_captured_by_returned_closure.wado//Range" { lo: 1, hi: black_box(3) }), used: 1 }, neg: 0 }.ranges; struct.new "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>" { repr: let $array_clone_src_1: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>"; $array_clone_src_1 = $load_0.repr; $load_2 = $load_0.used; let $array_clone_dst_2: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>"; $array_clone_dst_2 = builtin::array_new<ref "value_copy_share_captured_by_returned_closure.wado//Range">($load_2); let $array_clone_i_4: i32; $array_clone_i_4 = 0; let $array_clone_elem_5: ref null "value_copy_share_captured_by_returned_closure.wado//Range"; $array_clone_deep_prefix: block {
         l26: loop {
-            break_if $array_clone_deep_prefix $array_clone_i_4 >= used;
-            $array_clone_elem_5 = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">(elements, $array_clone_i_4);
+            break_if $array_clone_deep_prefix $array_clone_i_4 >= $load_2;
+            $array_clone_elem_5 = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_src_1, $array_clone_i_4);
             builtin::array_set<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_dst_2, $array_clone_i_4, (if ref.is_null($array_clone_elem_5) -> ref null "value_copy_share_captured_by_returned_closure.wado//Range" {
                 $array_clone_elem_5;
             } else {
@@ -617,13 +618,13 @@ fn "value_copy_share_captured_by_returned_closure.wado/$test_2_a_closure_stored_
             $array_clone_i_4 = $array_clone_i_4 + 1;
             continue l26;
         };
-    }; $array_clone_dst_2, used: used }, neg: 0 } }, func: ref.func "closure/value_copy_share_captured_by_returned_closure.wado/$closure_wrapper_0" };
-    used = $load_0.used; if @unlikely(0 >= used) {
+    }; $array_clone_dst_2, used: $load_2 }, neg: 0 } }, func: ref.func "closure/value_copy_share_captured_by_returned_closure.wado/$closure_wrapper_0" };
+    $load_2 = $load_0.used; if @unlikely(0 >= $load_2) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_share_captured_by_returned_closure.wado/Range>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$contract_report0"(0, used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_share_captured_by_returned_closure.wado:46"), used: 53 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_share_captured_by_returned_closure.wado/Range>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$contract_report0"(0, $load_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_share_captured_by_returned_closure.wado:46"), used: 53 });
         unreachable;
     }; builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($load_0.repr, 0).hi = 100;
-    if @unlikely(local.tee used(block -> i32 {
+    if @unlikely(local.tee $load_2(block -> i32 {
         call_ref "functype/$canonical_closure_fn_0"(self_21.func, local.tee self_21($inline_core_prelude_option_wado_Option_fn____i32___unwrap_6: block -> ref "canonical//CanonicalClosure_0" {
             if @likely(ref.is_null(local.tee self_21(global:value_copy_share_captured_by_returned_closure.wado::STASHED)) == 0) {
                 break $inline_core_prelude_option_wado_Option_fn____i32___unwrap_6: ref.as_non_null(self_21);
@@ -635,7 +636,7 @@ fn "value_copy_share_captured_by_returned_closure.wado/$test_2_a_closure_stored_
         }).env);
     }) != 3) {
         cold_path;
-        "value_copy_share_captured_by_returned_closure.wado/$test_2_a_closure_stored_in_a_global_keeps_the_copy$cold0"(used);
+        "value_copy_share_captured_by_returned_closure.wado/$test_2_a_closure_stored_in_a_global_keeps_the_copy$cold0"($load_2);
         unreachable;
     }
 }
@@ -685,19 +686,20 @@ fn "value_copy_share_captured_by_returned_closure.wado/$cm_export__$test_2_a_clo
 
 fn "value_copy_share_captured_by_returned_closure.wado/$cm_export__$test_3_a_reference_returned_through_a_named_call_keeps_the_copy"() {
     let $load_0: ref "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>";
-    let elements: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>";
-    let used: i32;
-    elements = local.tee $load_0(struct.new "value_copy_share_captured_by_returned_closure.wado//Class" { ranges: used = builtin::array_len(local.tee elements(array.new_fixed<ref "value_copy_share_captured_by_returned_closure.wado//Range">(struct.new "value_copy_share_captured_by_returned_closure.wado//Range" { lo: 1, hi: black_box(3) }))); struct.new "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>" { repr: elements, used: used }, neg: 0 }.ranges).repr;
-    used = $load_0.used;
+    let $load_2: i32;
+    $load_0 = struct.new "value_copy_share_captured_by_returned_closure.wado//Class" { ranges: struct.new "core:prelude/list.wado//List<value_copy_share_captured_by_returned_closure.wado/Range>" { repr: array.new_fixed<ref "value_copy_share_captured_by_returned_closure.wado//Range">(struct.new "value_copy_share_captured_by_returned_closure.wado//Range" { lo: 1, hi: black_box(3) }), used: 1 }, neg: 0 }.ranges;
+    let $array_clone_src_1: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>";
+    $array_clone_src_1 = $load_0.repr;
+    $load_2 = $load_0.used;
     let $array_clone_dst_2: ref "Array<value_copy_share_captured_by_returned_closure.wado/Range>";
-    $array_clone_dst_2 = builtin::array_new<ref "value_copy_share_captured_by_returned_closure.wado//Range">(used);
+    $array_clone_dst_2 = builtin::array_new<ref "value_copy_share_captured_by_returned_closure.wado//Range">($load_2);
     let $array_clone_i_4: i32;
     $array_clone_i_4 = 0;
     let $array_clone_elem_5: ref null "value_copy_share_captured_by_returned_closure.wado//Range";
     $array_clone_deep_prefix: block {
         l40: loop {
-            break_if $array_clone_deep_prefix $array_clone_i_4 >= used;
-            $array_clone_elem_5 = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">(elements, $array_clone_i_4);
+            break_if $array_clone_deep_prefix $array_clone_i_4 >= $load_2;
+            $array_clone_elem_5 = builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_src_1, $array_clone_i_4);
             builtin::array_set<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_dst_2, $array_clone_i_4, (if ref.is_null($array_clone_elem_5) -> ref null "value_copy_share_captured_by_returned_closure.wado//Range" {
                 $array_clone_elem_5;
             } else {
@@ -712,14 +714,14 @@ fn "value_copy_share_captured_by_returned_closure.wado/$cm_export__$test_3_a_ref
         "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_share_captured_by_returned_closure.wado/Range>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$contract_report0"(0, $array_clone_i_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_share_captured_by_returned_closure.wado:58"), used: 53 });
         unreachable;
     }; builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($load_0.repr, 0).hi = 100;
-    if @unlikely(0 >= used) {
+    if @unlikely(0 >= $load_2) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_share_captured_by_returned_closure.wado/Range>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_share_captured_by_returned_closure.wado:59"), used: 53 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_share_captured_by_returned_closure.wado/Range>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $load_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_share_captured_by_returned_closure.wado:59"), used: 53 });
         unreachable;
     }
-    if @unlikely(local.tee used(builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_dst_2, 0).hi) != 3) {
+    if @unlikely(local.tee $load_2(builtin::array_get_value<ref "value_copy_share_captured_by_returned_closure.wado//Range">($array_clone_dst_2, 0).hi) != 3) {
         cold_path;
-        "value_copy_share_captured_by_returned_closure.wado/$test_3_a_reference_returned_through_a_named_call_keeps_the_copy$cold0"(used);
+        "value_copy_share_captured_by_returned_closure.wado/$test_3_a_reference_returned_through_a_named_call_keeps_the_copy$cold0"($load_2);
         unreachable;
     }
     "wasi/task-return"(0);

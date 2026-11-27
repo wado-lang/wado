@@ -74,16 +74,15 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
     let tx: i32;
     let $cm_pair_8: i64;
     let elements: ref Array<u8>;
-    let used: i32;
     let $sroa_$pattern_temp_0_0_16: i32;
     $sroa_$pattern_temp_0_0_16 = builtin::i32_wrap_i64(local.tee $cm_pair_8("wasi/stream-new"()));
     tx = builtin::i32_wrap_i64($cm_pair_8 >> 32_i64);
     $sroa_$pattern_temp_0_0_16 = "opt_ctor_forward_slice.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_16);
-    used = builtin::array_len(local.tee elements(array.new_fixed<u8>(72, 101, 108, 108, black_box(111))));
+    elements = array.new_fixed<u8>(72, 101, 108, 108, black_box(111));
     if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }
-    "core:rt/cm_stream_write_raw_all_u8$spec0$dae[return]"(tx, elements, used);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$dae[return]"(tx, elements, 5);
     if ref.is_null(ref.null eq) == 0 {
     } else {
         "wasi/stream-drop-writable"(tx);

@@ -684,17 +684,17 @@ fn "effect_handler_stream_started_copy.wado/run"() with Stdout {
     let $local_1_491: ref "effect_handler_stream_started_copy.wado//$Dispatch_core:prelude/async.wado/Stream<u8>";
     let $local_2_492: ref null "tuple//[core:prelude/async.wado/Stream<u8>, core:prelude/async.wado/StreamWritable<u8>]";
     let $cm_pair_5_495: i64;
-    let elements_496: ref null "Array<core:prelude/async.wado/Ready<core:prelude/async.wado/ReadCopy<u8>>>";
-    let elements_500: ref null "Array<core:prelude/async.wado/ReadCopy<u8>>";
-    let used_501: i32;
     let into_511: ref "core:prelude/async.wado//ReadInto";
     let $local_5: ref null "core:prelude/async.wado//StartedRead<u8>";
+    let handle_517: i32;
     let lending: ref "core:prelude//$Cell<bool>";
     let b_533: i32;
     let $sroa_slot_19: i32;
     let $sroa_slot_21: i32;
     let self_539: ref null "core:prelude/list.wado//List<core:prelude/async.wado/ReadCopy<u8>>";
+    let $arg_4_548: ref null "Array<core:prelude/async.wado/ReadCopy<u8>>";
     let $held_7_551: ref null "core:prelude/async.wado//ReadCopy<u8>";
+    let self_557: ref null "Array<core:prelude/async.wado/Ready<core:prelude/async.wado/ReadCopy<u8>>>";
     let $held_7_564: ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/ReadCopy<u8>>";
     let rx_587: ref null "core:prelude//$Resource";
     let tx_588: ref null "core:prelude//$Resource";
@@ -722,7 +722,7 @@ fn "effect_handler_stream_started_copy.wado/run"() with Stdout {
         unreachable;
     }).0;
     tx_2 = $local_2_492.1;
-    set = struct.new "core:prelude/async.wado//WaitableSet<core:prelude/async.wado/ReadCopy<u8>>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: used_501 = builtin::array_len(local.tee elements_500(array.new_fixed<ref null "core:prelude/async.wado//ReadCopy<u8>">())); struct.new "core:prelude/list.wado//List<core:prelude/async.wado/ReadCopy<u8>>" { repr: elements_500, used: used_501 }, ready: used_501 = builtin::array_len(local.tee elements_496(array.new_fixed<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/ReadCopy<u8>>">())); struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/ReadCopy<u8>>>" { repr: elements_496, used: used_501 } };
+    set = struct.new "core:prelude/async.wado//WaitableSet<core:prelude/async.wado/ReadCopy<u8>>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: struct.new "core:prelude/list.wado//List<core:prelude/async.wado/ReadCopy<u8>>" { repr: array.new_fixed<ref null "core:prelude/async.wado//ReadCopy<u8>">(), used: 0 }, ready: struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/ReadCopy<u8>>>" { repr: array.new_fixed<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/ReadCopy<u8>>">(), used: 0 } };
     $local_5 = $inline__effect_dispatch__core_prelude_async_wado_Stream_u8___begin_read_spec0_3: block -> ref null "core:prelude/async.wado//StartedRead<u8>" {
         into_511 = struct.new "core:prelude/async.wado//ReadInto" { ptr: 0, room: 0, lending: ref.null none };
         if ref.is_null(local.tee $local_0_490(global:effect_handler_stream_started_copy.wado::$effect_core:prelude/async.wado/Stream<u8>)) == 0 {
@@ -737,7 +737,7 @@ fn "effect_handler_stream_started_copy.wado/run"() with Stdout {
             if @unlikely(ref.is_null(rx_1.backing) == 0) {
                 unreachable;
             }
-            used_501 = rx_1.value;
+            handle_517 = rx_1.value;
             $inline_cm_stream_read_u8_spec0_4__$inline_core_prelude_async_wado_ReadInto__landing_0: block {
                 let $match_scrut_2: ref null "core:prelude//$Cell<bool>";
                 if ref.is_null(local.tee $match_scrut_2(into_511.lending)) == 0 {
@@ -762,8 +762,8 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
                 $sroa_slot_21 = 2;
                 break $inline_cm_stream_read_u8_spec0_4__$inline_core_prelude_async_wado_ReadInto__landing_0;
             };
-            b_533 = "wasi/stream-read"(used_501, $sroa_slot_19, b_533);
-            break $inline__effect_dispatch__core_prelude_async_wado_Stream_u8___begin_read_spec0_3: struct.new "core:prelude/async.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/async.wado//CopyBuffer" { handle: used_501, packed: b_533, ptr: $sroa_slot_19, size: $sroa_slot_21, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } };
+            b_533 = "wasi/stream-read"(handle_517, $sroa_slot_19, b_533);
+            break $inline__effect_dispatch__core_prelude_async_wado_Stream_u8___begin_read_spec0_3: struct.new "core:prelude/async.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/async.wado//CopyBuffer" { handle: handle_517, packed: b_533, ptr: $sroa_slot_19, size: $sroa_slot_21, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } };
         }
         unreachable;
     };
@@ -778,20 +778,20 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
     });
     let $mv$$match_6$1: ref null "core:prelude/async.wado//ResourceId";
     let $mv$$match_6$2: ref null "core:prelude/async.wado//ReadyEvent";
-    multivalue_bind [used_501, $mv$$match_6$1, $mv$$match_6$2] = (let $mv_arg_5: ref null "core:prelude/async.wado//CopyBuffer"; "core:prelude/async.wado/core:prelude/async.wado/CopyBuffer::wait_on$sroa[return]"(local.tee $mv_arg_5($local_5.buffer).handle, $mv_arg_5.packed));
-    if used_501 == 0 {
+    multivalue_bind [handle_517, $mv$$match_6$1, $mv$$match_6$2] = (let $mv_arg_5: ref null "core:prelude/async.wado//CopyBuffer"; "core:prelude/async.wado/core:prelude/async.wado/CopyBuffer::wait_on$sroa[return]"(local.tee $mv_arg_5($local_5.buffer).handle, $mv_arg_5.packed));
+    if handle_517 == 0 {
         "wasi/waitable-join"($mv$$match_6$1.handle, if @unlikely(ref.is_null(local.tee rx_1(set.raw).backing) == 0) {
             unreachable;
         }; rx_1.value);
         self_539 = set.members;
         $moved_4_30 = member;
         member = ref.null none;
-        if @unlikely(local.tee used_501(self_539.used) >= builtin::array_len(self_539.repr)) {
+        if @unlikely(local.tee handle_517(self_539.used) >= builtin::array_len(self_539.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/async.wado/ReadCopy<u8>>::grow"(self_539);
         }
-        if ref.is_null(local.tee $held_7_551(builtin::array_get_value<ref null "core:prelude/async.wado//ReadCopy<u8>">(local.tee elements_500(self_539.repr), used_501))) {
-            builtin::array_set<ref null "core:prelude/async.wado//ReadCopy<u8>">(elements_500, used_501, $moved_4_30);
+        if ref.is_null(local.tee $held_7_551(builtin::array_get_value<ref null "core:prelude/async.wado//ReadCopy<u8>">(local.tee $arg_4_548(self_539.repr), handle_517))) {
+            builtin::array_set<ref null "core:prelude/async.wado//ReadCopy<u8>">($arg_4_548, handle_517, $moved_4_30);
         } else {
             "core:prelude/async.wado/core:prelude/async.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop"($held_7_551);
             let $slot_box_7: ref null "core:prelude//$Cell<core:prelude/option.wado/Option<[core:prelude/async.wado/Stream<u8>,core:prelude/async.wado/StartedRead<u8>]>>";
@@ -812,17 +812,17 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
                 $slot_box_7.value = $match_scrut_3;
             }
         }
-        self_539.used = used_501 + 1;
-    } else if @likely(used_501 == 1) {
+        self_539.used = handle_517 + 1;
+    } else if @likely(handle_517 == 1) {
         event = ref.as_non_null($mv$$match_6$2);
         self_49 = set.ready;
         value_50 = struct.new "core:prelude/async.wado//Ready<core:prelude/async.wado/ReadCopy<u8>>" { member: $moved_4_30 = member; member = ref.null none; $moved_4_30, event: event };
-        if @unlikely(local.tee used_501(self_49.used) >= builtin::array_len(self_49.repr)) {
+        if @unlikely(local.tee handle_517(self_49.used) >= builtin::array_len(self_49.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/async.wado/Ready<core:prelude/async.wado/ReadCopy<u8>>>::grow"(self_49);
         }
-        if ref.is_null(local.tee $held_7_564(builtin::array_get_value<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/ReadCopy<u8>>">(local.tee elements_496(self_49.repr), used_501))) {
-            builtin::array_set<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/ReadCopy<u8>>">(elements_496, used_501, value_50);
+        if ref.is_null(local.tee $held_7_564(builtin::array_get_value<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/ReadCopy<u8>>">(local.tee self_557(self_49.repr), handle_517))) {
+            builtin::array_set<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/ReadCopy<u8>>">(self_557, handle_517, value_50);
         } else {
             if ref.is_null(local.tee $moved_4_30($held_7_564.member)) == 0 {
                 "core:prelude/async.wado/core:prelude/async.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop"($moved_4_30);
@@ -832,7 +832,7 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
             $held_7_564.event = value_50.event;
             value_50.member = ref.null none;
         }
-        self_49.used = used_501 + 1;
+        self_49.used = handle_517 + 1;
     } else {
         unreachable;
     }
@@ -862,12 +862,12 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
     builtin::array_copy<u8>($mv_arg_2.repr, 0, global:effect_handler_stream_started_copy.wado::$const_obj_8, 0, 6);
     $temp_inline_core_prelude_reflect_wado_TemplateHole_effect_handler_stream_started_copy_wado__tmpl_ae4c35cff9d7be39_core_prelude_list_wado_List_u8____fmt_36_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $mv_arg_2 };
     "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$spec0$dae[start,marker]"($sroa_t_h0_1098.repr, $sroa_t_h0_1098.used, $temp_inline_core_prelude_reflect_wado_TemplateHole_effect_handler_stream_started_copy_wado__tmpl_ae4c35cff9d7be39_core_prelude_list_wado_List_u8____fmt_36_0, 256);
-    if @unlikely(local.tee used_501($mv_arg_2.used + 1) > builtin::array_len($mv_arg_2.repr)) {
+    if @unlikely(local.tee handle_517($mv_arg_2.used + 1) > builtin::array_len($mv_arg_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, used_501);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, handle_517);
     }
     $sroa_slot_19 = $mv_arg_2.used;
-    $mv_arg_2.used = used_501;
+    $mv_arg_2.used = handle_517;
     builtin::array_copy<u8>($mv_arg_2.repr, $sroa_slot_19, global:effect_handler_stream_started_copy.wado::$const_obj_7, 0, 1);
     $temp_inline_core_prelude_reflect_wado_TemplateHole_effect_handler_stream_started_copy_wado__tmpl_ae4c35cff9d7be39_core_prelude_list_wado_List_u8____fmt_36_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $mv_arg_2 };
     "core:prelude/traits.wado/core:prelude/async.wado/ReadyEvent^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(event, $temp_inline_core_prelude_reflect_wado_TemplateHole_effect_handler_stream_started_copy_wado__tmpl_ae4c35cff9d7be39_core_prelude_list_wado_List_u8____fmt_36_0);
@@ -888,19 +888,19 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
         unreachable;
     }).0;
     tx_588 = $local_2_492.1;
-    used_501 = "effect_handler_stream_started_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_587);
+    handle_517 = "effect_handler_stream_started_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_587);
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_588, $mv_arg_2.repr, $mv_arg_2.used);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_501);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_517);
     }
     let $mv_repr_19: ref Array<u8>;
-    multivalue_bind [$mv_repr_19, used_501] = "core:prelude/async.wado/core:prelude/async.wado/Stream<u8>::read_to_end_sized$dae[expected]"(rx_1);
-    $sroa_t_h0_1098 = struct.new "core:prelude/list.wado//List<u8>" { repr: $mv_repr_19, used: used_501 };
+    multivalue_bind [$mv_repr_19, handle_517] = "core:prelude/async.wado/core:prelude/async.wado/Stream<u8>::read_to_end_sized$dae[expected]"(rx_1);
+    $sroa_t_h0_1098 = struct.new "core:prelude/list.wado//List<u8>" { repr: $mv_repr_19, used: handle_517 };
     local.tee $mv_arg_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }).used = 5;
     builtin::array_copy<u8>($mv_arg_2.repr, 0, global:effect_handler_stream_started_copy.wado::$const_obj_6, 0, 5);
     $temp_inline_core_prelude_reflect_wado_TemplateHole_effect_handler_stream_started_copy_wado__tmpl_ae4c35cff9d7be39_core_prelude_list_wado_List_u8____fmt_36_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $mv_arg_2 };
-    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$spec0$dae[start,marker]"($sroa_t_h0_1098.repr, used_501, $temp_inline_core_prelude_reflect_wado_TemplateHole_effect_handler_stream_started_copy_wado__tmpl_ae4c35cff9d7be39_core_prelude_list_wado_List_u8____fmt_36_0, 256);
+    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$spec0$dae[start,marker]"($sroa_t_h0_1098.repr, handle_517, $temp_inline_core_prelude_reflect_wado_TemplateHole_effect_handler_stream_started_copy_wado__tmpl_ae4c35cff9d7be39_core_prelude_list_wado_List_u8____fmt_36_0, 256);
     $inline_core_prelude_string_wado_String__format_effect_handler_stream_started_copy_wado__tmpl_29c78788c139c9ee__core_prelude_list_wado_List_u8____spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_36: block {
         break $inline_core_prelude_string_wado_String__format_effect_handler_stream_started_copy_wado__tmpl_29c78788c139c9ee__core_prelude_list_wado_List_u8____spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_36;
     };
@@ -918,11 +918,11 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
         unreachable;
     }).0;
     tx_588 = $local_2_492.1;
-    used_501 = "effect_handler_stream_started_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_587);
+    handle_517 = "effect_handler_stream_started_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_587);
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_588, $mv_arg_2.repr, $mv_arg_2.used);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_501);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_517);
     }
     $inline__effect_dispatch__core_prelude_async_wado_Stream_u8___drop_66: block {
         rx_587 = rx_1;
@@ -935,10 +935,10 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
         } else {
             if ref.is_null(rx_587.backing) == 0 {
             } else {
-                used_501 = rx_587.value;
+                handle_517 = rx_587.value;
                 rx_587.value = 0;
                 rx_587.backing = ref.null eq;
-                "wasi/stream-drop-readable"(used_501);
+                "wasi/stream-drop-readable"(handle_517);
             }
             break $inline__effect_dispatch__core_prelude_async_wado_Stream_u8___drop_66;
         }
@@ -956,7 +956,7 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
         "core:rt/panic"(array.new_data<u8>("called Option::unwrap() on a None value"), 39);
         unreachable;
     }).0;
-    multivalue_bind [$sroa_t_h0_1098, used_501] = "core:prelude/async.wado/core:prelude/async.wado/take_written<u8>"(local.tee started_197($pattern_temp_0_194.1).buffer, started_197.data);
+    multivalue_bind [$sroa_t_h0_1098, handle_517] = "core:prelude/async.wado/core:prelude/async.wado/take_written<u8>"(local.tee started_197($pattern_temp_0_194.1).buffer, started_197.data);
     if ref.is_null(started_197) == 0 {
         $mv_arg_5 = started_197.buffer;
         $sroa_t_h0_1098 = started_197.data;
@@ -973,7 +973,7 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
     }
     local.tee $mv_arg_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8;
     builtin::array_copy<u8>($mv_arg_2.repr, 0, global:effect_handler_stream_started_copy.wado::$const_obj_5, 0, 8);
-    "core:prelude/traits.wado/core:prelude/async.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(used_501, $mv_arg_2);
+    "core:prelude/traits.wado/core:prelude/async.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(handle_517, $mv_arg_2);
     $inline_core_prelude_string_wado_String__internal_push_view_115: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_115;
     };
@@ -991,22 +991,22 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
         unreachable;
     }).0;
     tx_588 = $local_2_492.1;
-    used_501 = "effect_handler_stream_started_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_587);
+    handle_517 = "effect_handler_stream_started_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_587);
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_588, $mv_arg_2.repr, $mv_arg_2.used);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_501);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_517);
     }
-    used_501 = "core:prelude/async.wado/core:prelude/async.wado/StreamWritable<u8>::write_all"(tx_2, struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(10, 11), used: 2 });
+    handle_517 = "core:prelude/async.wado/core:prelude/async.wado/StreamWritable<u8>::write_all"(tx_2, struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(10, 11), used: 2 });
     local.tee $mv_arg_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 }).used = 10;
     builtin::array_copy<u8>(local.tee $mv_repr_19($mv_arg_2.repr), 0, global:effect_handler_stream_started_copy.wado::$const_obj_4, 0, 10);
-    if used_501 == 0 {
+    if handle_517 == 0 {
         $mv_arg_2.used = 19;
         builtin::array_copy<u8>($mv_repr_19, 10, global:effect_handler_stream_started_copy.wado::$const_obj_3, 0, 9);
-    } else if used_501 == 1 {
+    } else if handle_517 == 1 {
         $mv_arg_2.used = 17;
         builtin::array_copy<u8>($mv_repr_19, 10, global:effect_handler_stream_started_copy.wado::$const_obj_2, 0, 7);
-    } else if used_501 == 2 {
+    } else if handle_517 == 2 {
         $mv_arg_2.used = 19;
         builtin::array_copy<u8>($mv_repr_19, 10, global:effect_handler_stream_started_copy.wado::$const_obj_1, 0, 9);
     }
@@ -1027,11 +1027,11 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
         unreachable;
     }).0;
     tx_588 = $local_2_492.1;
-    used_501 = "effect_handler_stream_started_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_587);
+    handle_517 = "effect_handler_stream_started_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_587);
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_588, $mv_arg_2.repr, $mv_arg_2.used);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_501);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_517);
     }
     $inline__effect_dispatch__core_prelude_async_wado_StreamWritable_u8___drop_178: block {
         rx_587 = tx_2;
@@ -1043,10 +1043,10 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
         } else {
             if ref.is_null(rx_587.backing) == 0 {
             } else {
-                used_501 = rx_587.value;
+                handle_517 = rx_587.value;
                 rx_587.value = 0;
                 rx_587.backing = ref.null eq;
-                "wasi/stream-drop-writable"(used_501);
+                "wasi/stream-drop-writable"(handle_517);
             }
             break $inline__effect_dispatch__core_prelude_async_wado_StreamWritable_u8___drop_178;
         }
@@ -1060,10 +1060,10 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
             } else {
                 if ref.is_null(tx_2.backing) == 0 {
                 } else {
-                    used_501 = tx_2.value;
+                    handle_517 = tx_2.value;
                     tx_2.value = 0;
                     tx_2.backing = ref.null eq;
-                    "wasi/stream-drop-writable"(used_501);
+                    "wasi/stream-drop-writable"(handle_517);
                 }
                 break $inline__effect_dispatch__core_prelude_async_wado_StreamWritable_u8___drop_179;
             }
@@ -1078,10 +1078,10 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
             } else {
                 if ref.is_null(rx_1.backing) == 0 {
                 } else {
-                    used_501 = rx_1.value;
+                    handle_517 = rx_1.value;
                     rx_1.value = 0;
                     rx_1.backing = ref.null eq;
-                    "wasi/stream-drop-readable"(used_501);
+                    "wasi/stream-drop-readable"(handle_517);
                 }
                 break $inline__effect_dispatch__core_prelude_async_wado_Stream_u8___drop_180;
             }
@@ -1119,11 +1119,11 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
         unreachable;
     }).0;
     tx_2 = $local_2_492.1;
-    used_501 = "effect_handler_stream_started_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_1);
+    handle_517 = "effect_handler_stream_started_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_1);
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_2, $mv_arg_2.repr, $mv_arg_2.used);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_501);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_517);
     }
 }
 

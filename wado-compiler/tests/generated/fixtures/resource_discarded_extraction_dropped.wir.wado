@@ -376,21 +376,20 @@ fn "resource_discarded_extraction_dropped.wado/discard"() with Fields {
     let list_0: ref null "core:prelude/list.wado//List<wasi:http/types.wado/Fields>";
     let held: ref null "core:prelude/list.wado//List<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>";
     let value_22: ref null "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>";
+    let $arg_4_31: ref null "Array<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>";
     let $held_7_34: ref null "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>";
-    let elements_54: ref null "Array<wasi:http/types.wado/Fields>";
-    let used_55: i32;
+    let $index_3_45: i32;
     let value_63: ref null "core:prelude//$Resource";
+    let $arg_4_71: ref null "Array<wasi:http/types.wado/Fields>";
     let $held_7_74: ref null "core:prelude//$Resource";
-    let elements_88: ref null "Array<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>";
-    used_55 = builtin::array_len(local.tee elements_54(array.new_fixed<ref null "core:prelude//$Resource">()));
-    list_0 = struct.new "core:prelude/list.wado//List<wasi:http/types.wado/Fields>" { repr: elements_54, used: used_55 };
+    list_0 = struct.new "core:prelude/list.wado//List<wasi:http/types.wado/Fields>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 };
     value_63 = "resource_discarded_extraction_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
-    if @unlikely(used_55 >= builtin::array_len(list_0.repr)) {
+    if @unlikely(0 >= builtin::array_len(list_0.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<wasi:http/types.wado/Fields>::grow"(list_0);
     }
-    if ref.is_null(local.tee $held_7_74(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_54(list_0.repr), used_55))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_54, used_55, value_63);
+    if ref.is_null(local.tee $held_7_74(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $arg_4_71(list_0.repr), 0))) {
+        builtin::array_set<ref null "core:prelude//$Resource">($arg_4_71, 0, value_63);
     } else {
         if ref.is_null($held_7_74.backing) == 0 {
         } else {
@@ -405,14 +404,14 @@ fn "resource_discarded_extraction_dropped.wado/discard"() with Fields {
         value_63.value = 0;
         value_63.backing = ref.null eq;
     }
-    list_0.used = used_55 + 1;
+    list_0.used = 1;
     value_63 = "resource_discarded_extraction_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
-    if @unlikely(local.tee used_55(list_0.used) >= builtin::array_len(list_0.repr)) {
+    if @unlikely(1 >= builtin::array_len(list_0.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<wasi:http/types.wado/Fields>::grow"(list_0);
     }
-    if ref.is_null(local.tee $held_7_74(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_54(list_0.repr), used_55))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_54, used_55, value_63);
+    if ref.is_null(local.tee $held_7_74(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $arg_4_71(list_0.repr), 1))) {
+        builtin::array_set<ref null "core:prelude//$Resource">($arg_4_71, 1, value_63);
     } else {
         if ref.is_null($held_7_74.backing) == 0 {
         } else {
@@ -426,32 +425,31 @@ fn "resource_discarded_extraction_dropped.wado/discard"() with Fields {
         value_63.value = 0;
         value_63.backing = ref.null eq;
     }
-    list_0.used = local.tee used_55(used_55 + 1);
+    list_0.used = 2;
     $thread_$inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_0: block {
-        break_if $thread_$inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_0 used_55 == 0;
-        list_0.used = local.tee used_55(used_55 - 1);
-        value_63 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_54(list_0.repr), used_55);
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_54, used_55, ref.null none);
+        list_0.used = 1;
+        value_63 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $arg_4_71(list_0.repr), 1);
+        builtin::array_set<ref null "core:prelude//$Resource">($arg_4_71, 1, ref.null none);
         if ref.is_null(value_63.backing) == 0 {
         } else {
-            used_55 = value_63.value;
+            $cm_handle_2 = value_63.value;
             value_63.value = 0;
             value_63.backing = ref.null eq;
-            "wasi/resource-drop:wasi:http/types.wado#Fields"(used_55);
+            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
         }
         break $thread_$inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_0;
     };
     $thread_$inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_2: block {
-        break_if $thread_$inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_2 local.tee used_55(list_0.used) == 0;
-        list_0.used = local.tee used_55(used_55 - 1);
-        value_63 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_54(list_0.repr), used_55);
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_54, used_55, ref.null none);
+        break_if $thread_$inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_2 local.tee $cm_handle_2(list_0.used) == 0;
+        list_0.used = local.tee $cm_handle_2($cm_handle_2 - 1);
+        value_63 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $arg_4_71(list_0.repr), $cm_handle_2);
+        builtin::array_set<ref null "core:prelude//$Resource">($arg_4_71, $cm_handle_2, ref.null none);
         if ref.is_null(value_63.backing) == 0 {
         } else {
-            used_55 = value_63.value;
+            $cm_handle_2 = value_63.value;
             value_63.value = 0;
             value_63.backing = ref.null eq;
-            "wasi/resource-drop:wasi:http/types.wado#Fields"(used_55);
+            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
         }
         break $thread_$inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_2;
     };
@@ -460,16 +458,15 @@ fn "resource_discarded_extraction_dropped.wado/discard"() with Fields {
         "resource_discarded_extraction_dropped.wado/discard$cold1"();
         unreachable;
     }
-    used_55 = builtin::array_len(local.tee elements_88(array.new_fixed<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">()));
-    held = struct.new "core:prelude/list.wado//List<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>" { repr: elements_88, used: used_55 };
+    held = struct.new "core:prelude/list.wado//List<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>" { repr: array.new_fixed<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">(), used: 0 };
     value_22 = struct.new "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>::Some" { discriminant: 1, payload_0: "resource_discarded_extraction_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() };
-    if @unlikely(used_55 >= builtin::array_len(held.repr)) {
+    if @unlikely(0 >= builtin::array_len(held.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>::grow"(held);
     }
-    elements_88 = held.repr;
+    $arg_4_31 = held.repr;
     let $slot_box_13: ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>";
-    if ref.is_null(local.tee $held_7_34((if ref.is_null(local.tee $slot_box_13(builtin::array_get_value<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">(elements_88, used_55))) -> ref null "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>" {
+    if ref.is_null(local.tee $held_7_34((if ref.is_null(local.tee $slot_box_13(builtin::array_get_value<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">($arg_4_31, 0))) -> ref null "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>" {
         ref.null none;
     } else {
         $slot_box_13.value;
@@ -485,45 +482,40 @@ fn "resource_discarded_extraction_dropped.wado/discard"() with Fields {
             }
         }
     }
-    if ref.is_null(local.tee $slot_box_13(builtin::array_get_value<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">(elements_88, used_55))) {
-        builtin::array_set<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">(elements_88, used_55, struct.new "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>" { value: value_22 });
+    if ref.is_null(local.tee $slot_box_13(builtin::array_get_value<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">($arg_4_31, 0))) {
+        builtin::array_set<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">($arg_4_31, 0, struct.new "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>" { value: value_22 });
     } else {
         $slot_box_13.value = value_22;
     }
-    held.used = local.tee used_55(used_55 + 1);
-    $fused_$inline_core_prelude_list_wado_List_core_prelude_option_wado_Option_wasi_http_types_wado_Fields____pop_sroa_return__7: block {
-        break_if $fused_$inline_core_prelude_list_wado_List_core_prelude_option_wado_Option_wasi_http_types_wado_Fields____pop_sroa_return__7 used_55 == 0;
-        held.used = local.tee used_55(used_55 - 1);
-        value_22 = (if ref.is_null(local.tee $slot_box_13(builtin::array_get_value<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">(local.tee elements_88(held.repr), used_55))) -> ref null "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>" {
-            ref.null none;
+    held.used = 0;
+    value_22 = (if ref.is_null(local.tee $slot_box_13(builtin::array_get_value<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">(local.tee $arg_4_31(held.repr), 0))) -> ref null "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>" {
+        ref.null none;
+    } else {
+        $slot_box_13.value;
+    });
+    builtin::array_set<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">($arg_4_31, 0, ref.null none);
+    if value_22.discriminant == 0 {
+    } else {
+        if ref.is_null(local.tee value_63(ref.cast "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>::Some"(value_22).payload_0).backing) == 0 {
         } else {
-            $slot_box_13.value;
-        });
-        builtin::array_set<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">(elements_88, used_55, ref.null none);
-        if value_22.discriminant == 0 {
-        } else {
-            if ref.is_null(local.tee value_63(ref.cast "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>::Some"(value_22).payload_0).backing) == 0 {
-            } else {
-                used_55 = value_63.value;
-                value_63.value = 0;
-                value_63.backing = ref.null eq;
-                "wasi/resource-drop:wasi:http/types.wado#Fields"(used_55);
-            }
+            $cm_handle_2 = value_63.value;
+            value_63.value = 0;
+            value_63.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
         }
-        break $fused_$inline_core_prelude_list_wado_List_core_prelude_option_wado_Option_wasi_http_types_wado_Fields____pop_sroa_return__7;
-    };
-    if @unlikely((local.tee used_55(held.used) == 0) == 0) {
+    }
+    if @unlikely((local.tee $cm_handle_2(held.used) == 0) == 0) {
         cold_path;
         "resource_discarded_extraction_dropped.wado/discard$cold0"();
         unreachable;
     }
     if ref.is_null(held) == 0 {
-        elements_88 = held.repr;
-        $cm_handle_2 = 0;
+        $arg_4_31 = held.repr;
+        $index_3_45 = 0;
         b20: block {
             l21: loop {
-                break_if b20 $cm_handle_2 >= used_55;
-                if ref.is_null(local.tee value_22((if ref.is_null(local.tee $slot_box_13(builtin::array_get_value<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">(elements_88, $cm_handle_2))) -> ref null "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>" {
+                break_if b20 $index_3_45 >= $cm_handle_2;
+                if ref.is_null(local.tee value_22((if ref.is_null(local.tee $slot_box_13(builtin::array_get_value<ref null "core:prelude//$Cell<core:prelude/option.wado/Option<wasi:http/types.wado/Fields>>">($arg_4_31, $index_3_45))) -> ref null "core:prelude/option.wado//Option<wasi:http/types.wado/Fields>" {
                     ref.null none;
                 } else {
                     $slot_box_13.value;
@@ -540,19 +532,19 @@ fn "resource_discarded_extraction_dropped.wado/discard"() with Fields {
                         }
                     }
                 }
-                $cm_handle_2 = $cm_handle_2 + 1;
+                $index_3_45 = $index_3_45 + 1;
                 continue l21;
             };
         };
     }
     if ref.is_null(list_0) == 0 {
-        elements_54 = list_0.repr;
-        used_55 = list_0.used;
-        $cm_handle_2 = 0;
+        $arg_4_71 = list_0.repr;
+        $cm_handle_2 = list_0.used;
+        $index_3_45 = 0;
         b27: block {
             l28: loop {
-                break_if b27 $cm_handle_2 >= used_55;
-                if ref.is_null(local.tee value_63(builtin::array_get_value<ref null "core:prelude//$Resource">(elements_54, $cm_handle_2))) == 0 {
+                break_if b27 $index_3_45 >= $cm_handle_2;
+                if ref.is_null(local.tee value_63(builtin::array_get_value<ref null "core:prelude//$Resource">($arg_4_71, $index_3_45))) == 0 {
                     if ref.is_null(value_63.backing) == 0 {
                     } else {
                         $cm_handle_25 = value_63.value;
@@ -561,7 +553,7 @@ fn "resource_discarded_extraction_dropped.wado/discard"() with Fields {
                         "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_25);
                     }
                 }
-                $cm_handle_2 = $cm_handle_2 + 1;
+                $index_3_45 = $index_3_45 + 1;
                 continue l28;
             };
         };
