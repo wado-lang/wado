@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use { HashMap } from "core:collections";
+use { HashMap, HashIndex } from "core:collections";
 use {
     AtnSim,
     ATN_RULE_STOP,
@@ -203,113 +203,16 @@ impl AtnKey for AtnEdge {
     }
 }
 
-global ATN_ROW_INDEX_EMPTY: i64 = -1;
-global ATN_ROW_INDEX_MIN_SLOTS: i32 = 8;
-global ATN_ROW_INDEX_SPARSE: i32 = 16;
-
-struct AtnRowIndex {
-    slots: Array<i64>,
-    count: i32,
-    shift: i64,
-}
-
-fn atn_row_index_shift(slots: i32) -> i64 {
-    return (64 - i32::ctz(slots)) as i64;
-}
-
-impl AtnRowIndex {
-    fn new() -> AtnRowIndex {
-        return AtnRowIndex {
-            slots: Array::<i64>::filled(ATN_ROW_INDEX_MIN_SLOTS, ATN_ROW_INDEX_EMPTY),
-            count: 0,
-            shift: atn_row_index_shift(ATN_ROW_INDEX_MIN_SLOTS),
-        };
-    }
-
-    fn find(&self, hash: u64, is_row: fn(i32) -> bool) -> i32 {
-        let mask = self.slots.len() - 1;
-        let tag = (hash >> 32) as i64;
-        let mut s = (hash >> self.shift as u64) as i32;
-        loop {
-            let slot = self.slots[s];
-            if slot == ATN_ROW_INDEX_EMPTY {
-                return -1;
-            }
-            if slot as u64 >> 32 == tag as u64 && is_row(slot as i32) {
-                return slot as i32;
-            }
-            s = s + 1 & mask;
-        }
-    }
-
-    fn find_or_insert(&mut self, hash: u64, is_row: fn(i32) -> bool, row: i32) -> i32
-        contract row >= 0
-    {
-        let mask = self.slots.len() - 1;
-        let tag = (hash >> 32) as i64;
-        let mut s = (hash >> self.shift as u64) as i32;
-        loop {
-            let slot = self.slots[s];
-            if slot == ATN_ROW_INDEX_EMPTY {
-                break;
-            }
-            if slot as u64 >> 32 == tag as u64 && is_row(slot as i32) {
-                return slot as i32;
-            }
-            s = s + 1 & mask;
-        }
-        self.put(s, tag << 32 | row as i64);
-        return row;
-    }
-
-    fn insert(&mut self, hash: u64, row: i32)
-        contract row >= 0
-    {
-        let slot = (hash >> 32 << 32) as i64 | row as i64;
-        self.put(self.empty_slot(slot), slot);
-    }
-
-    fn put(&mut self, empty: i32, slot: i64) {
-        let mut s = empty;
-        if (self.count + 1) * 2 > self.slots.len() {
-            self.resize(self.slots.len() * 2);
-            s = self.empty_slot(slot);
-        }
-        self.slots[s] = slot;
-        self.count += 1;
-    }
-
-    fn empty_slot(&self, slot: i64) -> i32 {
-        let mask = self.slots.len() - 1;
-        let mut s = (slot as u64 >> self.shift as u64) as i32;
-        while self.slots[s] != ATN_ROW_INDEX_EMPTY {
-            s = s + 1 & mask;
-        }
-        return s;
-    }
-
-    fn resize(&mut self, slots: i32) {
-        let old = self.slots;
-        self.slots = Array::<i64>::filled(slots, ATN_ROW_INDEX_EMPTY);
-        self.shift = atn_row_index_shift(slots);
-        for let s of 0..<old.len() {
-            if old[s] != ATN_ROW_INDEX_EMPTY {
-                self.slots[self.empty_slot(old[s])] = old[s];
-            }
-        }
-    }
-}
-
 struct AtnKeyLists<T> {
     keys: List<T>,
     start: List<i32>,
     len: List<i32>,
-    index: AtnRowIndex,
+    index: HashIndex,
 }
 
 impl<T: AtnKey + Eq> AtnKeyLists<T> {
     fn new() -> AtnKeyLists<T> {
-        return AtnKeyLists { keys: [], start: [], len: [], index: AtnRowIndex::new() };
+        return AtnKeyLists { keys: [], start: [], len: [], index: HashIndex::new() };
     }
 
     fn hash_from(&self, from: i32) -> u64 {
