@@ -127,12 +127,9 @@ fn poke(holder: &Holder) {
 }
 ```
 
-A generic body is checked before its type parameter is known, so it cannot read
-a `T` as a `&`. A call is an error where a type argument that is a `&mut` sits
-behind a `&` the caller holds, and a slot of the callee's signature that names a
-type parameter can hand it back writable: the return, a `&mut` parameter or a
-function parameter. The instantiated types decide, so a `T` reaching the `&`
-through another parameter's bound alone counts too:
+A generic body that copies a `T` out from behind a `&` is never handed a
+`&mut`, since a type parameter takes one only where it is declared `affine`
+([Writable References](./spec-memory.md#writable-references)):
 
 <!-- {"fixture":"error_generic_call_hands_back_mut_through_shared.wado"} -->
 
@@ -145,6 +142,13 @@ fn poke(xs: &List<&mut S>) {
     first(xs).f = 2;   // Error: `T = &mut S` behind a `&`
 }
 ```
+
+> Not yet implemented: any type parameter takes a `&mut`. A call is an error
+> where a type argument that is a `&mut` sits behind a `&` the caller holds,
+> and a slot of the callee's signature that names a type parameter can hand it
+> back writable: the return, a `&mut` parameter or a function parameter. The
+> instantiated types decide, so a `T` reaching the `&` through another
+> parameter's bound alone counts too.
 
 A container that indexes by `IndexRef` and has no `IndexAssign`, such as a
 `Slice<T>`, is a read-only view: `&mut` on an element is an error, since nothing
@@ -159,25 +163,13 @@ fn poke(xs: &List<Element>) {
 }
 ```
 
-What a `&` refuses is the path. A value copied out from behind it is a value of
-its own, and a `&mut` it holds writes as any other does:
+A value holding a `&mut` is not copied out from behind a `&` either: it is
+affine, and no affine value
+[moves out of a reference](./spec-affine.md#no-move-out-of-a-reference).
 
-<!-- {"fixture":"spec_mutability_copy_out_of_shared_ref_writes.wado"} -->
-
-```wado
-fn poke(h: &Holder) {
-    let copy = *h;
-    copy.r.f = 9;   // OK: `copy` is the body's own `Holder`
-}
-
-test {
-    let mut s = S { f: 1 };
-    let h = Holder { r: &mut s };
-    s.f = 2;
-    poke(&h);
-    assert s.f == 9;
-}
-```
+> Not yet implemented: a value copied out from behind a `&` is a value of its
+> own, and a `&mut` it holds writes as any other does. `let copy = *h;` and
+> then `copy.r.f = 9` writes what `h.r` refers to.
 
 ## Deferred Initialization
 

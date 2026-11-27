@@ -335,6 +335,9 @@ The binding is a copy of each element
 change the collection. `for let x of &xs` and `for let x of &mut xs` bind
 references instead, as
 [iteration by reference](./spec-standard-traits.md#value-semantics) states.
+Over elements replaced on assignment, `for let x of &mut xs` binds a
+[scoped `&mut`](./spec-memory.md#mut-lasts-for-a-scope) that each turn stores
+back.
 Each iteration binds it anew, so a closure or a reference taken in one iteration
 keeps that iteration's element.
 

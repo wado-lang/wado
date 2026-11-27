@@ -16,9 +16,10 @@ test "references compare values, and ref_eq compares places" {
     ref_eq(&xs[0], &xs[0]);         // false or true: each `&` takes its own copy
 }
 
-test "a reference to a closure points to the place holding it" {
+test "a closure's identity is unobservable" {
     let f = || 1;
     let g = f;
-    assert ref_eq(&f, &f);          // always
+    ref_eq(&f, &f);                 // false or true: each `&` takes its own copy
     ref_eq(&f, &g);                 // false or true: two places holding one closure
+    assert f() == g();
 }

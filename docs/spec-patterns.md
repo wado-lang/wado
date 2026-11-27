@@ -538,7 +538,7 @@ own, so a replacement through the binding lands at once.
 > binding is an error, and so is replacing an affine `variant` bound as the
 > scrutinee whole.
 
-A destructuring `let` or `for` binding follows the same rule, and so does a reference met below the top of a pattern: `for let [a, b] of &pairs` gives `a: &A`, and `[n, { x, .. }]` against `[i32, &Point]` gives `x: &i32`.
+A destructuring `let` or `for` binding takes references the same way, and so does a reference met below the top of a pattern. For a `for`, one turn of the loop is the arm: `for let [a, b] of &pairs` gives `a: &A`, and `[n, { x, .. }]` against `[i32, &Point]` gives `x: &i32`.
 
 <!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
 

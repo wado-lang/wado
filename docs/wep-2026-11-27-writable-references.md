@@ -184,6 +184,10 @@ payload.
 An affine value is never copied, a `&mut` and an affine `variant` included, so
 a `&` of one names its place and sees what is written there.
 
+Two `&` of one place of such a type are two copies, so `ref_eq` of them is
+unspecified, a closure's included. The guarantee that two references to one
+place are `ref_eq` holds for a type written in place and for an affine value.
+
 Today a `&i32` of a local sees a later assignment and one of a field does not.
 Making every `&P` see it is not open: Wasm GC has no pointer into a struct or
 an array, so it would take a heap cell for every primitive field and element.
@@ -350,6 +354,21 @@ Two items land with the step whose rule they serve:
 - [ ] `HashMap` and `TreeMap` offer an accessor that takes a closure and
   updates a value in one lookup, for the counter that Rust writes
   `*map.entry(k).or_insert(0) += 1`.
+
+## Known gaps
+
+- A destructuring `let`, or a `let … else`, under a `&mut` scrutinee has no
+  scope decided for a binding of a type replaced on assignment. It has no arm
+  to end, and binding a scoped `&mut` to a variable is an error. Today such a
+  binding is refused.
+- The operands a scoped `for let v of &mut xs` covers are not decided, nor how
+  a turn finds the element it stores back to. A `for` is defined by
+  `into_iter()`, and no `IntoIterator` yields a `&mut` to an element replaced
+  on assignment. A user collection and a map's values have no answer.
+- Whether `Shared<T>` is `RefMut` is not decided: the table lists it on neither
+  row.
+- Nothing detects a key holding a cell that is written while a map holds it.
+  The lookup misses an entry the map still has.
 
 ## References
 

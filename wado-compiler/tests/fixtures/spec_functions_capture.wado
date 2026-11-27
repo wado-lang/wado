@@ -3,8 +3,8 @@
 
 test "a capture is a reference" {
     let mut count = 0;
-    let mut inc = || count += 1;   // captures &mut count; type fn mut() -> ()
-    let get = || count;             // captures &count; type fn() -> i32
+    let mut inc = || count += 1;   // writes count; type fn mut() -> ()
+    let get = || count;             // reads count; type fn() -> i32
     inc();
     inc();
     assert get() == 2;
@@ -33,7 +33,7 @@ test "a snapshot" {
 test "closures are values" {
     let mut count = 0;
     let mut c1 = || count += 1;
-    let mut c2 = c1;             // a copy holding the same `&mut count`
+    let mut c2 = c1;             // a copy writing the same `count`
     c1();
     c2();
     assert count == 2;

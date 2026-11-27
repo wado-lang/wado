@@ -908,22 +908,21 @@ A `fn` closure needs no `mut` binding.
 
 ### Capture
 
-A closure captures each free variable by reference. The reference kind is
-inferred from the body: `&T` where the body only reads the binding, `&mut T`
-where it writes it. A write assigns the binding or a place in it, calls a
-`&mut self` method on it, or takes `&mut` of it, so `|v| seen.push(v)` is a
-`fn mut`.
+A closure captures each free variable itself: not a copy of its value, and not
+a reference a program could name. Whether the body writes the variable is
+inferred from it, and a body that writes one makes the closure a `fn mut`. A
+write assigns the binding or a place in it, calls a `&mut self` method on it,
+or takes `&mut` of it, so `|v| seen.push(v)` is a `fn mut`.
 
-Because a capture is a reference, every closure naming a binding shares its
-location, and a closure reads the value the binding holds when the closure
-runs, not when it was made:
+Every closure naming a binding shares it, and a closure reads the value the
+binding holds when the closure runs, not when it was made:
 
 <!-- {"fixture":"spec_functions_capture.wado"} -->
 
 ```wado
 let mut count = 0;
-let mut inc = || count += 1;   // captures &mut count; type fn mut() -> ()
-let get = || count;             // captures &count; type fn() -> i32
+let mut inc = || count += 1;   // writes count; type fn mut() -> ()
+let get = || count;             // reads count; type fn() -> i32
 inc();
 inc();
 assert get() == 2;
@@ -967,15 +966,15 @@ does with its reference _parameters_; see
 ### Closures Are Values
 
 A closure is copied on assignment, on passing and on return, like any other
-value. Its captures are references, so every copy still refers to the same
-bindings:
+value. It captures variables, not their values, so every copy still refers to
+the same bindings:
 
 <!-- {"fixture":"spec_functions_capture.wado"} -->
 
 ```wado
 let mut count = 0;
 let mut c1 = || count += 1;
-let mut c2 = c1;             // a copy holding the same `&mut count`
+let mut c2 = c1;             // a copy writing the same `count`
 c1();
 c2();
 assert count == 2;

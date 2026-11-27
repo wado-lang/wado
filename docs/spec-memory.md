@@ -230,10 +230,10 @@ Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value
 ### References to a Value Replaced on Assignment
 
 A primitive, `enum`, `flags`, copyable `variant`, `fn` or `&` reference is
-replaced on assignment: it has no storage a reference could share. These are
-the types that are not
-[`RefMut`](./spec-standard-traits.md#dispatch). A `struct`, a tuple, a `List`
-and a `String` are written in place, and a reference to one shares its storage.
+replaced on assignment: it has no storage a reference could share, and it is
+not [`RefMut`](./spec-standard-traits.md#dispatch). A `struct`, a tuple, a
+`List` and a `String` are written in place, and a reference to one shares its
+storage.
 
 An affine value is never copied, a `&mut` and an affine `variant` included, so
 a reference to one names its place. A field, tuple element, payload or element
@@ -256,9 +256,11 @@ value of an `i32`.
 
 A closure's capture is not a `&P`. A closure captures the variable, and reads
 what the variable holds when it runs
-([Closures Are Values](./spec-functions.md#closures-are-values)).
+([Capture](./spec-functions.md#capture)).
 
 > Not yet implemented: a `&P` of a local sees a later assignment to the local.
+> A `&` of a `variant`, wherever it is taken, shares its payload with the
+> place, so it sees a later write to the payload.
 
 #### `&mut` Lasts for a Scope
 
@@ -306,9 +308,11 @@ under `stale_reference`.
 > field or an element is an error for a primitive, `enum`, `flags`, `fn` or
 > reference, a `&mut self` receiver's included, and so is
 > `for let v of &mut xs` over such elements. A `variant` field or element
-> admits `&mut`: a mutation of its payload lands, and replacing it whole
-> through the reference is an error. Nothing is stored back, and none of the
-> errors above is reported.
+> admits `&mut`, and a mutation of its payload lands. A call argument or a
+> receiver on a `variant` field stores back as stated. Replacing a `variant`
+> whole through a `&mut` of an element, through one a variable holds, or
+> through a pattern binding is an error. No other form stores back, and none of
+> the errors above is reported.
 
 Rationale: [WEP: Writable References](./wep-2026-11-27-writable-references.md).
 
@@ -321,8 +325,9 @@ references point to one place. A place is where a value is stored: a variable,
 a field, an element.
 
 Identity is guaranteed in one direction only. Two references to one place are
-always `ref_eq`: `&x` taken twice of one variable, or a reference and a copy of
-it. References to distinct places may also be `ref_eq`, because the copies value
+always `ref_eq` where its type is written in place or is affine: `&x` taken
+twice of one variable, or a reference and a copy of it. References to distinct
+places may also be `ref_eq`, because the copies value
 semantics promise are as-if: the implementation may store equal content once,
 by eliding a copy or by interning a constant `String` or `List`. Whether it
 does is [unspecified](./spec-overview.md#behavior-classes), so a `ref_eq` that
@@ -357,16 +362,20 @@ ref_eq(&xs[0], &xs[0]);         // false or true: each `&` takes its own copy
 An affine variant is the exception: its slot is a place, as
 [the previous section](#references-to-a-value-replaced-on-assignment) states.
 
+> Not yet implemented: two `&` of one local are always `ref_eq`, whatever its
+> type.
+
 A closure's identity stays unobservable. `ref_eq` takes references only, and a
-reference to a closure points to the place holding it, not to the closure:
+`&` of a closure is a copy of it, as of any value replaced on assignment:
 
 <!-- {"fixture": "spec_memory_ref_identity.wado"} -->
 
 ```wado
 let f = || 1;
 let g = f;
-assert ref_eq(&f, &f);          // always
+ref_eq(&f, &f);                 // false or true: each `&` takes its own copy
 ref_eq(&f, &g);                 // false or true: two places holding one closure
+assert f() == g();
 ```
 
 ## Shared Cells
@@ -374,8 +383,7 @@ ref_eq(&f, &g);                 // false or true: two places holding one closure
 A shared cell is a value that is one object under every copy, and that a `&`
 may write. Its type is `Shared<T>`, a prelude type the compiler knows.
 `Shared::new(value)` puts a value into a new cell, and nothing else makes one:
-no cell is taken from a variable or a field, so a `let mut` variable changes
-only through its name or through a `&mut` written at a call.
+no cell is taken from a variable or a field, so no cell aliases one.
 
 `*c` is the place the cell holds. It reads and writes whatever path reached
 `c`, a `&` included, and `c` needs no `mut`: the dereference of a cell starts

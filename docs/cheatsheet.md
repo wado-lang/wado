@@ -678,8 +678,7 @@ Key differences from Rust:
 
 - No borrow checker: multiple mutable references allowed
 - A `&T` refuses a write anywhere along its path: through `h: &Holder`,
-  `h.r.f = 1` is an error even where `r` is a `&mut`, and `h.r` reads as a `&`.
-  A copy, `*h`, is a value of its own, and its `r` writes
+  `h.r.f = 1` is an error even where `r` is a `&mut`, and `h.r` reads as a `&`
 - Can return references to local variables
 - No lifetime annotations needed
 

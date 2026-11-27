@@ -1161,10 +1161,9 @@ eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:
 | Types                                                              | `Ref` | `RefMut` |
 | ------------------------------------------------------------------ | ----- | -------- |
 | `struct`, `List<T>`, `String`, tuples, maps, sets, `i128` / `u128` | yes   | yes      |
-| an affine `variant`, `&mut T`                                      | yes   | yes      |
+| a `resource`, an affine `variant`, `&mut T`                        | yes   | yes      |
 | a copyable `variant`, `fn`, `&T`                                   | yes   | no       |
 | scalars, `enum`, `flags`                                           | no    | no       |
-| `resource`                                                         | no    | no       |
 | `()`, `!`                                                          | no    | no       |
 
 `Ref` holds for a type whose value `&T` can alias. `RefMut` holds for the `Ref`
@@ -1175,8 +1174,7 @@ so it is `RefMut` whatever its kind
 
 > Not yet implemented: an affine `variant` and `&mut T` are not `RefMut`.
 
-A `resource` is a handle that cannot be
-aliased, so a resource element is read by value. A newtype follows its base.
+A newtype follows its base.
 Neither marker asks whether a value holds references: a `struct` with `&T`
 fields is `Ref`, and `i32` is not `Ref`, although `&i32` is.
 

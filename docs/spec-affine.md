@@ -1,9 +1,9 @@
 # Affine Types
 
 An affine type is move-only: a value of it is used by value at most once. An
-affine resource is one, as is a type that implements [`Drop`](#drop) and a
-[`&mut T`](./spec-memory.md#writable-references), and so is every type that
-holds one at any depth. The rest of this chapter follows from
+affine resource is one, and so is a type that implements [`Drop`](#drop). A
+[`&mut T`](./spec-memory.md#writable-references) is one too. So is every type
+that holds one of these at any depth. The rest of this chapter follows from
 four rules:
 
 - A position that takes a value moves it. Every other position reads the value
@@ -13,6 +13,9 @@ four rules:
 - A value that has not moved drops exactly once, when its owner stops holding
   it.
 - Code that may copy a value is not handed an affine one.
+
+> Not yet implemented: a `&mut T` is copyable, and a struct holding one is not
+> declared `affine`.
 
 Rationale: [WEP: Affine Types](./wep-2026-10-17-affine-types.md).
 
