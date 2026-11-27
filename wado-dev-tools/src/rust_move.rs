@@ -355,9 +355,21 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
     };
     let mut report = Vec::new();
     let mut widenings: BTreeMap<PathBuf, Vec<Widening>> = BTreeMap::new();
-    let mut imports: BTreeMap<PathBuf, BTreeSet<String>> = BTreeMap::new();
+    // By the name each binds, so two sources importing one name by two paths
+    // leave the destination one import.
+    let mut imports: BTreeMap<PathBuf, BTreeMap<String, String>> = BTreeMap::new();
     let destination_uses = use_items(&destination.text);
-    let destination_names = destination.bound_names(&destination_uses);
+    // A top-level item that moves is the destination's own from here on.
+    let destination_names: BTreeSet<String> = destination
+        .bound_names(&destination_uses)
+        .into_iter()
+        .chain(
+            moved
+                .iter()
+                .filter(|item| item.header.is_none())
+                .map(|item| item.name.clone()),
+        )
+        .collect();
 
     // An item the move takes out of the reach of who refers to it.
     for item in &moved {
@@ -394,14 +406,14 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
             let mut by_hand = Vec::new();
             for user in &users {
                 if *user == item.source && are_siblings(source, &destination) {
-                    imports
-                        .entry(item.source.clone())
-                        .or_default()
-                        .insert(format!(
+                    imports.entry(item.source.clone()).or_default().insert(
+                        item.name.clone(),
+                        format!(
                             "use super::{}::{};",
                             destination.module_name().expect("siblings name modules"),
                             item.name
-                        ));
+                        ),
+                    );
                 } else {
                     by_hand.push(display_path(user));
                 }
@@ -465,13 +477,13 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
                 Some(_) => {}
                 None if are_siblings(source, &destination) => {
                     if !destination_names.contains(name) {
-                        imports
-                            .entry(destination.path.clone())
-                            .or_default()
-                            .insert(format!(
+                        imports.entry(destination.path.clone()).or_default().insert(
+                            name.to_string(),
+                            format!(
                                 "use super::{}::{name};",
                                 source.module_name().expect("siblings name modules")
-                            ));
+                            ),
+                        );
                     }
                 }
                 None => report.push(format!(
@@ -515,7 +527,8 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
                 imports
                     .entry(destination.path.clone())
                     .or_default()
-                    .insert(binding.item());
+                    .entry(binding.name.clone())
+                    .or_insert_with(|| binding.item());
             }
             for glob in &item.globs {
                 if !destination_uses.iter().any(|d| d.globs.contains(glob)) {
@@ -538,6 +551,10 @@ fn plan(client: &mut Client, locators: &[Locator], to: &Path) -> Result<Plan, St
             ));
         }
     }
+    let imports: BTreeMap<PathBuf, BTreeSet<String>> = imports
+        .into_iter()
+        .map(|(path, by_name)| (path, by_name.into_values().collect()))
+        .collect();
     for (path, items) in &imports {
         for item in items {
             report.push(format!("import in {}: {item}", display_path(path)));
