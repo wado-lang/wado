@@ -336,10 +336,16 @@ change the collection. `for let x of &xs` and `for let x of &mut xs` bind
 references instead, as
 [iteration by reference](./spec-standard-traits.md#value-semantics) states.
 Over elements replaced on assignment, `for let x of &mut xs` binds a
-[scoped `&mut`](./spec-memory.md#mut-lasts-for-a-scope) that each turn stores
-back.
-Each iteration binds it anew, so a closure or a reference taken in one iteration
-keeps that iteration's element.
+[scoped `&mut`](./spec-memory.md#mut-lasts-for-a-scope) instead. Where no
+`IntoIterator` answers for the `&mut` operand, the loop walks by index a
+[`Sequence`](./spec-standard-traits.md#sequence-and-asslice) that implements
+`IndexValue<i32>` and `IndexAssign<i32>`: a turn reads the element, binds it,
+and assigns it back when the turn ends. `List` and `Array` are such, and a map
+is not.
+
+> Not yet implemented: such a loop is a compile error.
+> Each iteration binds it anew, so a closure or a reference taken in one iteration
+> keeps that iteration's element.
 
 Iterating a `List` reads the list's own storage, so a body that shrinks the
 list it walks breaks the contract a shrinking list puts on its

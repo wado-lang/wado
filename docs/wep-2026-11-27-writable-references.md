@@ -226,8 +226,18 @@ value goes back to the place:
   was matched around it and stores that back.
 - A `for let v of &mut xs`, where one turn of the loop is the scope.
 
+The loop walks by index a `Sequence` that implements `IndexValue<i32>` and
+`IndexAssign<i32>`: a turn reads the element, binds it, and assigns it back.
+`List` and `Array` are such, and so is a user collection implementing the
+three. A map's values are not walked this way: its index is a key, and a walk
+by key would look each one up twice. An `IntoIterator` for the `&mut` itself
+comes first, as for any operand, so elements written in place are walked as
+they are today.
+
 Binding one to a variable, storing one in a value and returning one are errors,
-and a shared cell is what such code wants. The rule is by type alone: a local,
+and a shared cell is what such code wants. A destructuring `let` and a
+`let … else` bind variables with no arm to end, so such a binding under a
+`&mut` scrutinee is an error too. The rule is by type alone: a local,
 a field and an element take the same `&mut`, so a local no longer becomes a
 heap cell for a reference to keep.
 
@@ -250,6 +260,10 @@ without lasts for a scope:
 | --------------------------------------------------------------------------- | ------------------------------ |
 | `RefMut`: a `struct`, a tuple, `List`, `String`, `i128`, any affine value   | an affine borrow of the place  |
 | not `RefMut`: a primitive, `enum`, `flags`, a copyable `variant`, `fn`, `&` | scoped, as this section states |
+
+A `Shared<T>` is on the second row. An assignment to a cell replaces the cell,
+as one to a `&` replaces the reference, and what the cell holds is written
+through `*c` with no `&mut`.
 
 An affine `variant` stays on the first row. A field, an element or a payload
 holds it in an object of its own
@@ -357,16 +371,6 @@ Two items land with the step whose rule they serve:
 
 ## Known gaps
 
-- A destructuring `let`, or a `let … else`, under a `&mut` scrutinee has no
-  scope decided for a binding of a type replaced on assignment. It has no arm
-  to end, and binding a scoped `&mut` to a variable is an error. Today such a
-  binding is refused.
-- The operands a scoped `for let v of &mut xs` covers are not decided, nor how
-  a turn finds the element it stores back to. A `for` is defined by
-  `into_iter()`, and no `IntoIterator` yields a `&mut` to an element replaced
-  on assignment. A user collection and a map's values have no answer.
-- Whether `Shared<T>` is `RefMut` is not decided: the table lists it on neither
-  row.
 - Nothing detects a key holding a cell that is written while a map holds it.
   The lookup misses an entry the map still has.
 

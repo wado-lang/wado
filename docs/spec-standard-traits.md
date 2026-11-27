@@ -205,9 +205,7 @@ for let p of &mut points {
 assert points[0].x == 2 && points[1].x == 3;
 ```
 
-An element type that is replaced on assignment (a primitive, `enum`, `flags`, a copyable `variant`, `fn`, or a `&` reference) is not `RefMut`, so `iter_ref_mut()` does not walk it. `for let v of &mut xs` does: `v` is a [scoped `&mut`](./spec-memory.md#mut-lasts-for-a-scope), and each turn stores its value back to the element.
-
-> Not yet implemented: `&mut` iteration over such a list is a compile error.
+An element type that is replaced on assignment (a primitive, `enum`, `flags`, a copyable `variant`, `fn`, or a `&` reference) is not `RefMut`, so `iter_ref_mut()` does not walk it. `for let v of &mut xs` does, [by index](./spec-control-flow.md#semantics).
 
 Indexed access writes such an element too:
 
@@ -1162,13 +1160,14 @@ eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:
 | ------------------------------------------------------------------ | ----- | -------- |
 | `struct`, `List<T>`, `String`, tuples, maps, sets, `i128` / `u128` | yes   | yes      |
 | a `resource`, an affine `variant`, `&mut T`                        | yes   | yes      |
-| a copyable `variant`, `fn`, `&T`                                   | yes   | no       |
+| a copyable `variant`, `fn`, `&T`, `Shared<T>`                      | yes   | no       |
 | scalars, `enum`, `flags`                                           | no    | no       |
 | `()`, `!`                                                          | no    | no       |
 
 `Ref` holds for a type whose value `&T` can alias. `RefMut` holds for the `Ref`
 types mutated in place rather than replaced on assignment, which excludes a
-copyable `variant`, `fn` and a `&` reference. An affine value is never copied,
+copyable `variant`, `fn`, a `&` reference and a
+[shared cell](./spec-memory.md#shared-cells). An affine value is never copied,
 so it is `RefMut` whatever its kind
 ([References to a Value Replaced on Assignment](./spec-memory.md#references-to-a-value-replaced-on-assignment)).
 

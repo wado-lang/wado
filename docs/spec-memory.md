@@ -229,8 +229,8 @@ Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value
 
 ### References to a Value Replaced on Assignment
 
-A primitive, `enum`, `flags`, copyable `variant`, `fn` or `&` reference is
-replaced on assignment: it has no storage a reference could share, and it is
+A primitive, `enum`, `flags`, copyable `variant`, `fn`, `&` reference or
+[shared cell](#shared-cells) is replaced on assignment: it has no storage a reference could share, and it is
 not [`RefMut`](./spec-standard-traits.md#dispatch). A `struct`, a tuple, a
 `List` and a `String` are written in place, and a reference to one shares its
 storage.
@@ -273,10 +273,12 @@ fixes the point its value goes back to the place:
   such a type holds the value for the arm, and the arm's end rebuilds what was
   matched around it and stores that back
   ([Match Ergonomics](./spec-patterns.md#match-ergonomics)).
-- A `for let v of &mut xs`, where one turn of the loop is the scope.
+- A `for let v of &mut xs`, where one turn of the loop is the scope
+  ([Semantics](./spec-control-flow.md#semantics) says which operands).
 
 Binding one to a variable, storing one in a value and returning one are compile
-errors. State that outlives a scope is a [shared cell](#shared-cells). The rule
+errors. A destructuring `let` and a `let … else` bind variables with no arm to
+end, so such a binding under a `&mut` scrutinee is an error too. State that outlives a scope is a [shared cell](#shared-cells). The rule
 is by type alone: a local, a field and an element take the same `&mut`.
 
 A generic body that only uses a `p: &mut T` takes every `T`. One that stores or
