@@ -1,0 +1,36 @@
+// A closure literal's body moves into the loop of the adapter that calls it,
+// although it reaches a safepoint: the call it replaces is one as well, and the
+// splice leaves the closure's environment to SROA. Any other callee reaching a
+// safepoint stays a call in a loop (`inline_loop_site_allocates.wado`).
+
+#[inline(never)]
+fn tally(code: i32) -> i32 {
+    return code % 7;
+}
+
+#[inline(never)]
+fn classify_all(bytes: &List<u8>, bias: i32) -> List<i32> {
+    return (0..<bytes.len()).into_iter().map(|i| {
+        let b = bytes[i] as i32 + bias;
+        let width = if b < 0x80 { 1 } else if b < 0xE0 { 2 } else if b < 0xF0 { 3 } else { 4 };
+        let code = if width == 1 { b } else if width == 2 { b & 0x1F } else if width == 3 { b & 0x0F } else { b & 0x07 };
+        let tail = if b < 0x80 { 0 } else if b < 0xC0 { b & 0x3F } else if width == 2 { 1 } else if width == 3 { 2 } else { (b >> 1 & 3) + 3 };
+        return code * 8 + width + tail + tally(code);
+    }).collect();
+}
+
+export fn run() {
+    let literal: List<u8> = b"A\xC3\xE2\xF0";
+    let out = classify_all(&builtin::black_box(literal), builtin::black_box(0));
+    assert out[0] == 0x41 * 8 + 1 + 0 + 2;
+    assert out[1] == 3 * 8 + 2 + 1 + 3;
+    assert out[3] == 0 * 8 + 4 + 3 + 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/inline"]},
+    "wir_scope": "inline_loop_site_closure_call.wado/classify_all",
+    "wir_not_expect:O2": ["$Closure_0::$call\"("]
+}

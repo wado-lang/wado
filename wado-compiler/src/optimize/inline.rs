@@ -1693,7 +1693,10 @@ enum Reach {
     /// [`Reach::Sole`] for a loop-free callee reaching a safepoint, and only
     /// outside a loop: the call it replaces is a safepoint too, so the caller
     /// spills nothing it did not already, where a loop would reload its
-    /// references on every iteration.
+    /// references on every iteration. A closure literal's `$call` body is the
+    /// exception, admitted in a loop as well: spliced, its environment is a
+    /// literal SROA splits and its captures are loads LICM hoists, which pays
+    /// where splicing a derived deserializer's `next_field` measured slower.
     SoleOutsideLoops,
     Everywhere,
 }
@@ -1872,7 +1875,8 @@ enum Refusal {
     LeftToCopyElision,
     /// The callee waits for the constants a site may still hand it.
     AwaitingConstant,
-    /// A callee admitted outside loops only, at a site in one.
+    /// A callee admitted outside loops only, at a site in one, and not a
+    /// closure literal's `$call` body.
     InLoop,
     /// A callee admitted in loops only, at a site outside them.
     OutsideLoop,
@@ -2625,6 +2629,8 @@ struct Candidates<'a> {
     fold_pending: bool,
     /// Per function, whether it is a `$value_copy$T` helper.
     value_copies: &'a [bool],
+    /// Per function, whether it is a closure literal's `$call` body.
+    closure_calls: &'a [bool],
     /// The candidates [`Verdict::awaits`] keeps waiting, each with the numeric
     /// parameters it waits on.
     awaiting: &'a IndexMap<FuncId, IndexSet<u32>>,
@@ -2843,6 +2849,11 @@ fn inline_round(
         .map(|(&eligible, e)| eligible && e.is_pure())
         .collect();
     let value_copies = project.value_copy_functions();
+    let closure_calls: Vec<bool> = project
+        .functions
+        .iter()
+        .map(|f| f.borrow().is_closure_call())
+        .collect();
     let loopy: Vec<bool> = scans.iter().map(|s| s.loopy).collect();
     let spins: Vec<bool> = scans.iter().map(|s| s.spins).collect();
 
@@ -3159,6 +3170,7 @@ fn inline_round(
             ctfe_eligible: &ctfe_eligible,
             fold_pending,
             value_copies: &value_copies,
+            closure_calls: &closure_calls,
             awaiting: &awaiting,
             opens: &opens,
             spins: &spins,
@@ -3977,6 +3989,9 @@ fn try_inline_call_expr(
                 frame.deferred |= left;
                 left.then_some(Refusal::LeftToEngine)
             }),
+            (Site::Loop, Reach::SoleOutsideLoops) if candidates.closure_calls[func_id.index()] => {
+                sole_site(frame)
+            }
             (Site::Loop, Reach::SoleOutsideLoops) => Some(Refusal::InLoop),
             (Site::Loop, Reach::Loops) => {
                 if frame.glue {
