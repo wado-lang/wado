@@ -1196,6 +1196,8 @@ struct Builder<'a> {
     labels: Vec<(String, u32)>,
     /// Each closure functor's `$call`, by functor id.
     closure_calls: Vec<Frame>,
+    /// Each closure functor's `$call`, by the struct its captures fill.
+    functor_struct_calls: IndexMap<TypeId, Frame>,
     /// The value of a function the analysis has no body for: what a call
     /// through it hands escapes, and its result is what escapes.
     unseen_function: u32,
@@ -1245,6 +1247,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         return_to: 0,
         labels: Vec::new(),
         closure_calls: Vec::new(),
+        functor_struct_calls: IndexMap::default(),
         unseen_function: 0,
     };
     b.escape = b.g.node();
@@ -1306,6 +1309,11 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
                 .id(&call.module_source, &call.name)
                 .expect("closure planning adds each `$call` to the package")
         })
+        .collect();
+    b.functor_struct_calls = functors
+        .iter()
+        .zip(&b.closure_calls)
+        .map(|(functor, &call)| (functor.struct_type_id, call))
         .collect();
     for global in &flat.globals {
         let node = b.global(&global.module_source, &global.name);
@@ -1977,6 +1985,17 @@ impl Builder<'_> {
                         }
                     }
                 }
+                Some(self.function_value(call, true, held))
+            }
+            // A closure passed to a callee specialized on it: the struct its
+            // captures fill, handed over as the closure value it stands for.
+            TirExprKind::StructLiteral {
+                struct_type,
+                fields,
+                ..
+            } if self.type_table.is_reference(expr.type_id) => {
+                let call = self.functor_struct_calls[struct_type];
+                let held = fields.iter().filter_map(|f| self.eval(&f.value)).collect();
                 Some(self.function_value(call, true, held))
             }
             TirExprKind::Capture { .. } => {
