@@ -652,7 +652,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .receiver
             .spelled(self.tysys.resolutions.defs())
             .to_string();
-        let survey = self.static_arg_survey(recv, method_name);
+        let mut survey = self.static_arg_survey(recv, method_name);
+        retain_one_per_param_list(&mut survey.candidates);
         let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
         // The trait the first candidate names. Where several traits supply the
         // name the call is an overload, reported before it reaches here.
@@ -797,6 +798,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(expected) = recv.expected_return {
             self.narrow_to_expected_return(&mut admitted, expected, |c| c.return_type);
         }
+        // Impls agreeing on a parameter list shape the arguments alike, so
+        // what is left to choose among is the lists.
+        retain_one_per_param_list(&mut admitted);
         // An impl leaving a slot to the call is told from another by the
         // arguments' types, which the resolution reads once they are
         // elaborated; only a numeric literal, whose width it would choose,
@@ -1096,4 +1100,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|callee| callee.own_params.clone())
             .unwrap_or_default()
     }
+}
+
+/// Keep the first candidate of each parameter list.
+fn retain_one_per_param_list(candidates: &mut Vec<ArgCandidate>) {
+    let mut seen: Vec<Vec<TypeId>> = Vec::new();
+    candidates.retain(|c| {
+        let fresh = !seen.contains(&c.params);
+        if fresh {
+            seen.push(c.params.clone());
+        }
+        fresh
+    });
 }
