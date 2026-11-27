@@ -173,20 +173,20 @@ impl HashIndex {
 
     /// The row whose key equals `probe`: among the rows hashing as `probe`
     /// does, the one `is_row` accepts.
-    pub fn find<Q: Hash>(&self, probe: &Q, is_row: fn(i32) -> bool) -> Option<i32> {
+    pub fn find<Q: Hash>(&self, probe: Q, is_row: fn(i32) -> bool) -> Option<i32> {
         if self.count == 0 {
             return null;
         }
-        let s = self.find_slot(fingerprint_under(&self.seed, probe), is_row);
+        let s = self.find_slot(fingerprint_under(&self.seed, &probe), is_row);
         return if s >= 0 { Option::Some(self.rows[s]) } else { null };
     }
 
     /// The row whose key equals `probe`, or `row` once it is indexed under
     /// `probe`.
-    pub fn find_or_insert<Q: Hash>(&mut self, probe: &Q, is_row: fn(i32) -> bool, row: i32) -> i32
+    pub fn find_or_insert<Q: Hash>(&mut self, probe: Q, is_row: fn(i32) -> bool, row: i32) -> i32
         contract row >= 0
     {
-        let fp = fingerprint_under(&self.seed, probe);
+        let fp = fingerprint_under(&self.seed, &probe);
         let mut s = -1;
         if self.rows.len() > 0 {
             s = self.find_slot(fp, is_row);
@@ -230,16 +230,21 @@ impl HashIndex {
         }
     }
 
-    /// Forgets every row. A table far wider than what it held is let go, so
-    /// one large fill does not make every later `clear` pay for its width.
+    /// Forgets every row. A table far wider than what it held is cut to fit
+    /// that, so one large fill does not make every later `clear` pay for its
+    /// width.
     pub fn clear(&mut self) {
         if self.count == 0 {
             return;
         }
         if self.rows.len() > self.count * SPARSE_TABLE {
-            self.rows = Array::new(0);
-            self.fps = Array::new(0);
-            self.shift = 32;
+            let mut slots = MIN_SLOTS;
+            while slots < self.count * 2 {
+                slots *= 2;
+            }
+            self.rows = Array::<i32>::filled(slots, NO_ENTRY);
+            self.fps = Array::<i32>::new(slots);
+            self.shift = 32 - i32::ctz(slots);
         } else {
             self.rows.fill(NO_ENTRY);
         }
