@@ -16,12 +16,13 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateId, TupleSlot, TypeArgMap, TypeId,
-    slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::call::{ArgSite, CallSolve, CaseSite, InheritedStatic, SigChoice, bind_nearer};
+use super::call::{
+    ArgSite, CallSolve, CaseSite, DefaultTypeBinding, InheritedStatic, SigChoice, bind_nearer,
+};
 use super::callee::StaticMethodRef;
 use super::coercion::ExpectedReturn;
 use super::expr::IndexAccess;
@@ -491,6 +492,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
+        // What the receiver's own call owes may be what settles its type.
+        if self.type_has_infer_hole(receiver) {
+            self.run_obligations();
+            receiver = self.apply_infer_holes(receiver);
+        }
+
         // Base (non-ref) type for method lookup. `mut`: deferred-inference may
         // concretise the receiver below.
         let mut base_type_id = self.tysys.get_base_type(receiver);
@@ -597,6 +604,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // no trait is named, which a qualified call would have to keep to.
         let mut waits_for_selection = false;
         let can_wait = call_id.is_some() && required_trait.is_none();
+        // A reference blanket's `&self` method, which answers where the
+        // referent has no method of the name: both would read the same value,
+        // and the referent's is the direct one. A `&mut self` one is not
+        // adopted: it would write to a copy of the reference.
+        let mut behind_referent = None;
+        // The same of a choice among such methods the lookup left undecided:
+        // the call waits for it only where the referent has no method.
+        let mut undecided_behind_referent = None;
         if let Some(ref_kind) = subject_ref_kind
             && trait_answers_nearer(self, Some(ref_kind == RefKind::Mut))
         {
@@ -610,6 +625,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ArgSource::Exprs(&mut probe)),
             );
             let subject = subject.expect("a reference kind is read off the subject");
+            let ref_depth = self.tysys.type_table.borrow().ref_depth(subject);
+            let result = if ref_depth == 1 && self.undecided_behind_referent(&result, method_name) {
+                undecided_behind_referent = Some((ref_kind, subject, result));
+                TraitLookup::Missing
+            } else {
+                result
+            };
             let result = match self.wait_or_decide(
                 result,
                 can_wait,
@@ -629,21 +651,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Err(result) => result,
             };
             reported |= matches!(result, TraitLookup::Reported);
-            if let Some(trait_match) = result.found()
-                && trait_match
-                    .answers_reference_receiver(self.tysys.type_table.borrow().ref_depth(subject))
-            {
-                let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
-                matched_impl_decl = trait_match.impl_struct_fq.head().def();
-                trait_impl_struct_name = Some(trait_match.impl_struct_fq);
-                matched_ref_kind = Some(ref_kind);
-                trait_name = Some(trait_match.trait_name);
-                let mut info = trait_match.method_info;
-                info.is_ref_impl = true;
-                info.owner = owner;
-                method_info = Some(info);
-                trait_impl_module_source = Some(trait_match.impl_module_source);
-                blanket_binder = trait_match.blanket_binder;
+            if let Some(trait_match) = result.found() {
+                if trait_match.answers_reference_receiver(ref_depth) {
+                    let adopted = self.adopt_ref_match(trait_match, base_type_id);
+                    matched_impl_decl = adopted.matched_impl_decl;
+                    trait_impl_struct_name = adopted.trait_impl_struct_name;
+                    matched_ref_kind = Some(ref_kind);
+                    trait_name = Some(adopted.trait_name);
+                    method_info = Some(adopted.info);
+                    trait_impl_module_source = adopted.trait_impl_module_source;
+                    blanket_binder = adopted.blanket_binder;
+                } else if ref_depth == 1 && trait_match.answers_behind_referent() {
+                    behind_referent = Some((ref_kind, trait_match));
+                }
             }
         }
 
@@ -749,6 +769,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        if method_info.is_none()
+            && !reported
+            && let Some((ref_kind, trait_match)) = behind_referent
+        {
+            for tie in &trait_match.tie_behind_referent {
+                let _ = self.emit(tie.clone());
+            }
+            let adopted = self.adopt_ref_match(trait_match, base_type_id);
+            matched_impl_decl = adopted.matched_impl_decl;
+            trait_impl_struct_name = adopted.trait_impl_struct_name;
+            matched_ref_kind = Some(ref_kind);
+            trait_name = Some(adopted.trait_name);
+            method_info = Some(adopted.info);
+            trait_impl_module_source = adopted.trait_impl_module_source;
+            blanket_binder = adopted.blanket_binder;
+        }
+        if method_info.is_none()
+            && !reported
+            && let Some((ref_kind, subject, lookup)) = undecided_behind_referent
+        {
+            match self.wait_or_decide(lookup, can_wait, subject, base_type_id, method_name, span) {
+                Ok((declared, mut info)) => {
+                    waits_for_selection = true;
+                    info.is_ref_impl = true;
+                    trait_name = Some(declared);
+                    matched_ref_kind = Some(ref_kind);
+                    method_info = Some(info);
+                }
+                Err(decided) => {
+                    assert!(
+                        matches!(decided, TraitLookup::Reported),
+                        "an undecided lookup that cannot wait is reported"
+                    );
+                    reported = true;
+                }
+            }
+        }
+
         // Selection is over; the classes come out of the probe so the arguments
         // can be elaborated (which needs `ctx` mutably) and then checked. A
         // waiting call selects later from every class.
@@ -807,8 +865,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.tysys
                             .trait_declares_method(trait_, method_name, |_| true)
                             .then(|| self.tysys.comparison_withheld_note(tr, base_type_id))?
-                    })
-                    .or_else(|| self.blanket_left_open_hint(base_type_id, method_name));
+                    });
                 let _ = self.emit(TypeError::MethodNotFound {
                     type_name,
                     method_name: method_name.to_string(),
@@ -1141,9 +1198,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             solved
         };
         if let Some(block) = dispatched_impl_block {
+            let given = self.receiver_slots(block, &impl_slot_args, base_type_id);
             self.settle_trait_arg_slots(
                 block,
-                &slots_from_impl_args(block, &impl_slot_args),
+                &given,
                 &inferred_impl_slots,
                 &mut substituted_param_types,
                 &args,
@@ -1462,39 +1520,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_blanket: false,
             })
         } else if let Some(binder) = blanket_binder {
-            // The template is named by the blanket's binder, the call site by
-            // the concrete receiver; monomorph_info maps one to the other.
-            let generic_name = MethodName::format_local(&binder, trait_name.as_ref(), method_name);
-            // Keyed by its parameters in order, where a trait argument settles
-            // one the receiver does not.
-            let impl_type_args = match dispatched_impl_block {
-                Some(block) if self.tysys.type_table.borrow().impl_trait_sets_params(block) => {
-                    let trait_env = Arc::clone(&self.tysys.trait_env);
-                    let blanket = trait_env
-                        .blanket_of_block(block)
-                        .expect("a match through a blanket names its block");
-                    let args = blanket_impl_args(
-                        &trait_env,
-                        blanket,
-                        base_type_id,
-                        &trait_args,
-                        &mut self.tysys.type_table.borrow_mut(),
-                    );
-                    if let Some(args) = args {
-                        args
-                    } else {
-                        self.close_open_trait_args(&trait_args);
-                        Vec::new()
-                    }
-                }
-                _ => vec![base_type_id],
-            };
-            Some(MonomorphInfo {
-                generic_name,
-                impl_type_args,
-                method_type_args: method_type_args.clone(),
-                is_blanket: true,
-            })
+            Some(self.blanket_monomorph_info(
+                MethodName::format_local(&binder, trait_name.as_ref(), method_name),
+                dispatched_impl_block,
+                base_type_id,
+                &trait_args,
+                method_type_args.clone(),
+            ))
         } else if receiver_type_args.is_some() || !method_type_args.is_empty() {
             let generic_name = MethodName::format_local(&base_struct_name, None, method_name);
             Some(MonomorphInfo {
@@ -2395,6 +2427,69 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.answer_frame_projections_in(param_types);
     }
 
+    /// The instance a call on `receiver` reaches through the blanket `block`,
+    /// whose template `generic_name` names by the blanket's binder where the
+    /// call site names the concrete receiver. It is keyed by the receiver, or
+    /// by the block's parameters in order where a trait argument settles one
+    /// the receiver does not.
+    pub(super) fn blanket_monomorph_info(
+        &mut self,
+        generic_name: String,
+        block: Option<DefId>,
+        receiver: TypeId,
+        trait_args: &[TypeId],
+        method_type_args: Vec<TypeId>,
+    ) -> MonomorphInfo {
+        let impl_type_args = match block {
+            Some(block) if self.tysys.type_table.borrow().impl_trait_sets_params(block) => {
+                let trait_env = Arc::clone(&self.tysys.trait_env);
+                let blanket = trait_env
+                    .blanket_of_block(block)
+                    .expect("a match through a blanket names its block");
+                let args = blanket_impl_args(
+                    &trait_env,
+                    blanket,
+                    receiver,
+                    trait_args,
+                    &mut self.tysys.type_table.borrow_mut(),
+                );
+                if let Some(args) = args {
+                    args
+                } else {
+                    self.close_open_trait_args(trait_args);
+                    Vec::new()
+                }
+            }
+            _ => vec![receiver],
+        };
+        MonomorphInfo {
+            generic_name,
+            impl_type_args,
+            method_type_args,
+            is_blanket: true,
+        }
+    }
+
+    /// The type parameters of the block `declaring_impl` as the static's
+    /// receiver `target` settles them: the arguments, then the bindings.
+    fn static_impl_bindings(
+        &self,
+        target: TypeId,
+        declaring_impl: Option<DefId>,
+    ) -> (Vec<TypeId>, Vec<DefaultTypeBinding>) {
+        let declaring_args = self
+            .tysys
+            .receiver_args_at_impl(Some(target), &[], declaring_impl)
+            .unwrap_or_default();
+        let impl_bindings = declaring_impl
+            .map(|id| {
+                let table = &self.tysys.type_table;
+                slot_type_bindings(table, table.borrow().impl_target_args(id), &declaring_args)
+            })
+            .unwrap_or_default();
+        (declaring_args, impl_bindings)
+    }
+
     /// `written`, the arguments `target` spells, as the block declaring `sig`
     /// names its receiver: a newtype calling its base's static passes the
     /// base's, which a re-shaping one (`type Wl<T> = Wrap<List<T>>`) does not
@@ -2588,7 +2683,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 static_call.id,
                 Some(static_call.method_id),
                 static_call.span,
-                None,
+                expected_type,
                 ctx,
             );
         }
@@ -2967,22 +3062,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .copied()
             .chain(self.vars_holding_written_holes(&method_type_args))
             .collect();
-        let args: Vec<TypeId> = if written_vars.is_empty() {
-            static_call
-                .args
-                .iter()
-                .enumerate()
-                .map(|(i, a)| {
-                    let expected_type = param_types.get(i).copied();
-                    self.resolve_expr(a, ctx, expected_type)
-                })
-                .collect()
-        } else {
-            // The expected type answers a `_` before a literal under it takes
-            // its default. A newtype's inherited static is read at its base.
+        let open_own_slots = callee_sig.as_ref().filter(|sig| {
+            receiver_holes.is_empty()
+                && lookup_receiver.is_some()
+                && !sig.own_params.is_empty()
+                && self.turbofish_leaves_slot(&method_type_args, sig.own_params.len())
+        });
+        // The expected type answers an open slot or a `_` before a literal
+        // under it takes its default. A newtype's inherited static is read at
+        // its base.
+        let ret = if open_own_slots.is_some() || !written_vars.is_empty() {
             let (_, expected_at_base) =
                 self.at_inherited_base(newtype, declaring_link, &[], expected_type);
-            let ret = match (&callee_sig, expected_at_base) {
+            match (&callee_sig, expected_at_base) {
                 (Some(sig), Some(expected)) => {
                     let declaring = sig
                         .declaring_impl
@@ -2998,7 +3090,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(ExpectedReturn { declared, expected })
                 }
                 (None, _) | (Some(_), None) => None,
-            };
+            }
+        } else {
+            None
+        };
+        // The static's own slots the spelling left open, as variables the
+        // arguments were typed against: a literal among them waits for what
+        // the slots' bounds say, as an instance call's does.
+        let mut own_inst = None;
+        let args: Vec<TypeId> = if let Some(sig) = open_own_slots {
+            let (_, impl_bindings) = self.static_impl_bindings(target_type_id, sig.declaring_impl);
+            let impl_args = settled_impl_args(&impl_bindings);
+            let declaring_trait = self.tysys.signatures.declaring_trait(sig);
+            let (args, inst) = self.resolve_args_through_slots(
+                ctx,
+                &static_call.args,
+                &param_types,
+                &sig.own_type_param_ids(),
+                &sig.own_params,
+                &Instantiation {
+                    kind: InstanceKind::Method,
+                    name: &static_call.method,
+                    span: static_call.span,
+                    type_args: &method_type_args,
+                    self_binding: Some(SelfBinding::of_static(target_type_id, declaring_trait)),
+                    impl_args: &impl_args,
+                },
+                ret,
+            );
+            own_inst = inst;
+            args
+        } else if written_vars.is_empty() {
+            static_call
+                .args
+                .iter()
+                .enumerate()
+                .map(|(i, a)| {
+                    let expected_type = param_types.get(i).copied();
+                    self.resolve_expr(a, ctx, expected_type)
+                })
+                .collect()
+        } else {
             let inst = Instantiated::of_vars(written_vars.into_iter().collect());
             self.resolve_args_against_params(&static_call.args, ctx, &param_types, Some(&inst), ret)
         };
@@ -3064,17 +3196,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut arg_sites: Vec<ArgSite> = static_call.args.iter().map(ArgSite::written).collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
-        // The declaring block's type parameters, as the receiver settles them.
-        let declaring_args = self
-            .tysys
-            .receiver_args_at_impl(Some(target_type_id), &[], declaring_impl)
-            .unwrap_or_default();
-        let impl_bindings = declaring_impl
-            .map(|id| {
-                let table = &self.tysys.type_table;
-                slot_type_bindings(table, table.borrow().impl_target_args(id), &declaring_args)
-            })
-            .unwrap_or_default();
+        let (declaring_args, impl_bindings) =
+            self.static_impl_bindings(target_type_id, declaring_impl);
         let declaring_trait = callee_sig
             .as_ref()
             .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
@@ -3119,24 +3242,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let qualified = format!("{receiver}::{}", static_call.method);
             let (args_at_base, expected_at_base) =
                 self.at_inherited_base(newtype, declaring_link, &args, expected_type);
-            (method_type_args, _) = self.bind_static_type_args(
-                method_type_args,
-                &qualified,
-                MethodInferenceInput {
-                    slots: &own_ids,
-                    own_params: &sig.own_params,
-                    param_types: &param_types,
-                    args: &args_at_base,
-                    raw_args: &static_call.args,
-                    decl_return_type: declared_return,
-                    expected_return_type: expected_at_base,
-                    self_binding: SelfBinding::of_static(target_type_id, declaring_trait),
-                    declaring_module: Some(sig.defaults_module.clone()),
-                    impl_args: &impl_args,
-                    inst: None,
-                    span: static_call.span,
-                },
-            );
+            let input = MethodInferenceInput {
+                slots: &own_ids,
+                own_params: &sig.own_params,
+                param_types: &param_types,
+                args: &args_at_base,
+                raw_args: &static_call.args,
+                decl_return_type: declared_return,
+                expected_return_type: expected_at_base,
+                self_binding: SelfBinding::of_static(target_type_id, declaring_trait),
+                declaring_module: Some(sig.defaults_module.clone()),
+                impl_args: &impl_args,
+                inst: own_inst.as_ref(),
+                span: static_call.span,
+            };
+            (method_type_args, _) = if input.inst.is_some() {
+                self.bind_method_type_args(method_type_args, input)
+            } else {
+                self.bind_static_type_args(method_type_args, &qualified, input)
+            };
             self.instantiate_static_params(
                 Some(&sig),
                 &declaring_args,

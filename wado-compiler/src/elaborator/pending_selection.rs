@@ -10,9 +10,7 @@ use crate::defs::DefId;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, RefKind};
-use crate::tir::{
-    EffectRows, FunctionRef, SlotProjections, TypeArgMap, TypeId, TypeParamId, slots_from_impl_args,
-};
+use crate::tir::{EffectRows, FunctionRef, SlotProjections, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -196,6 +194,27 @@ pub(crate) struct SelectedDispatch {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// What `trait_match`, found among the impls for a reference to
+    /// `base_type_id`, dispatches a call with.
+    pub(super) fn adopt_ref_match(
+        &self,
+        trait_match: TraitMethodMatch,
+        base_type_id: TypeId,
+    ) -> AdoptedMatch {
+        let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
+        let mut info = trait_match.method_info;
+        info.is_ref_impl = true;
+        info.owner = owner;
+        AdoptedMatch {
+            info,
+            trait_name: trait_match.trait_name,
+            matched_impl_decl: trait_match.impl_struct_fq.head().def(),
+            trait_impl_struct_name: Some(trait_match.impl_struct_fq),
+            trait_impl_module_source: Some(trait_match.impl_module_source),
+            blanket_binder: trait_match.blanket_binder,
+        }
+    }
+
     /// What `trait_match` dispatches a call on `base_type_id` with.
     pub(super) fn adopt_trait_match(
         &self,
@@ -590,10 +609,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
         // As an immediate call asks: the impls written for the reference
-        // first, then those for the value it points at.
+        // first, then those for the value it points at, which answers ahead
+        // of a reference blanket's `&self` method.
         let (lookup, ref_kind) = match call.ref_kind {
             Some(kind) => match lookup_at(self, &ImplTargetKey::Ref(kind)) {
                 TraitLookup::Missing => (lookup_at(self, &value_target), None),
+                TraitLookup::Found(found) if found.answers_behind_referent() => {
+                    match lookup_at(self, &value_target) {
+                        TraitLookup::Missing => {
+                            for tie in &found.tie_behind_referent {
+                                let _ = self.emit(tie.clone());
+                            }
+                            (TraitLookup::Found(found), Some(kind))
+                        }
+                        at_value => (at_value, None),
+                    }
+                }
                 lookup => (lookup, Some(kind)),
             },
             None => (lookup_at(self, &value_target), None),
@@ -614,9 +645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let _ = self.emit(TypeError::MethodNotFound {
                         type_name,
                         method_name: call.method_name.clone(),
-                        hint: self
-                            .blanket_left_open_hint(receiver, &call.method_name)
-                            .unwrap_or_default(),
+                        hint: String::new(),
                         span: call.span,
                     });
                 }
@@ -707,9 +736,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = frame.to_newtype(&self.tysys, return_type);
         }
         if let Some(block) = info.impl_block {
+            let given = self.receiver_slots(block, &info.impl_slot_args, receiver);
             self.settle_trait_arg_slots(
                 block,
-                &slots_from_impl_args(block, &info.impl_slot_args),
+                &given,
                 &info.inferred_impl_slots,
                 &mut param_types,
                 args,

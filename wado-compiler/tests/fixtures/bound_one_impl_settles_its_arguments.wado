@@ -1,0 +1,184 @@
+// A bound whose subject is settled and has one impl of the bound's trait
+// settles the variables the bound's arguments hold, as a call of the trait's
+// own method on that subject would. Several impls leave them to the expected
+// type.
+
+trait Source<A> with () { fn first(&self) -> A; }
+trait Items<L> with () { fn items(&self) -> L; }
+
+struct One { n: i32 }
+impl Source<i32> for One { fn first(&self) -> i32 { return self.n; } }
+impl Items<List<i32>> for One { fn items(&self) -> List<i32> { return [self.n]; } }
+
+struct Two { n: i32 }
+impl Source<i32> for Two { fn first(&self) -> i32 { return self.n; } }
+impl Source<String> for Two { fn first(&self) -> String { return `${self.n}`; } }
+
+fn first_of<A, T: Source<A>>(t: &T) -> A {
+    return t.first();
+}
+
+fn head_of<A, T: Items<List<A>>>(t: &T) -> A {
+    return t.items()[0];
+}
+
+fn forwarded<T: Source<i32>>(t: &T) -> String {
+    let v = first_of(t);
+    return `${v}`;
+}
+
+test "a generic function's parameter" {
+    let one = One { n: 7 };
+    let v = first_of(&one);
+    assert `${v}` == "7";
+}
+
+test "nested in the bound's argument" {
+    let one = One { n: 7 };
+    let v = head_of(&one);
+    assert `${v}` == "7";
+}
+
+test "from the bound in force" {
+    assert forwarded(&Two { n: 7 }) == "7";
+}
+
+test "several impls wait for the expected type" {
+    let two = Two { n: 7 };
+    let s: String = first_of(&two);
+    assert s == "7";
+}
+
+test "the settled result is a receiver" {
+    let one = One { n: -7 };
+    assert first_of(&one).div_floor(2) == -4;
+}
+
+fn forwards_its_parameter<B, T: Source<B>>(t: &T) -> B {
+    return first_of(t);
+}
+
+test "from a bound in force naming a parameter" {
+    let v = forwards_its_parameter(&One { n: 7 });
+    assert v == 7;
+}
+
+struct Host {}
+
+impl Host {
+    fn first_of<A, T: Source<A>>(&self, t: &T) -> A {
+        return t.first();
+    }
+
+    fn put<A, T: Source<A>>(&self, t: &T, a: A) -> A {
+        return a;
+    }
+
+    fn stat<A, T: Source<A>>(t: &T) -> A {
+        return t.first();
+    }
+}
+
+test "a method's own parameter" {
+    let h = Host {};
+    let one = One { n: 7 };
+    let v = h.first_of(&one);
+    let s = Host::stat(&one);
+    let w: i32 = h.first_of(&one);
+    assert `${v}` == "7" && `${s}` == "7" && w == 7;
+    assert h.put(&one, 1) == 1;
+}
+
+trait Sink<A> with () {
+    fn sink(&self, a: A) -> i32;
+}
+
+impl Sink<i64> for One {
+    fn sink(&self, a: i64) -> i32 {
+        return 64;
+    }
+}
+
+fn put<A, T: Sink<A>>(t: &T, a: A) -> i32 {
+    return t.sink(a);
+}
+
+test "a literal argument takes the one impl's type" {
+    let one = One { n: 7 };
+    assert put(&one, 1) == 64;
+}
+
+struct Shapes { n: i32 }
+impl Source<&i32> for Shapes { fn first(&self) -> &i32 { return &self.n; } }
+impl Items<[i32, String]> for Shapes { fn items(&self) -> [i32, String] { return [self.n, "x"]; } }
+
+struct Thunk {}
+impl Source<fn() -> i32> for Thunk { fn first(&self) -> fn() -> i32 { return || 7; } }
+
+fn behind_ref<A, T: Source<&A>>(t: &T) -> A {
+    return *t.first();
+}
+
+fn in_tuple<A, T: Items<[A, String]>>(t: &T) -> A {
+    return t.items().0;
+}
+
+fn returned<A, T: Source<fn() -> A>>(t: &T) -> A {
+    let make = t.first();
+    return make();
+}
+
+test "behind a reference, in a tuple, in a function type" {
+    let shapes = Shapes { n: 7 };
+    let r = behind_ref(&shapes);
+    let t = in_tuple(&shapes);
+    let f = returned(&Thunk {});
+    assert `${r}` == "7" && `${t}` == "7" && `${f}` == "7";
+}
+
+trait Pair<R, A> with () {
+    fn pair(&self, a: A) -> i32;
+}
+
+impl Pair<i64, u64> for One {
+    fn pair(&self, a: u64) -> i32 {
+        return 64;
+    }
+}
+
+struct Typed<R> { r: R }
+
+impl<R> Typed<R> {
+    fn put<A, T: Pair<R, A>>(t: &T, a: A) -> i32 {
+        return t.pair(a);
+    }
+
+    fn give<A, T: Pair<R, A>>(&self, t: &T, a: A) -> i32 {
+        return t.pair(a);
+    }
+
+    fn echo<A>(a: A) -> A {
+        return a;
+    }
+}
+
+test "the expected type reaches a literal of a static on a written receiver" {
+    let n: i64 = Typed::<i32>::echo(1);
+    let xs: List<u8> = [Typed::<i32>::echo(1)];
+    assert n == 1 && xs[0] == 1;
+}
+
+test "a literal argument of a static on a written receiver" {
+    let one = One { n: 7 };
+    assert Typed::<i64>::put(&one, 1) == 64;
+    assert Typed::<i64> { r: 1 }.give(&one, 1) == 64;
+    assert Typed::<i64>::put::<_, One>(&one, 1) == 64;
+    assert Host::sunk(&one, 1) == 64;
+    assert Host::sunk::<_, One>(&one, 1) == 64;
+}
+
+impl Host {
+    fn sunk<A, T: Sink<A>>(t: &T, a: A) -> i32 {
+        return t.sink(a);
+    }
+}

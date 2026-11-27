@@ -802,7 +802,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|r| r.expect("every argument is resolved in one of the two passes"))
                 .collect::<Vec<TypeId>>()
         });
-        let settled = self.settle_pending_literals(pending, args, ret, ctx);
+        let settled = self.settle_pending_literals(pending, args, inst, ret, ctx);
         // A `null` answers last, as a literal does.
         if let Some(ret) = ret {
             self.equate(ret.declared, ret.expected);
@@ -2806,13 +2806,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .call_effect_binding(declared_param_types, args);
-        if !type_args.is_empty() {
-            self.check_function_type_arg_bounds(callee, type_args, &effect_rows, call.span);
-        }
-
         if !self.lookup_function_type_params(callee).is_empty() {
             self.report_value_for_reference(declared_param_types, call, args);
         }
+        // Before the bounds check, so a bound reading an open slot
+        // (`T: Source<A>`) names its variable, which the bound may settle.
         self.defer_or_report_uninferred_fn_type_args(
             callee,
             type_args,
@@ -2820,6 +2818,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &effect_rows,
             call.span,
         );
+        if !type_args.is_empty() {
+            self.check_function_type_arg_bounds(callee, type_args, &effect_rows, call.span);
+        }
         // The arguments were typed by the call's own variables, which what the
         // call settled answers: a projection or a default among them included.
         if let Some(inst) = &slot_instantiation

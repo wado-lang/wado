@@ -1,0 +1,78 @@
+// A method call in argument position is classed by the method its own
+// arguments select, among one trait's argument lists.
+// Regression: synthesis read the first candidate's return type, so the outer
+// call selected against a type the argument never had, and the compiler's
+// check of synthesis against elaboration panicked.
+
+trait Near with () {
+    fn near() -> i32;
+}
+
+trait Echo<A> with () {
+    fn echo(&self, a: A) -> A;
+}
+
+trait Accept<A> with () {
+    fn accept(&self, a: A) -> i32;
+}
+
+struct Plain {}
+
+impl Echo<i32> for Plain {
+    fn echo(&self, a: i32) -> i32 {
+        return a;
+    }
+}
+
+impl Echo<bool> for Plain {
+    fn echo(&self, a: bool) -> bool {
+        return a;
+    }
+}
+
+struct Bare {}
+
+impl Near for Bare {
+    fn near() -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Near> Echo<i32> for &T {
+    fn echo(&self, a: i32) -> i32 {
+        return a;
+    }
+}
+
+impl<T: Near> Echo<bool> for &T {
+    fn echo(&self, a: bool) -> bool {
+        return a;
+    }
+}
+
+struct Sink {}
+
+impl Accept<i32> for Sink {
+    fn accept(&self, _a: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl Accept<bool> for Sink {
+    fn accept(&self, _a: bool) -> i32 {
+        return 2;
+    }
+}
+
+test "impls for the receiver" {
+    let plain = Plain {};
+    let sink = Sink {};
+    assert sink.accept(plain.echo(true)) == 2;
+    assert sink.accept((&plain).echo(7 as i32)) == 1;
+}
+
+test "reference blankets" {
+    let bare = Bare {};
+    let sink = Sink {};
+    assert sink.accept((&bare).echo(true)) == 2;
+}

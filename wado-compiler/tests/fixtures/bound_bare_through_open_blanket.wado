@@ -1,0 +1,46 @@
+// A bare bound is not met through a blanket whose trait argument only its own
+// bounds would say: nothing at the bound settles it, and the bounds may agree
+// on no argument at all.
+
+trait Source<A> with () {
+    fn first(&self) -> A;
+}
+
+trait Sink<A> with () {
+    fn sink(&self, a: A) -> i32;
+}
+
+trait Tag<A> with () {
+    fn tag(&self) -> i32;
+}
+
+struct One {}
+
+impl Source<i32> for One {
+    fn first(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Sink<bool> for One {
+    fn sink(&self, a: bool) -> i32 {
+        return 2;
+    }
+}
+
+impl<A, T: Source<A> + Sink<A>> Tag<A> for T {
+    fn tag(&self) -> i32 {
+        return 3;
+    }
+}
+
+fn require<T: Tag>(t: &T) -> i32 {
+    return 5;
+}
+
+export fn run() {
+    let _ = require(&One {});
+}
+
+__DATA__
+{"compile_error": ":42:13: analysis error: type 'One' does not implement trait 'Tag'"}

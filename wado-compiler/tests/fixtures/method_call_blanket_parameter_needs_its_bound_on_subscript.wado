@@ -1,0 +1,18 @@
+// A `&mut self` call on a subscript receiver owes the blanket's bound at the
+// argument the call settles, as a call on a plain receiver does.
+
+trait Source<A> with () { fn first(&self) -> A; }
+trait Edit<A> with () { fn edit(&mut self, a: A) -> i32; }
+impl<A, T: Source<A>> Edit<A> for T {
+    fn edit(&mut self, _a: A) -> i32 { return 1; }
+}
+struct Two { n: i32 }
+impl Source<i32> for Two { fn first(&self) -> i32 { return self.n; } }
+impl Source<String> for Two { fn first(&self) -> String { return `${self.n}`; } }
+export fn run() {
+    let mut twos: List<Two> = [Two { n: 7 }];
+    let _ = twos[0].edit(1 as u8);
+}
+
+__DATA__
+{"compile_error": ":14:13: analysis error: type 'Two' does not implement trait 'Source<u8>' required by bound on 'T'"}

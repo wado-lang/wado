@@ -11,7 +11,8 @@ mod rank;
 mod testing;
 
 pub use candidates::{
-    Candidates, answering_link, bound_candidates, candidates, cmp_giving_eq, instance_candidates,
+    Candidates, answering_link, bound_candidates, bound_candidates_at_any_args, candidates,
+    cmp_giving_eq, instance_candidates,
 };
 pub use coherence::{CoherenceError, coherence_errors, mark_rejected};
 pub use derive::{derive, derive_alongside, pair_comparisons, sourced, written_over};
