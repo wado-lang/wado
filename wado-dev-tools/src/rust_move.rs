@@ -1678,16 +1678,19 @@ fn helper(n: usize) -> i32 {
 
     #[test]
     fn a_block_keeps_the_items_sharing_its_outer_lines() {
-        let (dir, _) = a_to_b(
-            "pub struct S;\n\npub fn before() {} impl S {\n    \
-             pub fn one(&self) -> i32 {\n        1\n    }\n} pub fn after() {}\n",
-            "",
-            "a::before(); a::after(); a::S.one()",
-            &["probe::a::S::one"],
-        );
-        let a = read(&dir, "src/a.rs");
-        assert!(a.contains("pub fn before() {}"), "{a}");
-        assert!(a.contains("pub fn after() {}"), "{a}");
+        for [before, after] in [["pub fn other() {} ", ""], ["", " pub fn other() {}"]] {
+            let (dir, _) = a_to_b(
+                &format!(
+                    "pub struct S;\n\n{before}impl S {{\n    \
+                     pub fn one(&self) -> i32 {{\n        1\n    }}\n}}{after}\n"
+                ),
+                "",
+                "a::other(); a::S.one()",
+                &["probe::a::S::one"],
+            );
+            let a = read(&dir, "src/a.rs");
+            assert!(a.contains("pub fn other() {}"), "{a}");
+        }
     }
 
     #[test]
