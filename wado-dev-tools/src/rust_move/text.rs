@@ -260,6 +260,51 @@ pub fn use_items(text: &str) -> Vec<UseItem> {
     items
 }
 
+/// The byte ranges of the blocks of `code` (as `code_only` leaves it) that a
+/// `use` of their own binds `name` in.
+pub fn blocks_importing(code: &str, name: &str) -> Vec<Range<usize>> {
+    let mut uses = identifiers(code)
+        .into_iter()
+        .filter(|(_, word)| *word == "use")
+        .map(|(at, _)| at)
+        .peekable();
+    let mut open: Vec<(usize, bool)> = Vec::new();
+    let mut found = Vec::new();
+    for (at, c) in code.char_indices() {
+        if uses.next_if_eq(&at).is_some()
+            && let Some((_, binds)) = open.last_mut()
+        {
+            let tree_start = at + "use".len();
+            let tree_len = code[tree_start..]
+                .find(';')
+                .expect("a `use` item ends in `;`");
+            let mut item = UseItem {
+                lines: 0..0,
+                bindings: Vec::new(),
+                globs: Vec::new(),
+                plain: false,
+            };
+            flatten_use_tree(
+                code,
+                "",
+                &code[tree_start..tree_start + tree_len],
+                &mut item,
+            );
+            *binds |= item.bindings.iter().any(|b| b.name == name);
+        }
+        match c {
+            '{' => open.push((at, false)),
+            '}' => {
+                if let Some((start, true)) = open.pop() {
+                    found.push(start..at + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
 /// Where the tree of a top-level `use` on `line` starts.
 fn use_keyword_end(line: &str) -> Option<usize> {
     let after_visibility = match line.strip_prefix("pub") {
@@ -385,6 +430,20 @@ mod tests {
     fn identifiers_carry_their_offsets() {
         let text = "let あ = b;";
         assert_eq!(identifiers(text), [(0, "let"), (4, "あ"), (10, "b")]);
+    }
+
+    #[test]
+    fn a_nested_use_binds_its_own_block() {
+        let code = "use a::max;\nfn f() {\n    { use std::cmp::{max, min}; max(1, 2) }\n    \
+                    use b::max as top;\n    max(1, 2)\n}\nfn g() {\n    use c::*;\n}\n";
+        let inner = code.find("{ use").unwrap();
+        let inner_end = code.find("2) }").unwrap() + "2) }".len();
+        assert_eq!(blocks_importing(code, "max"), vec![inner..inner_end]);
+        let f = code.find("{\n    {").unwrap();
+        let f_end = code.find("}\nfn g").unwrap() + 1;
+        assert_eq!(blocks_importing(code, "top"), vec![f..f_end]);
+        assert_eq!(blocks_importing(code, "min"), vec![inner..inner_end]);
+        assert_eq!(blocks_importing(code, "c"), Vec::<Range<usize>>::new());
     }
 
     #[test]

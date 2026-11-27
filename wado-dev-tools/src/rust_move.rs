@@ -21,7 +21,7 @@ use crate::rust_rename::edit::{self, Position};
 use crate::rust_rename::lsp::{Client, file_uri, uri_path};
 use crate::rust_rename::symbol::Location;
 use crate::rust_rename::{Locator, Mode, await_workspace, display_path, start_server};
-use text::{Binding, UseItem, code_only, identifiers, is_keyword, use_items};
+use text::{Binding, UseItem, blocks_importing, code_only, identifiers, is_keyword, use_items};
 
 /// `SymbolKind` values of the LSP specification.
 const MODULE_KIND: u64 = 2;
@@ -541,12 +541,25 @@ impl Move {
         }
         // A glob or the prelude binds it without naming it, and an explicit
         // import would outrank either: what the destination's own code reads
-        // by the bare name says. Every use, since a `use` inside a function
-        // binds the name there alone: the import changes nothing only where
-        // they all mean one thing.
+        // by the bare name says: every use the top level's binding reaches,
+        // which a module of its own and a block's own `use` do not.
+        let modules = destination
+            .symbols
+            .iter()
+            .filter(|s| s["kind"].as_u64() == Some(MODULE_KIND))
+            .map(|module| {
+                destination.offset(Position::from_lsp(&module["range"]["start"]))
+                    ..destination.offset(Position::from_lsp(&module["range"]["end"]))
+            });
+        let shadowed: Vec<Range<usize>> = blocks_importing(&destination.code, name)
+            .into_iter()
+            .chain(modules)
+            .collect();
         let bare_uses = destination.identifiers.iter().filter(|(at, written)| {
             let before = destination.lines[at.line][..at.column].trim_end();
+            let offset = destination.offset(*at);
             written == name
+                && !shadowed.iter().any(|block| block.contains(&offset))
                 && !self
                     .destination_uses
                     .iter()
@@ -1460,6 +1473,19 @@ fn helper(n: usize) -> i32 {
             "{report}"
         );
         assert!(!read(&dir, "src/b.rs").contains("\nuse std::cmp::max;"));
+    }
+
+    #[test]
+    fn a_block_importing_the_name_says_nothing_of_the_top_level() {
+        let (dir, report) = a_to_b(
+            "use std::cmp::max;\n\npub fn largest() -> i32 {\n    max(1, 2)\n}\n",
+            "use inner::*;\n\nmod inner {\n    pub fn max(a: i32, _b: i32) -> i32 {\n        a\n    }\n}\n\n\
+             pub fn local() -> i32 {\n    use std::cmp::max;\n    max(1, 2)\n}\n",
+            "a::largest(); b::local()",
+            &["probe::a::largest"],
+        );
+        assert!(!report.contains("`max` means"), "{report}");
+        assert!(read(&dir, "src/b.rs").contains("\nuse std::cmp::max;"));
     }
 
     #[test]
