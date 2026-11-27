@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795817466103,
+  "lastUpdate": 1795822862626,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -83085,6 +83085,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6de5f9736e14e0e0c943b852c6f6d4a9f4f5dcfb"
         },
         "date": 1795817465413,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "adeea9fe09d792936a916714bf131d955a31a03d",
+          "message": "Merge pull request #2789 from wado-lang/ccr-06ec82c2-nz18ok\n\nfeat(web): move a NodeIterator off a node removed from the tree",
+          "timestamp": "2026-11-28T08:23:41+09:00",
+          "tree_id": "b17bebda00812cb93b00b0528411acde87081a2c",
+          "url": "https://github.com/wado-lang/wado/commit/adeea9fe09d792936a916714bf131d955a31a03d"
+        },
+        "date": 1795822861723,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
