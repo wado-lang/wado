@@ -1522,7 +1522,7 @@ impl<T: AtnKey + Eq> AtnKeyLists<T> {
         for let mut i = from; i < self.keys.len(); i += 1 {
             h = (h ^ self.keys[i].key_bits() + 16) * 1099511628211;
         }
-        return ((h ^ (h as u64 >> 32) as i64) * -7046029254386353131) as u64;
+        return HashIndex::spread(h as u64);
     }
 
     fn count(&self) -> i32 {
