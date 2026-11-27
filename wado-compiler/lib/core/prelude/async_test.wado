@@ -7,8 +7,7 @@ test "a lent destination takes no more than its room, whatever the read asks" {
     for let i of 0..<8 {
         builtin::store(ptr + i, 0xAA as u8);
     }
-    let mut lending = true;
-    let chunk = rx.begin_read(4096, ReadInto::lent(ptr, 4, &mut lending)).settle(&rx);
+    let chunk = rx.begin_read(4096, ReadInto::lent(ptr, 4, Shared::new(true))).settle(&rx);
     assert chunk.items == [1, 2, 3, 4];
     assert builtin::load::<u8>(ptr + 4) == 0xAA;
     rx.drop();
@@ -22,8 +21,7 @@ test "a lent destination traps once its lend has ended" {
     let [rx, tx] = Stream::<u8>::new();
     tx.drop();
     let ptr = builtin::realloc(0, 0, 1, 4);
-    let mut lending = false;
-    let _ = rx.begin_read(4, ReadInto::lent(ptr, 4, &mut lending)).settle(&rx);
+    let _ = rx.begin_read(4, ReadInto::lent(ptr, 4, Shared::new(false))).settle(&rx);
 }
 
 // One Component Model copy moves at most 2^28 - 1 elements, and a longer one traps.

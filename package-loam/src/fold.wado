@@ -875,22 +875,25 @@ fn pick<T>(values: &List<T>, at: &List<i32>) -> List<T> {
 fn joined_elements(parts: &List<Known>) -> Result<Elements, String> {
     let mut joined = parts[0].elements;
     for let i of 1..<parts.len() {
-        match [&mut joined, &parts[i].elements] {
-            [Ints(a), Ints(b)] => a.extend(b),
-            [Floats(a), Floats(b)] => a.extend(b),
-            [Bools(a), Bools(b)] => a.extend(b),
-            [a, b] => {
-                let [Some(l), Some(r)] = [
-                    integer_polys(a),
-                    integer_polys(b),
-                ] else {
-                    return Result::Err("the operands are not one element type");
-                };
-                let mut values = l;
-                values.extend(&r);
-                *a = Elements::integers(values);
-            },
+        let more = &parts[i].elements;
+        if let Ints(a) = &mut joined && let Ints(b) = more {
+            a.extend(b);
+            continue;
         }
+        if let Floats(a) = &mut joined && let Floats(b) = more {
+            a.extend(b);
+            continue;
+        }
+        if let Bools(a) = &mut joined && let Bools(b) = more {
+            a.extend(b);
+            continue;
+        }
+        let [Some(l), Some(r)] = [integer_polys(&joined), integer_polys(more)] else {
+            return Result::Err("the operands are not one element type");
+        };
+        let mut values = l;
+        values.extend(&r);
+        joined = Elements::integers(values);
     }
     return Result::Ok(joined);
 }

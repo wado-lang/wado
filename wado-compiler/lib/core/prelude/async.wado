@@ -273,7 +273,7 @@ pub struct ReadInto {
     room: i32,
     /// Whether the lender still lends `ptr`; `None` for memory the copy
     /// allocates for itself.
-    lending: Option<&mut bool>,
+    lending: Option<Shared<bool>>,
 }
 
 impl ReadInto {
@@ -284,7 +284,7 @@ impl ReadInto {
 
     /// The `room` bytes at `ptr`, lent while `*lending` holds. Only a byte
     /// stream's read takes it.
-    internal fn lent(ptr: i32, room: i32, lending: &mut bool) -> ReadInto
+    internal fn lent(ptr: i32, room: i32, lending: Shared<bool>) -> ReadInto
         contract ptr != 0
     {
         return ReadInto { ptr, room, lending: Option::Some(lending) };

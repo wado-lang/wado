@@ -53,7 +53,7 @@ pub affine struct ListView<T: AnyBits> {
     internal owned_bytes: i32,
     /// Set where the view drops, so a reference kept past it traps on a read.
     /// A cell rather than a field, since `drop` takes the view by value.
-    internal released: &mut bool,
+    internal released: Shared<bool>,
     /// The array a borrowed view reads: `ptr` alone is a number, and a
     /// reference is what holds the view to the array that owns the block.
     internal owner: Option<&LinearArray<T>>,
@@ -105,8 +105,7 @@ impl<T: AnyBits> IndexValue<i32> for ListView<T> {
 /// A live view of `len` `T`s at `ptr`, freeing `owned_bytes` where it drops.
 /// An owned block is aligned to one `T`, as the view frees it.
 fn view_of<T: AnyBits>(ptr: i32, len: i32, owned_bytes: i32, owner: Option<&LinearArray<T>>) -> ListView<T> {
-    let mut released = false;
-    return ListView::<T> { ptr, len, owned_bytes, released: &mut released, owner };
+    return ListView::<T> { ptr, len, owned_bytes, released: Shared::new(false), owner };
 }
 
 impl<T: AnyBits> ListArg<T> for List<T> {
@@ -398,11 +397,11 @@ impl LinearArray<u8> {
     fn read_more(&mut self, stream: &Stream<u8>) -> CopyResult with Stream {
         let full = self.len == self.block.bytes;
         let room = if full { STREAM_CHUNK_ELEMENTS } else { self.block.bytes - self.len };
-        let mut lending = !full;
-        let into = if full { ReadInto::fresh() } else { ReadInto::lent(self.block.ptr + self.len, room, &mut lending) };
+        let lending = Shared::new(!full);
+        let into = if full { ReadInto::fresh() } else { ReadInto::lent(self.block.ptr + self.len, room, lending) };
         let mut started = stream.begin_read(room, into);
         let packed = started.buffer.settle();
-        lending = false;
+        *lending = false;
         let landed = cm_packed_upper(packed);
         let items = &started.items;
         if landed > 0 {
@@ -428,7 +427,7 @@ impl LinearArray<u8> {
 affine struct Landing {
     at: i32,
     started: StartedRead<u8>,
-    lending: &mut bool,
+    lending: Shared<bool>,
 }
 
 impl Waitable for Landing {
@@ -439,8 +438,7 @@ impl Waitable for Landing {
 
 /// A copy on `stream`, its stream `at`, into the `room` bytes at `ptr`.
 fn landing(stream: &Stream<u8>, at: i32, ptr: i32, room: i32) -> Landing with Stream {
-    let mut lent = true;
-    let lending = &mut lent;
+    let lending = Shared::new(true);
     let into = ReadInto::lent(ptr, room, lending);
     return Landing { at, started: stream.begin_read(room, into), lending };
 }
