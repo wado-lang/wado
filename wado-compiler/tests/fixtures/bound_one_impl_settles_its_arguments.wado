@@ -162,5 +162,13 @@ test "a literal argument of a static on a written receiver" {
     let one = One { n: 7 };
     assert Typed::<i64>::put(&one, 1) == 64;
     assert Typed::<i64> { r: 1 }.give(&one, 1) == 64;
-    assert Host::put::<_, One>(&Host {}, &one, 1) == 1;
+    assert Typed::<i64>::put::<_, One>(&one, 1) == 64;
+    assert Host::sunk(&one, 1) == 64;
+    assert Host::sunk::<_, One>(&one, 1) == 64;
+}
+
+impl Host {
+    fn sunk<A, T: Sink<A>>(t: &T, a: A) -> i32 {
+        return t.sink(a);
+    }
 }

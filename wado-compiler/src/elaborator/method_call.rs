@@ -3017,7 +3017,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .chain(self.vars_holding_written_holes(&method_type_args))
             .collect();
         let open_own_slots = callee_sig.as_ref().filter(|sig| {
-            written_vars.is_empty()
+            receiver_holes.is_empty()
                 && lookup_receiver.is_some()
                 && !sig.own_params.is_empty()
                 && self.turbofish_leaves_slot(&method_type_args, sig.own_params.len())
