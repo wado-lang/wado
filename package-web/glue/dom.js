@@ -25,6 +25,7 @@ const $ENUMS = {
   ScrollBehavior: ["auto", "instant", "smooth"],
   ScrollIntoViewContainer: ["all", "nearest"],
   ScrollLogicalPosition: ["start", "center", "end", "nearest"],
+  SelectionMode: ["select", "start", "end", "preserve"],
   SpatialNavigationDirection: ["up", "down", "left", "right"],
 };
 const $SLOT_GET = "$cm_extern_slot_get";
@@ -418,6 +419,30 @@ export function $glue() {
       },
       "$wado-lang:web/element#scroll-into-view": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10) => {
         return $settle(p0.scrollIntoView((p1 === 0 ? undefined : (p2 === 0 ? (p3 !== 0) : { behavior: (p3 === 0 ? undefined : $ENUMS.ScrollBehavior[p4]), block: (p5 === 0 ? undefined : $ENUMS.ScrollLogicalPosition[p6]), inline: (p7 === 0 ? undefined : $ENUMS.ScrollLogicalPosition[p8]), container: (p9 === 0 ? undefined : $ENUMS.ScrollIntoViewContainer[p10]) }))), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scroll((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scroll(p1, p2), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-to-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scrollTo((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-to-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scrollTo(p1, p2), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-by-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scrollBy((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-by-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scrollBy(p1, p2), 4, ($ret, $value) => {
         });
       },
       "$wado-lang:web/element#scroll-top": (p0) => {
@@ -1789,6 +1814,12 @@ export function $glue() {
       "$wado-lang:web/html-input-element#set-selection-direction": (p0, p1, p2, p3) => {
         p0.selectionDirection = (p1 === 0 ? undefined : $string(p2, p3));
       },
+      "$wado-lang:web/html-input-element#set-range-text": (p0, p1, p2) => {
+        p0.setRangeText($string(p1, p2));
+      },
+      "$wado-lang:web/html-input-element#set-range-text-with-start-end-selection-mode": (p0, p1, p2, p3, p4, p5) => {
+        p0.setRangeText($string(p1, p2), (p3 >>> 0), (p4 >>> 0), $ENUMS.SelectionMode[p5]);
+      },
       "$wado-lang:web/html-input-element#set-selection-range": (p0, p1, p2, p3, p4, p5) => {
         p0.setSelectionRange((p1 >>> 0), (p2 >>> 0), (p3 === 0 ? undefined : $string(p4, p5)));
       },
@@ -1960,7 +1991,7 @@ export function $glue() {
       "$wado-lang:web/document#set-body": (p0, p1) => {
         p0.body = (p1 ?? undefined);
       },
-      "$wado-lang:web/document#open": (p0, p1, p2, p3, p4, p5, p6) => {
+      "$wado-lang:web/document#open-with-unused1-unused2": (p0, p1, p2, p3, p4, p5, p6) => {
         return p0.open((p1 === 0 ? undefined : $string(p2, p3)), (p4 === 0 ? undefined : $string(p5, p6)));
       },
       "$wado-lang:web/document#close": (p0) => {
@@ -2178,6 +2209,30 @@ export function $glue() {
       "$wado-lang:web/window#page-y-offset": (p0) => {
         return p0.pageYOffset;
       },
+      "$wado-lang:web/window#scroll-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scroll((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#scroll-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scroll(p1, p2), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#scroll-to-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scrollTo((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#scroll-to-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scrollTo(p1, p2), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#scroll-by-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scrollBy((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#scroll-by-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scrollBy(p1, p2), 4, ($ret, $value) => {
+        });
+      },
       "$wado-lang:web/window#screen-x": (p0) => {
         return p0.screenX;
       },
@@ -2242,6 +2297,12 @@ export function $glue() {
       },
       "$wado-lang:web/window#origin-agent-cluster": (p0) => {
         return (p0.originAgentCluster ? 1 : 0);
+      },
+      "$wado-lang:web/window#alert": (p0) => {
+        p0.alert();
+      },
+      "$wado-lang:web/window#alert-with-message": (p0, p1, p2) => {
+        p0.alert($string(p1, p2));
       },
       "$wado-lang:web/window#confirm": (p0, p1, p2) => {
         return (p0.confirm($string(p1, p2)) ? 1 : 0);

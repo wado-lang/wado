@@ -13,7 +13,7 @@ use crate::glue;
 use crate::ir::{
     DictionaryField, UnionCase, WadoConstant, WadoDictionary, WadoEnum, WadoEnumVariant, WadoField,
     WadoFunction, WadoInterface, WadoModule, WadoNewtype, WadoParam, WadoResource, WadoStruct,
-    WadoType, WadoTypeDef, WadoUnion, WadoVariant, WadoVariantCase,
+    WadoType, WadoTypeDef, WadoUnavailable, WadoUnion, WadoVariant, WadoVariantCase,
 };
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
@@ -122,7 +122,7 @@ pub struct Interface {
     pub members: Vec<Member>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq)]
 pub struct ExtAttr {
     pub name: String,
 }
@@ -156,7 +156,7 @@ pub enum Callback {
     Interface { name: String, members: Vec<Member> },
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum Member {
     #[serde(rename = "attribute")]
@@ -215,7 +215,7 @@ impl Member {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq)]
 pub struct Argument {
     pub name: String,
     #[serde(rename = "idlType")]
@@ -227,7 +227,7 @@ pub struct Argument {
 
 /// An optional argument's default or a constant's value, as the snapshot
 /// records it.
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum DefaultValue {
     #[serde(rename = "boolean")]
@@ -241,7 +241,7 @@ pub enum DefaultValue {
     Other,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq)]
 pub struct IdlType {
     pub generic: String,
     pub nullable: bool,
@@ -250,7 +250,7 @@ pub struct IdlType {
 }
 
 /// A name, or the constituents of a union or of a generic's arguments.
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum IdlTypeInner {
     Name(String),
@@ -305,8 +305,6 @@ pub enum Cause {
     ListElement,
     /// A union of several expressible types, or one narrowed in a result.
     Union,
-    /// Several overloads lower, and nothing merges them.
-    Overloads,
     /// A callback in a result, as an event handler attribute is.
     CallbackResult,
     /// A callback the glue cannot call: one returning a value, or taking more
@@ -341,7 +339,6 @@ impl std::fmt::Display for Cause {
             Self::Generic(generic) => return write!(f, "`{generic}<…>`"),
             Self::ListElement => "a list of a list, a nullable type or a callback",
             Self::Union => "a union",
-            Self::Overloads => "overloads",
             Self::CallbackResult => "a callback in a result",
             Self::Callback => "a callback the glue cannot call",
             Self::ParamsInMemory => "a callback among parameters passed through memory",
@@ -391,8 +388,6 @@ pub enum Lost {
     /// A dictionary or an enum.
     Definition,
     Member,
-    /// One overload of a member another overload binds.
-    Overload,
     /// A trailing optional argument of a bound member, and each one after it.
     Argument,
 }
@@ -415,10 +410,9 @@ impl std::fmt::Display for Skip {
 /// The skips counted by cause and by what each lost, most frequent cause first.
 #[must_use]
 pub fn skip_table(skipped: &[Skip]) -> String {
-    const COLUMNS: [(&str, Lost); 4] = [
+    const COLUMNS: [(&str, Lost); 3] = [
         ("Definitions", Lost::Definition),
         ("Members", Lost::Member),
-        ("Overloads", Lost::Overload),
         ("Arguments", Lost::Argument),
     ];
     let mut counts: IndexMap<&Cause, [usize; COLUMNS.len()]> = IndexMap::new();
@@ -508,6 +502,17 @@ struct Merged<'a> {
     inheritance: Option<String>,
     global: bool,
     members: Vec<&'a Member>,
+}
+
+impl<'a> Merged<'a> {
+    /// Fold in `members`, each once: two specifications may declare one.
+    fn add(&mut self, members: &'a [Member]) {
+        for member in members {
+            if !self.members.contains(&member) {
+                self.members.push(member);
+            }
+        }
+    }
 }
 
 /// The types signatures name that the module declares, each once.
@@ -675,10 +680,8 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     for (name, iface) in &merged {
         let path = lowering.interface_path(name);
         let constants = lowering.constants(name, iface.members.iter().copied(), &mut skipped);
-        let methods = split_js(
-            lowering.methods_of(name, &path, iface, &mut skipped),
-            &mut js,
-        );
+        let (methods, unavailable) = lowering.methods_of(name, &path, iface, &mut skipped)?;
+        let methods = split_js(methods, &mut js);
         resources.insert(
             name,
             WadoResource {
@@ -689,12 +692,22 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 classes: Some(classes[name]),
                 extends: iface.inheritance.as_deref().map(to_upper_camel_case),
                 methods,
-                unavailable: Vec::new(),
+                unavailable,
                 constants,
             },
         );
     }
     settle_overrides(&merged, &mut resources, &mut js, &mut skipped);
+    for (name, resource) in &resources {
+        let mut declared = IndexSet::new();
+        let names = resource.methods.iter().map(|m| &m.name);
+        if let Some(twice) = names
+            .chain(resource.unavailable.iter().map(|a| &a.name))
+            .find(|n| !declared.insert(*n))
+        {
+            bail!("`{name}` declares `{twice}` twice");
+        }
+    }
 
     let mut module = WadoModule::new(snapshot.module.clone(), snapshot.webref.clone());
     if let Some(bindings) = lowering.global_bindings(&merged, &resources)? {
@@ -822,7 +835,7 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
             target.inheritance.clone_from(&iface.inheritance);
             target.global = iface.ext_attrs.iter().any(|a| a.name == "Global");
         }
-        target.members.extend(&iface.members);
+        target.add(&iface.members);
     }
     for (name, iface) in &merged {
         if !iface.defined {
@@ -851,10 +864,175 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
             );
         }
         for mixin in parts {
-            target.members.extend(&mixin.members);
+            target.add(&mixin.members);
         }
     }
     Ok(merged)
+}
+
+/// The Wado type of a `WebIDL` scalar or string type.
+fn scalar(name: &str) -> Option<WadoType> {
+    Some(match name {
+        "boolean" => WadoType::Bool,
+        "byte" => WadoType::I8,
+        "octet" => WadoType::U8,
+        "short" => WadoType::I16,
+        "unsigned short" => WadoType::U16,
+        "long" => WadoType::I32,
+        "unsigned long" => WadoType::U32,
+        "long long" => WadoType::I64,
+        "unsigned long long" => WadoType::U64,
+        "float" | "unrestricted float" => WadoType::F32,
+        "double" | "unrestricted double" => WadoType::F64,
+        "DOMString" | "USVString" | "ByteString" => WadoType::String,
+        _ => return None,
+    })
+}
+
+/// The name each of `members` binds under where it is one of several
+/// overloads, and the bare names no overload takes, declared unavailable. An
+/// overload is named by its arguments after those every overload shares
+/// (`scroll_with_x_y`), or by their types where two would share a name
+/// (`send_with_string`). The one those arguments leave empty binds the bare
+/// name, so it is named here by nothing. The names come from the snapshot
+/// alone, whichever overloads lower.
+fn overload_names(
+    iface: &str,
+    members: &[&Member],
+) -> Result<(Vec<Option<String>>, Vec<Overloaded>)> {
+    // A constructor's key names nothing; an operation's, its name and
+    // whether it is static, as WebIDL keeps the two apart.
+    let mut sets: IndexMap<(Option<&str>, bool), Vec<usize>> = IndexMap::new();
+    for (i, member) in members.iter().enumerate() {
+        let key = match member {
+            Member::Operation { name, special, .. } if !name.is_empty() => {
+                (Some(name.as_str()), special == "static")
+            }
+            Member::Constructor { .. } => (None, true),
+            _ => continue,
+        };
+        sets.entry(key).or_default().push(i);
+    }
+    let mut names = vec![None; members.len()];
+    let mut overloaded = Vec::new();
+    for ((name, is_static), set) in sets.into_iter().filter(|(_, set)| set.len() > 1) {
+        let lists: Vec<&[Argument]> = set
+            .iter()
+            .map(|&i| match members[i] {
+                Member::Operation { arguments, .. } | Member::Constructor { arguments, .. } => {
+                    arguments.as_slice()
+                }
+                _ => unreachable!("only an operation or a constructor overloads"),
+            })
+            .collect();
+        let base = name.map_or_else(|| "new".to_string(), to_snake_case);
+        let Some(suffixes) = distinct_suffixes(&lists, |arg| to_snake_case(&arg.name))
+            .or_else(|| distinct_suffixes(&lists, |arg| type_word(&arg.idl_type)))
+        else {
+            bail!("no argument names or types tell the overloads of `{iface}.{base}` apart");
+        };
+        let named: Vec<String> = suffixes
+            .iter()
+            .filter(|suffix| !suffix.is_empty())
+            .map(|suffix| format!("{base}_with_{suffix}"))
+            .collect();
+        if named.len() == suffixes.len() {
+            overloaded.push(Overloaded {
+                bare: name.map_or_else(|| "new".to_string(), to_wado_identifier),
+                instance: !is_static,
+                names: named.clone(),
+            });
+        }
+        let mut named = named.into_iter();
+        for (i, suffix) in set.into_iter().zip(suffixes) {
+            if !suffix.is_empty() {
+                names[i] = named.next();
+            }
+        }
+    }
+    Ok((names, overloaded))
+}
+
+/// A member whose overloads all bind under names of their own.
+struct Overloaded {
+    bare: String,
+    instance: bool,
+    names: Vec<String>,
+}
+
+impl Overloaded {
+    /// The bare name declared unavailable, offering the overloads that bind.
+    fn unavailable(self, bound: &[(WadoFunction, JsFunction)]) -> WadoUnavailable {
+        let offered: Vec<String> = self
+            .names
+            .into_iter()
+            .filter(|name| bound.iter().any(|(f, _)| f.name == *name))
+            .collect();
+        let reason = if offered.is_empty() {
+            "overloaded, and no overload binds".to_string()
+        } else {
+            format!("overloaded; use {}", alternatives(&offered))
+        };
+        WadoUnavailable {
+            name: self.bare,
+            instance: self.instance,
+            reason,
+        }
+    }
+}
+
+/// Each argument list's words after those every list shares, joined by `_`;
+/// `None` where two lists come out the same.
+fn distinct_suffixes(
+    lists: &[&[Argument]],
+    word: impl Fn(&Argument) -> String,
+) -> Option<Vec<String>> {
+    let words: Vec<Vec<String>> = lists
+        .iter()
+        .map(|list| list.iter().map(&word).collect())
+        .collect();
+    let shared = (0..words[0].len())
+        .take_while(|&i| words.iter().all(|list| list.get(i) == Some(&words[0][i])))
+        .count();
+    let suffixes: Vec<String> = words.iter().map(|list| list[shared..].join("_")).collect();
+    let distinct: IndexSet<&String> = suffixes.iter().collect();
+    (distinct.len() == suffixes.len()).then_some(suffixes)
+}
+
+/// What an overload's name calls an argument of type `ty`: a scalar by its
+/// Wado type, so every string type is `string`, and any other by its name.
+fn type_word(ty: &IdlType) -> String {
+    let words = |types: &[IdlType], separator: &str| {
+        let words: Vec<String> = types.iter().map(type_word).collect();
+        words.join(separator)
+    };
+    match &ty.inner {
+        IdlTypeInner::Name(_) if !ty.generic.is_empty() => {
+            unreachable!("webidl2 lists a generic's arguments")
+        }
+        IdlTypeInner::Name(name) => match scalar(name) {
+            Some(WadoType::String) => "string".to_string(),
+            Some(scalar) => scalar
+                .primitive_name()
+                .expect("a scalar other than a string is a primitive")
+                .to_string(),
+            None => to_snake_case(name),
+        },
+        IdlTypeInner::Types(arguments) if !ty.generic.is_empty() => {
+            format!("{}_{}", words(arguments, "_"), to_snake_case(&ty.generic))
+        }
+        IdlTypeInner::Types(constituents) => words(constituents, "_or_"),
+    }
+}
+
+/// `names` as a sentence offers them: `` `a`, `b` or `c` ``.
+fn alternatives(names: &[String]) -> String {
+    let quoted: Vec<String> = names.iter().map(|name| format!("`{name}`")).collect();
+    match quoted.split_last() {
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+        None => unreachable!("an overloaded member offers its overloads"),
+    }
 }
 
 /// Settle each method a child redeclares from its chain, which a resource may
@@ -863,8 +1041,9 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
 /// resource extending the parent's, which a type pattern narrows. Otherwise the
 /// parent's would answer with the wrong type, and the child's binds under its
 /// interface's name (`svg_element_class_name`), as does a setter restored
-/// below a read-only redeclaration. Either way the child declares unavailable
-/// every name the chain above binds that member under, and so does a child
+/// below a read-only redeclaration, or one an overload above shares a member
+/// with. Either way the child declares unavailable every name the chain above
+/// binds that member under that it does not redeclare alike, and so does a child
 /// redeclaring an attribute read-only, for its setter. Statics (`new` above
 /// all) are not inherited.
 fn settle_overrides<'a>(
@@ -907,9 +1086,32 @@ fn settle_overrides<'a>(
             )
         })
         .collect();
+    let reserved: IndexMap<&str, Vec<String>> = resources
+        .iter()
+        .map(|(name, r)| {
+            (
+                *name,
+                r.unavailable.iter().map(|a| a.name.clone()).collect(),
+            )
+        })
+        .collect();
+    let members: IndexMap<&str, Vec<JsMember>> = declared
+        .iter()
+        .map(|(name, bound)| {
+            (
+                *name,
+                bound
+                    .values()
+                    .map(|m| js[&m.cm_attr].member.clone())
+                    .collect(),
+            )
+        })
+        .collect();
     // The JavaScript members each interface takes from the bindings above it,
     // with the reason a call of one reports.
     let mut taken: IndexMap<&str, Vec<(JsMember, String)>> = IndexMap::new();
+    // The inherited bindings each interface redeclares alike, which stay.
+    let mut served: IndexMap<&str, Vec<String>> = IndexMap::new();
     for (name, iface) in merged {
         let taken = taken.entry(*name).or_default();
         // An attribute is one accessor in JavaScript, so redeclared read-only
@@ -918,31 +1120,52 @@ fn settle_overrides<'a>(
             let reason = format!("`{name}` redeclares `{attribute}` as read-only");
             (JsMember::Set(attribute.to_string()), reason)
         }));
+        let served = served.entry(*name).or_default();
         resources[name].methods.retain_mut(|method| {
             if !has_receiver(method) {
                 return true;
             }
-            let Some((parent, inherited)) = ancestors(name)
-                .find_map(|parent| Some((parent, declared[parent].get(&method.name)?)))
-            else {
-                return true;
-            };
-            let member = &js[&method.cm_attr].member;
+            let member = js[&method.cm_attr].member.clone();
             let hides_setter = |between: &&str| {
-                matches!(member, JsMember::Set(attribute)
+                matches!(&member, JsMember::Set(attribute)
                     if read_only_attributes(&merged[*between]).any(|a| a == attribute))
             };
-            let why = if serves(method, inherited) {
-                ancestors(name)
-                    .take_while(|between| *between != parent)
-                    .find(hides_setter)
-                    .map(|between| format!("restores the setter `{between}` hides"))
-            } else {
-                Some("redeclares it with another type".to_string())
+            let why = match ancestors(name)
+                .find_map(|parent| Some((parent, declared[parent].get(&method.name)?)))
+            {
+                Some((parent, inherited)) if serves(method, inherited) => {
+                    let restored = ancestors(name)
+                        .take_while(|between| *between != parent)
+                        .find(hides_setter);
+                    let Some(between) = restored else {
+                        js.shift_remove(&method.cm_attr)
+                            .expect("every function has a JavaScript half");
+                        skipped.push(Skip {
+                            item: format!("{name}.{}", method.name),
+                            lost: Lost::Member,
+                            reason: Reason::new(
+                                Cause::Override,
+                                format!("redeclares a method inherited from `{parent}`"),
+                            ),
+                        });
+                        served.push(method.name.clone());
+                        return false;
+                    };
+                    format!("restores the setter `{between}` hides")
+                }
+                Some(_) => "redeclares it with another type".to_string(),
+                // An overload above, bound under a name of its own.
+                None if ancestors(name).any(|above| members[above].contains(&member)) => {
+                    "redeclares it".to_string()
+                }
+                None => return true,
             };
-            if let Some(why) = why {
+            let inherited = |above: &str| {
+                declared[above].contains_key(&method.name) || reserved[above].contains(&method.name)
+            };
+            if ancestors(name).any(inherited) {
                 let interface = to_snake_case(name);
-                let own = match member {
+                let own = match &member {
                     JsMember::Set(_) => {
                         method
                             .name
@@ -955,35 +1178,36 @@ fn settle_overrides<'a>(
                     "`{name}` must not declare `{own}` beside the `{}` it redeclares",
                     method.name
                 );
-                taken.push((member.clone(), format!("`{name}` {why}; use `{own}`")));
                 method.name = own;
-                return true;
             }
-            js.shift_remove(&method.cm_attr)
-                .expect("every function has a JavaScript half");
-            skipped.push(Skip {
-                item: format!("{name}.{}", method.name),
-                lost: Lost::Member,
-                reason: Reason::new(
-                    Cause::Override,
-                    format!("redeclares a method inherited from `{parent}`"),
-                ),
-            });
-            false
+            taken.push((member, format!("`{name}` {why}; use `{}`", method.name)));
+            true
         });
     }
     let js = &*js;
     for (name, taken) in taken {
-        let hidden: Vec<(String, String)> = taken
+        let served = &served[name];
+        let hidden: Vec<WadoUnavailable> = taken
             .iter()
             .flat_map(|(member, reason)| {
                 ancestors(name)
                     .flat_map(|above| &resources[above].methods)
-                    .filter(move |bound| js[&bound.cm_attr].member == *member)
-                    .map(move |bound| (bound.name.clone(), reason.clone()))
+                    .filter(move |bound| {
+                        js[&bound.cm_attr].member == *member && !served.contains(&bound.name)
+                    })
+                    .map(move |bound| WadoUnavailable {
+                        name: bound.name.clone(),
+                        instance: true,
+                        reason: reason.clone(),
+                    })
             })
             .collect();
-        resources[name].unavailable = hidden;
+        let unavailable = &mut resources[name].unavailable;
+        for absent in hidden {
+            if !unavailable.iter().any(|a| a.name == absent.name) {
+                unavailable.push(absent);
+            }
+        }
     }
 }
 
@@ -1348,70 +1572,59 @@ impl Lowering<'_> {
         constants
     }
 
-    /// Every member of `iface` that lowers, appending to `skipped` the ones
-    /// that do not, the names two overloads compete for, and what a bound
-    /// member leaves out.
+    /// Every member of `iface` that lowers, and the bare names of its
+    /// overloaded members that no overload takes, appending to `skipped` the
+    /// members that do not lower and what a bound member leaves out.
     fn methods_of(
         &self,
         iface: &str,
         path: &str,
         merged: &Merged<'_>,
         skipped: &mut Vec<Skip>,
-    ) -> Vec<(WadoFunction, JsFunction)> {
-        let mut candidates: IndexMap<String, (Vec<Bound>, Vec<Reason>)> = IndexMap::new();
-        for member in &merged.members {
-            for lowered in self.lower_member(iface, path, member) {
-                match lowered {
-                    Ok(bound) => {
-                        let name = bound.function.name.clone();
-                        candidates.entry(name).or_default().0.push(bound);
-                    }
-                    Err((name, reason)) => candidates.entry(name).or_default().1.push(reason),
-                }
-            }
-        }
-        let mut methods = Vec::new();
-        for (name, (mut bound, reasons)) in candidates {
-            let item = format!("{iface}.{name}");
-            let mut skip = |lost, reason| {
-                skipped.push(Skip {
-                    item: item.clone(),
-                    lost,
-                    reason,
-                });
-            };
-            match bound.len() {
-                1 => {
-                    let Bound {
+    ) -> Result<(Vec<(WadoFunction, JsFunction)>, Vec<WadoUnavailable>)> {
+        let (names, overloaded) = overload_names(iface, &merged.members)?;
+        let mut methods: Vec<(WadoFunction, JsFunction)> = Vec::new();
+        for (member, overload) in merged.members.iter().zip(&names) {
+            for lowered in self.lower_member(iface, path, member, overload.as_deref()) {
+                let (name, lost, reason) = match lowered {
+                    Ok(Bound {
                         function,
                         js,
                         dropped,
-                    } = bound.pop().unwrap();
-                    methods.push((function, js));
-                    for reason in reasons {
-                        skip(Lost::Overload, reason);
+                    }) => {
+                        let name = function.name.clone();
+                        methods.push((function, js));
+                        let Some(reason) = dropped else {
+                            continue;
+                        };
+                        (name, Lost::Argument, reason)
                     }
-                    if let Some(reason) = dropped {
-                        skip(Lost::Argument, reason);
-                    }
-                }
-                0 => {
-                    for reason in reasons {
-                        skip(Lost::Member, reason);
-                    }
-                }
-                n => skip(
-                    Lost::Member,
-                    Reason::new(Cause::Overloads, format!("{n} overloads")),
-                ),
+                    Err((name, reason)) => (name, Lost::Member, reason),
+                };
+                skipped.push(Skip {
+                    item: format!("{iface}.{name}"),
+                    lost,
+                    reason,
+                });
             }
         }
-        methods
+        let unavailable = overloaded
+            .into_iter()
+            .map(|member| member.unavailable(&methods))
+            .collect();
+        Ok((methods, unavailable))
     }
 
     /// The functions a member yields: a getter and a setter for an attribute,
-    /// one function otherwise. `path` is `iface`'s CM interface.
-    fn lower_member(&self, iface: &str, path: &str, member: &Member) -> Vec<Lowered> {
+    /// one function otherwise. `path` is `iface`'s CM interface, and
+    /// `overload` the name an overloaded operation binds under.
+    fn lower_member(
+        &self,
+        iface: &str,
+        path: &str,
+        member: &Member,
+        overload: Option<&str>,
+    ) -> Vec<Lowered> {
         match member {
             Member::Attribute {
                 name,
@@ -1465,10 +1678,10 @@ impl Lowering<'_> {
                 arguments,
                 special,
             } => {
-                let wado_name = if name.is_empty() {
-                    format!("({special})")
-                } else {
-                    to_wado_identifier(name)
+                let (wado_name, kebab) = match overload {
+                    Some(overload) => (overload.to_string(), to_kebab_case(overload)),
+                    None if name.is_empty() => (format!("({special})"), String::new()),
+                    None => (to_wado_identifier(name), to_kebab_case(name)),
                 };
                 let (receiver, js) = match special.as_str() {
                     "" => (Some(self_param(iface)), JsMember::Call(name.clone())),
@@ -1491,7 +1704,7 @@ impl Lowering<'_> {
                 vec![self.lower_operation(
                     iface,
                     (wado_name, js),
-                    format!("{path}#{}", to_kebab_case(name)),
+                    format!("{path}#{kebab}"),
                     receiver,
                     arguments,
                     Some(idl_type),
@@ -1501,18 +1714,20 @@ impl Lowering<'_> {
                 arguments,
                 ext_attrs,
             } => {
+                let wado_name = overload.unwrap_or("new").to_string();
                 // `[HTMLConstructor]` runs only from a custom element definition.
                 if ext_attrs.iter().any(|a| a.name == "HTMLConstructor") {
                     let reason = Reason::new(Cause::HtmlConstructor, "HTMLConstructor");
-                    return vec![Err(("new".to_string(), reason))];
+                    return vec![Err((wado_name, reason))];
                 }
                 let js = JsMember::New {
                     interface: iface.to_string(),
                 };
+                let kebab = to_kebab_case(&wado_name);
                 vec![self.lower_operation(
                     iface,
-                    ("new".to_string(), js),
-                    format!("{path}#new"),
+                    (wado_name, js),
+                    format!("{path}#{kebab}"),
                     None,
                     arguments,
                     None,
@@ -1723,19 +1938,10 @@ impl Lowering<'_> {
         let named = |cause: Cause| Err(Reason::new(cause, format!("`{name}`")));
         let is_a =
             |cause: Cause, what: &str| Err(Reason::new(cause, format!("`{name}` is {what}")));
+        if let Some(scalar) = scalar(name) {
+            return Ok(scalar);
+        }
         Ok(match name {
-            "boolean" => WadoType::Bool,
-            "byte" => WadoType::I8,
-            "octet" => WadoType::U8,
-            "short" => WadoType::I16,
-            "unsigned short" => WadoType::U16,
-            "long" => WadoType::I32,
-            "unsigned long" => WadoType::U32,
-            "long long" => WadoType::I64,
-            "unsigned long long" => WadoType::U64,
-            "float" | "unrestricted float" => WadoType::F32,
-            "double" | "unrestricted double" => WadoType::F64,
-            "DOMString" | "USVString" | "ByteString" => WadoType::String,
             "undefined" => return Err(Reason::of(Cause::Undefined)),
             "any" => return named(Cause::Any),
             "object" => return named(Cause::Object),

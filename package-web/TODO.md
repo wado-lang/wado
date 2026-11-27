@@ -20,31 +20,30 @@ each thing it does not bind on stderr, and counts them by cause.
 interface a page can reach, and every namespace. That is the measure of what is
 left before the slice can be everything:
 
-| Cause                                           | Definitions | Members | Overloads | Arguments |
-| ----------------------------------------------- | ----------- | ------- | --------- | --------- |
-| a callback in a result                          | 5           | 954     | 0         | 0         |
-| a type outside the slice                        | 2           | 281     | 1         | 2         |
-| a union                                         | 15          | 200     | 0         | 0         |
-| `any`                                           | 3           | 158     | 0         | 34        |
-| a buffer                                        | 15          | 144     | 16        | 5         |
-| a namespace member                              | 0           | 133     | 0         | 0         |
-| a dictionary                                    | 34          | 67      | 0         | 15        |
-| a special operation                             | 0           | 81      | 0         | 0         |
-| `object`                                        | 4           | 66      | 1         | 7         |
-| `[HTMLConstructor]`                             | 0           | 76      | 0         | 0         |
-| overloads                                       | 0           | 63      | 0         | 0         |
-| a redeclared inherited method                   | 0           | 55      | 0         | 0         |
-| an iteration declaration                        | 0           | 41      | 0         | 0         |
-| an enum                                         | 19          | 21      | 0         | 0         |
-| `Promise<…>`                                    | 0           | 32      | 0         | 1         |
-| a callback the glue cannot call                 | 0           | 11      | 2         | 5         |
-| `record<…>`                                     | 0           | 15      | 0         | 0         |
-| a list of a list, a nullable type or a callback | 4           | 7       | 0         | 1         |
-| a static attribute                              | 0           | 7       | 0         | 0         |
-| `ObservableArray<…>`                            | 0           | 4       | 0         | 0         |
-| `bigint`                                        | 0           | 2       | 0         | 0         |
-| `async_sequence<…>`                             | 0           | 1       | 0         | 0         |
-| Total                                           | 101         | 2419    | 20        | 70        |
+| Cause                                           | Definitions | Members | Arguments |
+| ----------------------------------------------- | ----------- | ------- | --------- |
+| a callback in a result                          | 5           | 954     | 0         |
+| a type outside the slice                        | 2           | 282     | 2         |
+| a union                                         | 15          | 200     | 0         |
+| `any`                                           | 3           | 158     | 34        |
+| a buffer                                        | 15          | 172     | 5         |
+| a namespace member                              | 0           | 133     | 0         |
+| a dictionary                                    | 34          | 67      | 15        |
+| a special operation                             | 0           | 81      | 0         |
+| `object`                                        | 4           | 67      | 7         |
+| `[HTMLConstructor]`                             | 0           | 76      | 0         |
+| a redeclared inherited method                   | 0           | 56      | 0         |
+| an iteration declaration                        | 0           | 41      | 0         |
+| an enum                                         | 19          | 21      | 0         |
+| `Promise<…>`                                    | 0           | 32      | 1         |
+| a callback the glue cannot call                 | 0           | 13      | 5         |
+| `record<…>`                                     | 0           | 15      | 0         |
+| a list of a list, a nullable type or a callback | 4           | 7       | 1         |
+| a static attribute                              | 0           | 7       | 0         |
+| `ObservableArray<…>`                            | 0           | 4       | 0         |
+| `bigint`                                        | 0           | 2       | 0         |
+| `async_sequence<…>`                             | 0           | 1       | 0         |
+| Total                                           | 101         | 2389    | 70        |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
@@ -57,9 +56,9 @@ read the table:
 - A member is counted once, by the first thing that stops it. Lowering that
   cause may move it to another row rather than bind it. A dictionary's member
   left out of its struct is a member too.
-- An overload is one overload of a member another overload binds. An argument
-  is a trailing optional argument a bound member leaves out, with each one
-  after it.
+- Each overload binds under its own name, so it counts as a member of its own.
+  An argument is a trailing optional argument a bound member leaves out, with
+  each one after it.
 - A callback in a result is nearly always an event handler attribute
   (`onclick`).
 - A type outside the slice is a name no snapshot definition declares. Over the
@@ -99,8 +98,8 @@ lower is then available to each interface the slice adds.
 
 ### 3. Overloads and unions
 
-- [ ] Merge overloads into one member where they differ by trailing optional
-  arguments (`Window.alert()` and `alert(message)`)
+- [x] Bind each overload under a name of its own, from the arguments that tell
+  it apart: `Window.alert()` and `alert_with_message(message)`
 - [x] Lower a union of two or more typable constituents to a `variant` where
   the guest supplies it, named after its typedef where it has one
   (`(Node or DOMString)`)
@@ -164,8 +163,6 @@ lower is then available to each interface the slice adds.
 - Two unions that differ take one name where a typedef's name is another
   union's generated one, or where two constituents take one word, as
   `sequence<Node>` and `NodeList` do. The generator stops on it.
-- A union that makes a second overload of a member typable takes the member
-  out, until overloads are merged.
 - No member of the slice takes more than sixteen core values, so no test runs
   parameters read from memory against a host.
 - `SurfaceDom` takes the options of what it does not model and ignores them:

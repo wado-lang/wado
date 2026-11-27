@@ -13,6 +13,14 @@ export fn run() with Dom {
 }
 ```
 
+A DOM method overloaded in WebIDL is one Wado method per overload, named by the
+arguments that tell it apart: `scroll_with_options(options)` and
+`scroll_with_x_y(x, y)`. A name leaves out the arguments every overload shares,
+so the overload with no others keeps the bare name: `alert()` beside
+`alert_with_message(message)`, and `set_range_text(replacement)` beside
+`set_range_text_with_start_end_selection_mode(…)`. Where no overload does,
+calling the bare name is an error that names the overloads.
+
 A DOM object reaches the program as a reference the collector follows, which the
 Component Model cannot carry. The DOM calls are therefore imports of the
 component's main module, not of the component, and the component fills them
