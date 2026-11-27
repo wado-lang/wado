@@ -923,7 +923,7 @@ impl Expander<'_> {
             return None;
         }
         Some(match kind {
-            RefKind::Shared => TirUnaryOp::Ref,
+            RefKind::ImmutableReference => TirUnaryOp::Ref,
             RefKind::Mut => TirUnaryOp::MutRef,
         })
     }

@@ -343,7 +343,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 display_generic_name(&namespaced_name(&g.namespace, &g.name), &args)
             }
             Type::Reference(inner) => {
-                ref_type_name(RefKind::Shared, &self.get_type_name_full(inner))
+                ref_type_name(RefKind::ImmutableReference, &self.get_type_name_full(inner))
             }
             Type::MutReference(inner) => {
                 ref_type_name(RefKind::Mut, &self.get_type_name_full(inner))

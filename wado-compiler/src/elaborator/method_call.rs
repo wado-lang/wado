@@ -1936,7 +1936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let defs = self.tysys.resolutions.defs();
         let table = self.tysys.type_table.borrow();
-        [RefKind::Shared, RefKind::Mut]
+        [RefKind::ImmutableReference, RefKind::Mut]
             .into_iter()
             .flat_map(|kind| {
                 self.tysys

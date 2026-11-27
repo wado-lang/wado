@@ -100,6 +100,37 @@ about a resource ([Components](./spec-components.md)).
 `Signal<T>` holds a cell. A parser's `out: &mut String` stays a borrow, and
 the struct holding it becomes affine.
 
+### The cell is `Shared<T>`
+
+`Shared<T>` is a prelude type the compiler knows, declared without a
+definition as `Array<T>` is: `pub type Shared<T>;`.
+
+- `Shared::new(value)` puts a value into a new cell, and nothing else makes
+  one. No cell is taken from a variable or a field, so a `let mut` variable
+  changes only through its name or a `&mut` written at a call.
+- `*c` is the place the cell holds. It reads and writes whatever path reached
+  `c`, a `&` included, and `c` needs no `mut`. A field access and a method call
+  dereference a cell as they do a reference.
+- A copy of a cell is the same cell, so the deep copy of a value stops at one.
+  `Shared::new(*c)` makes a separate cell.
+- `==` asks whether two cells are one. Two cells holding equal values are not
+  interchangeable, since a write to one leaves the other, and `*a == *b`
+  compares what they hold. So a struct holding a cell derives the `Eq` that
+  `Signal<T>` writes by hand today. A cell has no order, so it is not `Ord`.
+- `T` is not affine.
+
+It is a type and not a `struct`, because a `struct` is a value: its copy is
+deep, an assignment to it writes field by field, and `Eq`, `Serialize` and the
+rest derive from its fields. Each would need an exception. A type with no
+definition also keeps the representation a `&mut T` has today, the object
+itself for an in-place `T` and a heap cell for one replaced on assignment,
+where a `struct` would add an object in front of every in-place `T`.
+
+It is a name and not a keyword or a sigil. `shared` is already a variable name
+across the corpus, a keyword would need an expression form and its precedence,
+and every other compiler-known type (`List<T>`, `Option<T>`, `String`) is a
+name.
+
 ### `&` of a type replaced on assignment is its value
 
 A primitive, `enum`, `flags`, `variant`, `fn` or reference has no storage a
@@ -181,26 +212,15 @@ unspecified. Wado defines it, and warns where one body shows both writes.
 
 ## Known gaps
 
-### The shared cell has no spelling
+### A cell is not `Hash`
 
-Nothing is chosen. It is a compiler-known type, so a keyword or a sigil is
-open to it as a name is. The spelling may sit at the use (a field's type says
-it is shared) or at the declaration (a type whose every value is shared, as
-Swift's `class` is and as an unrestricted resource already is). Under the
-second, `let b = a` copies or shares, and the declaration that decides is
-elsewhere.
+`==` on a cell is identity, and Wasm GC gives a reference no address to hash.
+So a cell is no key of a `HashMap`, and neither is a struct holding one.
 
-### What a shared cell is made from
+### A cell of an affine value
 
-Whether a cell can be taken from an existing place, or only made by putting a
-value into a new one, is not decided. Under the second, a `let mut` variable
-changes only through its name or a `&mut` visible at a call.
-
-### Reading, writing and comparing a cell
-
-Not decided: whether a cell is dereferenced implicitly, and whether `==` on
-two cells compares what they hold or which cell they are. `Signal<T>` writes
-the second by hand with `ref_eq`.
+`Shared<T>` takes no affine `T`: a cell has no one owner to drop what it
+holds. Callbacks that share one stream have no spelling.
 
 ### `fn mut` closures
 

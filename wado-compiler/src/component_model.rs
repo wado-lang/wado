@@ -2087,7 +2087,9 @@ impl CmInterfaceRegistry {
                 Some(source) => format!("{source}#{}", n.name),
                 None => n.name.clone(),
             },
-            Type::Reference(inner) => ref_type_name(RefKind::Shared, &self.type_key(inner)),
+            Type::Reference(inner) => {
+                ref_type_name(RefKind::ImmutableReference, &self.type_key(inner))
+            }
             Type::MutReference(inner) => ref_type_name(RefKind::Mut, &self.type_key(inner)),
             Type::Generic(g) => format!("{}:{}", g.name, keys(&g.args)),
             Type::NamespacedGeneric(g) => {
