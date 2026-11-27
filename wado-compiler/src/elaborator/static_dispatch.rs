@@ -91,6 +91,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // At the receiver's type, since no blanket is asked of a receiver
         // without one: a blanket whose bound holds there owns the call, and
         // the static a newtype inherits a link below is not the one named.
+        let given = slot_instantiation.as_ref().map(|inst| GivenSlots {
+            slots: callee_slots,
+            inst,
+        });
         let receiver_args = self.expected_receiver_args(receiver, suffix, expected_type);
         let typed = receiver.at_type(Some(receiver_type));
         let resolved = self.resolve_static_callee(StaticQuery {
@@ -109,6 +113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 call.id,
                 ident.segments.last().map(|segment| segment.id),
                 type_args,
+                given,
                 args,
                 &call.args,
                 expected_type,
@@ -149,10 +154,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver,
             method_name: suffix,
         };
-        let given = slot_instantiation.as_ref().map(|inst| GivenSlots {
-            slots: callee_slots,
-            inst,
-        });
         let Some(mut static_args) = self.static_call_type_args(
             callee,
             &call.args,
@@ -706,6 +707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             ident,
             call,
+            None,
             &args,
             expected_type,
             ctx,
@@ -1413,6 +1415,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 static_call.id,
                 Some(static_call.method_id),
                 &method_type_args,
+                None,
                 &static_call.args,
                 &args,
                 &arg_sites,

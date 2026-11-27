@@ -6,6 +6,7 @@ use std::sync::Arc;
 use super::Elaborator;
 use super::call::ArgSite;
 use super::call::CalleeSignature;
+use super::call::GivenSlots;
 use super::call::slot_names;
 use super::method_call::UnappliedStatic;
 use super::method_lookup::MethodInferenceInput;
@@ -191,6 +192,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call_id: AstId,
         method_id: Option<AstId>,
         method_type_args: &[TypeId],
+        given: Option<GivenSlots<'_>>,
         raw_args: &[Expr],
         args: &[TypeId],
         arg_sites: &[ArgSite],
@@ -272,6 +274,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             },
         );
+        // The variables the call typed its arguments by are answered by this
+        // solve: left open, a slot only its default settles is reported.
+        if let Some(given) = given {
+            let solved: Vec<TypeId> = given
+                .slots
+                .iter()
+                .zip(&given.inst.vars)
+                .map(|(slot, &var)| {
+                    if *slot == blanket_slot {
+                        return receiver_type_id;
+                    }
+                    let own = slots.iter().zip(&method_type_args);
+                    own.into_iter()
+                        .find_map(|(own, &answer)| (own == slot).then_some(answer))
+                        .unwrap_or(var)
+                })
+                .collect();
+            self.record_instantiation(given.inst, &solved);
+        }
         let param_types: Vec<TypeId> = param_types
             .iter()
             .map(|&t| self.substitute_map_in_frame(&subst, t))
@@ -468,6 +489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call_id: AstId,
         method_id: Option<AstId>,
         method_type_args: &[TypeId],
+        given: Option<GivenSlots<'_>>,
         args: &[TypeId],
         raw_args: &[Expr],
         expected_type: Option<TypeId>,
@@ -556,6 +578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             call_id,
             method_id,
             method_type_args,
+            given,
             raw_args,
             args,
             &arg_sites,
@@ -574,6 +597,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         suffix: &str,
         ident: &ast::IdentExpr,
         call: &ast::CallExpr,
+        given: Option<GivenSlots<'_>>,
         args: &[TypeId],
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
@@ -586,6 +610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             call.id,
             method_id,
             &method_type_args,
+            given,
             args,
             &call.args,
             expected_type,

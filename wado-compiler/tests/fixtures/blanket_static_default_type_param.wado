@@ -1,0 +1,41 @@
+// A blanket static's own type parameter falls to its default where nothing
+// at the call settles it, as a declared static's does.
+trait Marked {}
+
+trait Empty {
+    fn empty<U = i32>() -> List<U>;
+}
+
+impl<T: Marked> Empty for T {
+    fn empty<U>() -> List<U> {
+        return [];
+    }
+}
+
+struct S {}
+impl Marked for S {}
+
+struct Bx<T> {
+    v: T,
+}
+impl<T> Marked for Bx<T> {}
+
+test "the default" {
+    let xs = S::empty();
+    let held: List<i32> = xs;
+    assert held.len() == 0;
+}
+
+test "a turbofish over the default" {
+    let xs = S::empty::<i64>();
+    let held: List<i64> = xs;
+    assert held.len() == 0;
+}
+
+test "a receiver writing its arguments" {
+    let xs = Bx::<String>::empty();
+    let held: List<i32> = xs;
+    let ys = Bx::<String>::empty::<i64>();
+    let wide: List<i64> = ys;
+    assert held.len() + wide.len() == 0;
+}

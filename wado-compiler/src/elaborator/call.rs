@@ -2261,6 +2261,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name,
                 ident,
                 call,
+                resolved_args
+                    .slot_instantiation
+                    .as_ref()
+                    .map(|inst| GivenSlots {
+                        slots: &resolved_args.callee_slots,
+                        inst,
+                    }),
                 &resolved_args.args,
                 expected_type,
                 ctx,
