@@ -71,9 +71,11 @@ Generic code needs nothing new. `&mut F` instantiates only a type parameter
 declared `affine`, so a body that copies a `T` out of a `&List<T>` never sees
 one.
 
-This is not exclusivity. Two `&mut x` of one place stay legal. The rule stops
-a read-only view from yielding write access, and says nothing about how many
-writers a place has.
+This is not exclusivity. Two `&mut x` of one place stay legal, except two
+scoped ones in one call
+([below](#mut-of-a-type-replaced-on-assignment-lasts-for-a-scope)). The rule
+stops a read-only view from yielding write access, and says nothing about how
+many writers a place has.
 
 ### A place writes only through writable steps
 
@@ -96,7 +98,8 @@ stays usable. There are no lifetimes, so the reborrow is a second reference to
 the same referent.
 
 Only an expected type reborrows. `let b = a;` moves `a`, and
-`let b: &mut T = a;` reborrows it, as in Rust.
+`let b: &mut T = a;` reborrows it, as in Rust. Both are of a `T` that is
+`RefMut`: a scoped `&mut` binds to no variable.
 
 ### A shared cell is its own type
 
@@ -129,7 +132,8 @@ definition as `Array<T>` is: `pub type Shared<T>;`.
   address to hash. So a struct holding a cell derives no `Hash`. A type that
   wants one writes it, hashing what it holds, as `StrSlice` writes its own over
   the text it views. Such a hash agrees with `==`, since one cell holds one
-  value.
+  value. A write to the cell changes it, so a key holding a cell is not written
+  while a map holds it: a lookup would then miss an entry the map still has.
 - `${c:?}` writes what the cell holds as `Shared(…)`. A cell is `Default`
   where `T` is, as `Shared::new(T::default())`.
 - A cell is not `Serialize` or `Deserialize`, and does not cross a component
@@ -269,10 +273,12 @@ A scope that stores back does so at every exit, whether or not its binding was
 written: its end, a `return`, a `break`, a `continue` and a `?`. A trap is no
 exit. It does not unwind, so it stores nothing back, as it runs no drops
 ([Affine Types](./spec-affine.md#drop)). A handler always resumes or diverges,
-so an operation dispatched inside a scope adds no exit of its own. A write to the place by another route inside the scope is therefore
-overwritten: `if let Some(n) = &mut self.count { self.count = null; *n += 1 }`
-leaves `Some`. A binding of an in-place type stores nothing back, so none of
-this reaches it.
+so an operation dispatched inside a scope adds no exit of its own.
+
+A write to the place by another route inside the scope is therefore
+overwritten. Where `clear` assigns `null` to `self.count`,
+`if let Some(n) = &mut self.count { self.clear(); *n += 1 }` leaves `Some`. A
+binding of an in-place type stores nothing back, so none of this reaches it.
 
 - An assignment inside the scope, in the same body, to the scope's place, to a
   place holding it or to a part of it is a compile error. The place is read off
