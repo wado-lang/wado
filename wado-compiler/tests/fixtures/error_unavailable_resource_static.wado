@@ -1,0 +1,19 @@
+// A resource reserves a static name as an `impl` does: `wado-from-idl` declares
+// an overloaded constructor's bare `new` unavailable beside the overloads.
+
+#[cm("example:demo/thing", linearity = "unrestricted", repr = "externref")]
+resource Thing {
+    #[cm("example:demo/thing#new-with-x")]
+    #[cm_params("x")]
+    fn new_with_x(x: i32) -> Thing;
+
+    #[unavailable("overloaded; use `new_with_x`")]
+    fn new();
+}
+
+export fn run() {
+    Thing::new();
+}
+
+__DATA__
+{"compile_error": "`Thing::new` is unavailable: overloaded; use `new_with_x`"}
