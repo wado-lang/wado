@@ -3205,10 +3205,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Make the reports `ties` of a tie among `found`, or leave them on the
-    /// matches where every one is a reference blanket's `&self` method: those
-    /// answer only where the referent has no method of the name, and the tie
-    /// is one only there.
+    /// Make the reports `ties` of a selection among `found` that chose none,
+    /// or leave them on the matches where every one is a reference blanket's
+    /// `&self` method: those answer only where the referent has no method of
+    /// the name, and the selection fails only there.
     fn report_tie_where_it_answers(&self, found: &mut [TraitMethodMatch], ties: Vec<TypeError>) {
         let behind_referent = found
             .iter()
@@ -3249,9 +3249,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ref_name(&TraitRef { decl, args })
     }
 
-    /// Report the impls of one trait that each leave a slot to the call and all
-    /// admit its arguments (`impl<T: A> Put<T> for X` beside `impl<T: B>
-    /// Put<T> for X`), naming the trait at what the call passes.
+    /// The tie of the impls of one trait that each leave a slot to the call
+    /// and all admit its arguments (`impl<T: A> Put<T> for X` beside
+    /// `impl<T: B> Put<T> for X`), naming the trait at what the call passes.
     fn impls_tied_at_call(
         &self,
         found: &[TraitMethodMatch],

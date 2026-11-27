@@ -739,11 +739,13 @@ of the reference, and a write to `*self` would land in the copy. The prelude's
 `impl<T: AsStrSlice> AsStrSlice for &T` is why: its methods forward with
 `(*self).len()`, a call on a `&T`, which the blanket ranked first would send
 back to itself. `candidates` still ranks the blanket first, so the elaborator
-sets the solver's verdict aside for these methods. A tie the order reports
-among such blankets is set aside with it, and reported only where the referent
-has no method of the name: a tie between two traits
-(`trait_ref_blankets_tied_behind_referent.wado`) and one between two blankets
-of one trait (`trait_ref_blankets_of_one_trait_tied_behind_referent.wado`).
+sets the solver's verdict aside for these methods. A tie among such blankets
+is set aside with it, and reported only where the referent has no method of
+the name: a tie between two traits
+(`trait_ref_blankets_tied_behind_referent.wado`), one between two blankets of
+one trait (`trait_ref_blankets_of_one_trait_tied_behind_referent.wado`), and
+one between two of one trait at different arguments
+(`trait_ref_blankets_at_arguments_tied_behind_referent.wado`).
 
 It adopts one for a receiver holding one reference only. On `&mut &mut I` the
 blanket's parameter would stand for `&mut I`, which the lookup does not hand
