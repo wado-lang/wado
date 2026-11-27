@@ -20,9 +20,12 @@ use {
     HtmlElement,
     HtmlInputElement,
     Node,
+    NodeFilter,
+    NodeIterator,
     Rejection,
     StringOrElementCreationOptions,
     Text,
+    TreeWalker,
     Window,
 } from "./dom.wado";
 
@@ -73,6 +76,40 @@ struct SurfaceEvent {
 struct SurfaceRejection {
     name: String,
     message: String,
+}
+
+// What a `TreeWalker` and a `NodeIterator` share, as the DOM standard's
+// traverser.
+struct Traverser {
+    root: Node,
+    what_to_show: u32,
+    filter: NodeFilter,
+    // Set while the filter runs, which may not reenter its traverser.
+    active: bool,
+}
+
+struct SurfaceWalker {
+    traverser: Traverser,
+    current: Node,
+}
+
+struct SurfaceIterator {
+    traverser: Traverser,
+    reference: Node,
+    pointer_before_reference: bool,
+}
+
+enum Direction {
+    Next,
+    Previous,
+}
+
+fn surface_walker(walker: TreeWalker) -> &mut SurfaceWalker {
+    return walker.backing::<SurfaceWalker>().expect("a tree walker of a SurfaceDom backs the handle");
+}
+
+fn surface_iterator(iterator: NodeIterator) -> &mut SurfaceIterator {
+    return iterator.backing::<SurfaceIterator>().expect("a node iterator of a SurfaceDom backs the handle");
 }
 
 // The Fullscreen standard rejects with a `TypeError` where fullscreen is not
@@ -239,6 +276,69 @@ fn text_of(node: Node, out: &mut String) {
     for let child of children(node) {
         text_of(child, out);
     }
+}
+
+fn node_type(node: &SurfaceNode) -> u16 {
+    return match node.content {
+        Element(_) => Node::ELEMENT_NODE,
+        Text(_) => Node::TEXT_NODE,
+        _::Document => Node::DOCUMENT_NODE,
+        _::Doctype => Node::DOCUMENT_TYPE_NODE,
+        _::Window => unreachable(),
+    };
+}
+
+fn sibling_toward(node: Node, direction: Direction) -> Option<Node> {
+    let here = surface_node(node);
+    return match direction {
+        _::Next => here.next_sibling,
+        _::Previous => here.previous_sibling,
+    };
+}
+
+// The child a walk toward `direction` enters by: the first going next, the
+// last going previous.
+fn child_toward(node: Node, direction: Direction) -> Option<Node> {
+    let here = surface_node(node);
+    return match direction {
+        _::Next => here.first_child,
+        _::Previous => here.last_child,
+    };
+}
+
+// The node after `node` in tree order, among `root`'s inclusive descendants.
+fn following(node: Node, root: Node) -> Option<Node> {
+    if let Some(child) = surface_node(node).first_child {
+        return Option::Some(child);
+    }
+    let mut at = node;
+    while at != root {
+        let here = surface_node(at);
+        if here.next_sibling != null {
+            return here.next_sibling;
+        }
+        let Some(parent) = here.parent else {
+            return null;
+        };
+        at = parent;
+    }
+    return null;
+}
+
+// The node before `node` in tree order, among `root`'s inclusive descendants.
+fn preceding(node: Node, root: Node) -> Option<Node> {
+    if node == root {
+        return null;
+    }
+    let here = surface_node(node);
+    let Some(sibling) = here.previous_sibling else {
+        return here.parent;
+    };
+    let mut at = sibling;
+    while let Some(last) = surface_node(at).last_child {
+        at = last;
+    }
+    return Option::Some(at);
 }
 
 fn is_element(node: &SurfaceNode) -> bool {
@@ -606,6 +706,206 @@ impl SurfaceDom {
         };
         return child_named(html, local_name);
     }
+
+    // The DOM standard's filter. The filter runs with this DOM reinstalled, as
+    // a listener does, and reentering its own traverser is an
+    // `InvalidStateError`, which traps.
+    fn filter(&mut self, traverser: &mut Traverser, node: Node) -> u16 {
+        assert !traverser.active, "InvalidStateError: the filter is running";
+        let shown = traverser.what_to_show >> (node_type(surface_node(node)) - 1) as u32 & 1;
+        if shown == 0 {
+            return NodeFilter::FILTER_SKIP;
+        }
+        traverser.active = true;
+        let mut filter = traverser.filter;
+        let mut result = NodeFilter::FILTER_SKIP;
+        with &mut *self do {
+            result = filter(node);
+        };
+        traverser.active = false;
+        return result;
+    }
+
+    fn accepts(&mut self, traverser: &mut Traverser, node: Node) -> bool {
+        return self.filter(traverser, node) == NodeFilter::FILTER_ACCEPT;
+    }
+
+    fn walk_to_parent(&mut self, walker: &mut SurfaceWalker) -> Option<Node> {
+        let mut node = walker.current;
+        while node != walker.traverser.root {
+            let Some(parent) = surface_node(node).parent else {
+                return null;
+            };
+            node = parent;
+            if self.accepts(&mut walker.traverser, node) {
+                walker.current = node;
+                return Option::Some(node);
+            }
+        }
+        return null;
+    }
+
+    // The DOM standard's traverse children.
+    fn walk_to_child(&mut self, walker: &mut SurfaceWalker, direction: Direction) -> Option<Node> {
+        let mut at = child_toward(walker.current, direction);
+        while let Some(node) = at {
+            let result = self.filter(&mut walker.traverser, node);
+            if result == NodeFilter::FILTER_ACCEPT {
+                walker.current = node;
+                return at;
+            }
+            if result == NodeFilter::FILTER_SKIP && let Some(child) = child_toward(node, direction) {
+                at = Option::Some(child);
+                continue;
+            }
+            let mut climbing = node;
+            loop {
+                at = sibling_toward(climbing, direction);
+                if at != null {
+                    break;
+                }
+                match surface_node(climbing).parent {
+                    Some(parent) && parent != walker.traverser.root && parent != walker.current => climbing = parent,
+                    _ => {
+                        return null;
+                    },
+                }
+            }
+        }
+        return null;
+    }
+
+    // The DOM standard's traverse siblings.
+    fn walk_to_sibling(&mut self, walker: &mut SurfaceWalker, direction: Direction) -> Option<Node> {
+        let mut node = walker.current;
+        if node == walker.traverser.root {
+            return null;
+        }
+        loop {
+            let mut sibling = sibling_toward(node, direction);
+            while let Some(next) = sibling {
+                node = next;
+                let result = self.filter(&mut walker.traverser, node);
+                if result == NodeFilter::FILTER_ACCEPT {
+                    walker.current = node;
+                    return sibling;
+                }
+                sibling = child_toward(node, direction);
+                if result == NodeFilter::FILTER_REJECT || sibling == null {
+                    sibling = sibling_toward(node, direction);
+                }
+            }
+            let Some(parent) = surface_node(node).parent else {
+                return null;
+            };
+            node = parent;
+            if node == walker.traverser.root || self.accepts(&mut walker.traverser, node) {
+                return null;
+            }
+        }
+    }
+
+    fn walk_to_previous(&mut self, walker: &mut SurfaceWalker) -> Option<Node> {
+        let mut node = walker.current;
+        while node != walker.traverser.root {
+            let mut sibling = surface_node(node).previous_sibling;
+            while let Some(previous) = sibling {
+                node = previous;
+                let mut result = self.filter(&mut walker.traverser, node);
+                while result != NodeFilter::FILTER_REJECT && let Some(last) = surface_node(node).last_child {
+                    node = last;
+                    result = self.filter(&mut walker.traverser, node);
+                }
+                if result == NodeFilter::FILTER_ACCEPT {
+                    walker.current = node;
+                    return Option::Some(node);
+                }
+                sibling = surface_node(node).previous_sibling;
+            }
+            let Some(parent) = surface_node(node).parent else {
+                return null;
+            };
+            node = parent;
+            if self.accepts(&mut walker.traverser, node) {
+                walker.current = node;
+                return Option::Some(node);
+            }
+        }
+        return null;
+    }
+
+    fn walk_to_next(&mut self, walker: &mut SurfaceWalker) -> Option<Node> {
+        let mut node = walker.current;
+        let mut result = NodeFilter::FILTER_ACCEPT;
+        loop {
+            while result != NodeFilter::FILTER_REJECT && let Some(first) = surface_node(node).first_child {
+                node = first;
+                result = self.filter(&mut walker.traverser, node);
+                if result == NodeFilter::FILTER_ACCEPT {
+                    walker.current = node;
+                    return Option::Some(node);
+                }
+            }
+            let mut climbing = node;
+            loop {
+                if climbing == walker.traverser.root {
+                    return null;
+                }
+                let here = surface_node(climbing);
+                if let Some(sibling) = here.next_sibling {
+                    node = sibling;
+                    break;
+                }
+                let Some(parent) = here.parent else {
+                    return null;
+                };
+                climbing = parent;
+            }
+            result = self.filter(&mut walker.traverser, node);
+            if result == NodeFilter::FILTER_ACCEPT {
+                walker.current = node;
+                return Option::Some(node);
+            }
+        }
+    }
+
+    // The DOM standard's traverse, for a `NodeIterator`.
+    fn iterate(&mut self, iterator: &mut SurfaceIterator, direction: Direction) -> Option<Node> {
+        let root = iterator.traverser.root;
+        let mut node = iterator.reference;
+        let mut before = iterator.pointer_before_reference;
+        loop {
+            match direction {
+                _::Next => if before {
+                    before = false;
+                } else {
+                    let Some(after) = following(node, root) else {
+                        return null;
+                    };
+                    node = after;
+                },
+                _::Previous => if before {
+                    let Some(prior) = preceding(node, root) else {
+                        return null;
+                    };
+                    node = prior;
+                } else {
+                    before = true;
+                },
+            }
+            if self.accepts(&mut iterator.traverser, node) {
+                break;
+            }
+        }
+        iterator.reference = node;
+        iterator.pointer_before_reference = before;
+        return Option::Some(node);
+    }
+
+    fn traverser(&self, root: Node, what_to_show: u32, filter: NodeFilter) -> Traverser {
+        self.own(root);
+        return Traverser { root, what_to_show, filter, active: false };
+    }
 }
 
 impl Dom for SurfaceDom {
@@ -637,9 +937,9 @@ impl EventTarget for SurfaceDom {
     ) {
         let [capture, once] = match options {
             Some(AsBool(capture)) => [capture, false],
-            Some(AsAddEventListenerOptions(options)) => [
-                options.capture.unwrap_or(false),
-                options.once.unwrap_or(false),
+            Some(AsAddEventListenerOptions(given)) => [
+                given.capture.unwrap_or(false),
+                given.once.unwrap_or(false),
             ],
             null => [false, false],
         };
@@ -727,6 +1027,29 @@ impl Document for SurfaceDom {
         resume self.new_text(data);
     }
 
+    fn create_node_iterator(
+        &mut self,
+        this: &Document,
+        root: Node,
+        what_to_show: u32,
+        filter: NodeFilter,
+    ) -> NodeIterator {
+        self.own(*this);
+        resume NodeIterator::backed_by(SurfaceIterator {
+            traverser: self.traverser(root, what_to_show, filter),
+            reference: root,
+            pointer_before_reference: true,
+        });
+    }
+
+    fn create_tree_walker(&mut self, this: &Document, root: Node, what_to_show: u32, filter: NodeFilter) -> TreeWalker {
+        self.own(*this);
+        resume TreeWalker::backed_by(SurfaceWalker {
+            traverser: self.traverser(root, what_to_show, filter),
+            current: root,
+        });
+    }
+
     fn document_element(&mut self, this: &Document) -> Option<Element> {
         self.own(*this);
         resume element_of(child_named(self.document, "html"));
@@ -795,6 +1118,89 @@ impl Document for SurfaceDom {
     ..trap
 }
 
+impl TreeWalker for SurfaceDom {
+    fn root(&mut self, this: &TreeWalker) -> Node {
+        resume surface_walker(*this).traverser.root;
+    }
+
+    fn what_to_show(&mut self, this: &TreeWalker) -> u32 {
+        resume surface_walker(*this).traverser.what_to_show;
+    }
+
+    fn current_node(&mut self, this: &TreeWalker) -> Node {
+        resume surface_walker(*this).current;
+    }
+
+    fn set_current_node(&mut self, this: &TreeWalker, value: Node) {
+        self.own(value);
+        surface_walker(*this).current = value;
+        resume ();
+    }
+
+    fn parent_node(&mut self, this: &TreeWalker) -> Option<Node> {
+        resume self.walk_to_parent(surface_walker(*this));
+    }
+
+    fn first_child(&mut self, this: &TreeWalker) -> Option<Node> {
+        resume self.walk_to_child(surface_walker(*this), Direction::Next);
+    }
+
+    fn last_child(&mut self, this: &TreeWalker) -> Option<Node> {
+        resume self.walk_to_child(surface_walker(*this), Direction::Previous);
+    }
+
+    fn previous_sibling(&mut self, this: &TreeWalker) -> Option<Node> {
+        resume self.walk_to_sibling(surface_walker(*this), Direction::Previous);
+    }
+
+    fn next_sibling(&mut self, this: &TreeWalker) -> Option<Node> {
+        resume self.walk_to_sibling(surface_walker(*this), Direction::Next);
+    }
+
+    fn previous_node(&mut self, this: &TreeWalker) -> Option<Node> {
+        resume self.walk_to_previous(surface_walker(*this));
+    }
+
+    fn next_node(&mut self, this: &TreeWalker) -> Option<Node> {
+        resume self.walk_to_next(surface_walker(*this));
+    }
+
+    ..trap
+}
+
+impl NodeIterator for SurfaceDom {
+    fn root(&mut self, this: &NodeIterator) -> Node {
+        resume surface_iterator(*this).traverser.root;
+    }
+
+    fn reference_node(&mut self, this: &NodeIterator) -> Node {
+        resume surface_iterator(*this).reference;
+    }
+
+    fn pointer_before_reference_node(&mut self, this: &NodeIterator) -> bool {
+        resume surface_iterator(*this).pointer_before_reference;
+    }
+
+    fn what_to_show(&mut self, this: &NodeIterator) -> u32 {
+        resume surface_iterator(*this).traverser.what_to_show;
+    }
+
+    fn next_node(&mut self, this: &NodeIterator) -> Option<Node> {
+        resume self.iterate(surface_iterator(*this), Direction::Next);
+    }
+
+    fn previous_node(&mut self, this: &NodeIterator) -> Option<Node> {
+        resume self.iterate(surface_iterator(*this), Direction::Previous);
+    }
+
+    // The DOM standard keeps `detach` and has it do nothing.
+    fn detach(&mut self, this: &NodeIterator) {
+        resume ();
+    }
+
+    ..trap
+}
+
 impl Rejection for SurfaceDom {
     fn name(&mut self, this: &Rejection) -> String {
         resume surface_rejection(*this).name;
@@ -809,13 +1215,7 @@ impl Rejection for SurfaceDom {
 
 impl Node for SurfaceDom {
     fn node_type(&mut self, this: &Node) -> u16 {
-        resume match self.own(*this).content {
-            Element(_) => 1,
-            Text(_) => 3,
-            _::Document => 9,
-            _::Doctype => 10,
-            _::Window => unreachable(),
-        };
+        resume node_type(self.own(*this));
     }
 
     fn node_name(&mut self, this: &Node) -> String {
