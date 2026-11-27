@@ -1451,7 +1451,7 @@ impl<T: AtnKey + Eq> AtnKeyLists<T> {
 
     fn intern(&mut self, from: i32) -> i32 {
         let id = self.start.len();
-        let known = self.index.find_or_insert(self.hash_from(from), |row| self.equals_pending(row, from), id);
+        let known = unchecked self.index.find_or_insert(self.hash_from(from), |row| self.equals_pending(row, from), id);
         if known != id {
             self.keys.truncate(from);
             return known;
@@ -1502,7 +1502,7 @@ impl<T: AtnKey + Eq> AtnKeyLists<T> {
 
     fn add(&mut self, from: i32) -> i32 {
         let id = self.start.len();
-        self.index.insert(self.hash_from(from), id);
+        unchecked self.index.insert(self.hash_from(from), id);
         self.start.push(from);
         self.len.push(self.keys.len() - from);
         return id;
