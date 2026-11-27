@@ -1142,10 +1142,10 @@ impl Lowering<'_> {
     }
 
     /// Declares in `module` each enum, dictionary, union and callback
-    /// interface a function of it names, each callback interface holding a
-    /// constant, and each type a declared callback interface's function type
-    /// names. Answers each enum's values as the host spells them, in case
-    /// order, by Wado name.
+    /// interface a function of it names, and each callback interface holding a
+    /// constant. A callback's function type names only scalars and handles,
+    /// so it adds nothing to declare. Answers each enum's values as the host
+    /// spells them, in case order, by Wado name.
     fn declare_types(
         &self,
         snapshot: &Snapshot,
@@ -1164,43 +1164,19 @@ impl Lowering<'_> {
         let type_path =
             |name: &str| format!("{}/{TYPES_INTERFACE}#{}", self.package, to_kebab_case(name));
         let is_constant = |member: &&Member| matches!(member, Member::Const { .. });
-        // A function type may name a callback interface the snapshot declares
-        // before its own, so the walk runs until it reaches none.
-        let mut targets = IndexMap::new();
-        loop {
-            let reached: Vec<&str> = self
-                .callback_interfaces
-                .iter()
-                .filter(|&(&declared, &members)| {
-                    !targets.contains_key(declared)
-                        && (named.callbacks.contains(&to_upper_camel_case(declared))
-                            || members.iter().any(|m| is_constant(&m)))
-                })
-                .map(|(&declared, _)| declared)
-                .collect();
-            if reached.is_empty() {
-                break;
-            }
-            for declared in reached {
-                let signature = self.callbacks[declared].clone();
-                let target = signature.and_then(|s| self.callback_function(None, s));
-                if let Ok(target) = &target {
-                    named.collect(target);
-                }
-                targets.insert(declared, target);
-            }
-        }
         let mut callback_interfaces = Vec::new();
         for (&declared, &members) in &self.callback_interfaces {
-            let Some(target) = targets.swap_remove(declared) else {
+            let name = to_upper_camel_case(declared);
+            if !named.callbacks.contains(&name) && !members.iter().any(|m| is_constant(&m)) {
                 continue;
-            };
-            match target {
+            }
+            let signature = self.callbacks[declared].clone();
+            match signature.and_then(|s| self.callback_function(None, s)) {
                 Ok(target) => callback_interfaces.push(WadoNewtype {
                     cm_attr: Some(type_path(declared)),
                     target,
                     constants: self.constants(declared, members, skipped),
-                    name: to_upper_camel_case(declared),
+                    name,
                 }),
                 // Its constants have no type to sit on.
                 Err(reason) => {
@@ -1807,8 +1783,8 @@ impl Lowering<'_> {
         })
     }
 
-    /// A callback crosses only into the host and returns nothing. `name` is
-    /// the newtype naming its function type, where one does.
+    /// A callback crosses only into the host. `name` is the newtype naming its
+    /// function type, where one does.
     fn lower_callback(
         &self,
         name: Option<String>,
@@ -1818,15 +1794,11 @@ impl Lowering<'_> {
         if flow == Flow::Out {
             return Err(Reason::of(Cause::CallbackResult));
         }
-        if !is_undefined(signature.0) {
-            let why = "a callback returning a value";
-            return Err(Reason::new(Cause::Callback, why));
-        }
         self.callback_function(name, signature)
     }
 
-    /// The function type a callback is. It takes only what the host always
-    /// calls a closure back with: scalars and handles.
+    /// The function type a callback is. It takes and returns only what crosses
+    /// as one core value with no memory: scalars and handles.
     fn callback_function(
         &self,
         name: Option<String>,
@@ -1853,7 +1825,11 @@ impl Lowering<'_> {
         let result = if is_undefined(return_type) {
             None
         } else {
-            Some(Box::new(self.lower_type(return_type, Flow::In)?))
+            let ty = self.lower_type(return_type, Flow::In)?;
+            if ty.callback_argument_word().is_none() {
+                return uncallable("a result neither a scalar nor a handle".to_string());
+            }
+            Some(Box::new(ty))
         };
         Ok(WadoType::Callback {
             name,
