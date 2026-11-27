@@ -360,44 +360,41 @@ impl Deserialize for Value {
 /// object key order, variant shape) that a round-trip through a text format
 /// like JSON would flatten.
 pub fn to_value<T: Serialize>(value: &T) -> Result<Value, SerializeError> {
-    let mut out: Value = Value::Null;
-    let mut ser = ValueSerializer { out: &mut out };
+    let out = Shared::new(Value::Null);
+    let mut ser = ValueSerializer { out };
     value.serialize(&mut ser)?;
-    return Result::Ok(out);
+    return Result::Ok(*out);
 }
 
 pub struct ValueSerializer {
-    out: &mut Value,
+    out: Shared<Value>,
 }
 
 pub struct ValueSeqSerializer {
-    out: &mut Value,
+    out: Shared<Value>,
     items: List<Value>,
 }
 
 pub struct ValueMapSerializer {
-    out: &mut Value,
+    out: Shared<Value>,
     entries: HashMap<String, Value>,
     pending: Option<String>,
 }
 
 pub struct ValueStructSerializer {
-    out: &mut Value,
+    out: Shared<Value>,
     entries: HashMap<String, Value>,
 }
 
 pub struct ValueVariantSerializer {
-    out: &mut Value,
+    out: Shared<Value>,
     name: String,
     payloads: List<Value>,
 }
 
 impl SerializeSeq for ValueSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let mut v: Value = Value::Null;
-        let mut ser = ValueSerializer { out: &mut v };
-        value.serialize(&mut ser)?;
-        self.items.push(v);
+        self.items.push(to_value(value)?);
         return Result::Ok(());
     }
 
@@ -416,10 +413,7 @@ impl SerializeMap for ValueMapSerializer {
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let mut v: Value = Value::Null;
-        let mut ser = ValueSerializer { out: &mut v };
-        value.serialize(&mut ser)?;
-        self.entries[self.pending.expect("a value is written after its key")] = v;
+        self.entries[self.pending.expect("a value is written after its key")] = to_value(value)?;
         self.pending = null;
         return Result::Ok(());
     }
@@ -432,10 +426,7 @@ impl SerializeMap for ValueMapSerializer {
 
 impl SerializeStruct for ValueStructSerializer {
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
-        let mut v: Value = Value::Null;
-        let mut ser = ValueSerializer { out: &mut v };
-        value.serialize(&mut ser)?;
-        self.entries[name.to_string()] = v;
+        self.entries[name.to_string()] = to_value(value)?;
         return Result::Ok(());
     }
 
@@ -447,10 +438,7 @@ impl SerializeStruct for ValueStructSerializer {
 
 impl SerializeVariant for ValueVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let mut v: Value = Value::Null;
-        let mut ser = ValueSerializer { out: &mut v };
-        value.serialize(&mut ser)?;
-        self.payloads.push(v);
+        self.payloads.push(to_value(value)?);
         return Result::Ok(());
     }
 
