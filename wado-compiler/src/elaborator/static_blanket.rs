@@ -267,14 +267,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if sig.decl.return_type == Some(TypeTable::UNKNOWN) {
             return None;
         }
-        let block_decls: Vec<(TypeId, ast::GenericParam)> = {
-            let (_, owners) = self.sig_slots(sig);
-            sig.decl.type_params[..sig.declaring_split()]
-                .iter()
-                .map(|(_, slot)| *slot)
-                .zip(owners)
-                .collect()
-        };
         let blanket_slot = self.tysys.blanket_param_slot(blanket_def, &blanket_param);
         let trait_decl = trait_name.canonical();
         let self_binding = SelfBinding::of_static(receiver_type_id, trait_decl);
@@ -327,10 +319,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // One the call typed its arguments without is solved from them
             // now, as the method's own slots are below.
-            let (open_slots, open_params): (Vec<TypeId>, Vec<ast::GenericParam>) = block_decls
-                .into_iter()
-                .filter(|(slot, _)| self.is_open_trait_arg_slot(blanket_def, *slot, &answered))
-                .unzip();
+            let (_, owners) = self.sig_slots(sig);
+            let (open_slots, open_params): (Vec<TypeId>, Vec<ast::GenericParam>) =
+                sig.decl.type_params[..sig.declaring_split()]
+                    .iter()
+                    .map(|(_, slot)| *slot)
+                    .zip(owners)
+                    .filter(|(slot, _)| self.is_open_trait_arg_slot(blanket_def, *slot, &answered))
+                    .unzip();
             if !open_slots.is_empty() {
                 let (param_types, return_type) =
                     self.blanket_static_in(blanket_def, method, &answered);

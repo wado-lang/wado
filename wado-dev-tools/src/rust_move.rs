@@ -538,7 +538,10 @@ impl Move {
         let bare_use = destination.identifiers.iter().find(|(at, written)| {
             let before = destination.lines[at.line][..at.column].trim_end();
             written == name
-                && !self.destination_uses.iter().any(|u| u.lines.contains(&at.line))
+                && !self
+                    .destination_uses
+                    .iter()
+                    .any(|u| u.lines.contains(&at.line))
                 && !before.ends_with('.')
                 && !before.ends_with("::")
         });
@@ -1637,7 +1640,10 @@ fn helper(n: usize) -> i32 {
     #[test]
     fn a_const_argument_keeps_its_header_whole() {
         let dir = probe(&[
-            ("src/main.rs", "mod a;\nmod b;\nfn main() { a::Slot::<2>.width(); }\n"),
+            (
+                "src/main.rs",
+                "mod a;\nmod b;\nfn main() { a::Slot::<2>.width(); }\n",
+            ),
             (
                 "src/a.rs",
                 "pub struct Slot<const N: usize>;\n\nimpl Slot<{ 1 + 1 }> {\n    \
