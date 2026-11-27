@@ -821,11 +821,18 @@ impl CmChannelHelper {
 pub const CALLBACK_HANDLE_WORD: &str = "handle";
 
 /// The shape of the export the host calls a closure back through, given a word
-/// per argument: its Wado primitive, or [`CALLBACK_HANDLE_WORD`]
-/// (`call-handle`).
-pub fn callback_export_name<'a>(params: impl IntoIterator<Item = &'a str>) -> String {
+/// per argument and one for the result where there is one: its Wado
+/// primitive, or [`CALLBACK_HANDLE_WORD`] (`call-handle`,
+/// `call-handle-to-u16`). `to` is no type's word, so it parts the arguments
+/// from the result.
+pub fn callback_export_name<'a>(
+    params: impl IntoIterator<Item = &'a str>,
+    result: Option<&'a str>,
+) -> String {
+    let result = result.into_iter().flat_map(|word| ["to", word]);
     std::iter::once("call")
         .chain(params)
+        .chain(result)
         .collect::<Vec<_>>()
         .join("-")
 }

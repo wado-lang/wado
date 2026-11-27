@@ -101,7 +101,7 @@ Per-literal wrappers cast the canonical `env` back to `$Closure_N` and forward t
 
 ### A closure crosses the Component Model boundary only as an `externref`
 
-An exported signature may not carry a closure type in any position, including one buried in a container, a named struct's field, or a variant payload. An imported one carries it only as a whole parameter, a callback taking scalars and handles and returning nothing.
+An exported signature may not carry a closure type in any position, including one buried in a container, a named struct's field, or a variant payload. An imported one carries it only as a whole parameter, a callback taking scalars and handles and returning nothing, a scalar or a handle.
 
 The closure's own struct crosses as an `externref`, and the host calls it back through a core export of the main module. See [Extern Handles § A closure crosses as itself](./wep-2026-11-14-extern-handles.md#a-closure-crosses-as-itself).
 

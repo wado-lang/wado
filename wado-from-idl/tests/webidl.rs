@@ -1281,10 +1281,10 @@ pub type EventListener = fn mut(Node) with Dom;
         code.contains("callback: fn mut(f64) with Dom) -> u32;"),
         "{code}"
     );
+    assert!(code.contains("fn filter(&self, filter: fn mut("), "{code}");
     assert_eq!(
         skipped,
         [
-            "Element.filter: `filter`: a callback returning a value",
             "Element.on_text: `callback`: callback argument `text`: neither a scalar nor a handle",
             "Element.on_maybe: `callback`: callback argument `count`: optional",
             "Element.current_listener: a callback in a result",
@@ -1294,66 +1294,6 @@ pub type EventListener = fn mut(Node) with Dom;
 
 /// A callback interface has no object for a resource to stand for, so its
 /// constants sit on the function type its one operation is.
-/// What a callback interface's function type names is declared, though no
-/// bound member names the interface.
-#[test]
-fn a_callback_interface_declares_what_its_function_type_names() {
-    let decide = |name: &str, members: &[String]| {
-        let mut members = members.to_vec();
-        members.push(operation(
-            "decide",
-            &plain("Decision"),
-            &[argument("node", &plain("Node"), false, "null")],
-            "",
-        ));
-        definition("callback interface", name, "null", "", false, &members)
-    };
-    let mut defs = chain();
-    defs.enums = vec![
-        string_enum("Decision", &["accept", "skip"]),
-        string_enum("Unreached", &["a"]),
-    ];
-    defs.callbacks = vec![
-        decide("DecisionFilter", &[const_member("LEVEL")]),
-        // Nothing names this one, and it holds no constant.
-        decide("Unnamed", &[]),
-    ];
-    let (code, _) = defs.generate();
-    assert!(
-        code.contains("pub type DecisionFilter = fn mut(Node) -> Decision with Dom;"),
-        "{code}"
-    );
-    assert!(code.contains("pub enum Decision {"), "{code}");
-    assert!(!code.contains("Unnamed"), "{code}");
-    assert!(!code.contains("Unreached"), "{code}");
-}
-
-/// A callback interface named only by a later one's function type, whatever
-/// the declaration order.
-#[test]
-fn a_callback_interface_declares_the_callback_interfaces_its_function_type_names() {
-    let interface = |name: &str, members: &[String]| {
-        definition("callback interface", name, "null", "", false, members)
-    };
-    let mut defs = chain();
-    defs.callbacks = vec![
-        interface("Inner", &[operation("call", &plain("undefined"), &[], "")]),
-        interface(
-            "Outer",
-            &[
-                const_member("TAG"),
-                operation("make", &plain("Inner"), &[], ""),
-            ],
-        ),
-    ];
-    let (code, _) = defs.generate();
-    assert!(
-        code.contains("pub type Outer = fn mut() -> Inner"),
-        "{code}"
-    );
-    assert!(code.contains("pub type Inner = fn mut()"), "{code}");
-}
-
 #[test]
 fn a_callback_interface_is_a_named_function_type_holding_its_constants() {
     let number = |value: &str| format!(r#"{{"type": "number", "value": "{value}"}}"#);
@@ -1390,7 +1330,15 @@ fn a_callback_interface_is_a_named_function_type_holding_its_constants() {
                 ),
             ],
         ),
+        interface(
+            "Undecidable",
+            &[
+                const_member("LEVEL"),
+                operation("decide", &plain("Decision"), &[], ""),
+            ],
+        ),
     ];
+    defs.enums = vec![string_enum("Decision", &["accept", "skip"])];
     defs.interfaces.push(partial(
         "Element",
         &[operation(
@@ -1417,12 +1365,17 @@ impl NodeFilter {
     );
     assert!(!code.contains("Unused"), "{code}");
     assert!(!code.contains("Uncallable"), "{code}");
+    assert!(!code.contains("Undecidable"), "{code}");
     assert!(!code.contains("enum Decision"), "{code}");
+    assert!(
+        code.contains("fn walk(&self, filter: NodeFilter);"),
+        "{code}"
+    );
     assert_eq!(
         skipped,
         [
-            "Element.walk: `filter`: a callback returning a value",
             "Uncallable.LEVEL: callback argument `text`: neither a scalar nor a handle",
+            "Undecidable.LEVEL: a result neither a scalar nor a handle",
         ]
     );
 }

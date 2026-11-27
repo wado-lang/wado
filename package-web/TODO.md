@@ -8,8 +8,9 @@ design and the initial implementation are in
 
 The pipeline works end to end: WebIDL snapshot, generated bindings and glue,
 `SurfaceDom`, server-side rendering, callbacks, and a jsdom run in CI. The slice
-covers ten interfaces: `EventTarget`, `Event`, `Node`, `CharacterData`, `Text`,
-`Element`, `HTMLElement`, `HTMLInputElement`, `Document` and `Window`.
+covers twelve interfaces: `EventTarget`, `Event`, `Node`, `CharacterData`,
+`Text`, `Element`, `HTMLElement`, `HTMLInputElement`, `Document`, `Window`,
+`NodeIterator` and `TreeWalker`.
 
 `wado-from-idl` reads every definition and member kind webidl2 writes. It names
 each thing it does not bind on stderr, and counts them by cause.
@@ -24,7 +25,7 @@ left before the slice can be everything:
 | a callback in a result                          | 5           | 954     | 0         | 0         |
 | a type outside the slice                        | 2           | 281     | 1         | 2         |
 | a union                                         | 15          | 200     | 0         | 0         |
-| `any`                                           | 3           | 150     | 0         | 34        |
+| `any`                                           | 3           | 158     | 0         | 34        |
 | a buffer                                        | 15          | 144     | 16        | 5         |
 | a namespace member                              | 0           | 133     | 0         | 0         |
 | a dictionary                                    | 34          | 67      | 0         | 15        |
@@ -35,15 +36,15 @@ left before the slice can be everything:
 | a redeclared inherited method                   | 0           | 55      | 0         | 0         |
 | an iteration declaration                        | 0           | 41      | 0         | 0         |
 | an enum                                         | 19          | 21      | 0         | 0         |
-| `Promise<…>`                                    | 0           | 31      | 0         | 1         |
-| a callback the glue cannot call                 | 0           | 22      | 2         | 7         |
+| `Promise<…>`                                    | 0           | 32      | 0         | 1         |
+| a callback the glue cannot call                 | 0           | 11      | 2         | 5         |
 | `record<…>`                                     | 0           | 15      | 0         | 0         |
 | a list of a list, a nullable type or a callback | 4           | 7       | 0         | 1         |
 | a static attribute                              | 0           | 7       | 0         | 0         |
 | `ObservableArray<…>`                            | 0           | 4       | 0         | 0         |
 | `bigint`                                        | 0           | 2       | 0         | 0         |
 | `async_sequence<…>`                             | 0           | 1       | 0         | 0         |
-| Total                                           | 101         | 2421    | 20        | 72        |
+| Total                                           | 101         | 2419    | 20        | 70        |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
@@ -125,13 +126,14 @@ lower is then available to each interface the slice adds.
 - [x] Bind an interface's constant as an associated constant of its resource
 - [x] Bind a callback interface as a newtype over its closure type, holding
   its constants: `NodeFilter::SHOW_ALL`
-- [ ] Let a callback return a value, as `NodeFilter`'s does: until then a
-  member taking one is skipped, and only its constants are bound
+- [x] Let a callback return a scalar or a handle, as `NodeFilter`'s does
 
 ### 6. A wider slice
 
 - [x] Tree: `Text` and `CharacterData`; `SurfaceDom` answers `create_text_node`,
   `data` and `insert_before`
+- [x] Traversal: `NodeIterator` and `TreeWalker`; `SurfaceDom` answers
+  `create_node_iterator`, `create_tree_walker` and their traversals
 - [ ] Tree: `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`
 - [ ] Style and classes: `DOMTokenList`, `CSSStyleDeclaration`, `DOMRect`
 - [ ] Elements: `HTMLButtonElement`, `HTMLAnchorElement`, `HTMLFormElement`,
@@ -176,6 +178,13 @@ lower is then available to each interface the slice adds.
 - jco 1.30.0 fails an export that a listener reenters during
   `dispatch_event`.
 - `SurfaceDom` neither removes a listener nor ignores one added twice.
+- `SurfaceDom` does not move a `NodeIterator`'s reference node off a node
+  removed from the tree, as the DOM standard's pre-removing steps do: it
+  tracks no iterator after creating it.
+- A callback that returns a value runs to its end before the page goes on, so
+  waiting on a promise inside it traps.
+- A `NodeFilter` is required, though the page accepts `null` for one that
+  accepts every node: `|_| NodeFilter::FILTER_ACCEPT` says the same.
 - Every callback shape a declared `#[cm]` import takes gets its export, whether
   the program passes such a closure or not.
 - A mixin's members are folded into each interface that includes it, rather
