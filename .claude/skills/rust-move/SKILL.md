@@ -32,7 +32,8 @@ doc comment and attributes.
   same header. Where the destination has none, the tool opens one.
 - A top-level item lands at the end of the file, ahead of a trailing
   `mod tests`.
-- An `impl` block that loses every member is removed.
+- An `impl` block left with nothing in it is removed. A comment or a macro
+  invocation keeps it.
 
 ## What it fixes
 
@@ -54,8 +55,12 @@ The tool reports each of these as a `by hand:` line where it can see one.
   them.
 - A path in a third file that names a moved top-level item.
 - A relative import, or an import of a source item, between files that are not
-  siblings.
+  siblings. An import through `self` or a child module of the source file is
+  relative to it even between siblings.
 - A glob import of the source file.
+- A name the moved code reads that the destination already binds to something
+  else: the moved code would read the destination's.
+- A `macro_rules!` macro of the source file that the moved code invokes.
 
 Then format, since the tool appends imports unsorted:
 

@@ -14,7 +14,6 @@ use super::static_call::ReceiverId;
 use super::static_call::StaticLookup;
 use super::static_call::StaticQuery;
 use super::trait_env::ImplTargetKey;
-use super::trait_query::NewtypePeel;
 use super::trait_query::SelfBinding;
 use super::types::FunctionContext;
 use super::types::TypeError;
@@ -26,7 +25,6 @@ use crate::ast::Expr;
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::elaborator::call::slot_type_bindings;
-use crate::elaborator::trait_env::BlanketBound;
 use crate::elaborator::trait_env::BlanketImpl;
 use crate::elaborator::trait_env::BlanketReceiver;
 use crate::module_source::ModuleSource;
@@ -53,24 +51,22 @@ pub(super) struct BlanketStatic {
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Every value blanket supplying a static `method_name` that the receiver's
-    /// bounds admit, in the order the blocks were written: at the receiver
-    /// itself under `Here`, through its newtype chain under `Follow`. Facts
-    /// only: which of several answers is
+    /// bounds admit, in the order the blocks were written. The bounds are read
+    /// at the receiver itself, not through its newtype chain: each link is
+    /// asked on its own. Facts only: which of several answers is
     /// [`Elaborator::resolve_static_callee`]'s to decide.
     pub(super) fn applicable_blanket_statics(
         &self,
         receiver_type_id: TypeId,
         method_name: &str,
-        peel: NewtypePeel,
     ) -> Vec<BlanketStatic> {
-        let candidates: Vec<(BlanketStatic, Vec<BlanketBound>)> = self
-            .tysys
+        self.tysys
             .trait_env
             .blanket_impls
-            .iter()
-            .flat_map(|(trait_name, impls)| impls.iter().map(move |b| (trait_name, b)))
-            .filter(|(_, b)| b.receiver == BlanketReceiver::Value)
-            .filter(|(_, b)| {
+            .values()
+            .flatten()
+            .filter(|b| b.receiver == BlanketReceiver::Value)
+            .filter(|b| {
                 let target = ImplTargetKey::TypeParam {
                     owner: b.def,
                     name: b.param.clone(),
@@ -79,29 +75,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .next()
                     .is_some()
             })
-            .filter_map(|(_, b)| Some((self.blanket_static(b)?, b.bounds.clone())))
-            .collect();
-
-        candidates
-            .into_iter()
-            .filter(|(_, bounds)| {
-                bounds.iter().all(|bound| {
-                    bound.trait_.as_ref().is_some_and(|bound_trait| match peel {
-                        NewtypePeel::Follow => self.tysys.type_implements_trait(
-                            &self.annotate_ctx,
-                            receiver_type_id,
-                            bound_trait,
-                        ),
-                        NewtypePeel::Here => self.tysys.type_implements_trait_here(
+            .filter(|b| {
+                b.bounds.iter().all(|bound| {
+                    bound.trait_.as_ref().is_some_and(|bound_trait| {
+                        self.tysys.type_implements_trait_here(
                             &self.annotate_ctx,
                             &self.type_lookup(),
                             receiver_type_id,
                             bound_trait,
-                        ),
+                        )
                     })
                 })
             })
-            .map(|(blanket, _)| blanket)
+            .filter_map(|b| self.blanket_static(b))
             .collect()
     }
 

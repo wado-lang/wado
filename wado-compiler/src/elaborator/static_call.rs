@@ -1695,7 +1695,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(receiver_type) = receiver_type else {
             return Vec::new();
         };
-        self.applicable_blanket_statics(receiver_type, method_name, NewtypePeel::Here)
+        self.applicable_blanket_statics(receiver_type, method_name)
             .into_iter()
             .filter_map(|blanket| {
                 let header = &self.tysys.trait_env.impl_headers[&blanket.def];
