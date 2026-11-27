@@ -1168,14 +1168,14 @@ fn "core:prelude/primitive.wado/core:prelude/primitive.wado/$tmpl$c8d78b43997053
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/iter.wado/Iterator::next$sroa[return]"(self) {
-    let $av_7: i32;
-    if local.tee $av_7(self.byte_index) >= self.used {
+    let $load_0: i32;
+    if local.tee $load_0(self.byte_index) >= self.used {
         return 0, 0;
     }
     let $mv$$pattern_temp_0$0: u32;
     let $mv$$pattern_temp_0$1: i32;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/string.wado/decode_char_at"(self.repr, $av_7);
-    self.byte_index = $av_7 + $mv$$pattern_temp_0$1;
+    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/string.wado/decode_char_at"(self.repr, $load_0);
+    self.byte_index = $load_0 + $mv$$pattern_temp_0$1;
     return 1, if @unlikely("core:prelude/primitive.wado/char::is_scalar_value"($mv$$pattern_temp_0$0) == 0) {
         cold_path;
         "core:prelude/primitive.wado/char::from_u32$contract_report0"($mv$$pattern_temp_0$0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:324"), used: 28 });
@@ -1679,7 +1679,7 @@ fn "fn_type_impl_through_bound.wado/fn_type_impl_through_bound.wado/$Closure_3::
     let start_203: i32;
     let $sroa_out_repr_348: ref Array<u8>;
     let $sroa_out_used_349: i32;
-    let $sroa_write_back_350: ref "core:prelude/string.wado//String";
+    let $sroa_write_back_351: ref "core:prelude/string.wado//String";
     $sroa_out_repr_348 = builtin::array_new<u8>(16);
     $sroa_out_used_349 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
@@ -1688,19 +1688,14 @@ fn "fn_type_impl_through_bound.wado/fn_type_impl_through_bound.wado/$Closure_3::
     is_negative_75 = x < 0;
     digit_count_77 = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_79(x_79 = builtin::i64_extend_i32_s(x); select i64(x_79 < 0_i64, 0_i64 - x_79, x_79)));
     if is_negative_75 {
-        if @unlikely(1 > builtin::array_len($sroa_out_repr_348)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_350(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_348, used: 0 }), 1);
-            $sroa_out_repr_348 = $sroa_write_back_350.repr;
-        }
         $sroa_out_used_349 = 1;
         builtin::array_set_u8($sroa_out_repr_348, 0, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_75($sroa_out_used_349 + digit_count_77) > builtin::array_len($sroa_out_repr_348)) {
+    if @unlikely(local.tee is_negative_75($sroa_out_used_349 + digit_count_77) > 16) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_350(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_348, used: $sroa_out_used_349 }), is_negative_75);
-        $sroa_out_repr_348 = $sroa_write_back_350.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_351(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_348, used: $sroa_out_used_349 }), is_negative_75);
+        $sroa_out_repr_348 = $sroa_write_back_351.repr;
     }
     start_203 = $sroa_out_used_349;
     $sroa_out_used_349 = is_negative_75;
@@ -1774,9 +1769,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     $licm_arith_37 = c <u 128;
     $licm_arith_38 = c & 255;
     $hfs_used_39 = self.used;
-    b215: block {
-        l216: loop {
-            break_if b215 i >= n;
+    b214: block {
+        l215: loop {
+            break_if b214 i >= n;
             $inline_core_prelude_string_wado_String__push_0: block {
                 if $licm_arith_37 {
                     if @unlikely(local.tee $hfs_used_39($hfs_used_39 + 1) > builtin::array_len($licm_repr_36)) {
@@ -1808,7 +1803,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
             };
             i = i + 1;
             self.used = $hfs_used_39;
-            continue l216;
+            continue l215;
         };
     };
 }

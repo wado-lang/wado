@@ -1,0 +1,15 @@
+// A `&mut` subscript where only `IndexRef` answers would mint a `&mut` from the
+// `&Output` it hands out, on a type parameter as on a concrete container.
+
+fn first_len<B: IndexRef<i32, Output = String>>(names: &mut B) -> i32 {
+    let name = &mut names[0];
+    return name.len();
+}
+
+export fn run() {
+    let mut names: List<String> = ["a"];
+    let _ = first_len(&mut names);
+}
+
+__DATA__
+{"compile_error": ":5:16: analysis error: cannot take &mut through immutable reference"}

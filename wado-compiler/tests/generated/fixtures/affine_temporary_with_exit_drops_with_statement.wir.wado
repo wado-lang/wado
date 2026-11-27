@@ -387,7 +387,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temporary_with_exit_drops_with_statement.wado/$tmpl$ebaa20f4a908b504,[i32]>" = fn(ref "affine_temporary_with_exit_drops_with_statement.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//String";  // TypeId(126)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2521>>::from" = fn(ref "Array<core:prelude/string.wado/String>") -> [ref "Array<core:prelude/string.wado/String>", i32];  // TypeId(127)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2509>>::from" = fn(ref "Array<core:prelude/string.wado/String>") -> [ref "Array<core:prelude/string.wado/String>", i32];  // TypeId(127)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "Array<core:prelude/string.wado/String>", i32, ref "core:prelude/format.wado//Formatter");  // TypeId(128)
 
@@ -792,7 +792,7 @@ fn "affine_temporary_with_exit_drops_with_statement.wado/$cm_export__$test_1_a_d
 fn "affine_temporary_with_exit_drops_with_statement.wado/$initialize_module"() {
     let $mv_repr_1: ref "Array<core:prelude/string.wado/String>";
     let $mv_used_2: i32;
-    multivalue_bind [$mv_repr_1, $mv_used_2] = "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2521>>::from"(array.new_fixed<ref "core:prelude/string.wado//String">());
+    multivalue_bind [$mv_repr_1, $mv_used_2] = "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2509>>::from"(array.new_fixed<ref "core:prelude/string.wado//String">());
     global:affine_temporary_with_exit_drops_with_statement.wado::LOG = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: $mv_repr_1, used: $mv_used_2 };
 }
 
@@ -1836,14 +1836,14 @@ fn "core:prelude/primitive.wado/core:prelude/primitive.wado/$tmpl$c8d78b43997053
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/iter.wado/Iterator::next$sroa[return]"(self) {
-    let $av_7: i32;
-    if local.tee $av_7(self.byte_index) >= self.used {
+    let $load_0: i32;
+    if local.tee $load_0(self.byte_index) >= self.used {
         return 0, 0;
     }
     let $mv$$pattern_temp_0$0: u32;
     let $mv$$pattern_temp_0$1: i32;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/string.wado/decode_char_at"(self.repr, $av_7);
-    self.byte_index = $av_7 + $mv$$pattern_temp_0$1;
+    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/string.wado/decode_char_at"(self.repr, $load_0);
+    self.byte_index = $load_0 + $mv$$pattern_temp_0$1;
     return 1, if @unlikely("core:prelude/primitive.wado/char::is_scalar_value"($mv$$pattern_temp_0$0) == 0) {
         cold_path;
         "core:prelude/primitive.wado/char::from_u32$contract_report0"($mv$$pattern_temp_0$0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:324"), used: 28 });
@@ -2119,7 +2119,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temp
     return out;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2521>>::from"(elements) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2509>>::from"(elements) {
     let used: i32;
     used = builtin::array_len(elements);
     return elements, used;
@@ -2449,39 +2449,29 @@ fn "affine_temporary_with_exit_drops_with_statement.wado/affine_temporary_with_e
 }
 
 fn "affine_temporary_with_exit_drops_with_statement.wado/affine_temporary_with_exit_drops_with_statement.wado/Tok^core:prelude/traits.wado/Drop::drop$sroa[self.n]"(self) {
-    let $load_0: i32;
     let $load_1: ref Array<u8>;
     let self_1: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let out_7: ref "core:prelude/string.wado//String";
     let is_negative_69: bool;
     let x: i64;
+    let start_164: i32;
     self_1 = global:affine_temporary_with_exit_drops_with_statement.wado::LOG;
-    local.tee out_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }).used = local.tee $load_0(5);
+    local.tee out_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }).used = 5;
     builtin::array_copy<u8>(local.tee $load_1(out_7.repr), 0, global:affine_temporary_with_exit_drops_with_statement.wado::$const_obj_1, 0, 5);
     is_negative_69 = self < 0;
     self = "core:prelude/numeric.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     if is_negative_69 {
-        if @unlikely(local.tee $load_0($load_0 + 1) > builtin::array_len($load_1)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, $load_0);
-        }
-        is_negative_69 = out_7.used;
-        out_7.used = $load_0;
-        if @unlikely(is_negative_69 >=u $load_0) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(is_negative_69, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:555"), used: 28 });
-            unreachable;
-        }
-        builtin::array_set_u8(out_7.repr, is_negative_69, 45);
+        out_7.used = 6;
+        builtin::array_set_u8($load_1, 5, 45);
     } else {
     }
-    if @unlikely(local.tee $load_0(out_7.used + self) > builtin::array_len(out_7.repr)) {
+    if @unlikely(local.tee is_negative_69(out_7.used + self) > 21) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, $load_0);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, is_negative_69);
     }
-    is_negative_69 = out_7.used;
-    out_7.used = $load_0;
-    "core:prelude/numeric.wado/write_decimal_digits"(out_7.repr, is_negative_69, x, self);
+    start_164 = out_7.used;
+    out_7.used = is_negative_69;
+    "core:prelude/numeric.wado/write_decimal_digits"(out_7.repr, start_164, x, self);
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
     };
@@ -2512,9 +2502,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     $licm_arith_37 = c <u 128;
     $licm_arith_38 = c & 255;
     $hfs_used_39 = self.used;
-    b292: block {
-        l293: loop {
-            break_if b292 i >= n;
+    b290: block {
+        l291: loop {
+            break_if b290 i >= n;
             $inline_core_prelude_string_wado_String__push_0: block {
                 if $licm_arith_37 {
                     if @unlikely(local.tee $hfs_used_39($hfs_used_39 + 1) > builtin::array_len($licm_repr_36)) {
@@ -2546,7 +2536,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
             };
             i = i + 1;
             self.used = $hfs_used_39;
-            continue l293;
+            continue l291;
         };
     };
 }

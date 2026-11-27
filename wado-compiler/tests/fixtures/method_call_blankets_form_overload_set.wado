@@ -1,0 +1,148 @@
+// Two blankets of one trait at different arguments are an overload set where
+// no concrete impl answers: the expected type selects, and a blanket writing
+// its trait arguments wins over one leaving them to the call.
+
+trait Source<A> with () {
+    fn first(&self) -> A;
+}
+
+trait Marker with () {}
+
+trait Other with () {}
+
+trait Tag<A> with () {
+    fn tag(&self) -> A;
+}
+
+impl<A, T: Source<A>> Tag<A> for T {
+    fn tag(&self) -> A {
+        return self.first();
+    }
+}
+
+impl<T: Marker> Tag<bool> for T {
+    fn tag(&self) -> bool {
+        return true;
+    }
+}
+
+trait Pick<A> with () {
+    fn pick(&self) -> A;
+}
+
+impl<T: Other> Pick<i32> for T {
+    fn pick(&self) -> i32 {
+        return 7;
+    }
+}
+
+impl<T: Marker> Pick<bool> for T {
+    fn pick(&self) -> bool {
+        return true;
+    }
+}
+
+struct One {
+    n: i32,
+}
+
+impl Source<i32> for One {
+    fn first(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Marker for One {}
+
+impl Other for One {}
+
+test "the expected type selects between closed blankets" {
+    let one = One { n: 3 };
+    let b: bool = one.pick();
+    let n: i32 = one.pick();
+    assert b;
+    assert n == 7;
+}
+
+test "the expected type selects the blanket leaving its argument open" {
+    let one = One { n: 3 };
+    let n: i32 = one.tag();
+    assert n == 3;
+}
+
+test "the blanket writing its arguments wins with nothing expected" {
+    let one = One { n: 3 };
+    let b = one.tag();
+    assert `${b}` == "true";
+}
+
+test "a qualified call names either" {
+    let one = One { n: 3 };
+    assert Tag::<bool>::tag(&one);
+    assert Tag::<i32>::tag(&one) == 3;
+}
+
+test "the expected type selects where the qualified call writes `_`" {
+    let one = One { n: 3 };
+    let n: i32 = Pick::<_>::pick(&one);
+    let b: bool = Pick::<_>::pick(&one);
+    assert n == 7 && b;
+}
+
+trait SinkX<A> with () {
+    fn x(&self, a: A) -> i32;
+}
+
+trait SinkY<A> with () {
+    fn y(&self, a: A) -> i32;
+}
+
+trait Put<A> with () {
+    fn put(&self, a: A) -> i32;
+}
+
+impl<A, T: SinkX<A>> Put<A> for T {
+    fn put(&self, a: A) -> i32 {
+        return self.x(a);
+    }
+}
+
+impl<B, T: SinkY<B>> Put<List<B>> for T {
+    fn put(&self, a: List<B>) -> i32 {
+        return 100;
+    }
+}
+
+struct Sinks {}
+
+impl SinkX<String> for Sinks {
+    fn x(&self, a: String) -> i32 {
+        return 1;
+    }
+}
+
+impl SinkX<bool> for Sinks {
+    fn x(&self, a: bool) -> i32 {
+        return 2;
+    }
+}
+
+impl SinkY<i32> for Sinks {
+    fn y(&self, a: i32) -> i32 {
+        return 3;
+    }
+}
+
+impl SinkY<bool> for Sinks {
+    fn y(&self, a: bool) -> i32 {
+        return 4;
+    }
+}
+
+test "of two blankets leaving a parameter open, the one whose bound holds" {
+    let s = Sinks {};
+    let xs: List<i32> = [1, 2];
+    assert s.put(xs) == 100;
+    assert s.put(true) == 2;
+    assert s.put("s") == 1;
+}

@@ -1,0 +1,22 @@
+// A `&T` grants reading alone: a store through it is refused even where the
+// place goes on through a `&mut` stored behind it.
+
+struct S {
+    f: i32,
+}
+
+struct Holder {
+    r: &mut S,
+}
+
+fn touch(h: &Holder) {
+    h.r.f = 2;   // Error: `h.r` is reached through `&Holder`
+}
+
+export fn run() {
+    let mut s = S { f: 1 };
+    touch(&Holder { r: &mut s });
+}
+
+__DATA__
+{"compile_error": ":13:5: analysis error: cannot assign through immutable reference"}

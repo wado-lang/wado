@@ -9706,20 +9706,24 @@ impl TypeSystem {
         self.apply_scrutinee_ref_kind(scrutinee_type, target)
     }
 
-    /// The type of the `*…` result a dispatched index read produces: the recorded
-    /// one when resolved, else the `&Output` the index trait returns, peeled.
+    /// The type a dispatched index read produces: the recorded one when
+    /// resolved, which reads a `&mut` element behind a `&` as a `&`, else what
+    /// the index trait returns, a `&Output` peeled.
     fn index_deref_type(&self, recorded: Option<TypeId>, dispatch: &OperatorDispatch) -> TypeId {
-        if !dispatch.needs_deref {
-            return dispatch.return_type;
-        }
         recorded
             .filter(|t| !matches!(self.type_table.borrow().get(*t), ResolvedType::Unknown))
-            .unwrap_or_else(|| self.through_ref(dispatch.return_type))
+            .unwrap_or_else(|| {
+                if dispatch.needs_deref {
+                    self.through_ref(dispatch.return_type)
+                } else {
+                    dispatch.return_type
+                }
+            })
     }
 
     /// The trait read `*recv.index(idx)` (or `recv.index_value(idx)`) `dispatch`
     /// records, on a receiver already adjusted to its `self_kind`; `deref_type`
-    /// types the `*…` when `dispatch.needs_deref`.
+    /// types the read, the `*…` or the by-value call.
     fn build_index_read_from_dispatch(
         &self,
         adjusted: TirExpr,
@@ -9748,6 +9752,8 @@ impl TypeSystem {
                 span,
             )
         } else {
+            let mut method_call = method_call;
+            method_call.type_id = deref_type;
             method_call
         }
     }

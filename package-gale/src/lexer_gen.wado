@@ -724,9 +724,9 @@ fn gen_lexer_fragment_fn<S: AsStrSlice>(
 ) {
     let rule = find_fragment(all_rules, &frag.key.name).expect("a fragment matcher names no fragment");
     let mut ids = IdGen::new();
-    let e = LexerEmit { all_rules, ci: frag.key.ci, hm, ids: &mut ids };
+    let mut e = LexerEmit { all_rules, ci: frag.key.ci, hm, ids: &mut ids };
     emit_lexer_matcher(w, &frag.key.fn_name(), rule, all_rules, hm, sc_name, |w| {
-        lexer_matcher_body(w, rule, &frag.plan, &e, ea);
+        lexer_matcher_body(w, rule, &frag.plan, &mut e, ea);
     });
 }
 
@@ -779,7 +779,7 @@ struct LexerEmit {
 }
 
 /// `rule`'s body under `plan`, returning the end.
-fn lexer_matcher_body(w: &mut CodeWriter, rule: &LexerRule, plan: &LexerBodyPlan, e: &LexerEmit, ea: bool) {
+fn lexer_matcher_body(w: &mut CodeWriter, rule: &LexerRule, plan: &LexerBodyPlan, e: &mut LexerEmit, ea: bool) {
     w.line("let mut pos = start;");
     gen_lexer_body(w, &rule.body, plan, e, "return -1", ea, false);
     w.line("return pos;");
@@ -1534,8 +1534,8 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
         unreachable();
     };
     let mut ids = IdGen::new();
-    let e = LexerEmit { all_rules, ci: resolve_ci(grammar_opts, &rule.options), hm, ids: &mut ids };
-    emit_lexer_matcher(w, &fn_name, rule, all_rules, hm, sc_name, |w| lexer_matcher_body(w, rule, plan, &e, ea));
+    let mut e = LexerEmit { all_rules, ci: resolve_ci(grammar_opts, &rule.options), hm, ids: &mut ids };
+    emit_lexer_matcher(w, &fn_name, rule, all_rules, hm, sc_name, |w| lexer_matcher_body(w, rule, plan, &mut e, ea));
 }
 
 /// Emit each semantic predicate at position `before` as a guard
@@ -1805,8 +1805,8 @@ fn gen_lexer_apply_replay_body(
         w.line(`let mut ${DEFERRED_ACTIONS}: List<[i32, i32]> = [];`);
     }
     let mut ids = IdGen::new();
-    let e = LexerEmit { all_rules, ci, hm: has_members, defers_actions, ids: &mut ids };
-    gen_lexer_body(w, &rule.body, &plan, &e, "return", ea, true);
+    let mut e = LexerEmit { all_rules, ci, hm: has_members, defers_actions, ids: &mut ids };
+    gen_lexer_body(w, &rule.body, &plan, &mut e, "return", ea, true);
     if defers_actions {
         w.begin(`for let [action, at] of ${DEFERRED_ACTIONS}`);
         w.line("pos = at;");
@@ -2014,7 +2014,7 @@ fn gen_lexer_body<S: AsStrSlice>(
     w: &mut CodeWriter,
     alts: &List<LexerAlternative>,
     plan: &LexerBodyPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool,
@@ -2029,7 +2029,7 @@ fn gen_lexer_alts<S: AsStrSlice>(
     w: &mut CodeWriter,
     alts: &List<LexerAlternative>,
     plan: &LexerAltsPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool,
@@ -2318,7 +2318,7 @@ fn gen_lexer_arm_probe<S: AsStrSlice>(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool,
@@ -2328,7 +2328,7 @@ fn gen_lexer_arm_probe<S: AsStrSlice>(
 
 /// The id a probe's locals carry. Only a replay emits a probe, so only a replay
 /// mints one — the match pass keeps the numbering it had.
-fn probe_id(e: &LexerEmit, replay: bool) -> i32 {
+fn probe_id(e: &mut LexerEmit, replay: bool) -> i32 {
     return if replay { e.ids.next() } else { 0 };
 }
 
@@ -2859,7 +2859,7 @@ fn gen_lexer_alt_seq<S: AsStrSlice>(
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool,
@@ -2917,7 +2917,7 @@ fn gen_lexer_repeat_step<S: AsStrSlice>(
     index: i32,
     rep: &LexerRepeatElement,
     rp: &LexerRepeatPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool,
@@ -2951,7 +2951,7 @@ fn gen_lexer_repeat_step<S: AsStrSlice>(
 /// them (`LexerEmit.defers_actions`), in source order. Only reached on the
 /// replay path, where `pos` is the live match cursor, so a body reading the
 /// matched text sees exactly what ANTLR4's would.
-fn gen_lexer_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, e: &LexerEmit) {
+fn gen_lexer_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, e: &mut LexerEmit) {
     for let a of actions {
         if a.kind matches { _::Action } && a.before_index == before {
             if e.defers_actions {
@@ -3485,7 +3485,7 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool,
@@ -3564,7 +3564,7 @@ fn gen_lexer_repeat_stop_peek(
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     accept_var: &Option<String>,
     reach_var: &String,
     ea: bool,
@@ -3588,7 +3588,7 @@ fn gen_lexer_replay_to<S: AsStrSlice>(
     w: &mut CodeWriter,
     inner: &LexerElement,
     inner_plan: &LexerElemPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     bound: S,
 ) {
     let msg = `lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted`;
@@ -3619,7 +3619,7 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool,
@@ -3685,7 +3685,7 @@ fn gen_lexer_suffix_peek<S: AsStrSlice>(
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     end_var: S,
     ea: bool,
 ) {
@@ -3730,7 +3730,7 @@ fn gen_lexer_elem<S: AsStrSlice>(
     w: &mut CodeWriter,
     elem: &LexerElement,
     plan: &LexerElemPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool,
@@ -3932,7 +3932,7 @@ fn gen_lexer_repeat<S: AsStrSlice>(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
     inner: &LexerElemPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool = false,
@@ -3975,7 +3975,7 @@ fn gen_lexer_repeat_loop(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
     inner: &LexerElemPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     label: &String,
     rewinds: bool,
     ea: bool,
@@ -4018,7 +4018,7 @@ fn gen_lexer_repeat_iteration<S: AsStrSlice>(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
     inner: &LexerElemPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool,
@@ -4069,7 +4069,7 @@ fn gen_lexer_non_greedy_repeat<S: AsStrSlice>(
     inner: &LexerElemPlan,
     rest: &LexerAlternative,
     rest_plan: &LexerSeqPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
     replay: bool,
@@ -4118,7 +4118,7 @@ fn gen_lexer_not<S: AsStrSlice>(
     w: &mut CodeWriter,
     not_elem: &LexerNotElement,
     inner: &LexerElemPlan,
-    e: &LexerEmit,
+    e: &mut LexerEmit,
     fail_action: S,
     ea: bool,
 ) {

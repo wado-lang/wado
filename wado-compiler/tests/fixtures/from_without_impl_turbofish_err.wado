@@ -1,0 +1,11 @@
+// The conversion of a type to itself declares no type parameter, so a
+// turbofish on it names nothing.
+
+struct Pt { x: i32 }
+
+test "a turbofish on the conversion" {
+    assert Pt::from::<i32>(Pt { x: 1 }).x == 1;
+}
+
+__DATA__
+{"compile_error": ":7:12: analysis error: `from` takes no type arguments, but 1 was supplied"}

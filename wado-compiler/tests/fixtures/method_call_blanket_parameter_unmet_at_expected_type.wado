@@ -1,0 +1,21 @@
+// The expected type settles the parameter, and the bound is then owed at the
+// call: no impl of `Source<bool>` answers.
+
+trait Source<A> with () { fn first(&self) -> A; }
+trait Tag<A> with () { fn tag(&self) -> A; }
+
+impl<A, T: Source<A>> Tag<A> for T {
+    fn tag(&self) -> A { return self.first(); }
+}
+
+struct Two { n: i32 }
+impl Source<i32> for Two { fn first(&self) -> i32 { return self.n; } }
+impl Source<String> for Two { fn first(&self) -> String { return `${self.n}`; } }
+
+export fn run() {
+    let two = Two { n: 7 };
+    let _: bool = two.tag();
+}
+
+__DATA__
+{"compile_error": ":17:19: analysis error: type 'Two' does not implement trait 'Source<bool>' required by bound on 'T'"}

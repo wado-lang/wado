@@ -10,7 +10,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTraitName, FqTypeName, LocalMethodName, MethodName, RefKind, display_generic_name,
+    FqTraitName, FqTypeName, LocalMethodName, RefKind, display_generic_name,
     unalias_namespace_member,
 };
 use crate::resolve::Resolution;
@@ -19,7 +19,7 @@ use crate::tir::{
 };
 use crate::type_table::TypeTable;
 
-use super::callee::{CalleeRef, StaticMethodRef};
+use super::callee::CalleeRef;
 use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::unify;
@@ -30,9 +30,7 @@ use super::method_call::{
 };
 use super::pending_selection::{PendingStatic, Undecided};
 use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
-use super::sem::types::{
-    BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
-};
+use super::sem::types::{BodyFacts, IndirectCallee, ListViewConversion, StaticMethodDispatch};
 use super::sig::{DeclSig, MethodSig, Param};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::trait_env;
@@ -804,7 +802,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|r| r.expect("every argument is resolved in one of the two passes"))
                 .collect::<Vec<TypeId>>()
         });
-        let settled = self.settle_pending_literals(pending, args, ret, ctx);
+        let settled = self.settle_pending_literals(pending, args, inst, ret, ctx);
         // A `null` answers last, as a literal does.
         if let Some(ret) = ret {
             self.equate(ret.declared, ret.expected);
@@ -1936,9 +1934,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A case is reachable wherever its type is; only a static method has
         // a visibility of its own to check.
-        if callee_kind.case_owner().is_none()
-            && let Some(receiver) = &receivers.prefix_receiver
-        {
+        if let Some(receiver) = &receivers.static_method_receiver {
             let (_, method_name) = effective_name
                 .rsplit_once("::")
                 .expect("a receiver comes with a qualified name");
@@ -2117,7 +2113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Literal preselect on a static call's arguments (WEP 2026-07-31
         // phase 4): see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
-        if let Some((receiver, method_name)) = prefix_receiver.as_ref().map(static_method) {
+        if let Some((receiver, method_name)) = static_method_receiver.as_ref().map(static_method) {
             let typed = receiver.at_type(*rewritten_prefix_type);
             let preselected = self.preselect_static_args(
                 StaticReceiver {
@@ -2202,15 +2198,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_simd_lane_immediates(suffix, &call.args);
             return ControlFlow::Continue(self.callee_in_module(&builtin_source, suffix));
         }
+        // Every arm on a receiver reads `Type::method` and `ns::Type::method`
+        // alike: the receiver may be `ns::Type`, which no prefix names.
+        let (_, method_name) = effective_name
+            .rsplit_once("::")
+            .expect("a qualified callee ends in its method");
         // Static method call (Type::method). Static methods are
         // registered with mangled names "Type::method".
-        if let Some(receiver) = &receivers.prefix_receiver
-            && self.is_static_method_at(receiver, suffix)
+        if let Some(receiver) = &receivers.static_method_receiver
+            && self.is_static_method_at(receiver, method_name)
+            && let Some(receiver_type) = self.static_receiver_type_as_written(site, prefix)
         {
+            self.record_prefix_receiver_reference(site, prefix);
             return ControlFlow::Break(self.resolve_static_method_path_call(
                 site,
                 receiver,
-                [prefix, suffix],
+                receiver_type,
+                method_name,
                 resolved_args,
                 ctx,
             ));
@@ -2218,10 +2222,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check if this is a flags type method call: Perms::none(), Perms::all()
         // A newtype reaches its base's constants and keeps its own type:
         // `M::none()` on `type M = Perm` is `Perm::none() as M`.
-        // The receiver may be `ns::Perms`, which no prefix names.
-        let (_, method_name) = effective_name
-            .rsplit_once("::")
-            .expect("a qualified callee ends in its method");
         if matches!(method_name, "none" | "all")
             && let Some(receiver) = &receivers.static_method_receiver
             && !self.is_static_method_at(receiver, method_name)
@@ -2230,9 +2230,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .decl()
                 .and_then(|def| self.flags_members_through_newtype(def))
         {
-            if receivers.prefix_receiver.is_some() {
-                self.record_receiver_reference(ident, prefix);
-            }
+            self.record_prefix_receiver_reference(site, prefix);
             if !self.flags_constant_call_is_bare(
                 effective_name,
                 resolved_args.args.len(),
@@ -2247,19 +2245,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ControlFlow::Break(named.unwrap_or(flags_info.type_id));
         }
         // A type with no `from` of its own still converts to itself.
-        if suffix == "from"
+        if method_name == "from"
             && let [arg_type] = resolved_args.args[..]
-            && receivers.prefix_receiver.is_some()
-            && let receiver_type = self.static_receiver_written(
-                receivers.rewritten_prefix_type,
-                receivers.prefix_site,
-                prefix,
-                call.span,
-            )
+            && let Some(receiver_type) = self.static_receiver_type_as_written(site, prefix)
             && let Some(converted) =
                 self.convert_without_impl(call.id, receiver_type, arg_type, true)
         {
-            self.record_receiver_reference(ident, prefix);
+            self.record_prefix_receiver_reference(site, prefix);
+            if self.reject_surplus_turbofish(method_name, 0, call.type_args.len(), call.span) {
+                return ControlFlow::Break(TypeTable::ERROR);
+            }
             return ControlFlow::Break(converted);
         }
         // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
@@ -2271,16 +2266,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A type, resource included, with no such static method. A variant's
         // own case was constructed before the arguments were typed.
-        if let Some(receiver) = &receivers.prefix_receiver {
-            let receiver_type = self.static_receiver_written(
-                receivers.rewritten_prefix_type,
-                receivers.prefix_site,
-                prefix,
-                call.span,
-            );
+        if let Some(receiver) = &receivers.static_method_receiver
+            && let Some(receiver_type) = self.static_receiver_type_as_written(site, prefix)
+        {
             return ControlFlow::Break(self.blanket_static_or_unknown(
                 &receiver.at_type(Some(receiver_type)),
-                suffix,
+                method_name,
                 ident,
                 call,
                 &resolved_args.args,
@@ -2291,14 +2282,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Namespace import: `use ns from "..."` then `ns::Type::method()`
         // or `ns::func()`.
         if let Some(ns_source) = self.namespace_alias_source(prefix, call.callee.id()) {
-            if let Some((type_name, method_name)) = suffix.split_once("::") {
-                return ControlFlow::Break(self.resolve_namespaced_static_method_path_call(
-                    site,
-                    &ns_source,
-                    [prefix, type_name, method_name],
-                    resolved_args,
-                    ctx,
-                ));
+            // `ns::Type::method` every arm above declined: its middle segment
+            // names no type a static is asked at.
+            if let Some((type_name, _)) = suffix.split_once("::") {
+                let error = match receivers.static_method_receiver {
+                    Some(_) => TypeError::UnknownFunction {
+                        name: effective_name.to_string(),
+                        span: call.span,
+                    },
+                    None => TypeError::UnknownType {
+                        name: format!("{prefix}::{type_name}"),
+                        span: ident.owner_segment().map_or(call.span, |seg| seg.span),
+                    },
+                };
+                let _ = self.emit(error);
+                return ControlFlow::Break(TypeTable::ERROR);
             }
             // `use`'s namespace form registers only the reachable members
             // as `ns$member`; this arm looks the module up directly, so it
@@ -2400,12 +2398,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ControlFlow::Continue(None)
     }
 
-    /// `Type::method(…)` where `receiver` has a static method of that name.
+    /// `Type::method(…)` or `ns::Type::method(…)` where `receiver`, of type
+    /// `receiver_type`, has a static method named `suffix`.
     fn resolve_static_method_path_call(
         &mut self,
         site: PathCall<'_>,
         receiver: &ReceiverId,
-        [prefix, suffix]: [&str; 2],
+        receiver_type: TypeId,
+        suffix: &str,
         resolved_args: &mut ResolvedArgs,
         ctx: &mut FunctionContext,
     ) -> TypeId {
@@ -2413,7 +2413,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             call,
             ident,
             expected_type,
-            receivers,
             ..
         } = site;
         let ResolvedArgs {
@@ -2423,7 +2422,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             slot_instantiation,
             ..
         } = resolved_args;
-        self.record_receiver_reference(ident, prefix);
+        // At the receiver's type, since no blanket is asked of a receiver
+        // without one: a blanket whose bound holds there owns the call, and
+        // the static a newtype inherits a link below is not the one named.
+        let receiver_args = self.expected_receiver_args(receiver, suffix, expected_type);
+        let typed = receiver.at_type(Some(receiver_type));
+        let resolved = self.resolve_static_callee(StaticQuery {
+            arg_types: args,
+            receiver_args: &receiver_args,
+            expected_return: expected_type,
+            ..StaticQuery::of(&typed, suffix)
+        });
+        // The blanket resolver instantiates it and records the reference.
+        // Before the turbofish is counted, since it names the blanket's
+        // parameters and not the inherited static's.
+        if matches!(resolved, StaticLookup::Blanket(_))
+            && let Some(return_type) = self.resolve_named_type_blanket_static(
+                &typed,
+                suffix,
+                call.id,
+                ident.segments.last().map(|segment| segment.id),
+                type_args,
+                args,
+                &call.args,
+                expected_type,
+                call.span,
+                ctx,
+            )
+        {
+            return return_type;
+        }
         // Record the method segment (suffix) as a reference to the
         // declaration this call resolves to. The impl selection knows
         // which one answered — two conversion impls on a type declare
@@ -2434,22 +2462,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The same resolution the call itself uses, not a second one:
         // two resolutions of one call disagree, which is what the edge
         // then records.
-        let receiver_args = self.expected_receiver_args(receiver, suffix, expected_type);
-        let selection = self
-            .resolve_static_callee(StaticQuery {
-                arg_types: args,
-                receiver_args: &receiver_args,
-                expected_return: expected_type,
-                ..StaticQuery::of(receiver, suffix)
-            })
+        let selection = resolved
             .found()
-            .map(|callee| callee.method_ref.method_id);
-        let method_def = selection.flatten().or_else(|| {
+            .and_then(|callee| callee.method_ref.method_id);
+        let method_def = selection.or_else(|| {
             let owner = self.static_owner_key(receiver.key(), suffix);
             self.qualified_method_decl_id(&owner, suffix)
         });
         let own_from = method_def.is_some_and(|def| self.declares_own_from(def));
-        if let Some(suffix_seg) = ident.segments.get(1)
+        if let Some(suffix_seg) = ident.segments.last()
             && let Some(method_def) = method_def
             && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
         {
@@ -2477,12 +2498,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) else {
             return TypeTable::ERROR;
         };
-        let receiver_type = self.static_receiver_written(
-            receivers.rewritten_prefix_type,
-            receivers.prefix_site,
-            prefix,
-            call.span,
-        );
         // Before the record, which then holds what stands in for a slot
         // deferred.
         self.defer_uninferred_static_method_type_args(
@@ -2507,16 +2522,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_args: method_type_args,
             ..
         } = static_args;
-        // The same argument the selection above read: without it this
-        // resolution answers a different declaration than the call was
-        // mangled to.
-        let typed = receiver.at_type(Some(receiver_type));
-        let resolved = self.resolve_static_callee(StaticQuery {
-            arg_types: args,
-            receiver_args: &receiver_args,
-            expected_return: expected_type,
-            ..StaticQuery::of(&typed, suffix)
-        });
         // Impls of one trait neither the arguments nor the receiver tell
         // apart may be told apart by the instance a later use settles. A
         // receiver spelled without its arguments is the instance at the
@@ -2542,7 +2547,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args: args.clone(),
                 impl_args: instance_args,
                 call: call.id,
-                method_id: ident.segments.get(1).map(|segment| segment.id),
+                method_id: ident.segments.last().map(|segment| segment.id),
                 span: call.span,
                 expected: expected_type,
                 return_type: info.return_type,
@@ -2672,298 +2677,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// `ns::Type::method(…)`, a static method through a namespace import.
-    fn resolve_namespaced_static_method_path_call(
+    /// The type the receiver of a static call is written as, a generic one
+    /// bare until the call settles it: the type a rewritten `Self::` / `T::`
+    /// prefix stood for, `Type` at its segment, `ns::Type` at the segment that
+    /// wrote the type. `None` where `ns::X` names a trait, an interface or a
+    /// function, which declares no type a static is asked at.
+    fn static_receiver_type_as_written(
         &mut self,
         site: PathCall<'_>,
-        ns_source: &ModuleSource,
-        [prefix, type_name, method_name]: [&str; 3],
-        resolved_args: &mut ResolvedArgs,
-        ctx: &mut FunctionContext,
-    ) -> TypeId {
+        prefix: &str,
+    ) -> Option<TypeId> {
         let PathCall {
             call,
             ident,
             effective_name,
-            expected_type,
+            receivers,
             ..
         } = site;
-        let ResolvedArgs {
-            args,
-            type_args,
-            callee_slots,
-            slot_instantiation,
-            ..
-        } = resolved_args;
-        // The branch below reads the middle segment as a type, so a
-        // segment naming none is reported where it is written.
-        let Some(receiver) = self.namespaced_receiver(prefix, type_name, ident) else {
-            let _ = self.emit(TypeError::UnknownType {
-                name: format!("{prefix}::{type_name}"),
-                span: ident.owner_segment().map_or(call.span, |seg| seg.span),
-            });
-            return TypeTable::ERROR;
-        };
-        // The receiver's own type, off its declaration. A
-        // trait-frame signature is read at it, and the importing
-        // module cannot name `Type` to re-resolve one.
-        let ns_receiver_type = self.type_declared_by(Some(receiver.key()));
-        // `ns::Type::method` never reaches the bare-spelling check,
-        // so the ladder is enforced here.
-        self.check_static_call_visibility(&receiver, method_name, Some(call.id), call.span);
-        // The receiver's own type arguments, and the method's, as
-        // the two-segment spelling infers them. Reading only a
-        // written turbofish mangled `ns::Cell::wrap(7)` with no
-        // arguments at all, and reported nothing where none could
-        // be inferred.
-        let callee = StaticCallee {
-            receiver: &receiver,
-            method_name,
-        };
-        let given = slot_instantiation.as_ref().map(|inst| GivenSlots {
-            slots: callee_slots,
-            inst,
-        });
-        let Some(mut static_args) = self.static_call_type_args(
-            callee,
-            &call.args,
-            args,
-            expected_type,
-            call.span,
-            type_args.clone(),
-            given,
-        ) else {
-            return TypeTable::ERROR;
-        };
-        self.defer_uninferred_static_method_type_args(
-            callee,
-            &mut static_args,
-            ns_receiver_type,
-            call.span,
-        );
-        self.enforce_static_method_bounds(&static_args, ns_receiver_type, call.span);
-        let StaticTypeArgs {
-            impl_args: impl_type_args_inferred,
-            method_args: method_type_args,
-            ..
-        } = static_args;
-        let owner = self.static_owner_key(receiver.key(), method_name);
-        let inherited = self.inherited_static(receiver.key(), &owner, &impl_type_args_inferred);
-        let typed = receiver.at_type(ns_receiver_type);
-        let resolved = self.resolve_static_callee(StaticQuery {
-            arg_types: args,
-            receiver_args: &impl_type_args_inferred,
-            method_args: &method_type_args,
-            expected_return: expected_type,
-            ..StaticQuery::of(&typed, method_name)
-        });
-        if self.report_unresolved_static(&resolved, method_name, args, call.span) {
-            return TypeTable::ERROR;
+        if receivers.prefix_receiver.is_some() {
+            return Some(
+                match (receivers.rewritten_prefix_type, receivers.prefix_site) {
+                    (Some(receiver), _) => receiver,
+                    (None, Some(site)) => self.resolve_named_type(site, prefix, call.span, false),
+                    (None, None) => {
+                        unreachable!("an unrewritten receiver is written at a segment")
+                    }
+                },
+            );
         }
-        if !resolved.resolves() {
-            if typed.ty().is_some()
-                && let Some(return_type) = self.resolve_named_type_blanket_static(
-                    &typed,
-                    method_name,
-                    call.id,
-                    ident.segments.last().map(|segment| segment.id),
-                    &method_type_args,
-                    args,
-                    &call.args,
-                    expected_type,
-                    call.span,
-                    ctx,
-                )
-            {
-                return return_type;
-            }
-            let _ = self.emit(TypeError::UnknownFunction {
-                name: effective_name.to_string(),
-                span: call.span,
-            });
-            return TypeTable::ERROR;
+        let key = receivers.static_method_receiver.as_ref()?.key();
+        if key.decl().is_some() && self.type_declared_by(Some(key)).is_none() {
+            return None;
         }
-        let method_ref = resolved
-            .found()
-            .map(|callee| callee.method_ref.clone())
-            .unwrap_or_else(|| {
-                StaticMethodRef::new(ns_source.clone(), type_name, method_name, None, None)
-            });
-        let block = self.tysys.block_of(&method_ref);
-        self.enforce_static_block_bounds(block, &impl_type_args_inferred, call.span);
-        let trait_name = method_ref.trait_name.clone();
-        let struct_module = method_ref.module.clone();
+        let owner = ident
+            .owner_segment()
+            .expect("a namespaced receiver is written at its owner segment");
+        let (spelled, _) = effective_name
+            .rsplit_once("::")
+            .expect("a receiver comes with a qualified name");
+        Some(self.resolve_named_type(owner.id, spelled, call.span, false))
+    }
 
-        // The bare `Type::method` branch records this edge, but the
-        // spelling `ns::Type::method` resolves no static under the
-        // name `ns`, so a namespaced call lands here. `ident` is
-        // `ns::Type::method`, so the method is its third segment —
-        // the position `record_namespaced_case` also reads.
-        if let Some(method_seg) = ident.segments.get(2)
-            && let Some(method_def) = method_ref.method_id.or_else(|| {
-                // The receiver is `ns::Type`, whose middle segment
-                // the resolve walk answered for under the `ns$Type`
-                // alias. No spelling is re-resolved from the call
-                // site's frame, which declares its own `Type`.
-                let defs = self.tysys.resolutions.defs();
-                let receiver = trait_env::ImplTargetKey::of_decl(
-                    defs,
-                    self.tysys.resolutions.owner_decl(ident)?,
-                );
-                self.qualified_method_decl_id(&receiver, method_name)
-            })
-            && self.record_reference_to_decl(method_seg.id, method_def, method_seg.span)
-        {
-            return TypeTable::ERROR;
+    /// Records the `Type` of `Type::method` as a type name. The owner segment
+    /// of `ns::Type::method` is recorded where the call's path is first read.
+    fn record_prefix_receiver_reference(&mut self, site: PathCall<'_>, prefix: &str) {
+        if site.receivers.prefix_receiver.is_some() {
+            self.record_receiver_reference(site.ident, prefix);
         }
-
-        // Qualify by the module the impl was located in:
-        // `helper::Pair` and a local `Pair` are different
-        // declarations. Where the resolution answered under another
-        // name it peeled a newtype to its base, and the base owns
-        // the impl the call is mangled under.
-        // A concrete block hosts its function under the head it
-        // wrote, arguments included, as the two-segment spelling
-        // names it.
-        let receiver = if let Some(head) = self.tysys.concrete_impl_head_of(Some(&method_ref)) {
-            head
-        } else if method_ref.type_name == receiver.name(self.tysys.resolutions.defs()) {
-            receiver.key().decl().map_or_else(
-                || FqTypeName::shape(&struct_module, type_name),
-                |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
-            )
-        } else if let Some(inherited) = inherited {
-            self.link_receiver_names(inherited.base).1
-        } else {
-            FqTypeName::shape(&struct_module, &method_ref.type_name)
-        };
-        let final_mangled =
-            MethodName::format_local(&receiver, method_ref.trait_name.as_ref(), method_name);
-
-        let mut return_type = resolved.return_type();
-        self.retype_inherited(inherited, std::slice::from_mut(&mut return_type));
-
-        let template = self.tysys.static_template(&method_ref, &receiver);
-        let monomorph_info = if impl_type_args_inferred.is_empty() && method_type_args.is_empty() {
-            None
-        } else {
-            Some(MonomorphInfo {
-                generic_name: final_mangled.clone(),
-                impl_type_args: impl_type_args_inferred.clone(),
-                method_type_args: method_type_args.clone(),
-                is_blanket: false,
-            })
-        };
-
-        // From the same resolution the identity and the return type
-        // came from: a second lookup here answers with no list, and
-        // an inherited default body then goes unchecked.
-        let (
-            CalleeParams {
-                param_is_mut,
-                param_defaults,
-                mut param_types,
-                self_in_args,
-                defaults_module,
-            },
-            declares_params,
-        ) = resolved.params();
-        self.retype_inherited(inherited, &mut param_types);
-        self.answer_frame_projections_in(&mut param_types);
-        return_type = self.answer_frame_projections(return_type);
-
-        let func_ref = FunctionRef {
-            module_source: struct_module,
-            name: final_mangled,
-            template,
-            monomorph_info,
-            // The receiver `final_mangled` was built from: DCE and
-            // monomorphization key on this, so a different one here
-            // names a different type than the call reaches.
-            method_info: Some(LocalMethodName::new(
-                receiver,
-                trait_name,
-                method_name.to_string(),
-            )),
-        };
-
-        self.recoerce_literal_args(&call.args, args, &param_types);
-        if func_ref.monomorph_info.is_some()
-            && self.report_value_for_reference(&param_types, call, args)
-        {
-            return TypeTable::ERROR;
-        }
-        // The same check the bare `Type::method` spelling gets: a
-        // count is only skipped where no signature answered.
-        let arg_sites = self.arg_sites_of(call.id, &call.args, args.len(), call.span);
-        if declares_params
-            && !self.check_static_call_args(
-                &param_types,
-                args,
-                &arg_sites,
-                &param_defaults,
-                call.span,
-            )
-        {
-            return TypeTable::ERROR;
-        }
-
-        let defaults_module = defaults_module.unwrap_or_else(|| func_ref.module_source.clone());
-        let sig = method_ref
-            .method_id
-            .and_then(|def| self.tysys.signatures.method_sig(def))
-            .cloned();
-        let declaring_trait = sig
-            .as_ref()
-            .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
-        let self_binding =
-            ns_receiver_type.map(|receiver| SelfBinding::of_static(receiver, declaring_trait));
-        let type_bindings = match (sig, self_binding) {
-            (Some(sig), Some(declaring)) => self.own_slot_default_bindings(
-                &param_defaults,
-                &sig.own_params,
-                &sig.own_type_param_ids(),
-                declaring,
-                method_type_args.clone(),
-                Some(defaults_module.clone()),
-            ),
-            (sig, _) => slot_type_bindings(
-                &self.tysys.type_table,
-                &sig.map(|sig| sig.own_type_param_ids()).unwrap_or_default(),
-                &method_type_args,
-            ),
-        };
-        self.record_default_walk(
-            call.id,
-            call.span,
-            args,
-            &param_types,
-            &param_defaults,
-            defaults_module.clone(),
-            self_binding,
-            &type_bindings,
-            ctx,
-        );
-
-        let key = call.id;
-        self.sem.types.static_method_dispatch.insert(
-            key,
-            StaticMethodDispatch {
-                method_def: method_ref.method_id,
-                defaults_module,
-                function_ref: func_ref,
-                param_is_mut,
-                type_args: vec![],
-                param_defaults,
-                param_types,
-                self_in_args,
-            },
-        );
-
-        // Reify rebuilds the `Call` from the recorded
-        // `static_method_dispatch`; the body walk projects
-        // only the result type.
-        return_type
     }
 
     /// Settles a function call's type arguments: what the turbofish left open
@@ -3046,13 +2806,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .call_effect_binding(declared_param_types, args);
-        if !type_args.is_empty() {
-            self.check_function_type_arg_bounds(callee, type_args, &effect_rows, call.span);
-        }
-
         if !self.lookup_function_type_params(callee).is_empty() {
             self.report_value_for_reference(declared_param_types, call, args);
         }
+        // Before the bounds check, so a bound reading an open slot
+        // (`T: Source<A>`) names its variable, which the bound may settle.
         self.defer_or_report_uninferred_fn_type_args(
             callee,
             type_args,
@@ -3060,6 +2818,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &effect_rows,
             call.span,
         );
+        if !type_args.is_empty() {
+            self.check_function_type_arg_bounds(callee, type_args, &effect_rows, call.span);
+        }
         // The arguments were typed by the call's own variables, which what the
         // call settled answers: a projection or a default among them included.
         if let Some(inst) = &slot_instantiation
@@ -6068,22 +5829,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.record_generic_instantiation(case.site, type_args, variant_type);
         variant_type
-    }
-
-    /// The type a static call's receiver `prefix` names: the type a rewritten
-    /// `Self::` / `T::` prefix stood for, else what its segment resolves to.
-    fn static_receiver_written(
-        &mut self,
-        rewritten: Option<TypeId>,
-        site: Option<AstId>,
-        prefix: &str,
-        span: Span,
-    ) -> TypeId {
-        match (rewritten, site) {
-            (Some(receiver), _) => receiver,
-            (None, Some(site)) => self.resolve_named_type(site, prefix, span, false),
-            (None, None) => unreachable!("an unrewritten receiver is written at a segment"),
-        }
     }
 
     /// `receiver::suffix` answered by a value blanket's static, indexed under

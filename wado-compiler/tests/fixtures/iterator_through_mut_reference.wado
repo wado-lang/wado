@@ -164,13 +164,13 @@ impl Iterator for Evens {
     }
 }
 
-impl IntoIterator for &mut Counter {
+impl ForOf for &mut Counter {
     type Item = i32;
-    type Iter = Evens;
-    fn into_iter(&self) -> Evens { return Evens { inner: &mut **self }; }
+    type State = Evens;
+    fn start(self) -> Evens { return Evens { inner: self }; }
 }
 
-test "an IntoIterator written for the reference says what the loop walks" {
+test "a ForOf written for the reference says what the loop walks" {
     let mut c = Counter { n: 0 };
     let mut seen: List<i32> = [];
     for let x of &mut c {

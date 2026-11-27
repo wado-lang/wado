@@ -61,6 +61,7 @@ mod tuple_projection;
 mod unsigned_range_check;
 mod value_copy;
 mod value_copy_demote;
+mod writes;
 
 #[cfg(debug_assertions)]
 use std::ops::ControlFlow;
@@ -70,13 +71,19 @@ use std::sync::Arc;
 #[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
 #[cfg(debug_assertions)]
-use crate::nir_arena::{ExprKind, NodeRef, PatKind, StmtKind};
+use crate::nir::NirUnaryOp;
+#[cfg(debug_assertions)]
+use crate::nir_arena::{ExprId, ExprKind, NodeRef, PatKind, StmtKind};
 #[cfg(debug_assertions)]
 use crate::nir_value_graph::ValueKind;
+#[cfg(debug_assertions)]
+use crate::tir::ResolvedType;
 #[cfg(debug_assertions)]
 use crate::trace::filter;
 #[cfg(debug_assertions)]
 use crate::type_table::TypeTable;
+#[cfg(debug_assertions)]
+use cranelift_entity::EntityRef;
 
 use const_branch_prune::prune_constant_branches;
 use const_folding::{fold_constants, fold_constants_all};
@@ -512,6 +519,75 @@ fn audit_nir(project: &NirPackage, pass: &str) {
     audit_promoted_opaques(project, pass);
     audit_promoted_reads(project, pass);
     audit_assign_types(project, pass);
+    audit_writes_through_shared(project, pass);
+}
+
+/// No store or `&mut` reaches its place through a `&`, which grants reading
+/// alone, a cell's included. The nearest reference on the path is what grants
+/// the write: a `&mut` read out from behind a `&` writes the place it names,
+/// not the `&`'s referent. Nor is a `&` handed where a callee writes. A call
+/// handed a `&` writes nothing through it unless it holds a `&mut`, and the
+/// call verdicts lean on that.
+#[cfg(debug_assertions)]
+fn audit_writes_through_shared(project: &NirPackage, pass: &str) {
+    let tt = project.type_table.borrow();
+    for func in &project.functions {
+        let func = func.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let through_shared = |mut place: ExprId| loop {
+            let (ExprKind::FieldAccess { expr: base, .. }
+            | ExprKind::Index { expr: base, .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                expr: base,
+            }) = &body.exprs[place].kind
+            else {
+                return false;
+            };
+            let Some(base) = base.as_expr() else {
+                return false;
+            };
+            match tt.get(body.exprs[base].type_id) {
+                ResolvedType::Ref(_) => return true,
+                ResolvedType::MutRef(_) => return false,
+                _ => place = base,
+            }
+        };
+        body.for_each_reachable_node(|node| {
+            let NodeRef::Expr(e) = node else {
+                return;
+            };
+            let written = match &body.exprs[e].kind {
+                ExprKind::Assign { target, .. } => Some(*target),
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr,
+                } => expr.as_expr(),
+                ExprKind::Call { func_id, args, .. } => {
+                    let callee = project.functions[func_id.index()].borrow();
+                    let shared = args.iter().zip(&callee.params).position(|(arg, param)| {
+                        matches!(tt.get(param.type_id), ResolvedType::MutRef(_))
+                            && matches!(tt.get(body.operand_type(arg.expr)), ResolvedType::Ref(_))
+                    });
+                    assert!(
+                        shared.is_none(),
+                        "[NIR] {pass}: {e:?} of `{}` hands a `&` to `&mut` parameter {shared:?} of `{}`",
+                        func.name,
+                        callee.name
+                    );
+                    None
+                }
+                _ => None,
+            };
+            assert!(
+                !written.is_some_and(through_shared),
+                "[NIR] {pass}: {e:?} of `{}` writes a place reached through a `&`",
+                func.name
+            );
+        });
+    }
 }
 
 /// Every opaque leaf of a promoted operand reads a local. Extraction re-emits

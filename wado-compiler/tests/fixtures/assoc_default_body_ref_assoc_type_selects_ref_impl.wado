@@ -1,10 +1,10 @@
 // A default body reaching a bound's subject directly takes the impl for what
 // the subject binds to, a reference included.
 //
-// `Items: IntoIterator` names `Self::Items` itself, and `Bag` binds it to
-// `&mut List<P>`, so `into_iter` is `IntoIterator for &mut List<T>` and the
-// loop writes through to `Bag.xs`, as the same code written as an inherent
-// method does. Only a receiver that is a reference to the subject, as in
+// `Items: Bump` names `Self::Items` itself, and `Bag` binds it to
+// `&mut List<P>`, so `bump` is `Bump for &mut List<P>`, not the `List<P>` impl
+// the reference also reaches, as the same code written as an inherent method
+// does. Only a receiver that is a reference to the subject, as in
 // `assoc_default_body_ref_receiver_selects_through_bound`, reads past a `&T`
 // impl.
 
@@ -14,18 +14,34 @@ struct P {
     v: i32,
 }
 
-// `with _`: a default body is checked once against the trait, where iterating
-// through the open `IntoIterator` bound leaves its effects to each impl.
-trait Holder with _ {
-    type Items: IntoIterator;
+trait Bump with () {
+    fn bump(&mut self);
+}
+
+impl Bump for List<P> {
+    fn bump(&mut self) {
+        for let p of self {
+            p.v += 1;
+        }
+    }
+}
+
+impl Bump for &mut List<P> {
+    fn bump(&mut self) {
+        for let p of &mut **self {
+            p.v += 10;
+        }
+    }
+}
+
+trait Holder with () {
+    type Items: Bump;
 
     fn items(&mut self) -> Self::Items;
 
     fn bump(&mut self) {
-        let mut it = self.items().into_iter();
-        while let Some(mut p) = it.next() {
-            p.v += 10;
-        }
+        let mut it = self.items();
+        it.bump();
     }
 }
 
@@ -43,10 +59,8 @@ impl Holder for Bag {
 
 impl Bag {
     fn bump_inherent(&mut self) {
-        let mut it = self.items().into_iter();
-        while let Some(mut p) = it.next() {
-            p.v += 10;
-        }
+        let mut it = self.items();
+        it.bump();
     }
 }
 

@@ -1,0 +1,51 @@
+// A blanket answering the bound at other arguments than the subject's own
+// impl makes two answers, so the bound settles nothing and a later use does.
+
+trait Marker with () {}
+
+trait Source<A> with () {
+    fn first(&self) -> A;
+}
+
+struct One {
+    n: i32,
+}
+
+impl Marker for One {}
+
+impl Source<i32> for One {
+    fn first(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl<T: Marker> Source<String> for T {
+    fn first(&self) -> String {
+        return "blanket";
+    }
+}
+
+fn first_of<A, T: Source<A>>(t: &T) -> A {
+    return t.first();
+}
+
+test "a later use selects the blanket" {
+    let v = first_of(&One { n: 7 });
+    let s: String = v;
+    assert s == "blanket";
+}
+
+test "a later use selects the impl" {
+    let v = first_of(&One { n: 7 });
+    let n: i32 = v;
+    assert n == 7;
+}
+
+fn forwarded<T: Source<i32> + Marker>(t: &T) -> String {
+    let s: String = first_of(t);
+    return s;
+}
+
+test "a blanket beside a bound in force is a second answer" {
+    assert forwarded(&One { n: 7 }) == "blanket";
+}

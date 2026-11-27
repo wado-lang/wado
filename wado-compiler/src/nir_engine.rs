@@ -766,6 +766,12 @@ impl<'a> Engine<'a> {
         self.receiver_immutable_calls = receiver_immutable_calls;
     }
 
+    /// Whether the call `e`'s callee cannot write through its receiver, as
+    /// [`Self::set_call_verdicts`] recorded.
+    pub fn is_receiver_immutable_call(&self, e: ExprId) -> bool {
+        self.receiver_immutable_calls.contains(&e)
+    }
+
     /// Record what each call may write behind a reference, for a scoped walk.
     pub fn set_call_writes(&mut self, call_writes: IndexMap<ExprId, ObjectTypes>) {
         self.call_writes = call_writes;

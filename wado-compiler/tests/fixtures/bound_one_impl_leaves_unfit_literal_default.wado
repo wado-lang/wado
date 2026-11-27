@@ -1,0 +1,25 @@
+// A literal the one impl's type cannot take keeps its default, and the bound
+// is asked there.
+
+trait Sink<A> with () {
+    fn sink(&self, a: A) -> i32;
+}
+
+struct One {}
+
+impl Sink<i64> for One {
+    fn sink(&self, a: i64) -> i32 {
+        return 64;
+    }
+}
+
+fn put<A, T: Sink<A>>(t: &T, a: A) -> i32 {
+    return t.sink(a);
+}
+
+export fn run() {
+    let _ = put(&One {}, 1.5);
+}
+
+__DATA__
+{"compile_error": ":21:13: analysis error: type 'One' does not implement trait 'Sink<f64>' required by bound on 'T'"}

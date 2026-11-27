@@ -1,0 +1,134 @@
+// A call settles an impl parameter only the trait reference names: by the one
+// impl the bound's subject has, or by the type expected of the result where
+// it has several.
+// Regression: the call reported no method at all, as if no impl offered one.
+
+trait Source<A> with () { fn first(&self) -> A; }
+trait Shape with () { type Side; }
+
+trait Tag<A> with () { fn tag(&self) -> A; }
+impl<A, T: Source<A>> Tag<A> for T {
+    fn tag(&self) -> A { return self.first(); }
+}
+
+trait RefTag<A> with () { fn ref_tag(self) -> A; }
+impl<A, T: Source<A>> RefTag<A> for &T {
+    fn ref_tag(self) -> A { return self.first(); }
+}
+
+trait Wide<S, P, A> with () { fn wide(&self) -> A; }
+impl<A, P, T: Source<A> + Shape<Side = P>> Wide<List<T>, P, A> for T {
+    fn wide(&self) -> A { return self.first(); }
+}
+
+struct Bx<T> { inner: T }
+trait Unbox<A> with () { fn unbox(&self) -> A; }
+impl<A, T: Source<A>> Unbox<A> for Bx<T> {
+    fn unbox(&self) -> A { return self.inner.first(); }
+}
+
+struct One { n: i32 }
+impl Source<i32> for One { fn first(&self) -> i32 { return self.n; } }
+impl Shape for One { type Side = bool; }
+
+struct Two { n: i32 }
+impl Source<i32> for Two { fn first(&self) -> i32 { return self.n; } }
+impl Source<String> for Two { fn first(&self) -> String { return `${self.n}`; } }
+
+fn through_a_bound<T: Source<i32>>(t: &T) -> i32 {
+    return t.tag();
+}
+
+fn named_through_a_bound<T: Source<i32>>(t: &T) -> String {
+    let v = t.tag();
+    return `${v}`;
+}
+
+test "the expected type settles it" {
+    let two = Two { n: 7 };
+    let n: i32 = two.tag();
+    let s: String = two.tag();
+    assert n == 7 && s == "7";
+}
+
+test "the bound's one impl settles it" {
+    let one = One { n: 7 };
+    let v = one.tag();
+    let hole = Tag::<_>::tag(&one);
+    let boxed = Bx { inner: One { n: 7 } }.unbox();
+    assert `${v}` == "7" && `${hole}` == "7" && `${boxed}` == "7";
+    assert `${one.wide()}` == "7";
+}
+
+test "the bound in force settles it" {
+    assert named_through_a_bound(&Two { n: 7 }) == "7";
+}
+
+test "through a reference" {
+    let one = One { n: 7 };
+    let r = &one;
+    assert r.tag() == 7;
+}
+
+test "a static call" {
+    let one = One { n: 7 };
+    let two = Two { n: 7 };
+    let v: i32 = Tag::tag(&one);
+    let hole: i32 = Tag::<_>::tag(&one);
+    let s: String = Tag::tag(&two);
+    assert v == 7 && hole == 7 && s == "7";
+}
+
+test "a reference blanket" {
+    let one = One { n: 7 };
+    let two = Two { n: 7 };
+    let v: i32 = (&one).ref_tag();
+    let s: String = (&two).ref_tag();
+    assert v == 7 && s == "7";
+}
+
+test "an impl for a generic type" {
+    let v: i32 = Bx { inner: One { n: 7 } }.unbox();
+    let s: String = Bx { inner: Two { n: 7 } }.unbox();
+    assert v == 7 && s == "7";
+}
+
+test "under a bound in force" {
+    assert through_a_bound(&One { n: 7 }) == 7;
+    assert through_a_bound(&Two { n: 7 }) == 7;
+}
+
+test "the settled result is a receiver" {
+    let one = One { n: -7 };
+    assert one.tag().div_floor(2) == -4;
+}
+
+fn forwards_its_parameter<B, T: Source<B>>(t: &T) -> B {
+    return t.tag();
+}
+
+test "under a bound in force naming a parameter" {
+    let v = forwards_its_parameter(&One { n: 7 });
+    assert v == 7;
+}
+
+fn id<T>(t: T) -> T {
+    return t;
+}
+
+test "a receiver a generic call returns" {
+    let v = id(Bx { inner: One { n: 7 } }).unbox();
+    let xs = [Bx { inner: One { n: 7 } }];
+    assert `${v}` == "7" && `${xs[0].unbox()}` == "7";
+}
+
+trait Edit<A> with () { fn edit(&mut self, a: A) -> i32; }
+impl<A, T: Source<A>> Edit<A> for T {
+    fn edit(&mut self, _a: A) -> i32 { return 1; }
+}
+
+test "a `&mut self` method on a subscript receiver" {
+    let mut ones: List<One> = [One { n: 7 }];
+    let mut twos: List<Two> = [Two { n: 7 }];
+    assert ones[0].edit(1) == 1 && twos[0].edit("s") == 1;
+}

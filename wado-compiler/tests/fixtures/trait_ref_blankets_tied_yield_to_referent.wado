@@ -1,0 +1,179 @@
+// Tied reference blankets do not stand in the way of the referent's own
+// `&self` method: between two traits, between two blankets of one trait, and
+// between two of one trait at different arguments, whether the call's
+// arguments admit both or neither, or only a closure's row would choose.
+
+use { println, Stdout } from "core:cli";
+
+trait Near with () {
+    fn near() -> i32;
+}
+
+trait Far with () {
+    fn far() -> i32;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Near for Point {
+    fn near() -> i32 {
+        return 1;
+    }
+}
+
+impl Far for Point {
+    fn far() -> i32 {
+        return 2;
+    }
+}
+
+trait NameA with () {
+    fn name(&self) -> String;
+}
+
+trait NameB with () {
+    fn name(&self) -> String;
+}
+
+trait Label with () {
+    fn label(&self) -> String;
+}
+
+trait Base with () {
+    fn name(&self) -> String;
+    fn label(&self) -> String;
+}
+
+impl<T: Near> NameA for &T {
+    fn name(&self) -> String {
+        return "a";
+    }
+}
+
+impl<T: Near> NameB for &T {
+    fn name(&self) -> String {
+        return "b";
+    }
+}
+
+impl<T: Near> Label for &T {
+    fn label(&self) -> String {
+        return "near";
+    }
+}
+
+impl<T: Far> Label for &T {
+    fn label(&self) -> String {
+        return "far";
+    }
+}
+
+impl Base for Point {
+    fn name(&self) -> String {
+        return "base";
+    }
+
+    fn label(&self) -> String {
+        return `point ${self.x}`;
+    }
+}
+
+test "two traits tied" {
+    let p = Point { x: 1 };
+    assert (&p).name() == "base";
+}
+
+test "two blankets of one trait tied" {
+    let p = Point { x: 1 };
+    assert (&p).label() == "point 1";
+}
+
+trait Read<A> with () {
+    fn read(&self) -> A;
+    fn take(&self, a: A) -> i32;
+}
+
+trait Plain with () {
+    fn read(&self) -> String;
+    fn take(&self, a: String) -> i32;
+}
+
+impl<T: Near> Read<i32> for &T {
+    fn read(&self) -> i32 {
+        return 1;
+    }
+
+    fn take(&self, a: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Near> Read<bool> for &T {
+    fn read(&self) -> bool {
+        return true;
+    }
+
+    fn take(&self, a: bool) -> i32 {
+        return 2;
+    }
+}
+
+impl Plain for Point {
+    fn read(&self) -> String {
+        return "plain";
+    }
+
+    fn take(&self, a: String) -> i32 {
+        return 3;
+    }
+}
+
+test "two blankets of one trait at different arguments" {
+    let p = Point { x: 1 };
+    assert (&p).read() == "plain";
+    assert (&p).take("x") == 3;
+}
+
+trait Each<F> with _ {
+    fn each(&self, f: F) -> i32;
+}
+
+trait Walk with () {
+    fn each(&self, f: fn(i32)) -> i32;
+}
+
+impl<T: Near> Each<fn(i32)> for &T {
+    fn each(&self, _f: fn(i32)) -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Near> Each<fn(i32) with Stdout> for &T {
+    fn each(&self, _f: fn(i32) with Stdout) -> i32 {
+        return 2;
+    }
+}
+
+impl Walk for Point {
+    fn each(&self, _f: fn(i32)) -> i32 {
+        return 3;
+    }
+}
+
+struct Bare {}
+
+impl Near for Bare {
+    fn near() -> i32 {
+        return 1;
+    }
+}
+
+test "two blankets apart only in a closure's row" {
+    let p = Point { x: 1 };
+    assert (&p).each(|_x| {}) == 3;
+    let bare = Bare {};
+    assert (&bare).each(|_x| {}) == 1;
+    assert (&bare).each(|x| { println(`${x}`); }) == 2;
+}

@@ -1,0 +1,31 @@
+// A blanket whose bound holds at a newtype owns the static there, so a name
+// the base declares unavailable is not the one the call names.
+
+struct Base { v: i32 }
+
+impl Base {
+    #[unavailable("use the blanket")]
+    fn mk();
+}
+
+type N = Base;
+
+trait Marked with () {
+    fn mark(&self) -> i32;
+}
+
+impl Marked for N {
+    fn mark(&self) -> i32 { return 2; }
+}
+
+trait Make with () {
+    fn mk() -> i32;
+}
+
+impl<T: Marked> Make for T {
+    fn mk() -> i32 { return 20; }
+}
+
+test "the blanket answers at the newtype" {
+    assert N::mk() == 20;
+}

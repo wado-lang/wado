@@ -146,7 +146,8 @@ struct Package<'a> {
     callees: Vec<Callee>,
     /// Each closure functor's `$call`, by functor id.
     closure_calls: Vec<u32>,
-    /// Each `$call`, by the type of the closure it takes as `self`.
+    /// Each `$call`, by its functor's type: a holder takes the functor by
+    /// value or through either reference.
     calls_by_receiver: IndexMap<TypeId, u32>,
     /// The functions a value of a function type may run, by the type's shape.
     minted: IndexMap<Shape, IndexSet<u32>>,
@@ -214,7 +215,7 @@ pub fn compute(
         .filter_map(|func| {
             let func = func.borrow();
             let receiver = func.params.first().filter(|_| func.is_closure_call())?;
-            Some((receiver.type_id, id_of(&func)))
+            Some((type_table.peel_refs(receiver.type_id), id_of(&func)))
         })
         .collect();
     let mut package = Package {
@@ -406,7 +407,10 @@ fn summarize<'a>(
         })
         .collect();
     for (p, locs) in func.params.iter().zip(&params) {
-        if let Some(&call) = package.calls_by_receiver.get(&p.type_id) {
+        if let Some(&call) = package
+            .calls_by_receiver
+            .get(&package.type_table.peel_refs(p.type_id))
+        {
             b.bind_closure_value(locs.arg, call);
         }
     }
@@ -1075,7 +1079,7 @@ impl<'p, 'a> Body<'p, 'a> {
         }
         .unwrap_or(callee.type_id);
         let value = self.eval(callee).unwrap_or_else(|| self.g.node());
-        if let Some(&call) = self.package.calls_by_receiver.get(&declared) {
+        if let Some(&call) = self.package.calls_by_receiver.get(&tt.peel_refs(declared)) {
             let slots = self.package.callees[call as usize].slots.clone();
             let mut handed = vec![(Some(value), None)];
             handed.extend(

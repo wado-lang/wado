@@ -16,9 +16,9 @@ use crate::trait_solver::{
     ArgDefault, AssocEquality, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef,
     ImplId, ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program,
     RefRule, Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, Verdict,
-    answering_link, bound_candidates, candidates, cmp_giving_eq, comparison_row, derive,
-    derive_alongside, holds_with_args, instance_candidates, mark_rejected, owed, pair_comparisons,
-    rank, rank_open, sourced, written_comparison, written_over,
+    answering_link, bound_candidates, bound_candidates_at_any_args, candidates, cmp_giving_eq,
+    comparison_row, derive, derive_alongside, holds_with_args, instance_candidates, mark_rejected,
+    owed, pair_comparisons, rank, rank_open, sourced, written_comparison, written_over,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -2551,6 +2551,37 @@ impl SolverBridge {
         .collect()
     }
 
+    /// The impls that answer a bound on `type_id` naming `trait_` at whatever
+    /// arguments.
+    pub(super) fn bound_impls_at_any_args(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        type_id: TypeId,
+        trait_: &FqTraitName,
+    ) -> BoundImpls {
+        let Ok(q) = self.question(tysys, ctx, type_id, &trait_.head_only(), Variables::Refused)
+        else {
+            return BoundImpls::Several;
+        };
+        let found = bound_candidates_at_any_args(&self.program, &q.env, &q.ty, q.trait_);
+        match rank(&found) {
+            Selection::None => BoundImpls::None,
+            // The order's loser still answers the bound at its own arguments.
+            Selection::One(index) => found
+                .iter()
+                .all(|other| other.trait_args == found[index].trait_args)
+                .then(|| self.impl_def_of(found[index].impl_))
+                .flatten()
+                .map_or(BoundImpls::Several, BoundImpls::One),
+            Selection::Duplicated(_)
+            | Selection::AmbiguousTraits(_)
+            | Selection::AmbiguousBlankets(_)
+            | Selection::Overloaded(_) => BoundImpls::Several,
+            Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
+        }
+    }
+
     /// The blocks of the candidates `pick` keeps from the order's selection
     /// for a bound `asked` on `type_id`.
     fn bound_order(
@@ -3070,6 +3101,16 @@ pub(crate) enum InstanceOrder {
     Nothing,
     /// Impls the order cannot tell apart, by their blocks.
     Tied(Vec<Option<DefId>>),
+}
+
+/// How many impls answer a bound at whatever arguments
+/// ([`SolverBridge::bound_impls_at_any_args`]).
+pub(super) enum BoundImpls {
+    None,
+    /// One block answers, at one argument list.
+    One(DefId),
+    /// Several argument lists answer, or the one answer names no block.
+    Several,
 }
 
 /// What the order answers, naming each candidate by the impl block it came

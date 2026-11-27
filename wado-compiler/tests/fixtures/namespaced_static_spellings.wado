@@ -1,0 +1,23 @@
+// `ns::Type::method(…)` answers as `Type::method(…)` does: a builtin shape's
+// static, a conversion a type declares no `from` for, and a literal argument
+// that selects among overloaded impls.
+
+use p from "core:prelude";
+use dep from "./sub/namespaced_static_spellings_lib.wado";
+use { Pt } from "./sub/namespaced_static_spellings_lib.wado";
+
+test "a builtin shape's static" {
+    let a: Array<i32> = p::Array::filled(2, 7);
+    assert builtin::array_len(&a) == 2;
+}
+
+test "a type converts to itself with no `from` of its own" {
+    assert dep::Pt::from(Pt { x: 1 }).x == 1;
+    assert dep::Loc::from(Pt { x: 2 }).x == 2;
+    assert dep::Meters::from(1.5) as f64 == 1.5;
+}
+
+test "a literal selects the impl" {
+    assert dep::Wide::from(3).n == 3;
+    assert dep::Wide::from("ab").n == 2;
+}

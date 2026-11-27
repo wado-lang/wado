@@ -2,15 +2,17 @@
 
 use std::rc::Rc;
 
+use crate::module_source::ModuleSource;
 use crate::tir::{
-    FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirModule, TirStmt, TirStmtKind, TypeId, TypeParamId,
+    CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirLocal, TirModule, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeParamId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::TypeTable;
 
 use super::Unrewritten;
-use super::state::Monomorphizer;
+use super::state::{Monomorphizer, SharedMutLeak};
 
 impl Monomorphizer {
     /// Rewrite the function calls in what is `unrewritten` to use monomorphized
@@ -25,10 +27,17 @@ impl Monomorphizer {
         let mut rewriter = CallRewriter {
             mono: self,
             type_table: &mut type_table,
+            judged: None,
         };
 
         for func_rc in unrewritten.functions(module) {
             let mut func = func_rc.borrow_mut();
+            // An instance's calls answer to the call that instantiated it, which
+            // was judged where it was written.
+            rewriter.judged = func
+                .monomorph_info
+                .is_none()
+                .then(|| func.module_source.clone());
             if let Some(mut body) = func.body.take() {
                 rewriter.visit_block(&mut body);
                 Self::sync_local_types_from_lets(&body, &mut func.locals);
@@ -37,6 +46,7 @@ impl Monomorphizer {
             }
         }
 
+        rewriter.judged = None;
         for global in unrewritten.globals_mut(module) {
             rewriter.visit_expr(global.init.slot_expr_mut());
         }
@@ -90,7 +100,12 @@ impl Monomorphizer {
 
     /// Point a call or function reference at the instance its template reaches,
     /// the same answer collection queued it under.
-    fn rewrite_to_instance(&self, expr: &mut TirExpr, type_table: &mut TypeTable) {
+    fn rewrite_to_instance(
+        &self,
+        expr: &mut TirExpr,
+        type_table: &mut TypeTable,
+        judged: Option<&ModuleSource>,
+    ) {
         let templates = &self.functions.templates;
         let Some(key) = self.call_instance(expr, templates, type_table) else {
             return;
@@ -118,11 +133,26 @@ impl Monomorphizer {
             }
             _ => unreachable!("only a call or a function reference reaches an instance"),
         }
+        let Some(template) = key.template.as_ref().and_then(|t| templates.get(t)) else {
+            return;
+        };
         if let ResolvedType::TypeParam { id, .. } = *type_table.get(expr.type_id)
-            && let Some(template) = key.template.as_ref().and_then(|t| templates.get(t))
             && let Some(concrete) = instance_arg(&template.borrow(), &key, id)
         {
             expr.type_id = concrete;
+        }
+        if let Some(module_source) = judged
+            && let TirExprKind::Call { args, .. } = &expr.kind
+            && let Some((param, arg)) =
+                mut_leaked_through_shared(&template.borrow(), &key, args, expr.type_id, type_table)
+        {
+            self.shared_mut_leaks.borrow_mut().push(SharedMutLeak {
+                module_source: module_source.clone(),
+                span: expr.span,
+                callee: template.borrow().name.clone(),
+                param,
+                arg,
+            });
         }
     }
 }
@@ -139,6 +169,94 @@ fn instance_arg(
     }
     let at = template.type_params.iter().position(|p| p.id == param)?;
     key.method_type_args.get(at).copied()
+}
+
+/// The type parameter of `template`, and the `&mut` `key` instantiates it to,
+/// that a generic `&` parameter's argument mentions where the caller lends it
+/// shared, and that a generic slot can hand back: the call's result, the
+/// pointee of a `&mut` parameter, or a parameter of a function parameter.
+/// Judged on the instantiated types, since a parameter may reach the `&` one
+/// through another's bound alone. A subscript the elaborator read through a
+/// `&` types its result as the `&` it reads, so `returns` mentions no `&mut`
+/// there. A `&mut` the instance holds inside a value is not judged: a copy out
+/// from behind a `&` is a value of its own.
+fn mut_leaked_through_shared(
+    template: &TirFunction,
+    key: &InstantiationKey,
+    args: &[CallArg],
+    returns: TypeId,
+    tt: &TypeTable,
+) -> Option<(String, TypeId)> {
+    let head = |ty: TypeId| tt.get(tt.representation_head(ty));
+    let generic = |ty: TypeId| !tt.type_params_in(ty).is_empty();
+    let generic_args = || {
+        template
+            .params
+            .iter()
+            .zip(args)
+            .filter(|(p, _)| generic(p.type_id))
+    };
+    template
+        .impl_type_params
+        .iter()
+        .chain(&template.type_params)
+        .filter(|param| !param.is_pack)
+        .find_map(|param| {
+            let leaked = instance_arg(template, key, param.id)?;
+            if !matches!(head(leaked), ResolvedType::MutRef(_)) {
+                return None;
+            }
+            let mentions = |ty: TypeId| mentions_type(tt, ty, leaked);
+            let read_shared = generic_args().any(|(p, a)| {
+                matches!(head(p.type_id), ResolvedType::Ref(_))
+                    && reaches_through_shared(&a.expr, tt)
+                    && mentions(a.expr.type_id)
+            });
+            let carries = |arg: TypeId| match head(arg) {
+                ResolvedType::MutRef(pointee) => mentions(*pointee),
+                ResolvedType::Function { params, .. } => params.iter().any(|&p| mentions(p)),
+                _ => false,
+            };
+            let handed_back = (generic(template.return_type) && mentions(returns))
+                || generic_args().any(|(_, a)| carries(a.expr.type_id));
+            (read_shared && handed_back).then(|| (param.name.clone(), leaked))
+        })
+}
+
+/// Whether `ty` is `target` or is built over it.
+fn mentions_type(tt: &TypeTable, ty: TypeId, target: TypeId) -> bool {
+    ty == target || tt.any_constituent(ty, &mut |t| mentions_type(tt, t, target))
+}
+
+/// Whether the argument `expr` lends a `&` its caller holds: a `&` value, or a
+/// place one is on the way to.
+fn reaches_through_shared(expr: &TirExpr, tt: &TypeTable) -> bool {
+    let is_shared = |ty: TypeId| matches!(tt.get(tt.representation_head(ty)), ResolvedType::Ref(_));
+    match &expr.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: place,
+        } => place_crosses_shared(place, tt),
+        _ => is_shared(expr.type_id) || place_crosses_shared(expr, tt),
+    }
+}
+
+/// Whether the place `expr` names is reached through a `&`.
+fn place_crosses_shared(expr: &TirExpr, tt: &TypeTable) -> bool {
+    match &expr.kind {
+        TirExprKind::FieldAccess { expr: base, .. }
+        | TirExprKind::Index { expr: base, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: base,
+        } => {
+            matches!(
+                tt.get(tt.representation_head(base.type_id)),
+                ResolvedType::Ref(_)
+            ) || place_crosses_shared(base, tt)
+        }
+        _ => false,
+    }
 }
 
 /// Point `func` at the instance `key` names, recording in `monomorph_info` the
@@ -164,6 +282,9 @@ fn apply_instantiation(func: &mut FunctionRef, key: &InstantiationKey, mangled: 
 struct CallRewriter<'a> {
     mono: &'a Monomorphizer,
     type_table: &'a mut TypeTable,
+    /// The module of the function whose calls are judged for a `&mut` handed
+    /// behind a `&`; `None` for an instance.
+    judged: Option<ModuleSource>,
 }
 
 impl TirMutVisitor for CallRewriter<'_> {
@@ -183,7 +304,8 @@ impl TirMutVisitor for CallRewriter<'_> {
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
-        self.mono.rewrite_to_instance(expr, self.type_table);
+        self.mono
+            .rewrite_to_instance(expr, self.type_table, self.judged.as_ref());
         self.walk_expr(expr);
     }
 }

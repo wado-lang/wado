@@ -1,0 +1,65 @@
+// Reference blankets of two traits tied on a `&self` method answer only where
+// the referent has no method of the name, so only there is the tie reported.
+
+trait Limit with () {
+    fn limit() -> i32;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Limit for Point {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+trait NameA with () {
+    fn name(&self) -> String;
+    fn other(&self) -> String;
+}
+
+trait NameB with () {
+    fn name(&self) -> String;
+    fn other(&self) -> String;
+}
+
+trait Base with () {
+    fn name(&self) -> String;
+}
+
+impl<T: Limit> NameA for &T {
+    fn name(&self) -> String {
+        return "a";
+    }
+
+    fn other(&self) -> String {
+        return "a";
+    }
+}
+
+impl<T: Limit> NameB for &T {
+    fn name(&self) -> String {
+        return "b";
+    }
+
+    fn other(&self) -> String {
+        return "b";
+    }
+}
+
+impl Base for Point {
+    fn name(&self) -> String {
+        return "base";
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert (&p).name() == "base";
+    let _ = (&p).other();
+}
+
+__DATA__
+{"compile_error": ":61:13: analysis error: ambiguous method 'other': declared by 'NameA' and 'NameB'"}

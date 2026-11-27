@@ -4496,6 +4496,10 @@ pub(super) struct TraitMethodMatch {
     /// `Inner`). A reference impl buckets by kind, so nothing else names the
     /// link a newtype inherits it through.
     pub(super) ref_impl_target: Option<TypeId>,
+    /// The reports of the tie this match stands for, among reference blankets
+    /// that answer only where the referent has no method of the name: the
+    /// call adopting the match makes them.
+    pub(super) tie_behind_referent: Vec<TypeError>,
 }
 
 impl TraitMethodMatch {
@@ -4513,6 +4517,12 @@ impl TraitMethodMatch {
     pub(super) fn answers_reference_receiver(&self, receiver_ref_depth: usize) -> bool {
         !self.is_blanket_ref_impl
             || (self.method_info.self_kind == ast::SelfKind::Value && receiver_ref_depth == 1)
+    }
+
+    /// Whether this is a reference blanket's `&self` method, which answers
+    /// only where the referent has no method of the name.
+    pub(super) fn answers_behind_referent(&self) -> bool {
+        self.is_blanket_ref_impl && self.method_info.self_kind == ast::SelfKind::Ref
     }
 
     /// The owner a call on `receiver_base` dispatches with: a newtype inherits

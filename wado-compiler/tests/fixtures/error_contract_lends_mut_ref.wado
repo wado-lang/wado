@@ -1,13 +1,14 @@
 // A clause cannot lend `&mut` to what it did not declare, whether it takes the
 // reference itself or passes on one a parameter holds, even beneath the `&` a
-// `&self` method takes.
+// `&self` method takes: a copy of the holder carries the `&mut` on.
 struct Counter { n: i32 }
 
 struct Holder { r: &mut i32 }
 
 impl Holder {
     fn poke(&self) -> bool {
-        *self.r = 9;
+        let copy = *self;
+        *copy.r = 9;
         return true;
     }
 
@@ -59,5 +60,5 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":21:14: analysis error: contract clause cannot mutate 'h', which reaches state it did not create; 27:28: contract clause cannot mutate 'h', which reaches state it did not create; 43:24: contract clause cannot mutate 'n', which reaches state it did not create; 49:19: contract clause cannot mutate 'c', which reaches state it did not create"
+  "compile_error": ":22:14: analysis error: contract clause cannot mutate 'h', which reaches state it did not create; 28:28: contract clause cannot mutate 'h', which reaches state it did not create; 44:24: contract clause cannot mutate 'n', which reaches state it did not create; 50:19: contract clause cannot mutate 'c', which reaches state it did not create"
 }
