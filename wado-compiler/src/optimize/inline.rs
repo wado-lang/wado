@@ -1871,8 +1871,7 @@ impl Basis {
             Basis::Safepoint {
                 sole_and_loop_free: true,
             } => Reach::SoleOutsideLoops,
-            Basis::SoleClosure => Reach::Sole,
-            Basis::Payback { sole: true } => Reach::Sole,
+            Basis::SoleClosure | Basis::Payback { sole: true } => Reach::Sole,
             Basis::Payback { sole: false } => Reach::Loops,
         }
     }
