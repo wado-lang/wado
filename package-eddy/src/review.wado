@@ -64,10 +64,15 @@ global RUNS_PER_FINDING: i32 = 3;
 
 /// How many reviewers search a change at most, each a batch of units. The
 /// units past what they hold, the least changed, go unread.
-pub global MAX_REVIEWERS: i32 = 10;
+pub global MAX_REVIEWERS: i32 = 20;
 
-/// The most bytes of units one search reads, about 15k tokens.
-global BATCH_BYTES: i32 = 60_000;
+/// The most bytes of units one search reads, about 7k tokens. A search given
+/// 15k tokens read the function a known defect lay in and named another.
+global BATCH_BYTES: i32 = 30_000;
+
+/// How many of the most changed units two searches read, each in its own
+/// batch, so that a defect one search reads past the other may name.
+global READ_TWICE: i32 = 10;
 
 pub struct Finding {
     pub file: String,
@@ -381,28 +386,32 @@ fn sources(w: &Workspace, diff: &String) -> HashMap<String, String> with Preopen
 }
 
 /// `units`, in their order, packed into at most `most` batches of up to
-/// `BATCH_BYTES` each: a unit goes into the first batch it fits, so the most
-/// changed are read and the least changed are left out.
+/// `BATCH_BYTES` each: a unit goes into the first batch it fits that does not
+/// hold it already, so the most changed are read and the least changed are
+/// left out. The first `READ_TWICE` are placed twice.
 fn batches(units: &List<Unit>, most: i32) -> List<List<Unit>> {
-    let mut out: List<List<Unit>> = [];
+    let twice = i32::min(READ_TWICE, units.len());
+    let mut order: List<i32> = (0..<twice).collect();
+    order.extend(&(0..<units.len()).collect());
+    let mut held: List<List<i32>> = [];
     let mut sizes: List<i32> = [];
-    for let u of units {
-        let n = u.text.len();
+    for let k of order {
+        let n = units[k].text.len();
         let mut placed = false;
-        for let i of 0..<out.len() {
-            if sizes[i] + n <= BATCH_BYTES {
-                out[i].push(*u);
+        for let i of 0..<held.len() {
+            if sizes[i] + n <= BATCH_BYTES && !held[i].contains(&k) {
+                held[i].push(k);
                 sizes[i] += n;
                 placed = true;
                 break;
             }
         }
-        if !placed && out.len() < most {
-            out.push([*u]);
+        if !placed && held.len() < most {
+            held.push([k]);
             sizes.push(n);
         }
     }
-    return out;
+    return held.into_iter().map(|ks| ks.into_iter().map(|k| units[k]).collect()).collect();
 }
 
 /// What a batch reads, as `file name` for each unit, for the record.
@@ -530,16 +539,19 @@ test "the units are packed into batches the most changed first, and those past t
     let unit = |name: String, bytes: i32| Unit { file: "f.rs", name, start: 1, end: 2, changed: 1, text: "x".repeat(
         bytes,
     ) };
-    let found = batches(&[
-        unit("a", BATCH_BYTES - 10),
-        unit("b", 20),
-        unit("c", 5),
-        unit("d", BATCH_BYTES),
-        unit("e", 30),
-    ], 2);
-    assert found.len() == 2;
-    assert names_of(&found[0]) == "f.rs:1 a, f.rs:1 c";
-    assert names_of(&found[1]) == "f.rs:1 b, f.rs:1 e";
+    let mut all: List<Unit> = [unit("a", BATCH_BYTES - 10)];
+    for let i of 1..<READ_TWICE {
+        all.push(unit(`t${i}`, 1));
+    }
+    all.push(unit("b", 20));
+    all.push(unit("c", 5));
+    all.push(unit("d", BATCH_BYTES));
+    let found = batches(&all, 3);
+    assert found.len() == 3;
+    // The most changed are each read twice, never twice in one batch, and the
+    // rest go where they fit: `d` fits nowhere.
+    assert found[0].len() == READ_TWICE && found[1].len() == READ_TWICE && found[1][0].name == "a";
+    assert names_of(&found[2]) == "f.rs:1 b, f.rs:1 c";
     let task = Submission { heading: "PULL REQUEST #1: t", diff: "+a" }.searched_in(&found[0]);
     assert task.shared == "PULL REQUEST #1: t"
         && task.own.starts_with("<unit file=\"f.rs\" lines=\"1-2\" name=\"a\">\nx");

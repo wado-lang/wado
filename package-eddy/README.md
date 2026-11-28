@@ -22,9 +22,9 @@ A review takes three steps:
 1. Search. Eddy cuts the change into units: each definition it touched, read
    whole from the head with the lines it added and removed marked, and the
    functions it calls in the same file. The code comes before the tests and
-   the most changed first. Up to `--reviewers` reviewers (10) each read a
-   batch of about 15k tokens of them, and the units past the last batch go
-   unread. Each reviews the logic as it stands, so a defect the change left in
+   the most changed first. Up to `--reviewers` reviewers (20) each read a
+   batch of about 7k tokens of them, and the units past the last batch go
+   unread. The ten most changed units are read twice, in two batches. Each reviews the logic as it stands, so a defect the change left in
    place is a candidate too. They run nothing and report candidates, the
    uncertain ones included. `tools/units.wado` prints the units of a merge.
 2. Triage. One call merges the candidates that name one defect and keeps the
