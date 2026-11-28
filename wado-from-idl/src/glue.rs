@@ -350,11 +350,11 @@ fn property(name: &str) -> String {
     }
 }
 
-/// Whether a `WebIDL` name is also a JavaScript identifier. Both start with a
-/// letter or `_`, so only the characters after differ.
+/// Whether a `WebIDL` name is also a JavaScript identifier. A `WebIDL`
+/// identifier is letters, digits, `_` and `-`, so it is one without a `-`.
 #[must_use]
 pub fn is_identifier(name: &str) -> bool {
-    name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    !name.contains('-')
 }
 
 /// The core parameters of the function being written, named in order.
