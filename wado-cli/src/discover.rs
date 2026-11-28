@@ -184,16 +184,14 @@ fn discover_wado_files(
 
     let mut result = DiscoveryResult::default();
     let mut rules: Vec<GitignoreRule> = Vec::new();
-    let mut ancestors = Vec::new();
-    let mut dir = walk_root.as_path();
-    while !dir.join(".git").exists() {
-        let Some(parent) = dir.parent() else { break };
-        ancestors.push(parent);
-        dir = parent;
-    }
-    if dir.join(".git").exists() {
-        for ancestor in ancestors.into_iter().rev() {
-            load_gitignore(ancestor, &mut rules)?;
+    if let Some(checkout) = checkout_root(&walk_root) {
+        let above: Vec<&Path> = walk_root
+            .ancestors()
+            .skip(1)
+            .take_while(|dir| dir.starts_with(checkout))
+            .collect();
+        for dir in above.into_iter().rev() {
+            load_gitignore(dir, &mut rules)?;
         }
     }
     walk_dir(
@@ -620,6 +618,11 @@ fn parse_gitignore(content: &str, base: &Path) -> Vec<GitignoreRule> {
         }
     }
     out
+}
+
+/// The root of the git checkout holding `path`.
+pub(crate) fn checkout_root(path: &Path) -> Option<&Path> {
+    path.ancestors().find(|dir| dir.join(".git").exists())
 }
 
 fn is_ignored(rules: &[GitignoreRule], path: &Path, is_dir: bool) -> bool {
