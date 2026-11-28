@@ -191,8 +191,7 @@ pub fn run(command: WorkspaceCommand) -> Result<(), CliExit> {
     match command {
         WorkspaceCommand::Init(opts) => init_workspace(&cwd, &opts),
         WorkspaceCommand::New(dir, opts) => {
-            let dir = init::create_dir(&cwd.join(dir))?;
-            init_workspace(&dir, &opts)
+            init::in_new_dir(&cwd.join(dir), |dir| init_workspace(dir, &opts))
         }
         WorkspaceCommand::Add(dir) => add(&cwd.join(dir)),
     }

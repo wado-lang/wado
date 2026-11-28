@@ -308,6 +308,54 @@ fn new_in_a_git_ignored_directory_stays_out_of_the_workspace() {
     assert!(manifest.contains("namespace = \"mine\""), "{manifest}");
 }
 
+/// Only the part of the path the workspace holds is asked of git: a workspace
+/// that itself sits in ignored scratch space still takes members.
+#[test]
+fn new_joins_a_workspace_that_sits_in_a_git_ignored_directory() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::create_dir(tmp.path().join(".git")).unwrap();
+    fs::write(tmp.path().join(".gitignore"), "scratch/\n").unwrap();
+    let root = tmp.path().join("scratch/tools");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(
+        root.join("wado-workspace.toml"),
+        "[workspace]\nmembers = []\n\n[workspace.package]\nnamespace = \"acme\"\n",
+    )
+    .unwrap();
+
+    wado_in(&root).args(["new", "geo"]).assert().success();
+
+    assert!(read(&root.join("wado-workspace.toml")).contains("\"geo\""));
+}
+
+/// A `new` that fails leaves no directory it created behind, and keeps one
+/// that was already there.
+#[test]
+fn new_that_fails_removes_what_it_created() {
+    let tmp = tempfile::tempdir().unwrap();
+
+    wado_in(tmp.path())
+        .args(["new", "nested/my.app", "--namespace", "acme"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--name"));
+    assert!(!tmp.path().join("nested").exists());
+
+    fs::create_dir(tmp.path().join("kept")).unwrap();
+    wado_in(tmp.path())
+        .args(["new", "kept"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--namespace is required"));
+    assert!(tmp.path().join("kept").is_dir());
+
+    wado_in(tmp.path())
+        .args(["workspace", "new", "ws/tools", "--namespace", "not a name"])
+        .assert()
+        .failure();
+    assert!(!tmp.path().join("ws").exists());
+}
+
 /// The scaffold is a package that passes its own tests.
 #[test]
 fn new_package_passes_its_tests() {

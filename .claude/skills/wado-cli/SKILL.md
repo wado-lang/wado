@@ -336,9 +336,11 @@ What the formatter decides — width, wrapping, comment placement — is in
 ## New Packages and Workspaces
 
 `wado init` lays out a package in the current directory, as the standard package
-layout says: `wado.toml`, `README.md`, `AGENTS.md`, `src/` and `tests/`.
-`wado new <dir>` is `mkdir -p <dir>` and then `init` there. Each keeps a file of
-the layout that is already there, except `wado.toml`, which `--force` replaces.
+layout says: `wado.toml`, `README.md`, `AGENTS.md` and `src/`, and `tests/`
+with the library. `wado new <dir>` is `mkdir -p <dir>` and then `init` there,
+and removes the directories it created when `init` fails. Each keeps a file of
+the layout that is already there, but refuses an existing `wado.toml` unless
+`--force` replaces it.
 
 ```sh
 wado new geo --namespace acme         # a library: src/lib.wado and a test

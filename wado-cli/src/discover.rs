@@ -625,10 +625,13 @@ pub(crate) fn checkout_root(path: &Path) -> Option<&Path> {
     path.ancestors().find(|dir| dir.join(".git").exists())
 }
 
-/// Whether git ignores the directory `dir`, which must be canonical: whether
-/// it or a directory between it and the checkout's root matches the
-/// `.gitignore` rules above that directory. Outside a checkout nothing is.
-pub(crate) fn is_git_ignored(dir: &Path) -> Result<bool, WalkError> {
+/// Whether git ignores the directory `dir` on the way down from `base`, both
+/// canonical: whether `dir` or a directory between it and `base` matches the
+/// `.gitignore` rules above it. `base` and what holds it are not asked, so a
+/// tree that itself sits in ignored scratch space ignores nothing of its own.
+/// Outside a checkout nothing is ignored.
+pub(crate) fn is_git_ignored_below(base: &Path, dir: &Path) -> Result<bool, WalkError> {
+    assert!(dir.starts_with(base), "`dir` must lie under `base`");
     let Some(checkout) = checkout_root(dir) else {
         return Ok(false);
     };
@@ -641,7 +644,8 @@ pub(crate) fn is_git_ignored(dir: &Path) -> Result<bool, WalkError> {
     {
         load_gitignore(&level, &mut rules)?;
         level.push(component);
-        if is_ignored(&rules, &level, true) {
+        let below_base = level.starts_with(base) && level != base;
+        if below_base && is_ignored(&rules, &level, true) {
             return Ok(true);
         }
     }
@@ -686,18 +690,18 @@ mod tests {
         fs::write(root.join(".gitignore"), "b/\n").unwrap();
         fs::write(root.join("a/.gitignore"), "kept\n").unwrap();
 
-        assert!(!is_git_ignored(&root.join("a")).unwrap());
-        assert!(is_git_ignored(&root.join("a/b")).unwrap());
+        let ignored = |dir: &str| is_git_ignored_below(&root, &root.join(dir)).unwrap();
+        assert!(!ignored("a"));
+        assert!(ignored("a/b"));
+        assert!(ignored("a/b/c"), "under an ignored directory");
+        assert!(ignored("a/kept"), "by a nested .gitignore");
         assert!(
-            is_git_ignored(&root.join("a/b/c")).unwrap(),
-            "under an ignored directory"
+            !is_git_ignored_below(&root.join("a/b"), &root.join("a/b/c")).unwrap(),
+            "above the base"
         );
+        let outside = tmp.path().parent().unwrap();
         assert!(
-            is_git_ignored(&root.join("a/kept")).unwrap(),
-            "by a nested .gitignore"
-        );
-        assert!(
-            !is_git_ignored(tmp.path().parent().unwrap()).unwrap(),
+            !is_git_ignored_below(outside, outside).unwrap(),
             "outside a checkout"
         );
     }

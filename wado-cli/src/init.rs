@@ -12,7 +12,7 @@ use wado_manifest::{
 };
 
 use crate::args::{self, CliExit};
-use crate::discover::{checkout_root, is_git_ignored};
+use crate::discover::{checkout_root, is_git_ignored_below};
 use crate::workspace::{member_entry, with_member, write_workspace};
 
 #[derive(Debug)]
@@ -23,11 +23,31 @@ pub struct InitOptions {
     pub force: bool,
 }
 
-/// The worlds a new package declares. Neither flag given means a library.
-#[derive(Debug, Clone, Copy)]
-pub struct Kind {
-    pub lib: bool,
-    pub cli: bool,
+/// The worlds a new package declares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Lib,
+    Cli,
+    Both,
+}
+
+impl Kind {
+    /// What `--lib` and `--cli` ask for; neither means a library.
+    fn from_flags(lib: bool, cli: bool) -> Self {
+        match (lib, cli) {
+            (_, false) => Self::Lib,
+            (false, true) => Self::Cli,
+            (true, true) => Self::Both,
+        }
+    }
+
+    fn declares_lib(self) -> bool {
+        matches!(self, Self::Lib | Self::Both)
+    }
+
+    fn declares_cli(self) -> bool {
+        matches!(self, Self::Cli | Self::Both)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -87,7 +107,9 @@ impl Opt {
     }
 }
 
-fn format_usage(command: &str, operand: &str, summary: &str) -> String {
+/// The usage of `init` and of what runs it, `new`: the same options and the
+/// same scaffold, under `command`'s own synopsis.
+pub(crate) fn scaffold_usage(command: &str, operand: &str, summary: &str) -> String {
     let mut buf = String::new();
     writeln!(buf, "Usage: wado {command} {operand}[options]").unwrap();
     writeln!(buf).unwrap();
@@ -95,17 +117,22 @@ fn format_usage(command: &str, operand: &str, summary: &str) -> String {
     writeln!(buf).unwrap();
     writeln!(
         buf,
-        "It writes wado.toml, README.md, AGENTS.md, src/ and tests/, keeping any of"
+        "It writes wado.toml, README.md, AGENTS.md and src/, and tests/ with the"
     )
     .unwrap();
     writeln!(
         buf,
-        "them but wado.toml that is already there. Under a workspace whose `members`"
+        "library. A file of these already there is kept, but an existing wado.toml"
     )
     .unwrap();
     writeln!(
         buf,
-        "misses the package, the package is added to `members`, unless git ignores it."
+        "is refused unless --force. Under a workspace whose `members` misses the"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "package, the package is added to `members`, unless git ignores it."
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -114,20 +141,8 @@ fn format_usage(command: &str, operand: &str, summary: &str) -> String {
     buf
 }
 
-pub(crate) fn init_usage() -> String {
-    format_usage("init", "", "Create a package in the current directory.")
-}
-
-pub(crate) fn new_usage() -> String {
-    format_usage(
-        "new",
-        "<dir> ",
-        "Create <dir> and a package in it: `mkdir -p <dir> && cd <dir> && wado init`.",
-    )
-}
-
 pub fn parse_args(parser: lexopt::Parser) -> Result<InitOptions, CliExit> {
-    let usage = init_usage();
+    let usage = scaffold_usage("init", "", "Create a package in the current directory.");
     let (opts, dir) = parse_options(parser, &usage)?;
     if dir.is_some() {
         return Err(CliExit::error_with_usage(
@@ -143,34 +158,33 @@ pub(crate) fn parse_options(
     mut parser: lexopt::Parser,
     usage: &str,
 ) -> Result<(InitOptions, Option<PathBuf>), CliExit> {
-    let mut opts = InitOptions {
-        name: None,
-        namespace: None,
-        kind: Kind {
-            lib: false,
-            cli: false,
-        },
-        force: false,
-    };
+    let mut name = None;
+    let mut namespace = None;
+    let mut lib = false;
+    let mut cli = false;
+    let mut force = false;
     let mut dir = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
-                Opt::Name => opts.name = Some(args::require_string(&mut parser)?),
-                Opt::Namespace => opts.namespace = Some(args::require_string(&mut parser)?),
-                Opt::Lib => opts.kind.lib = true,
-                Opt::Cli => opts.kind.cli = true,
-                Opt::Force => opts.force = true,
+                Opt::Name => name = Some(args::require_string(&mut parser)?),
+                Opt::Namespace => namespace = Some(args::require_string(&mut parser)?),
+                Opt::Lib => lib = true,
+                Opt::Cli => cli = true,
+                Opt::Force => force = true,
                 Opt::Help => return Err(CliExit::help(usage.to_owned())),
             }
         } else {
             args::take_dir_operand(arg, &mut dir, usage)?;
         }
     }
-    if !opts.kind.cli {
-        opts.kind.lib = true;
-    }
+    let opts = InitOptions {
+        name,
+        namespace,
+        kind: Kind::from_flags(lib, cli),
+        force,
+    };
     Ok((opts, dir))
 }
 
@@ -200,7 +214,7 @@ pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit
                 joining: false,
                 root,
             }),
-            Some(_) if is_git_ignored(&dir).map_err(CliExit::error)? => {
+            Some(_) if is_git_ignored_below(&root, &dir).map_err(CliExit::error)? => {
                 eprintln!(
                     "{} is ignored by git, so it does not join the workspace",
                     dir.display()
@@ -235,10 +249,9 @@ pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit
             )));
         }
         (None, None) => {
-            return Err(CliExit::error(format!(
-                "--namespace is required: no workspace sets one\n\n{}",
-                init_usage()
-            )));
+            return Err(CliExit::error(
+                "--namespace is required: no workspace this package belongs to sets one",
+            ));
         }
         (namespace, _) => namespace,
     };
@@ -274,12 +287,10 @@ pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit
         CliExit::error(format!("the manifest would not be valid: {e}{hint}"))
     })?;
 
-    fs::write(dir.join(MANIFEST_FILENAME), &content)
-        .map_err(|e| CliExit::error(format!("writing {MANIFEST_FILENAME}: {e}")))?;
-    eprintln!("Created {MANIFEST_FILENAME}");
-    write_scaffold(&dir, Scaffold::Package(opts.kind), &name)?;
-
-    if let Some(membership) = workspace
+    // The workspace goes first: a `members` entry naming a directory with no
+    // manifest yet is skipped, while a manifest left out of the workspace it
+    // leaves fields to does not parse.
+    if let Some(membership) = &workspace
         && membership.joining
     {
         write_workspace(
@@ -288,7 +299,10 @@ pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit
             &member_entry(&membership.root, &dir),
         )?;
     }
-    Ok(())
+    fs::write(dir.join(MANIFEST_FILENAME), &content)
+        .map_err(|e| CliExit::error(format!("writing {MANIFEST_FILENAME}: {e}")))?;
+    eprintln!("Created {MANIFEST_FILENAME}");
+    write_scaffold(&dir, Scaffold::Package(opts.kind), &name)
 }
 
 /// The workspace above a new package, as it reads once the package is a
@@ -324,7 +338,7 @@ fn generate_manifest(fields: &ManifestFields) -> String {
     if let Some(directory) = fields.repository_directory {
         writeln!(buf, "repository-directory = {}", toml_string(directory)).unwrap();
     }
-    if fields.kind.lib {
+    if fields.kind.declares_lib() {
         writeln!(buf, "lib = \"src/lib.wado\"").unwrap();
     }
     if !fields.inherited.is_empty() {
@@ -335,7 +349,7 @@ fn generate_manifest(fields: &ManifestFields) -> String {
         )
         .unwrap();
     }
-    if fields.kind.cli {
+    if fields.kind.declares_cli() {
         buf.push_str("\n[world]\n");
         writeln!(buf, "\"wasi:cli/command\" = \"src/main.wado\"").unwrap();
     }
@@ -424,10 +438,10 @@ impl Scaffold {
         match self {
             Self::Package(kind) => {
                 let mut templates = vec![&README, &PACKAGE_AGENTS];
-                if kind.lib {
+                if kind.declares_lib() {
                     templates.extend([&LIB, &LIB_TEST]);
                 }
-                if kind.cli {
+                if kind.declares_cli() {
                     templates.push(&MAIN);
                 }
                 templates
@@ -481,11 +495,24 @@ pub(crate) fn canonical(dir: &Path) -> Result<PathBuf, CliExit> {
         .map_err(|e| CliExit::error(format!("{}: {e}", dir.display())))
 }
 
-/// `mkdir -p dir`, answering the directory's canonical path.
-pub(crate) fn create_dir(dir: &Path) -> Result<PathBuf, CliExit> {
+/// `mkdir -p dir`, then `init` there, given the canonical path. Where `init`
+/// fails, the directories this run created go again: nothing but this run
+/// wrote under them.
+pub(crate) fn in_new_dir(
+    dir: &Path,
+    init: impl FnOnce(&Path) -> Result<(), CliExit>,
+) -> Result<(), CliExit> {
+    let created = dir.ancestors().take_while(|a| !a.exists()).last();
     fs::create_dir_all(dir)
         .map_err(|e| CliExit::error(format!("creating {}: {e}", dir.display())))?;
-    canonical(dir)
+    let result = canonical(dir).and_then(|dir| init(&dir));
+    if result.is_err()
+        && let Some(created) = created
+    {
+        fs::remove_dir_all(created)
+            .map_err(|e| CliExit::error(format!("removing {}: {e}", created.display())))?;
+    }
+    result
 }
 
 pub(crate) fn directory_name(dir: &Path) -> Result<String, CliExit> {
@@ -505,10 +532,7 @@ mod tests {
             name: "my-app",
             version: Some("0.1.0"),
             repository_directory: None,
-            kind: Kind {
-                lib: true,
-                cli: true,
-            },
+            kind: Kind::Both,
             inherited: Vec::new(),
         });
         let manifest: Manifest = result.parse().unwrap();
@@ -525,7 +549,7 @@ mod tests {
     fn parse_options_defaults_to_a_library() {
         let parser = lexopt::Parser::from_args(vec!["--namespace", "myorg"]);
         let (opts, dir) = parse_options(parser, "").unwrap();
-        assert!(opts.kind.lib && !opts.kind.cli);
+        assert_eq!(opts.kind, Kind::Lib);
         assert!(opts.name.is_none());
         assert!(dir.is_none());
     }
@@ -534,7 +558,7 @@ mod tests {
     fn parse_options_takes_cli_alone() {
         let parser = lexopt::Parser::from_args(vec!["--cli", "app"]);
         let (opts, dir) = parse_options(parser, "").unwrap();
-        assert!(!opts.kind.lib && opts.kind.cli);
+        assert_eq!(opts.kind, Kind::Cli);
         assert_eq!(dir, Some(PathBuf::from("app")));
     }
 }
