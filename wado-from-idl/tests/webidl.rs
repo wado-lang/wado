@@ -1784,6 +1784,36 @@ fn a_union_of_several_types_is_a_variant_either_way() {
     }
 }
 
+/// Digital Credentials unions two enums, which `WebIDL` does not count as
+/// distinguishable; their values are, so the glue tests a case by them.
+#[test]
+fn a_result_union_of_two_enums_takes_the_case_holding_the_value() {
+    let mut defs = chain();
+    defs.enums = vec![
+        string_enum("Presentation", &["openid4vp"]),
+        string_enum("Issuance", &["openid4vci"]),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[attribute(
+            "protocol",
+            &union(&[plain("Presentation"), plain("Issuance")], false),
+            true,
+        )],
+    ));
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(
+        glue.contains("if ($ENUMS.Presentation.includes($value)) {"),
+        "{glue}"
+    );
+    assert!(
+        glue.contains("} else if ($ENUMS.Issuance.includes($value)) {"),
+        "{glue}"
+    );
+}
+
 #[test]
 fn an_html_constructor_is_not_new() {
     let mut defs = chain();

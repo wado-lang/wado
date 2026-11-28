@@ -9,7 +9,7 @@
 
 use std::fmt::Write;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use wado_compiler::ast::HandleClasses;
 use wado_compiler::component_model::flat_params_in_buffer;
 use wado_compiler::name::{
@@ -343,14 +343,18 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction, cl
 /// The access to the property `name`: `.name`, or `["name"]` where the name
 /// is no JavaScript identifier, as CSSOM's dashed attributes are not.
 fn property(name: &str) -> String {
-    if name
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
-    {
+    if is_identifier(name) {
         format!(".{name}")
     } else {
         format!("[{name:?}]")
     }
+}
+
+/// Whether a `WebIDL` name is also a JavaScript identifier. Both start with a
+/// letter or `_`, so only the characters after differ.
+#[must_use]
+pub fn is_identifier(name: &str) -> bool {
+    name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// The core parameters of the function being written, named in order.
@@ -871,15 +875,18 @@ fn store(
             lines.push("});".to_string());
         }
         Shape::Variant(cases) => {
-            // WebIDL requires a union's constituents to be distinguishable, so
-            // at most one test takes the host's value.
+            let tests: Vec<String> = cases
+                .iter()
+                .map(|case| case_test(&case.ty, value, classes))
+                .collect();
+            assert!(
+                tests.iter().collect::<IndexSet<_>>().len() == tests.len(),
+                "a union's cases must have tests of their own: {tests:?}"
+            );
             let (payload, ..) = variant_layout(cases);
-            for (index, case) in cases.iter().enumerate() {
+            for (index, (case, test)) in cases.iter().zip(&tests).enumerate() {
                 let keyword = if index == 0 { "if" } else { "} else if" };
-                lines.push(format!(
-                    "{keyword} ({}) {{",
-                    case_test(&case.ty, value, classes)
-                ));
+                lines.push(format!("{keyword} ({test}) {{"));
                 lines.push(format!(
                     "  {}",
                     Scalar::U8.to_memory(&at, &index.to_string())
@@ -924,7 +931,9 @@ fn case_test(ty: &WadoType, value: &str, classes: &Classes) -> String {
         }
         Shape::Scalar(Scalar::Bool) => format!("typeof {value} === \"boolean\""),
         Shape::Scalar(_) => format!("typeof {value} === \"number\""),
-        Shape::String | Shape::Enum(_) => format!("typeof {value} === \"string\""),
+        Shape::String => format!("typeof {value} === \"string\""),
+        // By its values, which tell two enums apart where a union holds both.
+        Shape::Enum(name) => format!("$ENUMS.{name}.includes({value})"),
         Shape::List(_) => format!("Array.isArray({value})"),
         Shape::Record(_) => format!("$dictionary({value})"),
         Shape::Option(_) | Shape::Variant(_) | Shape::Callback(..) => {

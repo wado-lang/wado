@@ -48,14 +48,12 @@ These come from WEP: Variant Payload Design.
   `match x { ab: A | B => …, c: C => … }`.
 - A `match` over a union is checked for exhaustiveness.
 
-Two more follow from why this WEP exists:
-
-- A union is represented as a `variant`, so it crosses the Component Model
-  boundary as one.
-- A WebIDL union lowers to a union type, in place of a generated variant.
-
 ## Open questions
 
+- Representation: whether a union is represented as a `variant`, and so
+  crosses the Component Model boundary as one.
+- WebIDL: whether a WebIDL union lowers to a union type in place of a
+  generated variant.
 - Injection: whether a value of a constituent's type is accepted where the
   union is expected, so that `set_attribute("id", "x")` compiles. Also whether
   an `A | B` is accepted where an `A | B | C` is.
@@ -81,4 +79,3 @@ Two more follow from why this WEP exists:
 - [ ] Subset binding in `if let` (`if let x: A | B = abc`)
 - [ ] Subset binding in `match`
 - [ ] Exhaustiveness checking for union types
-- [ ] `wado-from-idl` lowers a WebIDL union to a union type

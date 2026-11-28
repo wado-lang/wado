@@ -521,9 +521,12 @@ impl<'a> Merged<'a> {
             .members
             .iter()
             .copied()
-            .filter_map(|member| match member {
-                Member::Attribute { name, .. } => Some(name.as_str()),
-                _ => None,
+            .filter_map(|member| {
+                if let Member::Attribute { name, .. } = member {
+                    Some(name.as_str())
+                } else {
+                    None
+                }
             })
             .collect();
         self.members.retain(|member| {
@@ -1385,6 +1388,11 @@ impl Lowering<'_> {
             fields.extend(inherited);
         }
         for field in parts.iter().flat_map(|part| &part.members) {
+            assert!(
+                glue::is_identifier(&field.name),
+                "a dictionary member's name must be a JavaScript identifier: `{}`",
+                field.name
+            );
             match self.lower_type(&field.idl_type, Flow::Out) {
                 Ok(ty) => fields.push(DictionaryField {
                     host_name: field.name.clone(),

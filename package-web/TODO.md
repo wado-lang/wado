@@ -179,9 +179,10 @@ lower is then available to each interface the slice adds.
   nothing reaches a `CanvasRenderingContext2D`, though its members bind.
 - `SurfaceDom` answers none of the members the canvas, style and collection
   interfaces brought.
-- No member of the slice returns a union with an interface, a sequence or a
-  dictionary case, so no test runs the glue telling those apart against a
-  host.
+- No test runs the glue telling apart a result union's interface, sequence,
+  dictionary or enum case against a host. `CanvasRenderingContext2D`'s
+  `fill_style` and `stroke_style` return an interface case, but nothing reaches
+  a `CanvasRenderingContext2D` while `getContext` is unbound.
 - `SurfaceDom` takes the options of what it does not model and ignores them:
   `passive`, since no event is cancelled, the `is` of `create_element`, and
   those of `get_html`, `scroll_into_view` and `request_fullscreen`.
