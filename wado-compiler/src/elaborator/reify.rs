@@ -10143,7 +10143,7 @@ impl<'a> Reify<'a> {
     /// back along its own path. The element a `&mut xs[i]` scrutinee holds is
     /// stored back at every exit of the match.
     fn match_storing_back(
-        &mut self,
+        &self,
         scrutinee: TirExpr,
         elements: Vec<ScopedElement>,
         arms: Vec<(TirMatchArm, Vec<HeldBinding>)>,
