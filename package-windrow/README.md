@@ -18,6 +18,8 @@ wado run package-windrow/src/main.wado -- [--min-tokens N] [--similarity S] [--n
 
 A path is a `.rs` or `.wado` file, or a directory walked for them. The walk
 skips a directory named `target` or `build`, or one whose name starts with `.`.
+A file Git's attributes mark `linguist-generated` is left out too: a generator
+repeats its own shapes by construction.
 `--min-tokens` is the smallest node compared, in tokens, at least 6; the
 default is 40.
 `--similarity` is the least similarity reported, in (0, 1]; the default is 0.8.
@@ -34,11 +36,20 @@ tokens first:
   wado-compiler/src/tir.rs:4295-4404
 ```
 
+Standard error ends with how many files it read and how fast:
+
+```text
+517 files (12 generated left out), 18.3 MB, 784 groups
+read 140.2s, compared 8.1s, total 148.3s: 0.12 MB/s
+```
+
 Every two members of a group are alike, and of sizes within the similarity of
 each other. A group is reported at the largest nodes that are, so a member's
-inner nodes are not listed again. A node that repeats one small shape, such as
-a long or-pattern of enum cases, is not
-compared: its few distinct runs make any two such nodes look alike. Nor is test
+inner nodes are not listed again. A pattern of alternatives counts as one
+token: an exhaustive match lists every case of its enum, so two matches over
+one enum share those whatever their arms do. A node that repeats one small
+shape, such as a long list of literals, is not compared: its few distinct runs
+make any two such nodes look alike. Nor is test
 code, a Rust item under `#[test]` or `#[cfg(test)]` or a Wado `test` block: a
 fixture repeats its shape on purpose. A test module in a file of its own
 (`#[cfg(test)] mod tests;`) is compared, since nothing reads which file a module

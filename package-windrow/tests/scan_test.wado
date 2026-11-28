@@ -175,8 +175,8 @@ ${shared}    let r = Report::new(sum, items.first(), 0, 1);
 }
 
 test "a node repeating one small shape is not compared" {
-    let a = "fn f(t: &T) { match t { A::B { .. } | A::C(_) | A::D | A::E { .. } | A::F(_) | A::G | A::H { .. } | A::I(_) | A::J => {} } }";
-    let b = "fn g(u: &U) { match u { X::Y(_) | X::Z { .. } | X::W | X::V(_) | X::Q { .. } | X::R | X::S(_) | X::P { .. } | X::O => 1 } }";
+    let a = "fn f() -> [u8; 16] { [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] }";
+    let b = "fn g(x: &X) -> usize { let t = vec![9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 4, 3]; t.len() + x.n }";
     let trees: List<Tree> = [
         tree("a.rs", a),
         tree("b.rs", b),

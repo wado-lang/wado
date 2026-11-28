@@ -1,0 +1,28 @@
+//! The files Git's attributes mark generated: a generator repeats its own
+//! shapes by construction, so their copies are no one's to fold.
+
+use { cmd, Process, ProcessError } from "core:process";
+use { HashSet } from "core:collections";
+
+/// The paths among `paths` whose `linguist-generated` attribute is set, as Git
+/// reads every `.gitattributes` that applies.
+pub fn generated_among(paths: List<String>) -> Result<HashSet<String>, ProcessError> with Process {
+    if paths.is_empty() {
+        return Result::Ok(HashSet::<String>::new());
+    }
+    let bytes = cmd`git check-attr -z linguist-generated -- ${paths}`.read()?;
+    return Result::Ok(marked_generated(String::try_from_utf8(bytes).expect("git echoes the UTF-8 paths it was given")));
+}
+
+/// The paths `git check-attr -z linguist-generated` printed as set: each
+/// record is `path NUL attribute NUL value NUL`.
+pub fn marked_generated(records: String) -> HashSet<String> {
+    let fields: List<String> = records.split("\u{0}").collect();
+    let mut out = HashSet::<String>::new();
+    for let mut i = 0; i + 2 < fields.len(); i += 3 {
+        if fields[i + 2] == "true" || fields[i + 2] == "set" {
+            out.insert(fields[i]);
+        }
+    }
+    return out;
+}
