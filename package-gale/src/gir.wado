@@ -728,8 +728,8 @@ pub struct AltBody {
     /// The precedence a prefix-LR alt's trailing operand climbs from, or 0.
     /// The one source for the parse call, its scan twin, and the ATN edge.
     pub prefix_self_ref_min_prec: i32,
-    /// A group alternative's actions, positioned by `ops` index, which the
-    /// op-only walker runs; empty on a rule's own alternative.
+    /// A group alternative's actions, positioned by `ops` index; empty on a
+    /// rule's own alternative.
     pub actions: List<AltAction> = [],
     /// Whether a group alternative derives empty; false on a rule's own.
     pub nullable: bool = false,
@@ -958,8 +958,7 @@ pub struct ContinuationScan {
 pub struct RepeatOp {
     pub kind: RepeatKind,
     /// Surface `RepeatElement.non_greedy`. A `??` lowers to
-    /// `strategy: Plain`, so this is what tells it apart from a greedy `?`
-    /// for the op-only walker, which never sees the surface element.
+    /// `strategy: Plain`, so this is what tells it apart from a greedy `?`.
     pub non_greedy: bool = false,
     /// Inner op (recursive — single-element only). Wado allows
     /// the recursive type-reference; the variant boxes through the
@@ -1011,14 +1010,8 @@ pub struct RepeatOp {
     /// to avoid threading the enum through every call site that just
     /// asks "does this body produce storage?".
     pub body_has_field: bool,
-    /// Lowered emit-shape classifier for the body op. Drives emit's
-    /// dispatch in `gen_op_repeat_*` so the `op_is_leaf` /
-    /// `is RuleCall(_)` / `is Group(_)` × `body_has_field` predicates
-    /// don't have to be re-checked at every dispatch site, and so the
-    /// fall-through panics ("op-driven dispatch did not cover this
-    /// body shape") become unreachable: every reachable body op has a
-    /// named variant here, and lower asserts at construction time
-    /// that no other shape leaks through.
+    /// Lowered emit-shape classifier for the body op, which emit's
+    /// `gen_op_repeat_*` dispatch matches on.
     pub body_shape: RepeatBodyShape,
     /// Caller-side second-token set for non-greedy 2-token
     /// disambiguation. For a non-greedy Repeat at position `i` of a
@@ -1124,17 +1117,13 @@ pub struct GroupOp {
     pub tournament_shadowed: bool = false,
 }
 
-/// Lower-side classification of a Repeat's body op shape. Drives
-/// emit's `gen_op_repeat_*` dispatch — every reachable shape lower
-/// produces has a named variant, so emit's per-Repeat dispatcher is
-/// an exhaustive `match rep_op.body_shape { ... }` rather than a
-/// cascade of `op_is_leaf` / `is RuleCall(_)` / `let Group(_) = ...`
-/// probes guarded by an "unhandled body shape" panic. Lower asserts
-/// at construction time that the body op falls into one of the four
-/// variants; ListLabel / Repeat shapes never reach `lower_repeat_op`.
+/// Lower-side classification of a Repeat's body op shape, which emit's
+/// `gen_op_repeat_*` dispatch matches on exhaustively. Lower asserts at
+/// construction time that the body op falls into one of the four variants;
+/// ListLabel / Repeat shapes never reach `lower_repeat_op`.
 pub variant RepeatBodyShape {
     /// `Op::RuleCall` body. Optional dispatch routes here for the
-    /// caller-follow subtraction (`gen_op_repeat_optional_rulecall`),
+    /// caller-follow subtraction (`gen_op_repeat_optional_leaf`),
     /// avoiding the next-sibling token greedy-eat issue.
     LeafRuleCall,
     /// `Op::Token` / `Op::Literal` / `Op::Wildcard` / `Op::Excluded`

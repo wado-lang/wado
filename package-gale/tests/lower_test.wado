@@ -2590,9 +2590,8 @@ test "lower drops the empty shape from a scan-side optional lookahead" {
 
 test "lower Optional Repeat with single-token inner stays Plain" {
     // `r : INT? ;` — bare leaf Optional. Lower keeps the strategy at
-    // `Plain`; emit's Optional+leaf arm in
-    // `gen_op_repeat_with_follow_override` emits the single-token
-    // guard directly from `inner_first`, so the `OptionalLookahead`
+    // `Plain`; emit's `gen_op_repeat_optional_leaf` emits the single-token
+    // guard directly from `body_admits`, so the `OptionalLookahead`
     // specialisation is unnecessary here.
     let mut g = empty_grammar("T");
     g.parser_rules = [

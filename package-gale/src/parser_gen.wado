@@ -3,15 +3,7 @@
 //! Not here: scaffolding (`parser_runtime_gen`), actions (`action_gen`),
 //! token-set tables (`kind_set_gen`), naming leaves (`ir_shape`, `gen_util`).
 
-use {
-    Grammar,
-    ParserRule,
-    Alternative,
-    Element,
-    RepeatKind,
-    AltAction,
-    ActionSource,
-} from "./ir.wado";
+use { Grammar, ParserRule, Alternative, Element, RepeatKind, AltAction, ActionSource } from "./ir.wado";
 use {
     general_group_field_name,
     gen_visibility_comment,
@@ -3764,11 +3756,11 @@ fn after_label_bindings(ctx: &EmitContext) -> List<AltBinding> {
 /// Star / Plus and non-greedy still need the caller-side follow:
 /// greedy Star / Plus reads it as the iter-follow for nested
 /// non-greedy gates, and non-greedy uses it as the exit-first set.
-/// For those we propagate the outer walker's `outer_follow` when the
-/// remainder of the surrounding element list is nullable (so the
+/// For those we propagate `outer_follow` where the rest of the alternative
+/// derives empty (`rest_nullable`, so the
 /// next-iteration FIRST union picks up tokens that would otherwise
 /// exit the outer construct).
-fn inner_walker_follow_for_repeat(rep_op: &RepeatOp, outer_follow: &List<i32>) -> List<i32> {
+fn group_repeat_follow(rep_op: &RepeatOp, outer_follow: &List<i32>) -> List<i32> {
     if rep_op.kind matches { _::Optional } && !rep_op.non_greedy {
         return [];
     }
@@ -3778,12 +3770,8 @@ fn inner_walker_follow_for_repeat(rep_op: &RepeatOp, outer_follow: &List<i32>) -
     return rep_op.caller_follow_first;
 }
 
-/// True when the lowered op is a leaf shape that emit can render
-/// directly from `op.field` / `op.kind` / `op.target_snake` /
-/// `op.follow_arg` / `op.min_prec_arg` — i.e. lower has resolved
-/// every decision and the emit body is a single `let … = …;` line.
-/// Repeat / Group / ListLabel ops still flow through the surface-IR
-/// helpers in this slice and will migrate in later (2) slices.
+/// Whether `op` matches one token or calls one rule, which `gen_op_leaf`
+/// emits in one line.
 fn op_is_leaf(op: &Op) -> bool {
     return match op {
         Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => true,
@@ -4023,11 +4011,9 @@ fn expect_call(kind: i32, leaf_site: i32, ctx: &mut EmitContext) -> String {
 }
 
 // === GIR-op body emission ===
-// Under the emitter the alt body is emitted from the lowered ops (no
-// surface elements, no typed fields): leaves go through `gen_op_leaf` (the
-// Parser appends), groups / repeats dispatch on their GIR shape and recurse.
-// Mirrors `cst_gen`'s emitter but against the builder-appending Parser, whose
-// match methods recover in place (infallible) instead of returning `Result`.
+// Leaves go through `gen_op_leaf` (the Parser appends), groups / repeats
+// dispatch on their GIR shape and recurse. The Parser's match methods recover
+// in place (infallible) instead of returning `Result`.
 
 /// `op` at a required position. `group_follow` is null in a rule's own
 /// alternative, and inside a group the follow the group hands its repeats.
@@ -4042,29 +4028,15 @@ fn gen_op(
     match op {
         Repeat(r) => {
             let follow = match group_follow {
-                Some(f) => inner_walker_follow_for_repeat(r, f),
+                Some(f) => group_repeat_follow(r, f),
                 null => r.caller_follow_first,
             };
             gen_op_repeat(w, r, ctx, nc, &follow);
         },
-        Group(g) => gen_group_body(w, g, ctx, nc, null, proven),
+        Group(g) => gen_group_entered(w, g, GroupEntry::Required, ctx, nc, null, proven),
         ListLabel(ll) => gen_op_list_label(w, ll, ctx, nc, proven),
         _ => gen_op_leaf(w, op, ctx, nc, proven),
     }
-}
-
-/// The op-only walker's group: required where nothing decided it, committing
-/// to `decided` where a caller's scan did.
-fn gen_group_body(
-    w: &mut CodeWriter,
-    g: &GroupOp,
-    ctx: &mut EmitContext,
-    nc: &mut List<[String, i32]>,
-    decided: Option<String> = null,
-    proven: &List<i32> = &NO_KINDS,
-) {
-    let entry = if decided matches { Some(_) } { GroupEntry::Guaranteed } else { GroupEntry::Required };
-    gen_group_entered(w, g, entry, ctx, nc, decided, proven);
 }
 
 /// Record where `winner`, the tournament's pick that `lines` computes, differs
@@ -5280,12 +5252,8 @@ fn close_call_capture(w: &mut CodeWriter, span_field: &Option<String>) {
     }
 }
 
-/// Op-driven shape-lookahead emit for the storable Optional + SingleAlt
-/// case. Mirrors `gen_storable_optional_with_lookahead` exactly except
-/// the inner per-element parse routes through op-driven dispatch
-/// (`gen_op_dispatch_element`), and
-/// the struct construction reads `body.fields` (lower's canonical
-/// field list).
+/// Shape-lookahead `?` over a `SingleAlt` group: one branch per shape, each
+/// parsing the positions the shape holds.
 fn gen_op_optional_with_shape_lookahead_storable(
     w: &mut CodeWriter,
     rep_op: &RepeatOp,
@@ -5326,9 +5294,8 @@ fn gen_op_optional_with_shape_lookahead_storable(
 }
 
 /// Bump `name_counts` for a leaf `Op` exactly the way lower did, by
-/// reading the lower-baked `dedup_base`. Used by
-/// `gen_op_leaf` so siblings that still route through the surface
-/// walker see lower-consistent dedup state.
+/// reading the lower-baked `dedup_base`. Used by `gen_op_leaf` so a
+/// sibling deduped after it sees lower's state.
 ///
 /// `dedup_base` is the base name lower bumped in the alt's outer
 /// `name_counts` when it computed `op.field`: the surface
@@ -5657,7 +5624,7 @@ fn gen_op_repeat_optional_leaf(
 /// `selector : simpleSelectorSequence ws (combinator ws)*` doesn't greedily
 /// eat the `Space` that belongs to the next iteration's `combinator`. The
 /// tail-position caller-FOLLOW repair is the runtime `gate_caller_follow`
-/// gate, so `inner_walker_follow_for_repeat` can clear `follow` to `[]` for
+/// gate, so `group_repeat_follow` can clear `follow` to `[]` for
 /// inner greedy Optionals where the next sibling's first overlaps the inner's
 /// first by design (e.g. `accessibilityModifier?` inside `optionalParameter`).
 fn gen_leaf_optional_enters(
@@ -6081,7 +6048,7 @@ fn gen_repeat_shadow<S: AsStrSlice>(
         caller_follow_kinds: s.caller_follow_kinds,
     };
     let mut lines = CodeWriter::with_capacity(512);
-    assert (path matches { _::Loop }) != (r.kind matches { _::Optional }), "only a `?` takes a `?`'s path";
+    assert path matches { _::Loop } != r.kind matches { _::Optional }, "only a `?` takes a `?`'s path";
     let static_enters = if path matches { _::Loop } {
         gen_loop_static_enters(&mut lines, &static_view, ctx, nc);
     } else if optional_continuation_decides(&static_view, ctx) {
@@ -6495,7 +6462,7 @@ impl Speculation {
 ///
 /// A `+`'s first iteration is mandatory and takes what prediction picked. The
 /// two ways an entry knows that differ, and an empty flag name cannot tell them
-/// apart: `gen_repeat_body` emits the mandatory iteration ahead of its loop, so
+/// apart: a loop the simulator decides emits the mandatory iteration ahead, so
 /// inside the loop there is no flag at all, while `gen_rep_iteration_entry` has
 /// one and stands inside the `if !flag` that already excludes it.
 variant Refusable {

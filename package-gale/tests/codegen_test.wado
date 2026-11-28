@@ -284,8 +284,8 @@ X : 'x' ;
 }
 
 test "generate scalar-labeled group `t=(a | b)`" {
-    // Sets/ParserSet.txt: the op is a Group while the element is still
-    // `Label(Group)`, so the walker peels the label before `gen_op_group`.
+    // Sets/ParserSet.txt: the element is `Label(Group)`, and the label
+    // rebinds the group's op.
     let got = parses("grammar T; a : t=('x' | 'y') ; B : 'b' ;", "a", ["x", "y", "b"]);
     assert got == "x => (a x)\ny => (a y)\nb => error\n";
 }

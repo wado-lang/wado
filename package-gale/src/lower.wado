@@ -2794,9 +2794,8 @@ fn lower_op<S: AsStrSlice>(
     };
 }
 
-/// `op`, lowered from `g`, with `g`'s decision site and each alternative
-/// carrying the actions written in it and whether it derives empty, for the
-/// op-only walker, which has no surface alternative to read them from.
+/// `op`, lowered from `g`, with `g`'s decision site, and each alternative
+/// carrying what emit would otherwise read off the surface alternative.
 fn with_surface_group(op: Op, g: &GroupElement, analysis: &mut GrammarAnalysis) -> Op {
     let Group(mut go) = op else {
         unreachable();
@@ -3695,11 +3694,7 @@ fn compute_body_second_position_first(elem: &Element, ctx: &mut LowerContext) ->
 
 /// Classify the body op into its `RepeatBodyShape`. The four cases
 /// cover every shape `lower_op` produces for a Repeat's inner; lower
-/// asserts on anything else so emit's exhaustive dispatch can drop
-/// the "did not cover this body shape" panics.
-///
-/// Mirrors emit's pre-shape checks (`is RuleCall(_)`, `op_is_leaf`,
-/// `let Group(g_op) = body && body_has_field`).
+/// asserts on anything else.
 fn classify_repeat_body_shape(body: &Op) -> RepeatBodyShape {
     return match body {
         RuleCall(_) => RepeatBodyShape::LeafRuleCall,
@@ -3802,8 +3797,7 @@ fn warn_optional_scan_guard(owner: &DiagnosticOwner, ctx: &mut LowerContext) {
 /// Fires when the inner is a single-alt Group with a non-empty
 /// leading run of fixed tokens (`TokenRef` / `Literal`); returns
 /// `null` for non-Group inners. Bare leaf Optionals stay at
-/// `Plain` — the Optional+leaf arm of
-/// `gen_op_repeat_with_follow_override` emits the single-token
+/// `Plain` — `gen_op_repeat_optional_leaf` emits the single-token
 /// guard directly from `body_admits`, so the specialisation is
 /// unnecessary there.
 fn try_optional_k_token_lookahead(inner: &Element, ctx: &mut LowerContext) -> Option<RepeatStrategy> {
@@ -3831,8 +3825,8 @@ fn try_optional_k_token_lookahead(inner: &Element, ctx: &mut LowerContext) -> Op
 ///
 /// Returns `[]` for non-Group inners and for a group with no leading
 /// fixed token — leaf Optionals (`TokenRef?` / `Literal?`) are handled by
-/// `gen_op_repeat_with_follow_override`'s Optional+leaf arm using
-/// `inner_first` directly, so we keep their strategy at `Plain`.
+/// `gen_op_repeat_optional_leaf` from `body_admits`, so we keep their
+/// strategy at `Plain`.
 fn collect_optional_entry_signature(inner: &Element, ctx: &mut LowerContext) -> List<List<i32>> {
     let mut sig: List<List<i32>> = [];
     if let Group(g) = inner {
