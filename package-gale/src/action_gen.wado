@@ -23,7 +23,7 @@ use {
     RuleAmbiguousNode,
     RuleCallOp,
     RulePrediction,
-    rule_alt_body,
+    rule_alt_actions,
     rule_decision,
 } from "./gir.wado";
 use { EmitContext } from "./emit_context.wado";
@@ -667,11 +667,6 @@ pub fn alt_initial_gate_conditions(actions: &List<AltAction>, ctx: &mut EmitCont
         }
     }
     return conds;
-}
-
-/// The actions of alternative `idx` of `rule`.
-pub fn rule_alt_actions(rule: &Rule, idx: i32) -> &List<AltAction> {
-    return &rule_alt_body(rule, idx).unwrap().actions;
 }
 
 /// Whether any of `rule`'s alternatives `alts` carries a gateable alt-initial

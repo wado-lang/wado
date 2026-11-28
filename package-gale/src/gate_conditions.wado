@@ -138,19 +138,15 @@ pub fn predicate_is_fn(a: &AltAction, settings: &GenSettings) -> bool {
         && body_needs_no_translator(&a.source.text, settings);
 }
 
-/// Whether `alt` carries an alt-initial predicate that will reach its emitted
-/// arm — for a caller deciding how to shape a dispatch, not emitting one.
+/// Whether an alternative's `actions` carry an alt-initial predicate that will
+/// reach its emitted arm — for a caller deciding how to shape a dispatch, not
+/// emitting one.
 ///
 /// "Will reach" is half the question and lives here rather than at each caller.
 /// With actions retained but not emitted the condition renders nothing, so the
 /// arm is unconditional and everything behind it dead; a caller that asked only
 /// whether the IR carries a predicate would gate on a condition that is never
 /// written.
-pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &GrammarAnalysis, site: &PredicateSite) -> bool {
-    return actions_have_gate(&alt.actions, settings, analysis, site);
-}
-
-/// `alt_has_gate` over an alternative's actions alone.
 pub fn actions_have_gate(
     actions: &List<AltAction>,
     settings: &GenSettings,

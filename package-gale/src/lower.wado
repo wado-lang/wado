@@ -1142,9 +1142,14 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut LowerC
     };
 }
 
-/// How `rule` chooses among `alt_indices`. Only a rule that is `multi_alt`
-/// reads its FOLLOW: an LR atom runs on into the suffix loop.
-fn lower_rule_decision(rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool, ctx: &mut LowerContext) -> RuleDecision {
+/// How `rule` chooses among `alt_indices`, `multi_alt` as for
+/// `rule_overlap::overlap_groups_of`.
+fn lower_rule_decision(
+    rule: &ParserRule,
+    alt_indices: List<i32>,
+    multi_alt: bool,
+    ctx: &mut LowerContext,
+) -> RuleDecision {
     let og = ctx.rule_overlap(rule, alt_indices, multi_alt);
     let alts = &rule.alternatives;
     let classes = alt_classes(&og.non_lr_indices, alts, rule_is_left_recursive(rule), &og.first_sets, &mut ctx.analysis);
@@ -1196,28 +1201,42 @@ fn lower_rule_decision(rule: &ParserRule, alt_indices: List<i32>, multi_alt: boo
 
 /// `node`, reached past the `skip` terminals the tree consumed, with what emit
 /// would otherwise read off `alts` settled.
-fn lower_prediction(node: &PredictionNode, alts: &List<Alternative>, skip: i32, analysis: &mut GrammarAnalysis) -> RulePrediction {
+fn lower_prediction(
+    node: &PredictionNode,
+    alts: &List<Alternative>,
+    skip: i32,
+    analysis: &mut GrammarAnalysis,
+) -> RulePrediction {
     return match node {
         Leaf(idx) => RulePrediction::Leaf(*idx),
         Consume(c) => {
             let reads_past = consume_reads_past(c, alts, skip);
             let next_skip = if reads_past { skip + 1 } else { skip };
-            RulePrediction::Consume(RuleConsumeNode { reads_past, child: lower_prediction(&c.child, alts, next_skip, analysis) });
+            RulePrediction::Consume(RuleConsumeNode { reads_past, child: lower_prediction(
+                &c.child,
+                alts,
+                next_skip,
+                analysis,
+            ) });
         },
-        Dispatch(d) => RulePrediction::Dispatch(RuleDispatchNode {
-            depth: d.depth,
-            branches: d.branches
-                .iter_ref()
-                .map(|b| RuleBranchNode { tokens: b.tokens, child: lower_prediction(&b.child, alts, skip, analysis) })
-                .collect(),
-            fallback: dispatch_fallback_indices(d, alts, analysis, skip),
-        }),
+        Dispatch(d) => RulePrediction::Dispatch(
+            RuleDispatchNode {
+                depth: d.depth,
+                branches: d.branches
+                    .iter_ref()
+                    .map(|b| RuleBranchNode {
+                        tokens: b.tokens,
+                        child: lower_prediction(&b.child, alts, skip, analysis),
+                    })
+                    .collect(),
+                fallback: dispatch_fallback_indices(d, alts, analysis, skip),
+            },
+        ),
         Ambiguous(a) => {
             assert skip == 0, "a Consume leading to an Ambiguous node is stripped when the tree is built";
             // Non-scannability's only source is a `RuleRef` to a name that is
             // not a parser rule, which `ir.wado` rejects first.
-            assert a.alts.len() >= 2 && a.alts.iter_ref().all(|i| elements_scannable(&alts[*i].elements, analysis)),
-                "a tournament's candidates scan in full";
+            assert a.alts.len() >= 2 && a.alts.iter_ref().all(|i| elements_scannable(&alts[*i].elements, analysis)), "a tournament's candidates scan in full";
             let mut tournament = a.alts.sorted();
             sort_group_by_element_count(&mut tournament, alts);
             RulePrediction::Ambiguous(RuleAmbiguousNode {
@@ -1260,7 +1279,8 @@ fn dispatch_fallback_indices(
     }
     let mut sorted_indices = indices.sorted();
     sort_group_by_element_count(&mut sorted_indices, alts);
-    if sorted_indices.len() < 2 || !sorted_indices.iter_ref().all(|i| elements_scannable(&alts[*i].elements, analysis)) {
+    if sorted_indices.len() < 2
+        || !sorted_indices.iter_ref().all(|i| elements_scannable(&alts[*i].elements, analysis)) {
         return [];
     }
     if dispatch_claims_every_first_token(d, &sorted_indices, alts, analysis, skip) {

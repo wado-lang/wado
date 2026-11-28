@@ -4,11 +4,7 @@
 //! token-set tables (`kind_set_gen`), naming leaves (`ir_shape`, `gen_util`).
 
 use { Grammar, ParserRule, Alternative, Element, RepeatKind, AltAction, ActionSource } from "./ir.wado";
-use {
-    general_group_field_name,
-    gen_visibility_comment,
-    rule_alts_labeled,
-} from "./ir_shape.wado";
+use { general_group_field_name, gen_visibility_comment, rule_alts_labeled } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use {
     dedup_name,
@@ -78,6 +74,7 @@ use {
     ScanGroupElement,
     ScanOptionalLookaheadElement,
     IterationDuties,
+    rule_alt_actions,
     rule_alt_body,
     rule_decision,
     rule_header,
@@ -129,7 +126,6 @@ use {
     rule_call_ctx_field,
     rule_call_span_field,
     rule_has_attr_inits,
-    rule_alt_actions,
     rule_has_emittable_actions,
     rule_result_type_for,
     unbound_label_value,
@@ -3255,7 +3251,15 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     }
                     f.set_prunable();
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
-                    emit_seeded_alt_fn(w, &mut f, ctx, |w| gen_alt_body(w, rule, header, body, alt_index, &NO_AFTER, ctx));
+                    emit_seeded_alt_fn(w, &mut f, ctx, |w| gen_alt_body(
+                        w,
+                        rule,
+                        header,
+                        body,
+                        alt_index,
+                        &NO_AFTER,
+                        ctx,
+                    ));
                     w.blank();
 
                     // Emit the per-alt scan helper only when the dispatch
@@ -3415,13 +3419,7 @@ fn gen_rule_pick<S: AsStrSlice>(
     }
 }
 
-fn gen_multi_alt_body(
-    w: &mut CodeWriter,
-    side: PickSide,
-    rule: &ParserRule,
-    lowered_rule: &Rule,
-    ctx: &mut EmitContext,
-) {
+fn gen_multi_alt_body(w: &mut CodeWriter, side: PickSide, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut EmitContext) {
     let decision = rule_decision(lowered_rule);
     let non_lr_indices = &decision.non_lr_indices;
     let all_pos_sets = &decision.position_first_sets;
@@ -8378,7 +8376,17 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
         w.begin(`if ${ctx.admits_check_str(&admits[g], &DISPATCH_KIND_LOCAL)}${gate}`);
 
         if let Some(tree) = &decision.trees[g] {
-            gen_prediction_code_inner(w, side, tree, fn_name, lowered_rule, ctx, 0, &rule_header(lowered_rule).name, &proven);
+            gen_prediction_code_inner(
+                w,
+                side,
+                tree,
+                fn_name,
+                lowered_rule,
+                ctx,
+                0,
+                &rule_header(lowered_rule).name,
+                &proven,
+            );
         } else {
             gen_pick_alt(w, side, rule, lowered_rule, non_lr_indices[group[0]], ctx, &proven);
         }

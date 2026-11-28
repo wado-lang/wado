@@ -15,7 +15,7 @@ use {
     DecisionPredicates,
     PredicateSite,
     ScanEscapes,
-    alt_has_gate,
+    actions_have_gate,
     alt_meets_gate,
     alt_scan_checks,
     alt_scan_escapes,
@@ -212,9 +212,9 @@ impl LowerContext {
         };
     }
 
-    /// `gate_conditions::alt_has_gate` for an alternative of the rule being lowered.
+    /// `gate_conditions::actions_have_gate` for an alternative of the rule being lowered.
     pub fn alt_has_gate(&self, alt: &Alternative) -> bool {
-        return alt_has_gate(alt, &self.settings, &self.analysis, &self.predicate_site());
+        return actions_have_gate(&alt.actions, &self.settings, &self.analysis, &self.predicate_site());
     }
 
     /// Whether the simulator decides a group's or a repeat's contested decision.

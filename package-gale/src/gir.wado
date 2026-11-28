@@ -1564,8 +1564,6 @@ pub variant FieldKind {
 // Header-extraction helper
 // ==========================================================================
 
-/// The rule header of either variant, by reference, so traversals don't repeat
-/// the match.
 /// The choice among a rule's alternatives; a `Simple` rule has none to make.
 pub fn rule_decision(rule: &Rule) -> &RuleDecision {
     return match rule {
@@ -1575,6 +1573,8 @@ pub fn rule_decision(rule: &Rule) -> &RuleDecision {
     };
 }
 
+/// The rule header of either variant, by reference, so traversals don't repeat
+/// the match.
 pub fn rule_header(rule: &Rule) -> &RuleHeader {
     return match rule {
         Simple(s) => &s.header,
@@ -1595,6 +1595,11 @@ pub fn rule_alt_body(rule: &Rule, alt_index: i32) -> Option<&AltBody> {
         MultiAlt(m) => m.alts.iter_ref().find(|a| a.alt_index == alt_index),
         LeftRecursive(l) => l.atom.alts.iter_ref().find(|a| a.alt_index == alt_index),
     };
+}
+
+/// The actions of the alternative `rule_alt_body` finds.
+pub fn rule_alt_actions(rule: &Rule, alt_index: i32) -> &List<AltAction> {
+    return &rule_alt_body(rule, alt_index).unwrap().actions;
 }
 
 /// Scan-side counterpart of `rule_alt_body`. Returns the
