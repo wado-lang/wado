@@ -49,7 +49,7 @@ pub fn shows(diff: &String, file: &String, line: i32) -> bool {
 
 /// The first line and the line count of the new side of a hunk header's
 /// ranges, `-a,b +c,d @@ …`. A count left out is 1.
-fn new_side(ranges: String) -> [i32, i32] {
+pub fn new_side(ranges: String) -> [i32, i32] {
     let new = ranges.split(" ").collect()[1];
     let numbers: List<String> = new.trim_prefix("+").split(",").map(|n| n.to_string()).collect();
     let count = if numbers.len() > 1 { i32::from_str(&numbers[1]).unwrap() } else { 1 };

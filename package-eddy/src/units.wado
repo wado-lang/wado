@@ -10,6 +10,7 @@
 //! header's indent ends it.
 
 use { HashMap } from "core:collections";
+use { new_side } from "./diff.wado";
 
 /// The most lines one unit shows; a longer definition shows the window of its
 /// changed lines.
@@ -307,7 +308,7 @@ fn touched_files(diff: &String) -> HashMap<String, Touched> {
         } else if file.is_empty() || l.starts_with("--- ") || l.starts_with("\\") {
             continue;
         } else if let Some(hunk) = l.strip_prefix("@@ ") {
-            n = new_start(hunk.to_string());
+            n = new_side(hunk.to_string())[0];
             pending = [];
         } else if let Some(gone) = l.strip_prefix("-") {
             pending.push(gone.to_string());
@@ -324,13 +325,6 @@ fn touched_files(diff: &String) -> HashMap<String, Touched> {
         }
     }
     return out;
-}
-
-/// The first line of the new side of a hunk header's ranges, `-a,b +c,d @@`.
-fn new_start(ranges: String) -> i32 {
-    let new = ranges.split(" ").collect()[1];
-    let first = new.trim_prefix("+").split(",").collect()[0];
-    return i32::from_str(first).unwrap();
 }
 
 test "a change is read by the definitions it touched, whole, with what it added and removed marked" {
