@@ -165,12 +165,8 @@ fn parse_init_args(
                 Opt::Namespace => namespace = Some(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage.to_owned())),
             }
-        } else if dir.is_none()
-            && let Value(value) = arg
-        {
-            dir = Some(PathBuf::from(value));
         } else {
-            return Err(args::unexpected_arg(arg, usage));
+            args::take_dir_operand(arg, &mut dir, usage)?;
         }
     }
     Ok((WorkspaceInitOptions { namespace }, dir))
@@ -182,13 +178,8 @@ fn parse_add_args(mut parser: lexopt::Parser) -> Result<PathBuf, CliExit> {
     while let Some(arg) = args::next_arg(&mut parser)? {
         if args::match_opt(&arg, Opt::HELP, |o| o.spec()).is_some() {
             return Err(CliExit::help(usage));
-        } else if dir.is_none()
-            && let Value(value) = arg
-        {
-            dir = Some(PathBuf::from(value));
-        } else {
-            return Err(args::unexpected_arg(arg, &usage));
         }
+        args::take_dir_operand(arg, &mut dir, &usage)?;
     }
     dir.ok_or_else(|| CliExit::error_with_usage("missing <dir>", &usage))
 }
@@ -222,7 +213,12 @@ fn init_workspace(dir: &Path, opts: &WorkspaceInitOptions) -> Result<(), CliExit
 
     let mut text = String::from("[workspace]\nmembers = []\n");
     if let Some(namespace) = &opts.namespace {
-        writeln!(text, "\n[workspace.package]\nnamespace = \"{namespace}\"").unwrap();
+        writeln!(
+            text,
+            "\n[workspace.package]\nnamespace = {}",
+            init::toml_string(namespace)
+        )
+        .unwrap();
     }
     text.parse::<WorkspaceManifest>()
         .map_err(|e| CliExit::error(format!("the workspace would not be valid: {e}")))?;
@@ -320,11 +316,20 @@ fn insert_member(text: &str, member: &str) -> Result<String, CliExit> {
 
 fn add(dir: &Path) -> Result<(), CliExit> {
     let manifest_path = dir.join(MANIFEST_FILENAME);
-    let Ok(manifest) = fs::read_to_string(&manifest_path) else {
-        return Err(CliExit::error(format!(
-            "no {MANIFEST_FILENAME} in {}; `wado new <dir>` creates a package",
-            dir.display()
-        )));
+    let manifest = match fs::read_to_string(&manifest_path) {
+        Ok(manifest) => manifest,
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            return Err(CliExit::error(format!(
+                "no {MANIFEST_FILENAME} in {}; `wado new <dir>` creates a package",
+                dir.display()
+            )));
+        }
+        Err(e) => {
+            return Err(CliExit::error(format!(
+                "reading {}: {e}",
+                manifest_path.display()
+            )));
+        }
     };
     let dir = init::canonical(dir)?;
     let Some((root, text)) = nearest_above(&dir)? else {

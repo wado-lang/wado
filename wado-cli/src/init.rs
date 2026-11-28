@@ -3,8 +3,8 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use lexopt::Arg::Value;
 use toml::Value as TomlValue;
+use wado_lsp::host::discovery::slash_separated;
 
 use wado_manifest::{
     MANIFEST_FILENAME, Manifest, ManifestError, WORKSPACE_FILENAME, WorkspaceManifest,
@@ -163,12 +163,8 @@ pub(crate) fn parse_options(
                 Opt::Force => opts.force = true,
                 Opt::Help => return Err(CliExit::help(usage.to_owned())),
             }
-        } else if dir.is_none()
-            && let Value(value) = arg
-        {
-            dir = Some(PathBuf::from(value));
         } else {
-            return Err(args::unexpected_arg(arg, usage));
+            args::take_dir_operand(arg, &mut dir, usage)?;
         }
     }
     if !opts.kind.cli {
@@ -198,10 +194,11 @@ pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit
 
     let workspace = match nearest_above(&dir)? {
         Some((root, text)) => {
-            let joining = with_member(&root, &text, &dir)?;
+            let joined = with_member(&root, &text, &dir)?;
+            let joining = joined.is_some();
             Some(Membership {
-                text: joining.clone().unwrap_or(text),
-                joining: joining.is_some(),
+                text: joined.unwrap_or(text),
+                joining,
                 root,
             })
         }
@@ -256,11 +253,12 @@ pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit
         None => content.parse::<Manifest>(),
     }
     .map_err(|e| {
-        let hint = match (&e, &opts.name) {
-            (ManifestError::InvalidName { field, .. }, None) if field == "package.name" => {
-                "; the name is the directory's, so choose one with --name"
-            }
-            _ => "",
+        let named_after_dir = opts.name.is_none()
+            && matches!(&e, ManifestError::InvalidName { field, .. } if field == "package.name");
+        let hint = if named_after_dir {
+            "; the name is the directory's, so choose one with --name"
+        } else {
+            ""
         };
         CliExit::error(format!("the manifest would not be valid: {e}{hint}"))
     })?;
@@ -303,18 +301,17 @@ struct ManifestFields<'a> {
 /// A manifest leaving out each field `None` stands for, which the governing
 /// workspace sets.
 fn generate_manifest(fields: &ManifestFields) -> String {
-    let quote = |s: &str| TomlValue::String(s.to_owned()).to_string();
     let mut buf = String::new();
     buf.push_str("[package]\n");
     if let Some(namespace) = fields.namespace {
-        writeln!(buf, "namespace = {}", quote(namespace)).unwrap();
+        writeln!(buf, "namespace = {}", toml_string(namespace)).unwrap();
     }
-    writeln!(buf, "name = {}", quote(fields.name)).unwrap();
+    writeln!(buf, "name = {}", toml_string(fields.name)).unwrap();
     if let Some(version) = fields.version {
-        writeln!(buf, "version = {}", quote(version)).unwrap();
+        writeln!(buf, "version = {}", toml_string(version)).unwrap();
     }
     if let Some(directory) = fields.repository_directory {
-        writeln!(buf, "repository-directory = {}", quote(directory)).unwrap();
+        writeln!(buf, "repository-directory = {}", toml_string(directory)).unwrap();
     }
     if fields.kind.lib {
         writeln!(buf, "lib = \"src/lib.wado\"").unwrap();
@@ -332,6 +329,10 @@ fn generate_manifest(fields: &ManifestFields) -> String {
         writeln!(buf, "\"wasi:cli/command\" = \"src/main.wado\"").unwrap();
     }
     buf
+}
+
+pub(crate) fn toml_string(s: &str) -> String {
+    TomlValue::String(s.to_owned()).to_string()
 }
 
 /// The `[workspace.package]` fields a member inherits, in the order the
@@ -365,12 +366,8 @@ fn inherited_fields(package: &WorkspacePackage) -> Vec<&'static str> {
 /// `repository-directory` names. `None` outside a checkout or at its root.
 fn repository_directory(dir: &Path) -> Option<String> {
     let root = dir.ancestors().find(|a| a.join(".git").exists())?;
-    let relative = dir.strip_prefix(root).ok()?;
-    let parts: Vec<String> = relative
-        .components()
-        .map(|c| c.as_os_str().to_string_lossy().into_owned())
-        .collect();
-    (!parts.is_empty()).then(|| parts.join("/"))
+    let relative = dir.strip_prefix(root).expect("an ancestor is a prefix");
+    (relative != Path::new("")).then(|| slash_separated(relative))
 }
 
 #[derive(Clone, Copy)]
