@@ -11,7 +11,7 @@
 //! keeps the text in them from reading as code.
 
 use { HashMap } from "core:collections";
-use { new_side } from "./diff.wado";
+use { diff_lines, DiffLine } from "./diff.wado";
 
 /// The most lines one unit shows; a longer definition shows the window of its
 /// changed lines.
@@ -328,7 +328,9 @@ impl Scan {
                     hashes += 1;
                 }
                 let before = i - hashes;
-                let r_prefix = before > 0 && cs[before - 1] == 'r' && (before == 1 || !is_word(cs[before - 2]) || cs[before - 2] == 'b');
+                let r_prefix = before > 0
+                    && cs[before - 1] == 'r'
+                    && (before == 1 || !is_word(cs[before - 2]) || cs[before - 2] == 'b');
                 self.raw = hashes > 0 || r_prefix;
                 self.close = `${c}`;
                 for let _ of 0..<hashes {
@@ -422,29 +424,35 @@ fn item_name(body: &String) -> Option<String> {
 fn touched_files(diff: &String) -> HashMap<String, Touched> {
     let mut out = HashMap::<String, Touched>::new();
     let [mut file, mut n] = ["", 0];
-    let mut in_hunk = false;
     let mut pending: List<String> = [];
-    for let l of diff.lines() {
-        if l.starts_with("diff --git ") {
-            removed_before(&mut out, &file, n, &mut pending);
-            [file, in_hunk] = ["", false];
-        } else if !in_hunk && let Some(path) = l.strip_prefix("+++ b/") {
-            file = path.to_string();
-            out.try_insert(file, Touched { added: [], removed: HashMap::<i32, List<String>>::new() });
-        } else if let Some(hunk) = l.strip_prefix("@@ ") && !file.is_empty() {
-            removed_before(&mut out, &file, n, &mut pending);
-            n = new_side(hunk.to_string())[0];
-            in_hunk = true;
-        } else if !in_hunk || l.starts_with("\\") {
-            continue;
-        } else if let Some(gone) = l.strip_prefix("-") {
-            pending.push(gone.to_string());
-        } else {
-            removed_before(&mut out, &file, n, &mut pending);
-            if l.starts_with("+") {
-                out[file].added.push(n);
-            }
-            n += 1;
+    for let [l, kind] of diff_lines(diff) {
+        match kind {
+            _::Start => {
+                removed_before(&mut out, &file, n, &mut pending);
+                file = "";
+            },
+            _::File(path) => {
+                file = path;
+                if !file.is_empty() {
+                    out.try_insert(file, Touched { added: [], removed: HashMap::<i32, List<String>>::new() });
+                }
+            },
+            _ && file.is_empty() => {
+            },
+            _::Hunk([start, _]) => {
+                removed_before(&mut out, &file, n, &mut pending);
+                n = start;
+            },
+            _::Removed => pending.push(l.substr_bytes(1, l.len())),
+            _::Added | _::Context => {
+                removed_before(&mut out, &file, n, &mut pending);
+                if kind == DiffLine::Added {
+                    out[file].added.push(n);
+                }
+                n += 1;
+            },
+            _::Other => {
+            },
         }
     }
     removed_before(&mut out, &file, n, &mut pending);
@@ -542,12 +550,12 @@ mod tests {
 }
 ";
     let lines: List<String> = source.lines().map(|l| l.to_string()).collect();
-    let spans: List<String> = items_of(&lines).into_iter().map(|it| `${it.name} ${it.start}-${it.end} ${it.is_test}`).collect();
+    let spans: List<String> = items_of(&lines)
+        .into_iter()
+        .map(|it| `${it.name} ${it.start}-${it.end} ${it.is_test}`)
+        .collect();
     assert spans == [
-        "global PROMPT 1-4 false",
-        "struct A 6-6 false",
-        "fn f 8-12 false",
-        "mod tests 14-18 true",
+        "global PROMPT 1-4 false", "struct A 6-6 false", "fn f 8-12 false", "mod tests 14-18 true",
         "fn checks 16-17 true",
     ];
 }

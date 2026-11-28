@@ -10,6 +10,7 @@ use { args, println, Stdout, Environment } from "core:cli";
 use { HashMap } from "core:collections";
 use { Process } from "core:process";
 use { changed_paths, source_diff } from "./eval.wado";
+use { diff_files } from "../src/diff.wado";
 use { git } from "../src/git.wado";
 use { units } from "../src/units.wado";
 
@@ -21,10 +22,8 @@ export fn run() with (Stdout, Environment, Process) {
     let paths = changed_paths(&sha);
     let diff = source_diff(&sha, &paths, "culprit", 2_000_000).unwrap();
     let mut sources = HashMap::<String, String>::new();
-    for let p of &paths {
-        if diff.contains(`+++ b/${*p}\n`) {
-            sources[*p] = git(["show", `${sha}:${*p}`]);
-        }
+    for let p of diff_files(&diff) {
+        sources[p] = git(["show", `${sha}:${p}`]);
     }
     let found = units(&diff, &sources);
     let mut bytes = 0;

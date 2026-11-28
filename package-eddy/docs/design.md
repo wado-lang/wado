@@ -44,9 +44,9 @@ research points. The evidence behind them is in
   It receives structured, verified findings, so that its context holds
   evidence rather than transcripts.
 - [x] Searching and reproducing are separate steps. Reviewers each search a
-  batch of the change's units, reading only, one call merges their candidates and
-  keeps the twenty most severe, and a reproducer per candidate tries it with three
-  runs. A reviewer that reproduced as it searched spent its turns on its first
+  batch of the change's units, reading only, one call merges their candidates
+  and keeps the twenty most severe, and a reproducer per candidate tries it
+  with three runs. A reviewer that reproduced as it searched spent its turns on its first
   suspicion and reported about one finding, and one reviewer confirming every
   candidate dropped most by reading. The searches overlap in what they read,
   but not in what they run, which costs the most.
@@ -55,9 +55,8 @@ research points. The evidence behind them is in
   than to a diff of hundreds of thousands of tokens, which cost each search
   most of its price. A defect the change left in place is a finding too, and
   is not told apart: whether to fix it with the change is each project's
-  call. On #1697 the
-  culprit's defect lay in a whole function's logic that no diff-reading search
-  named.
+  call. On #1697 the culprit's defect lay in a whole function's logic that no
+  diff-reading search named.
 - [x] Only a finding a test reproduced is reported. One nobody reproduced
   leaves the reproduction to whoever reads it, and when that reader fails to
   reproduce it the review cost them twice; the reviewer and the programmer are

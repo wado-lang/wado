@@ -10,14 +10,14 @@ Eddy is a code review bot in Wado, on the Anthropic API for now. The
 
 Eddy cuts the branch into units, the definitions it touched read whole.
 Reviewer agents, one per batch of units, read them and the tree through Eddy's
-tools (reading, searching and symbol lookup) and report candidates. One call merges
-them and keeps the most severe, and a reproducer agent per candidate writes
-and runs a test that shows it. A smaller reporter model then turns each
+tools (reading, searching and symbol lookup) and report candidates. One call
+merges them and keeps the most severe, and a reproducer agent per candidate
+writes and runs a test that shows it. A smaller reporter model then turns each
 reproducer's finding into a structured record. Eddy tries each reproduction
 again alone in a clean checkout to set `verified` and reports only the
-verified findings (under `--no-run`, the candidates unreproduced), writes the patches and comments under
-`scratchpad/eddy/<head>/`, records the run in the wiki, and prices the tokens
-each model took.
+verified findings (under `--no-run`, the candidates unreproduced), writes the
+patches and comments under `scratchpad/eddy/<head>/`, records the run in the
+wiki, and prices the tokens each model took.
 
 ## Evaluation Set
 

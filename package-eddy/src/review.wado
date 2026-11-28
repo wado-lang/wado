@@ -24,7 +24,7 @@ use { MonotonicClock } from "wasi:clocks";
 use { JsonSchema } from "wado-lang:jade";
 use { ask_json, shaped, Credential, Format, Usage } from "./anthropic.wado";
 use { run_agent, Call, Request, Task } from "./agent.wado";
-use { numbered } from "./diff.wado";
+use { diff_files, numbered } from "./diff.wado";
 use { reset_snapshot } from "./snapshot.wado";
 use { empty_index } from "./symbols.wado";
 use { Runner, Workspace } from "./tools.wado";
@@ -386,9 +386,9 @@ pub fn review(
 /// change deleted has none.
 fn sources(w: &Workspace, diff: &String) -> HashMap<String, String> with Preopens {
     let mut out = HashMap::<String, String>::new();
-    for let l of diff.lines() {
-        if let Some(path) = l.strip_prefix("+++ b/") && let Ok(text) = fs::read_to_string(fs::join(&w.root, path)) {
-            out[path.to_string()] = text;
+    for let path of diff_files(diff) {
+        if let Ok(text) = fs::read_to_string(fs::join(&w.root, &path)) {
+            out[path] = text;
         }
     }
     return out;
@@ -430,7 +430,7 @@ fn names_of(batch: &List<Unit>) -> String {
 }
 
 /// The `candidates` merged and ordered by `model` in one call, kept in the
-/// returned step's `candidates`.
+/// returned step's `candidates`; where the call fails, as they came.
 fn triaged(
     credential: &mut Credential,
     model: String,

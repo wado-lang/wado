@@ -24,12 +24,14 @@ A review takes three steps:
    functions it calls in the same file. The code comes before the tests and
    the most changed first. Up to `--reviewers` reviewers (20) each read a
    batch of about 7k tokens of them, and the units past the last batch go
-   unread. The ten most changed units are read twice, in two batches. Each reviews the logic as it stands, so a defect the change left in
+   unread. The ten most changed units are read twice, in two batches. Each
+   reviewer reviews the logic as it stands, so a defect the change left in
    place is a candidate too. They run nothing and report candidates, the
    uncertain ones included. `tools/units.wado` prints the units of a merge.
 2. Triage. One call merges the candidates that name one defect and keeps the
    twenty most severe. It reads the candidates alone, not the diff, and judges
-   none of them right or wrong.
+   none of them right or wrong. Where the call fails, the first twenty as the
+   searches found them go on.
 3. Reproduce. A reproducer per candidate kept reads the diff of the
    candidate's file and has three runs to show it with a test. Reading settles
    nothing: a candidate no run shows is not reported. Before the review Eddy
@@ -54,8 +56,9 @@ Under `--no-run` the candidates are reported unreproduced. A `repro` holds:
   patch alone in a clean checkout, after the review. The reviewer's word is not
   taken for it.
 - `output` is what that run reported.
-  The test asserts the right behaviour, so `git apply` and that command give
-  the failing test to fix against.
+
+The test asserts the right behaviour, so `git apply` and that command give
+the failing test to fix against.
 
 Each finding is also written under `scratchpad/eddy/<head>/`, numbered from 1:
 
@@ -72,8 +75,8 @@ A finding's `line` is a line the diff shows, which is where a pull request
 takes a comment on a line, or 0.
 
 The reviewers are asked for none of this. Their instructions hold the review
-alone: what to look for, and to reproduce a finding with a test that asserts
-the right behaviour. A second, smaller model (`--reporter`, Claude Haiku 5.5)
+alone: what to look for, and for a reproducer, to show a candidate with a test
+that asserts the right behaviour. A second, smaller model (`--reporter`, Claude Haiku 5.5)
 then reads each reproducer's finding, the files it wrote and the runs it made,
 and names the finding's line, its test and the run that failed. Anything
 about how a finding is reported goes into that second prompt, so it cannot
