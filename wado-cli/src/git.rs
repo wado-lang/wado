@@ -316,7 +316,12 @@ pub(crate) fn command() -> Command {
         Command::new("git")
             .args(["rev-parse", "--local-env-vars"])
             .output()
-            .map(|out| String::from_utf8_lossy(&out.stdout).lines().map(str::to_owned).collect())
+            .map(|out| {
+                String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .map(str::to_owned)
+                    .collect()
+            })
             .unwrap_or_default()
     });
     let mut cmd = Command::new("git");

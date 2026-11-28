@@ -517,23 +517,10 @@ pub(crate) fn in_new_dir(
     dir: &Path,
     init: impl FnOnce(&Path) -> Result<(), CliExit>,
 ) -> Result<(), CliExit> {
-    // One level at a time, since `..` in the operand puts a created directory
-    // off the ancestors of `dir`.
     let mut created = Vec::new();
-    let mut path = PathBuf::new();
-    let mut result = Ok(());
-    for component in dir.components() {
-        path.push(component);
-        if path.exists() {
-            continue;
-        }
-        if let Err(e) = fs::create_dir(&path) {
-            result = Err(CliExit::error(format!("creating {}: {e}", path.display())));
-            break;
-        }
-        created.push(path.clone());
-    }
-    let result = result.and_then(|()| canonical(dir)).and_then(|dir| init(&dir));
+    let result = create_levels(dir, &mut created)
+        .and_then(|()| canonical(dir))
+        .and_then(|dir| init(&dir));
     if result.is_err() {
         // A directory is created after its parent, so the reverse order
         // removes each before the directory holding it.
@@ -543,6 +530,21 @@ pub(crate) fn in_new_dir(
         }
     }
     result
+}
+
+/// `mkdir -p dir` one level at a time, recording each directory it creates:
+/// `..` in `dir` puts one off the ancestors of `dir`.
+fn create_levels(dir: &Path, created: &mut Vec<PathBuf>) -> Result<(), CliExit> {
+    let mut path = PathBuf::new();
+    for component in dir.components() {
+        path.push(component);
+        if !path.exists() {
+            fs::create_dir(&path)
+                .map_err(|e| CliExit::error(format!("creating {}: {e}", path.display())))?;
+            created.push(path.clone());
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn directory_name(dir: &Path) -> Result<String, CliExit> {

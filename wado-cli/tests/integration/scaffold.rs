@@ -348,10 +348,14 @@ fn new_in_an_ignored_directory_members_covers_is_a_member() {
     let tmp = tempfile::tempdir().unwrap();
     git_init(tmp.path());
     fs::write(tmp.path().join(".gitignore"), "scratch/\n").unwrap();
-    let ws = "[workspace]\nmembers = [\"scratch/*\"]\n\n[workspace.package]\nnamespace = \"acme\"\n";
+    let ws =
+        "[workspace]\nmembers = [\"scratch/*\"]\n\n[workspace.package]\nnamespace = \"acme\"\n";
     fs::write(tmp.path().join("wado-workspace.toml"), ws).unwrap();
 
-    wado_in(tmp.path()).args(["new", "scratch/demo"]).assert().success();
+    wado_in(tmp.path())
+        .args(["new", "scratch/demo"])
+        .assert()
+        .success();
 
     let manifest = read(&tmp.path().join("scratch/demo/wado.toml"));
     assert!(!manifest.contains("namespace = "), "{manifest}");
