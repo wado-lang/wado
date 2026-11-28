@@ -74,6 +74,7 @@ use {
     general_group_field_name,
     general_group_alt_struct_name,
     is_storable_group,
+    all_alts_are_single_token,
 } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use { sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
@@ -407,7 +408,7 @@ fn lower_simple_rule(rule: &ParserRule, ctx: &mut LowerContext) -> SimpleRule {
     let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx, &case_names, &alt_gc_starts, true);
     let scan_body = lower_scan_body(&rule.alternatives[0], ctx, &rule.name, true);
     return SimpleRule {
-        header: lower_header(rule),
+        header: lower_header(rule, ctx),
         body,
         scan_body,
     };
@@ -417,7 +418,7 @@ fn lower_simple_rule(rule: &ParserRule, ctx: &mut LowerContext) -> SimpleRule {
 /// single token-led `if / else if` chain (`Direct`); overlapping
 /// first-sets land in `Tournament` (scan-and-commit).
 fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut LowerContext) -> MultiAltRule {
-    let header = lower_header(rule);
+    let header = lower_header(rule, ctx);
 
     // Compute per-alt first sets up-front so the dispatch decision
     // sees them and the resulting `DispatchBranch.tokens` reuses the
@@ -477,7 +478,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut LowerContext) -> MultiAltRu
 /// * `lr_dispatch: LrDispatchData` — the suffix-loop overlap groups
 ///   and the indices of LR alts that have a non-empty suffix.
 fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule {
-    let header = lower_header(rule);
+    let header = lower_header(rule, ctx);
 
     // Partition alts into atom (non-LR) and lr (LR). `check_left_recursion_ends`
     // has rejected a rule with no non-LR alt, so the GIR `atom: MultiAltRule`
@@ -1077,7 +1078,7 @@ fn compute_self_ref_prec_from_ops(ops: &List<Op>, k: i32, conflict_min: i32, lr_
 /// the surface `rule.alternatives` list. emit relies on that
 /// correspondence to look up case names from `header.case_names`.
 fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut LowerContext) -> MultiAltRule {
-    let header = lower_header(rule);
+    let header = lower_header(rule, ctx);
 
     let mut first_sets: List<List<i32>> = [];
     for let idx of non_lr_indices {
@@ -2569,7 +2570,12 @@ fn shape_signatures_collide(sigs: &List<List<List<i32>>>) -> bool {
 /// snake/field names on `ParserRule` are reused so we don't recompute
 /// `to_snake_case`. `case_names` is derived from the alternative list
 /// with the same helper `parser_gen.wado` uses.
-fn lower_header(rule: &ParserRule) -> RuleHeader {
+fn lower_header(rule: &ParserRule, ctx: &mut LowerContext) -> RuleHeader {
+    let mut first: List<i32> = [];
+    for let alt of &rule.alternatives {
+        let mut visiting: List<String> = [];
+        dedup_append_arr(&mut first, &ctx.analysis.first_of_alt(alt, &mut visiting));
+    }
     return RuleHeader {
         name: rule.name,
         snake_name: rule.snake_name,
@@ -2578,6 +2584,14 @@ fn lower_header(rule: &ParserRule) -> RuleHeader {
         visibility: rule.visibility,
         case_names: case_names_for_rule(&rule.alternatives),
         alt_labels: rule.alternatives.iter_ref().map(|a| a.label).collect(),
+        init_action: rule.init_action,
+        after_action: rule.after_action,
+        single_token_alts: if all_alts_are_single_token(&rule.alternatives) {
+            Option::Some(rule.alternatives.iter_ref().map(|a| ctx.analysis.terminal_kind(&a.elements[0])).collect());
+        } else {
+            null;
+        },
+        first,
     };
 }
 

@@ -7,7 +7,6 @@ use { Grammar, ParserRule, Alternative, Element, RepeatKind, AltAction, ActionSo
 use {
     general_group_field_name,
     gen_visibility_comment,
-    all_alts_are_single_token,
     rule_alts_labeled,
     elements_match,
 } from "./ir_shape.wado";
@@ -96,6 +95,8 @@ use {
     ScanOptionalLookaheadElement,
     IterationDuties,
     rule_alt_body,
+    rule_header,
+    RuleHeader,
     rule_alt_scan_body,
 } from "./gir.wado";
 
@@ -677,11 +678,6 @@ fn scan_element_can_match_empty(se: &ScanElement, ctx: &mut EmitContext) -> bool
         Group(ge) => ge.lenient || ge.alts.iter_ref().any(|alt| scan_body_can_match_empty(&alt.elements, ctx)),
         OptionalLookahead(_) => true,
     };
-}
-
-/// Every alternative is one token and no action runs, so one set test decides the rule.
-fn is_compact_single_token(rule: &ParserRule, ctx: &EmitContext) -> bool {
-    return all_alts_are_single_token(&rule.alternatives) && !rule_has_emittable_actions(ctx);
 }
 
 /// A rule's scan function. A left-recursive rule's is the family
@@ -2989,12 +2985,13 @@ fn gen_scan_op_elements_in_block<S: AsStrSlice>(
 }
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut EmitContext) {
-    ctx.enter_rule(ctx.analysis.rule_index_of(&rule.name));
+    let header = rule_header(lowered_rule);
+    ctx.enter_rule(ctx.analysis.rule_index_of(&header.name));
     // The canonical name every other rule (and the public input entry)
     // calls. We emit the rule body under `<canonical>__inner` and wrap it
     // with a thin entry that records the rule on the rule stack when its
     // body fails — see `gen_rule_entry_wrapper`.
-    let canonical = `_parse_${rule.snake_name}`;
+    let canonical = `_parse_${header.snake_name}`;
     let inner = `${canonical}__inner`;
     match *lowered_rule {
         Simple(_) => gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, &inner),
@@ -3009,7 +3006,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         w,
         &canonical,
         &inner,
-        rule,
+        &header.name,
         rule_takes_min_prec(lowered_rule),
         ctx.current_rule_reads_follow(),
         ctx.settings.trace,
@@ -3038,7 +3035,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w: &mut CodeWriter,
     outer_name: S,
     inner_name: S1,
-    rule: &ParserRule,
+    rule_display: &String,
     takes_min_prec: bool,
     emit_follow: bool,
     trace: bool,
@@ -3046,7 +3043,6 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx: &EmitContext,
     mid_operand_gated: bool = false,
 ) {
-    let rule_display = &rule.name;
     let returns_vals = result_type_carries_vals(result_type);
     let mut f = FnSpec::new(outer_name);
     add_parser_super_effect(&mut f, ctx);
@@ -3142,9 +3138,10 @@ fn gen_parse_fn_simple_named<S: AsStrSlice>(
     ctx: &mut EmitContext,
     fn_name: S,
 ) {
-    gen_visibility_comment(w, &rule.visibility);
+    let header = rule_header(lowered_rule);
+    gen_visibility_comment(w, &header.visibility);
     let body = rule_alt_body(lowered_rule, 0).unwrap();
-    emit_rule_inner_fn(w, rule, ctx, fn_name, |w| gen_alt_body(w, rule, body, 0, &rule.after_action, ctx));
+    emit_rule_inner_fn(w, header, ctx, fn_name, |w| gen_alt_body(w, rule, header, body, 0, &header.after_action, ctx));
     w.blank();
 }
 
@@ -3152,7 +3149,7 @@ fn gen_parse_fn_simple_named<S: AsStrSlice>(
 /// the rule's arguments, its span, and `@init` — before `body`.
 fn emit_rule_inner_fn<S: AsStrSlice>(
     w: &mut CodeWriter,
-    rule: &ParserRule,
+    rule: &RuleHeader,
     ctx: &mut EmitContext,
     fn_name: S,
     mut body: fn mut(&mut CodeWriter),
@@ -3201,28 +3198,33 @@ fn emit_seeded_alt_fn(w: &mut CodeWriter, f: &mut FnSpec, ctx: &mut EmitContext,
 /// so parsing reduces to: confirm the lookahead is in the rule's first
 /// set, consume the one token, and build the struct. The no-match path is
 /// the shared `gen_error_fallback`, so the diagnostic matches the cascade's.
-fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut EmitContext, fn_name: S) {
+fn gen_parse_fn_single_token<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    rule: &RuleHeader,
+    alt_kinds: &List<i32>,
+    ctx: &mut EmitContext,
+    fn_name: S,
+) {
     gen_visibility_comment(w, &rule.visibility);
     let mut f = parse_fn_spec(fn_name, ctx);
     f.set_prunable();
     emit_fn(w, ctx, &f, |w| {
-        gen_rule_entry_sync(w, ctx, rule);
+        gen_rule_entry_sync(w, ctx);
         w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
-        if rule_alts_labeled(&rule.alternatives) {
+        if rule.alts_labeled() {
             // Labeled rule: emit a per-alt cascade so the matched alternative's
             // index is stamped on the node (consumers dispatch via `<rule>_alt`).
             // Each alt is exactly one token; a shared token resolves to the first
             // alt (cascade order), matching ANTLR4.
-            for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-                let single: List<i32> = [ctx.analysis.terminal_kind(&rule.alternatives[i].elements[0])];
+            for let mut i = 0; i < alt_kinds.len(); i += 1 {
+                let single: List<i32> = [alt_kinds[i]];
                 open_chain_arm(w, i > 0, &ctx.kind_check_str(&single, &DISPATCH_KIND_LOCAL));
                 w.line(`p.b.set_alt(${i});`);
                 w.line(`${PARSER_HANDLE}.take();`);
                 w.line("return;");
             }
         } else {
-            let firsts = ctx.analysis.single_token_kinds(&rule.alternatives);
-            w.begin(`if ${ctx.kind_check_str(&firsts, &DISPATCH_KIND_LOCAL)}`);
+            w.begin(`if ${ctx.kind_check_str(&rule.first, &DISPATCH_KIND_LOCAL)}`);
             w.line(`${PARSER_HANDLE}.take();`);
             w.line("return;");
         }
@@ -3246,16 +3248,18 @@ fn gen_parse_fn_named<S: AsStrSlice>(
 )
     contract rule.alternatives.len() > 1, "`lower_rule` makes a single-alternative rule `Simple`, which `gen_parse_fn` emits apart"
 {
-
+    let header = rule_header(lowered_rule);
     // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
     // `keyword`) use a compact `{ span, token }` struct (see
     // `gen_multi_alt_cst`), built once rather than per alternative.
-    if is_compact_single_token(rule, ctx) && !ctx.current_rule_emits_vals() {
-        gen_parse_fn_single_token(w, rule, ctx, fn_name);
+    if let Some(alt_kinds) = &header.single_token_alts
+        && !rule_has_emittable_actions(ctx)
+        && !ctx.current_rule_emits_vals() {
+        gen_parse_fn_single_token(w, header, alt_kinds, ctx, fn_name);
         return;
     }
 
-    gen_visibility_comment(w, &rule.visibility);
+    gen_visibility_comment(w, &header.visibility);
 
     let og = ctx.rule_overlap(rule, lowered_rule);
     let has_overlaps = has_multi_alt_groups(&og.groups);
@@ -3291,7 +3295,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     }
                     f.set_prunable();
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
-                    emit_seeded_alt_fn(w, &mut f, ctx, |w| gen_alt_body(w, rule, body, alt_index, &NO_AFTER, ctx));
+                    emit_seeded_alt_fn(w, &mut f, ctx, |w| gen_alt_body(w, rule, header, body, alt_index, &NO_AFTER, ctx));
                     w.blank();
 
                     // Emit the per-alt scan helper only when the dispatch
@@ -3316,14 +3320,14 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         // invocation precedence (`atn_enters_cond` reads it).
         add_min_prec_param(&mut f);
         emit_seeded_alt_fn(w, &mut f, ctx, |w| {
-            gen_rule_entry_sync(w, ctx, rule);
+            gen_rule_entry_sync(w, ctx);
             gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, ctx, &og, fn_name);
         });
         w.blank();
         ctx.cursor.set_lr_cont_in_atom(was_in_atom);
 
         let h_loop_dec = if l.atn_class || l.loop_checked {
-            ctx.plan.lr_loop_entry_decision(ctx.analysis.rule_index_of(&rule.name));
+            ctx.plan.lr_loop_entry_decision(ctx.cursor.current_rule_index());
         } else {
             -1;
         };
@@ -3343,10 +3347,10 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     } else {
         // A finished alternative leaves the block for the one `@after`; the
         // no-viable path returns past it, as ANTLR4 skips `@after` on error.
-        let after = rule_after_for(rule, lowered_rule, ctx);
+        let after = if ctx.settings.emit_actions { header.after_action } else { null };
         let emits_vals = ctx.current_rule_emits_vals();
-        emit_rule_inner_fn(w, rule, ctx, fn_name, |w| {
-            gen_rule_entry_sync(w, ctx, rule);
+        emit_rule_inner_fn(w, header, ctx, fn_name, |w| {
+            gen_rule_entry_sync(w, ctx);
             if after matches { Some(_) } {
                 w.begin(if emits_vals { "vals = alt_done:" } else { "alt_done:" });
                 ctx.cursor.set_alt_exit_label(Option::Some("alt_done"));
@@ -3359,7 +3363,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                 } else {
                     w.end();
                 }
-                gen_prequel_action(w, a, &rule.name, false, ctx);
+                gen_prequel_action(w, a, &header.name, false, ctx);
                 emit_alt_exit(w, ctx);
             }
         });
@@ -3370,25 +3374,13 @@ fn gen_parse_fn_named<S: AsStrSlice>(
 /// An alternative body that runs no `@after` of its own.
 global NO_AFTER: Option<ActionSource> = null;
 
-/// The `@after` a multi-alt non-LR rule's inner fn runs once, after whichever
-/// alternative finished, or `null`. LR rules run theirs elsewhere.
-fn rule_after_for(rule: &ParserRule, lowered_rule: &Rule, ctx: &EmitContext) -> Option<ActionSource> {
-    if !ctx.settings.emit_actions {
-        return null;
-    }
-    if let LeftRecursive(_) = lowered_rule {
-        return null;
-    }
-    return rule.after_action;
-}
-
 /// Emit the `trace_pick` line for a committed alternative. An all-single-token
 /// rule emits none: the `enter` line already printed the lookahead token that
 /// names the alt, so `pick literal_value alt#0` after
 /// `enter literal_value @9 '1'` is noise. Tournament and speculative picks, and
 /// picks among alts that consume sub-structure, stay.
-fn gen_trace_pick(w: &mut CodeWriter, rule: &ParserRule, alt_index: i32, ctx: &EmitContext) {
-    if !all_alts_are_single_token(&rule.alternatives) {
+fn gen_trace_pick(w: &mut CodeWriter, rule: &RuleHeader, alt_index: i32, ctx: &EmitContext) {
+    if rule.single_token_alts matches { null } {
         emit_trace_pick(w, PickSide::Parse, &rule.name, `${alt_index}`, ctx);
     }
 }
@@ -3416,9 +3408,10 @@ fn gen_picked_rule_alt(
     ctx: &mut EmitContext,
     proven_first: &List<i32>,
 ) {
+    let header = rule_header(lowered_rule);
     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
-    gen_trace_pick(w, rule, alt_index, ctx);
-    gen_alt_body(w, rule, body, alt_index, &NO_AFTER, ctx, proven_first);
+    gen_trace_pick(w, header, alt_index, ctx);
+    gen_alt_body(w, rule, header, body, alt_index, &NO_AFTER, ctx, proven_first);
 }
 
 /// The one rule-level alternative body, wherever the alternative is emitted:
@@ -3426,6 +3419,7 @@ fn gen_picked_rule_alt(
 fn gen_alt_body(
     w: &mut CodeWriter,
     rule: &ParserRule,
+    header: &RuleHeader,
     body: &AltBody,
     alt_index: i32,
     after_action: &Option<ActionSource>,
@@ -3433,7 +3427,7 @@ fn gen_alt_body(
     proven_first: &List<i32> = &NO_KINDS,
 ) {
     // A consumer of a labeled rule dispatches on `<rule>_alt`.
-    if rule_alts_labeled(&rule.alternatives) {
+    if header.alts_labeled() {
         w.line(`p.b.set_alt(${alt_index});`);
     }
     let alt = &rule.alternatives[alt_index];
@@ -3514,7 +3508,7 @@ fn gen_multi_alt_body(
         }
         emit_tested_arms(w, &arms, &bodies, &DISPATCH_KIND_LOCAL, ctx);
         w.end();
-        emit_no_alternative(w, side, rule, ctx);
+        emit_no_alternative(w, side, lowered_rule, ctx);
         return;
     }
 
@@ -3542,7 +3536,7 @@ fn gen_multi_alt_body(
         w.end();
     }
 
-    emit_no_alternative(w, side, rule, ctx);
+    emit_no_alternative(w, side, lowered_rule, ctx);
 }
 
 /// The actual post-dedup bindings of an alt's top-level leaf ops, so the action
@@ -3825,8 +3819,8 @@ fn gen_decision_sync<S: AsStrSlice>(
     );
 }
 
-fn gen_rule_entry_sync(w: &mut CodeWriter, ctx: &mut EmitContext, rule: &ParserRule) {
-    gen_decision_sync(w, ctx, ctx.plan.rule_entry_expect(ctx.analysis.rule_index_of(&rule.name)), "sync_alts");
+fn gen_rule_entry_sync(w: &mut CodeWriter, ctx: &mut EmitContext) {
+    gen_decision_sync(w, ctx, ctx.plan.rule_entry_expect(ctx.cursor.current_rule_index()), "sync_alts");
 }
 
 fn gen_loop_back_sync(w: &mut CodeWriter, ctx: &mut EmitContext, rep_op: &RepeatOp) {
@@ -8586,7 +8580,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
         gen_pick_alt(w, side, rule, lowered_rule, alt_index, ctx, &NO_KINDS);
         w.end();
     }
-    emit_no_alternative(w, side, rule, ctx);
+    emit_no_alternative(w, side, lowered_rule, ctx);
 }
 
 /// An alternative's gate as `side` evaluates it, or "" where it has none that
@@ -8636,9 +8630,9 @@ fn gen_pick_alt(
 }
 
 /// What a rule does when no alternative's test admits the lookahead.
-fn emit_no_alternative(w: &mut CodeWriter, side: PickSide, rule: &ParserRule, ctx: &mut EmitContext) {
+fn emit_no_alternative(w: &mut CodeWriter, side: PickSide, lowered_rule: &Rule, ctx: &mut EmitContext) {
     match side {
-        _::Parse => gen_error_fallback(w, rule, ctx),
+        _::Parse => gen_error_fallback(w, rule_header(lowered_rule), ctx),
         _::Scan => w.line("return -1;"),
     }
 }
@@ -8673,16 +8667,10 @@ fn rule_takes_min_prec(rule: &Rule) -> bool {
     };
 }
 
-fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut EmitContext) {
-    let mut expected: List<i32> = [];
-    for let alt of rule.alternatives {
-        let mut visiting: List<String> = [];
-        let first = ctx.analysis.first_of_alt(&alt, &mut visiting);
-        dedup_append_arr(&mut expected, &first);
-    }
+fn gen_error_fallback(w: &mut CodeWriter, rule: &RuleHeader, ctx: &mut EmitContext) {
     let msg = wado`"no alternative of ${rule.name} matches"`;
     // Kind ids, not names: `fail` resolves names only for the error it keeps.
-    let expected_ref = expected_set_ref(ctx, &expected);
+    let expected_ref = expected_set_ref(ctx, &rule.first);
     w.line(`p.no_viable(`);
     w.indent();
     w.line(`${msg},`);

@@ -316,6 +316,13 @@ pub struct RuleHeader {
     pub case_names: List<String>,
     /// Each alternative's `# Label`, in source order.
     pub alt_labels: List<Option<String>>,
+    pub init_action: Option<ActionSource> = null,
+    pub after_action: Option<ActionSource> = null,
+    /// Each alternative's one token kind, in source order, where every
+    /// alternative is a single token or literal; `null` otherwise.
+    pub single_token_alts: Option<List<i32>> = null,
+    /// What the rule can start with: the union of its alternatives' first sets.
+    pub first: List<i32> = [],
 }
 
 impl RuleHeader {
