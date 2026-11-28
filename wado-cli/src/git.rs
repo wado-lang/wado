@@ -9,6 +9,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 use wado_lsp::host::discovery::{
     Disk, PackageFiles, absolutize, keyed_lib_entry, resolve_member_manifest, slash_separated,
@@ -303,6 +304,30 @@ fn ready_marker(worktree: &Path) -> PathBuf {
     PathBuf::from(marker)
 }
 
+/// A `git` that finds its repository from where it runs, whatever repository
+/// the environment names, as inside a hook. Like git's own spawn into another
+/// repository, it clears the variables `git rev-parse --local-env-vars` lists
+/// and keeps the configuration a `git -c` passed down.
+pub(crate) fn command() -> Command {
+    static LOCAL_ENV_VARS: OnceLock<Vec<String>> = OnceLock::new();
+    let local = LOCAL_ENV_VARS.get_or_init(|| {
+        // With no `git` to ask, the command built here cannot spawn either,
+        // and its caller reports that.
+        Command::new("git")
+            .args(["rev-parse", "--local-env-vars"])
+            .output()
+            .map(|out| String::from_utf8_lossy(&out.stdout).lines().map(str::to_owned).collect())
+            .unwrap_or_default()
+    });
+    let mut cmd = Command::new("git");
+    for var in local {
+        if var != "GIT_CONFIG_PARAMETERS" && var != "GIT_CONFIG_COUNT" {
+            cmd.env_remove(var);
+        }
+    }
+    cmd
+}
+
 /// Whether git ignores `path`, as `git check-ignore` answers: every source of
 /// ignore rules git reads, `.git/info/exclude` and `core.excludesFile`
 /// included. Outside a checkout, or with no `git` to ask, nothing is ignored,
@@ -311,7 +336,7 @@ pub(crate) fn ignores(path: &Path) -> Result<bool, CliExit> {
     let Some(checkout) = checkout_root(path) else {
         return Ok(false);
     };
-    let output = match Command::new("git")
+    let output = match command()
         .current_dir(checkout)
         .args(["check-ignore", "-q", "--"])
         .arg(path)
@@ -335,7 +360,7 @@ pub(crate) fn ignores(path: &Path) -> Result<bool, CliExit> {
 /// Run `git`, returning stdout on success. A missing `git` binary or a non-zero
 /// exit becomes a descriptive [`ProviderError`].
 fn run_git(cwd: Option<&Path>, args: &[&str]) -> Result<String, ProviderError> {
-    let mut cmd = Command::new("git");
+    let mut cmd = command();
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }

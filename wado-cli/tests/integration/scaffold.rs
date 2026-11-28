@@ -341,6 +341,51 @@ fn new_joins_a_workspace_that_sits_in_a_git_ignored_directory() {
     assert!(read(&root.join("wado-workspace.toml")).contains("\"geo\""));
 }
 
+/// What `members` already covers is a member, ignored or not: the package
+/// inherits from the workspace and the file stays as written.
+#[test]
+fn new_in_an_ignored_directory_members_covers_is_a_member() {
+    let tmp = tempfile::tempdir().unwrap();
+    git_init(tmp.path());
+    fs::write(tmp.path().join(".gitignore"), "scratch/\n").unwrap();
+    let ws = "[workspace]\nmembers = [\"scratch/*\"]\n\n[workspace.package]\nnamespace = \"acme\"\n";
+    fs::write(tmp.path().join("wado-workspace.toml"), ws).unwrap();
+
+    wado_in(tmp.path()).args(["new", "scratch/demo"]).assert().success();
+
+    let manifest = read(&tmp.path().join("scratch/demo/wado.toml"));
+    assert!(!manifest.contains("namespace = "), "{manifest}");
+    assert_eq!(read(&tmp.path().join("wado-workspace.toml")), ws);
+}
+
+/// The checkout asked is the package's own, whatever repository the
+/// environment names, as it does inside a git hook.
+#[test]
+fn new_asks_its_own_checkout_whatever_git_dir_names() {
+    let tmp = tempfile::tempdir().unwrap();
+    let other = tmp.path().join("other");
+    let repo = tmp.path().join("repo");
+    fs::create_dir_all(&other).unwrap();
+    fs::create_dir_all(&repo).unwrap();
+    git_init(&other);
+    git_init(&repo);
+    fs::write(other.join(".gitignore"), "geo/\n").unwrap();
+    fs::write(
+        repo.join("wado-workspace.toml"),
+        "[workspace]\nmembers = []\n\n[workspace.package]\nnamespace = \"acme\"\n",
+    )
+    .unwrap();
+
+    wado_in(&repo)
+        .args(["new", "geo"])
+        .env("GIT_DIR", other.join(".git"))
+        .env("GIT_WORK_TREE", &other)
+        .assert()
+        .success();
+
+    assert!(read(&repo.join("wado-workspace.toml")).contains("\"geo\""));
+}
+
 /// A `new` that fails leaves no directory it created behind, and keeps one
 /// that was already there.
 #[test]
@@ -353,6 +398,13 @@ fn new_that_fails_removes_what_it_created() {
         .failure()
         .stderr(predicate::str::contains("--name"));
     assert!(!tmp.path().join("nested").exists());
+
+    wado_in(tmp.path())
+        .args(["new", "bridge/../my.app", "--namespace", "acme"])
+        .assert()
+        .failure();
+    assert!(!tmp.path().join("bridge").exists());
+    assert!(!tmp.path().join("my.app").exists(), "reached through `..`");
 
     fs::create_dir(tmp.path().join("kept")).unwrap();
     wado_in(tmp.path())
@@ -502,6 +554,14 @@ fn workspace_add_refuses_a_package_that_conflicts() {
         .failure()
         .stderr(predicate::str::contains("version"));
     assert_eq!(read(&tmp.path().join("wado-workspace.toml")), ws);
+
+    let covering = "[workspace]\nmembers = [\"*\"]\n\n[workspace.package]\nversion = \"1.0.0\"\n";
+    fs::write(tmp.path().join("wado-workspace.toml"), covering).unwrap();
+    wado_in(tmp.path())
+        .args(["workspace", "add", "geo"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("version"));
 }
 
 #[test]

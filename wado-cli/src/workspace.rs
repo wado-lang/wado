@@ -19,7 +19,7 @@ use wado_manifest::{
 };
 
 use crate::args::{self, CliExit};
-use crate::init::{self, Scaffold, toml_string, write_scaffold};
+use crate::init::{self, CANONICAL_IS_UTF8, Scaffold, toml_string, write_scaffold};
 
 #[derive(Debug)]
 pub enum WorkspaceCommand {
@@ -189,7 +189,7 @@ fn parse_add_args(mut parser: lexopt::Parser) -> Result<PathBuf, CliExit> {
 pub fn run(command: WorkspaceCommand) -> Result<(), CliExit> {
     let cwd = init::current_dir()?;
     match command {
-        WorkspaceCommand::Init(opts) => init_workspace(&cwd, &opts),
+        WorkspaceCommand::Init(opts) => init_workspace(&init::canonical(&cwd)?, &opts),
         WorkspaceCommand::New(dir, opts) => {
             init::in_new_dir(&cwd.join(dir), |dir| init_workspace(dir, &opts))
         }
@@ -255,7 +255,7 @@ pub(crate) fn member_entry(root: &Path, member_dir: &Path) -> String {
         .expect("a member lies under its workspace root");
     let parts: Vec<String> = relative
         .components()
-        .map(|c| Pattern::escape(&c.as_os_str().to_string_lossy()))
+        .map(|c| Pattern::escape(c.as_os_str().to_str().expect(CANONICAL_IS_UTF8)))
         .collect();
     parts.join("/")
 }
@@ -320,16 +320,17 @@ fn add(dir: &Path) -> Result<(), CliExit> {
         )));
     };
     let entry = member_entry(&root, &dir);
-    let Some(updated) = with_member(&root, &text, &dir)? else {
-        eprintln!("{entry} is already a member");
-        return Ok(());
-    };
-    resolve_member(&manifest, &updated).map_err(|e| {
+    let updated = with_member(&root, &text, &dir)?;
+    resolve_member(&manifest, updated.as_deref().unwrap_or(&text)).map_err(|e| {
         CliExit::error(format!(
             "{} cannot join the workspace: {e}",
             manifest_path.display()
         ))
     })?;
+    let Some(updated) = updated else {
+        eprintln!("{entry} is already a member");
+        return Ok(());
+    };
     write_workspace(&root, &updated, &entry)
 }
 

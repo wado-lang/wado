@@ -493,9 +493,21 @@ pub(crate) fn current_dir() -> Result<PathBuf, CliExit> {
     env::current_dir().map_err(|e| CliExit::error(format!("reading the current directory: {e}")))
 }
 
+pub(crate) const CANONICAL_IS_UTF8: &str = "a path through `canonical` must be UTF-8";
+
+/// `dir` resolved. A path that is not UTF-8 is refused here, where it enters:
+/// the manifests name a package by its directory, in text.
 pub(crate) fn canonical(dir: &Path) -> Result<PathBuf, CliExit> {
-    dir.canonicalize()
-        .map_err(|e| CliExit::error(format!("{}: {e}", dir.display())))
+    let resolved = dir
+        .canonicalize()
+        .map_err(|e| CliExit::error(format!("{}: {e}", dir.display())))?;
+    if resolved.to_str().is_none() {
+        return Err(CliExit::error(format!(
+            "{} is not UTF-8, so no manifest can name it",
+            dir.display()
+        )));
+    }
+    Ok(resolved)
 }
 
 /// `mkdir -p dir`, then `init` there, given the canonical path. Where `init`
@@ -505,22 +517,37 @@ pub(crate) fn in_new_dir(
     dir: &Path,
     init: impl FnOnce(&Path) -> Result<(), CliExit>,
 ) -> Result<(), CliExit> {
-    let created = dir.ancestors().take_while(|a| !a.exists()).last();
-    fs::create_dir_all(dir)
-        .map_err(|e| CliExit::error(format!("creating {}: {e}", dir.display())))?;
-    let result = canonical(dir).and_then(|dir| init(&dir));
-    if result.is_err()
-        && let Some(created) = created
-    {
-        fs::remove_dir_all(created)
-            .map_err(|e| CliExit::error(format!("removing {}: {e}", created.display())))?;
+    // One level at a time, since `..` in the operand puts a created directory
+    // off the ancestors of `dir`.
+    let mut created = Vec::new();
+    let mut path = PathBuf::new();
+    let mut result = Ok(());
+    for component in dir.components() {
+        path.push(component);
+        if path.exists() {
+            continue;
+        }
+        if let Err(e) = fs::create_dir(&path) {
+            result = Err(CliExit::error(format!("creating {}: {e}", path.display())));
+            break;
+        }
+        created.push(path.clone());
+    }
+    let result = result.and_then(|()| canonical(dir)).and_then(|dir| init(&dir));
+    if result.is_err() {
+        // A directory is created after its parent, so the reverse order
+        // removes each before the directory holding it.
+        for created in created.iter().rev() {
+            fs::remove_dir_all(created)
+                .map_err(|e| CliExit::error(format!("removing {}: {e}", created.display())))?;
+        }
     }
     result
 }
 
 pub(crate) fn directory_name(dir: &Path) -> Result<String, CliExit> {
     dir.file_name()
-        .map(|name| name.to_string_lossy().into_owned())
+        .map(|name| name.to_str().expect(CANONICAL_IS_UTF8).to_owned())
         .ok_or_else(|| CliExit::error(format!("{} has no name; pass --name", dir.display())))
 }
 
