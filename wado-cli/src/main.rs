@@ -15,6 +15,8 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[derive(Clone, Copy)]
 enum Cmd {
     Init,
+    New,
+    Workspace,
     Update,
     Fetch,
     Clean,
@@ -39,6 +41,8 @@ enum Cmd {
 impl Cmd {
     const ALL: &[Self] = &[
         Self::Init,
+        Self::New,
+        Self::Workspace,
         Self::Update,
         Self::Fetch,
         Self::Clean,
@@ -63,6 +67,8 @@ impl Cmd {
     const fn name(self) -> &'static str {
         match self {
             Self::Init => "init",
+            Self::New => "new",
+            Self::Workspace => "workspace",
             Self::Update => "update",
             Self::Fetch => "fetch",
             Self::Clean => "clean",
@@ -95,6 +101,8 @@ impl Cmd {
             Self::Format | Self::Dump => "[options] <file.wado>...",
             Self::Doc => "[options] <file.wado | module>...",
             Self::Spec => "[options] [<name>[#section]]",
+            Self::New => "<dir> [options]",
+            Self::Workspace => "<init | new | add> [options]",
             Self::Init
             | Self::Update
             | Self::Fetch
@@ -110,7 +118,9 @@ impl Cmd {
 
     const fn desc(self) -> &'static str {
         match self {
-            Self::Init => "Create a new wado.toml manifest",
+            Self::Init => "Create a package in the current directory",
+            Self::New => "Create a directory and a package in it",
+            Self::Workspace => "Create a workspace, or add a package to its members",
             Self::Update => "Resolve dependencies and write wado.lock",
             Self::Fetch => "Download the project's registry dependencies",
             Self::Clean => "Evict derived cache state (git worktrees)",
@@ -336,6 +346,14 @@ async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
         Cmd::Init => {
             let opts = wado_cli::init::parse_args(parser)?;
             wado_cli::init::run(opts)
+        }
+        Cmd::New => {
+            let opts = wado_cli::new::parse_args(parser)?;
+            wado_cli::new::run(opts)
+        }
+        Cmd::Workspace => {
+            let command = wado_cli::workspace::parse_args(parser)?;
+            wado_cli::workspace::run(command)
         }
         Cmd::Update => {
             let opts = wado_cli::update::parse_args(parser)?;

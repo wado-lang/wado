@@ -1,31 +1,53 @@
+use std::env;
 use std::fmt::Write as _;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use lexopt::Arg::Value;
+use toml::Value as TomlValue;
 
-use wado_lsp::host::discovery::{Disk, governing_workspace, resolve_member_manifest};
-use wado_manifest::WorkspaceManifest;
+use wado_manifest::{
+    MANIFEST_FILENAME, Manifest, ManifestError, WORKSPACE_FILENAME, WorkspaceManifest,
+    WorkspacePackage, resolve_member,
+};
 
 use crate::args::{self, CliExit};
+use crate::workspace::{member_entry, nearest_above, with_member, write_workspace};
 
 #[derive(Debug)]
 pub struct InitOptions {
-    pub name: String,
+    pub name: Option<String>,
     pub namespace: Option<String>,
+    pub kind: Kind,
     pub force: bool,
+}
+
+/// The worlds a new package declares. Neither flag given means a library.
+#[derive(Debug, Clone, Copy)]
+pub struct Kind {
+    pub lib: bool,
+    pub cli: bool,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Name,
     Namespace,
+    Lib,
+    Cli,
     Force,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[Self::Name, Self::Namespace, Self::Force, Self::Help];
+    const ALL: &[Self] = &[
+        Self::Name,
+        Self::Namespace,
+        Self::Lib,
+        Self::Cli,
+        Self::Force,
+        Self::Help,
+    ];
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -33,13 +55,25 @@ impl Opt {
                 long: Some("name"),
                 short: None,
                 value: Some("<name>"),
-                desc: "Package name (required)",
+                desc: "Package name (default: the directory's name)",
             },
             Self::Namespace => args::OptSpec {
                 long: Some("namespace"),
                 short: None,
                 value: Some("<ns>"),
                 desc: "Package namespace (required unless the workspace sets one)",
+            },
+            Self::Lib => args::OptSpec {
+                long: Some("lib"),
+                short: None,
+                value: None,
+                desc: "Declare the library world, src/lib.wado (the default)",
+            },
+            Self::Cli => args::OptSpec {
+                long: Some("cli"),
+                short: None,
+                value: None,
+                desc: "Declare the wasi:cli/command world, src/main.wado",
             },
             Self::Force => args::OptSpec {
                 long: Some("force"),
@@ -52,13 +86,25 @@ impl Opt {
     }
 }
 
-fn format_usage() -> String {
+fn format_usage(command: &str, operand: &str, summary: &str) -> String {
     let mut buf = String::new();
-    writeln!(buf, "Usage: wado init [options]").unwrap();
+    writeln!(buf, "Usage: wado {command} {operand}[options]").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "{summary}").unwrap();
     writeln!(buf).unwrap();
     writeln!(
         buf,
-        "Create a new wado.toml manifest in the current directory."
+        "It writes wado.toml, README.md, AGENTS.md, src/ and tests/, keeping any of"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "them but wado.toml that is already there. Under a workspace whose `members`"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "misses the package, the package is added to `members`."
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -67,61 +113,114 @@ fn format_usage() -> String {
     buf
 }
 
-pub fn parse_args(mut parser: lexopt::Parser) -> Result<InitOptions, CliExit> {
-    let usage = format_usage();
-    let mut name: Option<String> = None;
-    let mut namespace: Option<String> = None;
-    let mut force = false;
+pub(crate) fn init_usage() -> String {
+    format_usage("init", "", "Create a package in the current directory.")
+}
+
+pub(crate) fn new_usage() -> String {
+    format_usage(
+        "new",
+        "<dir> ",
+        "Create <dir> and a package in it: `mkdir -p <dir> && cd <dir> && wado init`.",
+    )
+}
+
+pub fn parse_args(parser: lexopt::Parser) -> Result<InitOptions, CliExit> {
+    let usage = init_usage();
+    let (opts, dir) = parse_options(parser, &usage)?;
+    if dir.is_some() {
+        return Err(CliExit::error_with_usage(
+            "unexpected positional argument",
+            &usage,
+        ));
+    }
+    Ok(opts)
+}
+
+/// The options `init` and `new` share, and the one operand only `new` takes.
+pub(crate) fn parse_options(
+    mut parser: lexopt::Parser,
+    usage: &str,
+) -> Result<(InitOptions, Option<PathBuf>), CliExit> {
+    let mut opts = InitOptions {
+        name: None,
+        namespace: None,
+        kind: Kind {
+            lib: false,
+            cli: false,
+        },
+        force: false,
+    };
+    let mut dir = None;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
-                Opt::Name => name = Some(args::require_string(&mut parser)?),
-                Opt::Namespace => namespace = Some(args::require_string(&mut parser)?),
-                Opt::Force => force = true,
-                Opt::Help => return Err(CliExit::help(usage)),
+                Opt::Name => opts.name = Some(args::require_string(&mut parser)?),
+                Opt::Namespace => opts.namespace = Some(args::require_string(&mut parser)?),
+                Opt::Lib => opts.kind.lib = true,
+                Opt::Cli => opts.kind.cli = true,
+                Opt::Force => opts.force = true,
+                Opt::Help => return Err(CliExit::help(usage.to_owned())),
             }
-        } else if let Value(_) = arg {
-            return Err(CliExit::error_with_usage(
-                "unexpected positional argument",
-                &usage,
-            ));
+        } else if dir.is_none()
+            && let Value(value) = arg
+        {
+            dir = Some(PathBuf::from(value));
         } else {
-            return Err(args::unexpected_arg(arg, &usage));
+            return Err(args::unexpected_arg(arg, usage));
         }
     }
-
-    let name = name.ok_or_else(|| CliExit::error_with_usage("--name is required", &usage))?;
-
-    Ok(InitOptions {
-        name,
-        namespace,
-        force,
-    })
+    if !opts.kind.cli {
+        opts.kind.lib = true;
+    }
+    Ok((opts, dir))
 }
 
 pub fn run(opts: InitOptions) -> Result<(), CliExit> {
-    let manifest_path = Path::new("wado.toml");
+    init_package(&current_dir()?, &opts)
+}
 
-    if manifest_path.exists() && !opts.force {
-        return Err(CliExit::error(
-            "wado.toml already exists in the current directory (use --force to overwrite)",
-        ));
+pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit> {
+    if dir.join(MANIFEST_FILENAME).exists() && !opts.force {
+        return Err(CliExit::error(format!(
+            "{MANIFEST_FILENAME} already exists in {} (use --force to overwrite)",
+            dir.display()
+        )));
     }
+    if dir.join(WORKSPACE_FILENAME).exists() {
+        return Err(CliExit::error(format!(
+            "{} holds {WORKSPACE_FILENAME}; a member goes in a directory under it (`wado new <dir>`)",
+            dir.display()
+        )));
+    }
+    let dir = canonical(dir)?;
 
-    let dir = std::env::current_dir()
-        .map_err(|e| CliExit::error(format!("reading the current directory: {e}")))?;
-    let inherited = match governing_workspace(&dir, &Disk) {
-        Some((_, text)) => {
-            let workspace = text
-                .parse::<WorkspaceManifest>()
-                .map_err(|e| CliExit::error(format!("invalid wado-workspace.toml: {e}")))?;
-            workspace.workspace.package
+    let workspace = match nearest_above(&dir)? {
+        Some((root, text)) => {
+            let joining = with_member(&root, &text, &dir)?;
+            Some(Membership {
+                text: joining.clone().unwrap_or(text),
+                joining: joining.is_some(),
+                root,
+            })
         }
         None => None,
     };
-    let inherited_namespace = inherited.as_ref().and_then(|p| p.namespace.as_deref());
-    let namespace = match (opts.namespace.as_deref(), inherited_namespace) {
+    let inherited = match &workspace {
+        Some(membership) => {
+            membership
+                .text
+                .parse::<WorkspaceManifest>()
+                .map_err(|e| CliExit::error(format!("invalid {WORKSPACE_FILENAME}: {e}")))?
+                .workspace
+                .package
+        }
+        None => None,
+    }
+    .unwrap_or_default();
+
+    let namespace = match (opts.namespace.as_deref(), inherited.namespace.as_deref()) {
         (Some(_), Some(namespace)) => {
             return Err(CliExit::error(format!(
                 "the workspace sets the namespace `{namespace}`; leave out --namespace"
@@ -130,41 +229,261 @@ pub fn run(opts: InitOptions) -> Result<(), CliExit> {
         (None, None) => {
             return Err(CliExit::error(format!(
                 "--namespace is required: no workspace sets one\n\n{}",
-                format_usage()
+                init_usage()
             )));
         }
         (namespace, _) => namespace,
     };
-    let inherits_version = inherited.as_ref().is_some_and(|p| p.version.is_some());
-    let content = generate_manifest(
-        &opts.name,
+    let name = match &opts.name {
+        Some(name) => name.clone(),
+        None => directory_name(&dir)?,
+    };
+    let repository_directory = inherited
+        .repository
+        .is_some()
+        .then(|| repository_directory(&dir))
+        .flatten();
+    let content = generate_manifest(&ManifestFields {
         namespace,
-        (!inherits_version).then_some("0.1.0"),
-    );
-    resolve_member_manifest(&dir, &content, &Disk)
-        .map_err(|e| CliExit::error(format!("the manifest would not be valid: {e}")))?;
+        name: &name,
+        version: inherited.version.is_none().then_some("0.1.0"),
+        repository_directory: repository_directory.as_deref(),
+        kind: opts.kind,
+        inherited: inherited_fields(&inherited),
+    });
+    match &workspace {
+        Some(membership) => resolve_member(&content, &membership.text),
+        None => content.parse::<Manifest>(),
+    }
+    .map_err(|e| {
+        let hint = match (&e, &opts.name) {
+            (ManifestError::InvalidName { field, .. }, None) if field == "package.name" => {
+                "; the name is the directory's, so choose one with --name"
+            }
+            _ => "",
+        };
+        CliExit::error(format!("the manifest would not be valid: {e}{hint}"))
+    })?;
 
-    fs::write(manifest_path, &content)
-        .map_err(|e| CliExit::error(format!("writing wado.toml: {e}")))?;
-    eprintln!("Created wado.toml");
+    fs::write(dir.join(MANIFEST_FILENAME), &content)
+        .map_err(|e| CliExit::error(format!("writing {MANIFEST_FILENAME}: {e}")))?;
+    eprintln!("Created {MANIFEST_FILENAME}");
+    write_scaffold(&dir, Scaffold::Package(opts.kind), &name)?;
+
+    if let Some(membership) = workspace
+        && membership.joining
+    {
+        write_workspace(
+            &membership.root,
+            &membership.text,
+            &member_entry(&membership.root, &dir),
+        )?;
+    }
     Ok(())
+}
+
+/// The workspace above a new package, as it reads once the package is a
+/// member.
+struct Membership {
+    root: PathBuf,
+    text: String,
+    /// Whether `text` adds the package to `members`, to be written back.
+    joining: bool,
+}
+
+struct ManifestFields<'a> {
+    namespace: Option<&'a str>,
+    name: &'a str,
+    version: Option<&'a str>,
+    repository_directory: Option<&'a str>,
+    kind: Kind,
+    inherited: Vec<&'static str>,
 }
 
 /// A manifest leaving out each field `None` stands for, which the governing
 /// workspace sets.
-fn generate_manifest(name: &str, namespace: Option<&str>, version: Option<&str>) -> String {
+fn generate_manifest(fields: &ManifestFields) -> String {
+    let quote = |s: &str| TomlValue::String(s.to_owned()).to_string();
     let mut buf = String::new();
     buf.push_str("[package]\n");
-    if let Some(namespace) = namespace {
-        writeln!(buf, "namespace = \"{namespace}\"").unwrap();
+    if let Some(namespace) = fields.namespace {
+        writeln!(buf, "namespace = {}", quote(namespace)).unwrap();
     }
-    writeln!(buf, "name = \"{name}\"").unwrap();
-    if let Some(version) = version {
-        writeln!(buf, "version = \"{version}\"").unwrap();
+    writeln!(buf, "name = {}", quote(fields.name)).unwrap();
+    if let Some(version) = fields.version {
+        writeln!(buf, "version = {}", quote(version)).unwrap();
     }
-    buf.push_str("\n[world]\n");
-    writeln!(buf, "\"wasi:cli/command\" = \"src/main.wado\"").unwrap();
+    if let Some(directory) = fields.repository_directory {
+        writeln!(buf, "repository-directory = {}", quote(directory)).unwrap();
+    }
+    if fields.kind.lib {
+        writeln!(buf, "lib = \"src/lib.wado\"").unwrap();
+    }
+    if !fields.inherited.is_empty() {
+        writeln!(
+            buf,
+            "# {} inherited from [workspace.package]",
+            fields.inherited.join(" / ")
+        )
+        .unwrap();
+    }
+    if fields.kind.cli {
+        buf.push_str("\n[world]\n");
+        writeln!(buf, "\"wasi:cli/command\" = \"src/main.wado\"").unwrap();
+    }
     buf
+}
+
+/// The `[workspace.package]` fields a member inherits, in the order the
+/// specification lists them.
+fn inherited_fields(package: &WorkspacePackage) -> Vec<&'static str> {
+    let WorkspacePackage {
+        version,
+        repository,
+        namespace,
+        license,
+        license_file,
+        authors,
+        wado_version,
+        unknown_fields: _,
+    } = package;
+    [
+        ("version", version.is_some()),
+        ("repository", repository.is_some()),
+        ("namespace", namespace.is_some()),
+        ("license", license.is_some()),
+        ("license-file", license_file.is_some()),
+        ("authors", !authors.is_empty()),
+        ("wado-version", wado_version.is_some()),
+    ]
+    .into_iter()
+    .filter_map(|(field, set)| set.then_some(field))
+    .collect()
+}
+
+/// `dir` relative to the root of the git checkout holding it, which is what
+/// `repository-directory` names. `None` outside a checkout or at its root.
+fn repository_directory(dir: &Path) -> Option<String> {
+    let root = dir.ancestors().find(|a| a.join(".git").exists())?;
+    let relative = dir.strip_prefix(root).ok()?;
+    let parts: Vec<String> = relative
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    (!parts.is_empty()).then(|| parts.join("/"))
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum Scaffold {
+    Package(Kind),
+    Workspace,
+}
+
+/// A file the scaffold writes: its path under the new directory and its
+/// text, each with `{name}` and `{layout_url}` still to fill.
+struct Template {
+    path: &'static str,
+    text: &'static str,
+}
+
+const README: Template = Template {
+    path: "README.md",
+    text: include_str!("../assets/scaffold/package/README.template.md"),
+};
+const PACKAGE_AGENTS: Template = Template {
+    path: "AGENTS.md",
+    text: include_str!("../assets/scaffold/package/AGENTS.template.md"),
+};
+const LIB: Template = Template {
+    path: "src/lib.wado",
+    text: include_str!("../assets/scaffold/package/src/lib.wado"),
+};
+const LIB_TEST: Template = Template {
+    path: "tests/{name}_test.wado",
+    text: include_str!("../assets/scaffold/package/tests/lib_test.wado"),
+};
+const MAIN: Template = Template {
+    path: "src/main.wado",
+    text: include_str!("../assets/scaffold/package/src/main.wado"),
+};
+const WORKSPACE_AGENTS: Template = Template {
+    path: "AGENTS.md",
+    text: include_str!("../assets/scaffold/workspace/AGENTS.template.md"),
+};
+
+impl Scaffold {
+    fn templates(self) -> Vec<&'static Template> {
+        match self {
+            Self::Package(kind) => {
+                let mut templates = vec![&README, &PACKAGE_AGENTS];
+                if kind.lib {
+                    templates.extend([&LIB, &LIB_TEST]);
+                }
+                if kind.cli {
+                    templates.push(&MAIN);
+                }
+                templates
+            }
+            Self::Workspace => vec![&WORKSPACE_AGENTS],
+        }
+    }
+}
+
+/// The standard package layout as the running `wado` implements it, so the
+/// link names the version that wrote the files.
+fn layout_url() -> String {
+    format!(
+        "https://github.com/wado-lang/wado/blob/v{}/docs/spec-package-standard.md",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
+/// Write each file of `scaffold` under `dir`, keeping one already there.
+pub(crate) fn write_scaffold(dir: &Path, scaffold: Scaffold, name: &str) -> Result<(), CliExit> {
+    let layout_url = layout_url();
+    let fill = |s: &str| {
+        s.replace("{name}", name)
+            .replace("{layout_url}", &layout_url)
+    };
+    for template in scaffold.templates() {
+        let relative = fill(template.path);
+        let path = dir.join(&relative);
+        if path.exists() {
+            eprintln!("Kept {relative}");
+            continue;
+        }
+        let parent = path
+            .parent()
+            .expect("a scaffold file lies under its directory");
+        fs::create_dir_all(parent)
+            .map_err(|e| CliExit::error(format!("creating {}: {e}", parent.display())))?;
+        fs::write(&path, fill(template.text))
+            .map_err(|e| CliExit::error(format!("writing {relative}: {e}")))?;
+        eprintln!("Created {relative}");
+    }
+    Ok(())
+}
+
+pub(crate) fn current_dir() -> Result<PathBuf, CliExit> {
+    env::current_dir().map_err(|e| CliExit::error(format!("reading the current directory: {e}")))
+}
+
+pub(crate) fn canonical(dir: &Path) -> Result<PathBuf, CliExit> {
+    dir.canonicalize()
+        .map_err(|e| CliExit::error(format!("{}: {e}", dir.display())))
+}
+
+/// `mkdir -p dir`, answering the directory's canonical path.
+pub(crate) fn create_dir(dir: &Path) -> Result<PathBuf, CliExit> {
+    fs::create_dir_all(dir)
+        .map_err(|e| CliExit::error(format!("creating {}: {e}", dir.display())))?;
+    canonical(dir)
+}
+
+pub(crate) fn directory_name(dir: &Path) -> Result<String, CliExit> {
+    dir.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .ok_or_else(|| CliExit::error(format!("{} has no name; pass --name", dir.display())))
 }
 
 #[cfg(test)]
@@ -173,12 +492,21 @@ mod tests {
 
     #[test]
     fn generated_manifest_parses() {
-        let result = generate_manifest("my-app", Some("myorg"), Some("0.1.0"));
-        let manifest: wado_manifest::Manifest = result.parse().unwrap();
-        assert_eq!(
-            manifest.package.as_ref().unwrap().coordinate(),
-            "myorg:my-app@0.1.0"
-        );
+        let result = generate_manifest(&ManifestFields {
+            namespace: Some("myorg"),
+            name: "my-app",
+            version: Some("0.1.0"),
+            repository_directory: None,
+            kind: Kind {
+                lib: true,
+                cli: true,
+            },
+            inherited: Vec::new(),
+        });
+        let manifest: Manifest = result.parse().unwrap();
+        let package = manifest.package.as_ref().unwrap();
+        assert_eq!(package.coordinate(), "myorg:my-app@0.1.0");
+        assert_eq!(package.lib.as_deref(), Some("src/lib.wado"));
         assert_eq!(
             manifest.world_entry("wasi:cli/command"),
             Some("src/main.wado")
@@ -186,18 +514,19 @@ mod tests {
     }
 
     #[test]
-    fn parse_args_requires_name() {
+    fn parse_options_defaults_to_a_library() {
         let parser = lexopt::Parser::from_args(vec!["--namespace", "myorg"]);
-        let err = parse_args(parser).unwrap_err();
-        assert_eq!(err.exit_code, 1);
-        assert!(err.message.contains("--name is required"));
+        let (opts, dir) = parse_options(parser, "").unwrap();
+        assert!(opts.kind.lib && !opts.kind.cli);
+        assert!(opts.name.is_none());
+        assert!(dir.is_none());
     }
 
     #[test]
-    fn parse_args_with_namespace() {
-        let parser = lexopt::Parser::from_args(vec!["--name", "my-app", "--namespace", "myorg"]);
-        let opts = parse_args(parser).unwrap();
-        assert_eq!(opts.name, "my-app");
-        assert_eq!(opts.namespace.as_deref(), Some("myorg"));
+    fn parse_options_takes_cli_alone() {
+        let parser = lexopt::Parser::from_args(vec!["--cli", "app"]);
+        let (opts, dir) = parse_options(parser, "").unwrap();
+        assert!(!opts.kind.lib && opts.kind.cli);
+        assert_eq!(dir, Some(PathBuf::from("app")));
     }
 }

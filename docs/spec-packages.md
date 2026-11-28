@@ -768,10 +768,29 @@ error.
 
 ## Tools
 
-The `wado` command edits and reads the manifest and the lock file. `wado init`
-writes a new manifest. `wado update` resolves the dependencies and writes
-`wado.lock`. `wado fetch` downloads what the lock file records. `wado publish`
-checks the rules in [Publishing](#publishing) and uploads each publishable world.
+The `wado` command edits and reads the manifest and the lock file. `wado update`
+resolves the dependencies and writes `wado.lock`. `wado fetch` downloads what
+the lock file records. `wado publish` checks the rules in
+[Publishing](#publishing) and uploads each publishable world.
+
+These commands create what this chapter describes:
+
+| Command                    | Creates                                                          |
+| -------------------------- | ---------------------------------------------------------------- |
+| `wado init`                | a package in the current directory                               |
+| `wado new <dir>`           | `<dir>` and a package in it: `mkdir -p <dir>`, then `init` in it |
+| `wado workspace init`      | a workspace in the current directory, with no members            |
+| `wado workspace new <dir>` | `<dir>` and a workspace in it                                    |
+
+A new package is laid out as
+[the standard package layout](./spec-package-standard.md) says. It declares the
+library world unless `--cli` asks for the command world alone. Its name is its
+directory's unless `--name` gives one. A file of the layout that is already
+there is kept.
+
+A package created under a workspace is a member of it. Where `members` does not
+already cover the package's directory, `init` adds the directory to `members`.
+`wado workspace add <dir>` adds a package that is already there.
 
 Rationale: [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md) and
 [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).

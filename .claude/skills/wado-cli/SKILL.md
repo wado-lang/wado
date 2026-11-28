@@ -17,26 +17,28 @@ Inside the wado repository, `wado` means `cargo run --bin wado --`.
 Usage: wado <command> [options]
 
 Commands:
-  init [options]                         Create a new wado.toml manifest
-  update [options]                       Resolve dependencies and write wado.lock
-  fetch [options]                        Download the project's registry dependencies
-  clean [options]                        Evict derived cache state (git worktrees)
-  build [options]                        Build the project's worlds from wado.toml
-  compile [options] <file.wado>          Compile a single Wado source file
-  check [options] [file.wado | dir]      Verify a source file and its Kiln generators
-  run [options] [file.wado]              Compile and run a Wado CLI program
-  serve [options] [file.wado]            Compile and serve a Wado HTTP service
-  test [options] [files or dirs...]      Run tests in Wado source files
-  format [options] <file.wado>...        Format a Wado source file
-  doc [options] <file.wado | module>...  Generate or search the API reference of modules
-  spec [options] [<name>[#section]]      Read or search the bundled language specification
-  dump [options] <file.wado>...          Dump compiler internal state
-  wit [options] [file.wado | dir]        Emit the WIT contract for a Wado program
-  syntax [options]                       Generate syntax definition files
-  lsp [options]                          Start the language server (LSP over stdio)
-  query <kind> [options] <file.wado>     Query language service information
-  publish [options]                      Check whether the package can be published
-  help [command]                         Show a command's help, builtin or external
+  init [options]                          Create a package in the current directory
+  new <dir> [options]                     Create a directory and a package in it
+  workspace <init | new | add> [options]  Create a workspace, or add a package to its members
+  update [options]                        Resolve dependencies and write wado.lock
+  fetch [options]                         Download the project's registry dependencies
+  clean [options]                         Evict derived cache state (git worktrees)
+  build [options]                         Build the project's worlds from wado.toml
+  compile [options] <file.wado>           Compile a single Wado source file
+  check [options] [file.wado | dir]       Verify a source file and its Kiln generators
+  run [options] [file.wado]               Compile and run a Wado CLI program
+  serve [options] [file.wado]             Compile and serve a Wado HTTP service
+  test [options] [files or dirs...]       Run tests in Wado source files
+  format [options] <file.wado>...         Format a Wado source file
+  doc [options] <file.wado | module>...   Generate or search the API reference of modules
+  spec [options] [<name>[#section]]       Read or search the bundled language specification
+  dump [options] <file.wado>...           Dump compiler internal state
+  wit [options] [file.wado | dir]         Emit the WIT contract for a Wado program
+  syntax [options]                        Generate syntax definition files
+  lsp [options]                           Start the language server (LSP over stdio)
+  query <kind> [options] <file.wado>      Query language service information
+  publish [options]                       Check whether the package can be published
+  help [command]                          Show a command's help, builtin or external
 
 Global options:
   --help     Show this help message

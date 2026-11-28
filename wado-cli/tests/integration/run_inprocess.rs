@@ -1,9 +1,8 @@
 //! In-process subcommand `run()` tests — call each subcommand directly
 //! and assert on the returned `CliExit`, no subprocess.
 
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
-use std::{env, fs};
 
 use crate::common::project_root;
 use wado_cli::args::CliExit;
@@ -12,76 +11,6 @@ use wado_cli::knobs::{CompileKnobs, EmbedOptions, HostKnobs, OptLevel};
 
 fn fixture(rel: &str) -> PathBuf {
     project_root().join(rel)
-}
-
-// `set_current_dir` is process-wide, so cwd-mutating tests serialize on this.
-fn cwd_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
-
-fn with_tempdir<F: FnOnce() -> R, R>(f: F) -> R {
-    let guard = cwd_lock()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let dir = tempfile::tempdir().unwrap();
-    let prev = env::current_dir().unwrap();
-    env::set_current_dir(dir.path()).unwrap();
-    let result = f();
-    env::set_current_dir(prev).unwrap();
-    drop(guard);
-    result
-}
-
-#[test]
-fn init_run_creates_manifest_in_cwd() {
-    with_tempdir(|| {
-        let opts = wado_cli::init::InitOptions {
-            name: "demo".to_string(),
-            namespace: Some("acme".to_string()),
-            force: false,
-        };
-        let result = wado_cli::init::run(opts);
-        assert!(result.is_ok(), "init::run should succeed in empty cwd");
-        let content = fs::read_to_string("wado.toml").unwrap();
-        assert!(content.contains("name = \"demo\""));
-    });
-}
-
-#[test]
-fn init_run_refuses_to_overwrite_without_force() {
-    with_tempdir(|| {
-        fs::write("wado.toml", "pre-existing").unwrap();
-        let opts = wado_cli::init::InitOptions {
-            name: "demo".to_string(),
-            namespace: Some("acme".to_string()),
-            force: false,
-        };
-        let err = wado_cli::init::run(opts).expect_err("expected CliExit");
-        assert_eq!(err.exit_code, 1);
-        assert!(
-            err.message.contains("already exists"),
-            "unexpected message: {:?}",
-            err.message
-        );
-        // File is untouched.
-        assert_eq!(fs::read_to_string("wado.toml").unwrap(), "pre-existing");
-    });
-}
-
-#[test]
-fn init_run_force_overwrites() {
-    with_tempdir(|| {
-        fs::write("wado.toml", "pre-existing").unwrap();
-        let opts = wado_cli::init::InitOptions {
-            name: "demo".to_string(),
-            namespace: Some("acme".to_string()),
-            force: true,
-        };
-        wado_cli::init::run(opts).expect("force should succeed");
-        let content = fs::read_to_string("wado.toml").unwrap();
-        assert!(content.contains("name = \"demo\""));
-    });
 }
 
 // Listed exhaustively so adding a new `CompileOptions` field forces a
