@@ -78,18 +78,11 @@ test "a list's iterator is advanced the same way" {
     assert it.next() matches { Some(2) };
 }
 
-test "by_ref is `&mut it`" {
-    let mut r = 0..<5;
-    let two: List<i32> = r.by_ref().take(2).collect();
-    assert two == [0, 1];
-    assert r.next() matches { Some(2) };
-}
-
 test "an adapter taking a closure reads the reference's item type" {
     let mut r = 0..<9;
     let doubled = (&mut r).map(|x| x * 2).take(1).collect();
     assert doubled == [0];
-    let even = r.by_ref().filter(|x| x % 2 == 0).take(1).collect();
+    let even = (&mut r).filter(|x| x % 2 == 0).take(1).collect();
     assert even == [2];
     assert r.next() == Option::Some(3);
 }

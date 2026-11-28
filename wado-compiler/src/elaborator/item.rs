@@ -21,6 +21,7 @@ use crate::tir::{
 use crate::token::Span;
 use crate::type_table::{ImplProjection, TypeTable};
 
+use super::held_mut_ref::Holder;
 use super::infer_hole::InferHoleTable;
 use super::pending_selection::Undecided;
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext, TypeParamScope, param_decl};
@@ -1294,6 +1295,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let Some(default_ast) = &param.default {
             self.check_param_default(default_ast, type_id, type_params, ctx);
         }
+        self.refuse_held_mut_ref(type_id, Holder::Param, param.span);
         ctx.add_local_at(
             param.name.clone(),
             type_id,
@@ -1317,6 +1319,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .types
             .fn_affine_params
             .insert(func.id, affine_params);
+        // A declaration without a body is an intrinsic, which returns nothing
+        // it holds.
+        if func.body.is_some() {
+            self.refuse_held_mut_ref(
+                return_type,
+                Holder::Held("a returned value"),
+                func.name_span,
+            );
+        }
         if let Some(b) = func.body.as_ref() {
             self.settling_selections(Undecided::Report, |this| this.resolve_block(b, ctx, None));
         }
@@ -1799,6 +1810,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let struct_field_types = self.sem.types.struct_field_types[&struct_decl.id].clone();
         let mut scope = self.enter_decl_params_scope(owner, &struct_decl.type_params);
         scope.resolve_field_defaults(struct_decl, &struct_field_types);
+        for (field, &type_id) in struct_decl.fields.iter().zip(&struct_field_types) {
+            scope.refuse_held_mut_ref(type_id, Holder::Held("a struct field"), field.span);
+        }
 
         let type_params = scope.project_type_params(&struct_decl.type_params);
         drop(scope);
@@ -2576,6 +2590,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Resolve a variant declaration
     pub(super) fn resolve_variant_decl(&mut self, variant_decl: &ast::VariantDecl) {
         self.record_decl_type_params(variant_decl.id, &variant_decl.type_params);
+        let owner = self.tysys.def_at(variant_decl.id);
+        let payloads: Vec<TypeId> = self.tysys.data.variant_cases[&owner]
+            .cases
+            .iter()
+            .map(|case| case.payload)
+            .collect();
+        let scope = self.enter_decl_params_scope(owner, &variant_decl.type_params);
+        for (case, payload) in variant_decl.cases.iter().zip(payloads) {
+            scope.refuse_held_mut_ref(payload, Holder::Held("a variant payload"), case.name_span);
+        }
     }
 
     /// Record a data declaration's type parameters, defaults resolved in its

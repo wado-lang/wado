@@ -11,9 +11,9 @@ test "the adapter advances the copy" {
     assert r.next() matches { Some(0) };
 }
 
-test "by_ref advances the iterator itself" {
+test "`&mut` advances the iterator itself" {
     let mut r = 0..<5;
-    let head: List<i32> = r.by_ref().take(2).collect();
+    let head: List<i32> = (&mut r).take(2).collect();
     assert head == [0, 1];
     assert r.next() matches { Some(2) };
 }

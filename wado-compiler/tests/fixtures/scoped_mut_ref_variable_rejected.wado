@@ -1,0 +1,15 @@
+// A `&mut` of a type that is not `RefMut` lasts for a scope, so a variable
+// holding one would write a copy no scope stores back.
+
+test "a variable holding a `&mut i32`" {
+    let mut n = 1;
+    let r = &mut n;
+    *r = 2;
+    assert n == 2;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "a variable cannot hold a `&mut i32`: a `&mut` of a type that is not `RefMut` lasts only for a call, a pattern's arm or a loop's turn; hold a `Shared<i32>` instead"
+}

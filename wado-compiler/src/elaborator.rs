@@ -20,6 +20,7 @@ mod exhaustiveness;
 mod expr;
 pub(crate) mod float_literal;
 mod handlers;
+mod held_mut_ref;
 mod infer;
 mod infer_hole;
 mod instantiate;

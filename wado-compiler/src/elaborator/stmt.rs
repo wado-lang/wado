@@ -15,6 +15,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::unparse::{case_pattern_head, unparse_instance_pattern, unparse_pattern_source};
 
+use super::held_mut_ref::Holder;
 use super::method_call::MethodCallInput;
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
 use super::pending_selection::{ElementHome, Undecided};
@@ -887,6 +888,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.reject_unresolved_annotation(annotated_type);
         match (&let_stmt.pattern, let_stmt.pattern.as_name()) {
             (_, Some(n)) => {
+                self.refuse_held_mut_ref(type_id, Holder::Held("a variable"), n.span);
                 self.bind_local(
                     ctx,
                     n.id,
@@ -1734,6 +1736,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ctx.must_bind.is_some(),
                     *name_span,
                 );
+                // A `for` turn is the scope of the `&mut` it binds.
+                let holder = match ctx.must_bind {
+                    Some(MustBind {
+                        site: BindingSite::Let,
+                        ..
+                    }) => Some(Holder::Held("a variable")),
+                    Some(MustBind {
+                        site: BindingSite::ForOf,
+                        ..
+                    }) => Some(Holder::Param),
+                    None => None,
+                };
+                if let Some(holder) = holder {
+                    self.refuse_held_mut_ref(binding_type, holder, *name_span);
+                }
                 let index = self.bind_local(ctx, *id, name, *name_span, is_mut, binding_type);
                 vec![(name.clone(), index, binding_type)]
             }

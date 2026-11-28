@@ -69,7 +69,8 @@ test "a loop over `&mut it` advances it" {
 
 So a function handed a `&mut I` advances its caller's iterator, by a loop or
 by an adapter, and a function taking any `I: Iterator` accepts `&mut it`.
-`it.by_ref()` is `&mut it`, for the middle of a method chain.
+There is no `it.by_ref()`: it would return a `&mut Self`, which only a
+[`RefMut`](#dispatch) `Self` may.
 
 <!-- {"fixture":"iterator_through_mut_reference.wado"} -->
 

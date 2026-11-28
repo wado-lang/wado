@@ -15,6 +15,7 @@ use crate::tir::{
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
+use super::held_mut_ref::Holder;
 use super::types::{FunctionContext, OuterReach, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
@@ -310,6 +311,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 declared_return.or(diverged_into).unwrap_or(body_type)
             }
         };
+
+        for (param, (_, type_id)) in closure.params.iter().zip(&params) {
+            self.refuse_held_mut_ref(*type_id, Holder::Param, param.name_span);
+        }
+        self.refuse_held_mut_ref(
+            return_type,
+            Holder::Held("a returned value"),
+            closure.span,
+        );
 
         // Only the walk knows which `&mut`s reach a capture's own storage.
         for var_name in std::mem::take(&mut closure_ctx.mut_ref_captures) {

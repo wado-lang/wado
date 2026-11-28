@@ -1,0 +1,21 @@
+// A struct field holding a `&mut` of a type that is not `RefMut` outlives the
+// scope that stores the value back.
+
+struct Counter {
+    count: &mut i32,
+}
+
+fn bump(c: Counter) {
+    *c.count += 1;
+}
+
+test "a field holding a `&mut i32`" {
+    let mut n = 0;
+    bump(Counter { count: &mut n });
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "a struct field cannot hold a `&mut i32`"
+}

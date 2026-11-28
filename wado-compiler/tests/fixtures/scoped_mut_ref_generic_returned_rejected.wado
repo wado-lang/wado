@@ -1,0 +1,17 @@
+// A generic body returning a `&mut T` holds it past the call, which only a
+// `RefMut` type allows.
+
+fn keep<T>(p: &mut T) -> &mut T {
+    return p;
+}
+
+test "a generic `&mut T` returned" {
+    let mut n = 0;
+    *keep(&mut n) = 1;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "a returned value cannot hold a `&mut T`: a `&mut` of a type that is not `RefMut` lasts only for a call, a pattern's arm or a loop's turn; bound `T: RefMut`, or hold a `Shared<T>` instead"
+}

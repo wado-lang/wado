@@ -544,9 +544,9 @@ test "a &mut to an iterator advances the one it points to" {
     assert r.next() == Option::Some(4);
 }
 
-test "by_ref lends the iterator to an adapter" {
+test "`&mut` lends the iterator to an adapter" {
     let mut r = 0..<6;
-    let head = r.by_ref().take(2).collect();
+    let head = (&mut r).take(2).collect();
     assert head == [0, 1];
     assert r.next() == Option::Some(2);
 }
