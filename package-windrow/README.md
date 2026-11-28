@@ -78,11 +78,13 @@ git log $R --no-merges --format='%h %s' -E -i --grep='^refactor.*(dedup|duplicat
 git log $R --no-merges --format='%h %s' -E -i --grep='^feat' "${P[@]}" | head -200 > wado-feat.txt
 ```
 
-Each row replays one list, with `--names` for the shape + names rows:
+Each cell replays one list, with `--names` for the shape + names rows:
 
 ```sh
-wado run package-windrow/tools/recall.wado -- --commits rs-dedup.txt --files '*.rs' [--names]
-wado run package-windrow/tools/recall.wado -- --commits wado-dedup.txt --files '*.wado' [--names]
+for L in dedup feat; do
+  wado run package-windrow/tools/recall.wado -- --commits rs-$L.txt --files '*.rs' [--names]
+  wado run package-windrow/tools/recall.wado -- --commits wado-$L.txt --files '*.wado' [--names]
+done
 ```
 
 Below 30 tokens a match is about as likely by chance as on a deduplication, hence
