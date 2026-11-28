@@ -713,8 +713,8 @@ drops the scans of alternatives the lookahead cannot reach.
 **A nullable alternative is admitted by what follows the group, as well as by
 its own first set.** It can match nothing, so the group's local FOLLOW selects
 it too; lower computes that at the group's position and bakes it as
-`GroupOp.empty_alt_admits` — one value both walkers read, rather than an
-absence each interprets. It has three states, because a bare list would fold
+`GroupOp.empty_alt_admits` — one value the parse and the scan read, rather
+than an absence each interprets. It has three states, because a bare list would fold
 two of them together: no alternative is nullable; a nullable one whose suffix
 is nullable in turn, so the answer is the caller's FOLLOW and is not
 statically known; or one admitted by exactly this set. The follow set **joins**
@@ -725,8 +725,7 @@ can also be skipped.
 **What an alternative matches is one value, `AltClass`, produced once.**
 Deriving it per site — is there a wildcard in the elements, is the first set
 empty, is it nullable, has it no elements — gets a different answer per
-spelling, so the two emit walkers partition the same group differently
-(invariant 9). `alt_class` in `alt_grouping` is the only producer:
+spelling, so the parse and the scan partition the same group differently. `alt_class` in `alt_grouping` is the only producer:
 
 - `OpenEnded(first)` — `.` or `~X`, written in the alternative or reached
   through a nullable prefix or a rule. Admits every token, so no set describes
@@ -873,17 +872,11 @@ take no alternative, append nothing, and report nothing while the sequence
 continued as though it had matched — the shape reached first-set-only
 positions for years and reached predicate-gated ones as soon as gating landed.
 
-Two decisions are deliberately not that emitter, because their inputs are not
-a group's alternatives:
-
-- **A rule's own alternatives** are independent attempts that fall through to
-  the next on a body failure, closing with the rule's error fallback, rather
-  than a chain that commits on a condition.
-- **A group inside a left-recursive suffix** is walked by the GIR walker off
-  the dispatch plan lower baked (`MultiAltDispatch`), not off first sets, and
-  closes with `expect_set` over the union — a report, but not the same one.
-  Its optional's decision is built from that plan for the same reason
-  (invariant 9), so the two walkers still each decide once.
+A rule's own alternatives are deliberately not that emitter, because they are
+not a group's alternatives: they are independent attempts that fall through to
+the next on a body failure, closing with the rule's error fallback, rather than
+a chain that commits on a condition. A group inside a left-recursive suffix is
+a group like any other (invariant 9).
 
 ### Static LL prediction — the runtime FOLLOW gate
 

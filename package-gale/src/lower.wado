@@ -4734,8 +4734,8 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 /// * `Group` shapes carry their outer field inside the shape payload
 ///   (`TokenOnly.field`, `SimpleCst.field`, etc.); the `Transparent`
 ///   shape has no field of its own and the label passes through to
-///   the inner op. Only `TokenOnly`, a leaf to emit, carries a
-///   `dedup_base`.
+///   the inner op. Every shape but `General` and `Transparent` carries a
+///   `dedup_base` too, rebound as a leaf's is.
 /// * `ListLabel` carries `dedup_base` itself; rebinding the outer
 ///   field here updates `dedup_base` to `new_dedup_base` for the same
 ///   reason as the leaf arms.
@@ -4792,10 +4792,12 @@ fn rebind_group_shape<S: AsStrSlice, S1: AsStrSlice>(shape: GroupShape, new_fiel
         },
         SimpleCst(mut scst) => {
             scst.field = new_field.to_string();
+            scst.dedup_base = new_dedup_base.to_string();
             GroupShape::SimpleCst(scst);
         },
         SingleAlt(mut sa) => {
             sa.field = new_field.to_string();
+            sa.dedup_base = new_dedup_base.to_string();
             GroupShape::SingleAlt(sa);
         },
         General(mut gen) => {
