@@ -13,8 +13,8 @@ runtime, so two grammars' `CstStore`s are different types. It describes its
 grammar's kinds in a `Language`, from which `classify` sorts each token into a
 `TokenClass`, keeping the spelling of a name that resolves outside the function
 (a type, a path, a callee), marks the nodes whose children are statements,
-collapses a pattern of alternatives to one token, and leaves test code out. `shapes` reads each node's token range and each token as
-its shape keeps it. `find_similar` gathers MinHash signatures of every node's
+collapses a pattern of alternatives to one token, and leaves test code out.
+`shapes` reads each node's token range and each token as its shape keeps it. `find_similar` gathers MinHash signatures of every node's
 set of token runs and of its spelled names bottom-up, and of each shortest run
 of statements reaching the minimum size, pairs the nodes banding puts together
 (locality-sensitive hashing), and joins the pairs alike enough into groups

@@ -39,8 +39,8 @@ tokens first:
 Standard error ends with how many files it read and how fast:
 
 ```text
-517 files (12 generated left out), 18.3 MB, 784 groups
-read 140.2s, compared 8.1s, total 148.3s: 0.12 MB/s
+516 files (1 generated left out), 18.5 MB, 728 groups
+read 77.9s, compared 5.2s, total 83.1s: 0.22 MB/s
 ```
 
 Every two members of a group are alike, and of sizes within the similarity of
@@ -49,8 +49,7 @@ inner nodes are not listed again. A pattern of alternatives counts as one
 token: an exhaustive match lists every case of its enum, so two matches over
 one enum share those whatever their arms do. A node that repeats one small
 shape, such as a long list of literals, is not compared: its few distinct runs
-make any two such nodes look alike. Nor is test
-code, a Rust item under `#[test]` or `#[cfg(test)]` or a Wado `test` block: a
+make any two such nodes look alike. Nor is test code, a Rust item under `#[test]` or `#[cfg(test)]` or a Wado `test` block: a
 fixture repeats its shape on purpose. A test module in a file of its own
 (`#[cfg(test)] mod tests;`) is compared, since nothing reads which file a module
 declaration names.
