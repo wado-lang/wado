@@ -1,0 +1,139 @@
+//! The action translations settled before lowering, off the surface grammar:
+//! the bodies a gate analysis reads, and each recognizer's `@members`.
+
+use { ActionSource, Grammar, ParserRule, is_parser_members, is_lexer_members } from "./ir.wado";
+use { RuleAttrs, rule_attrs_table } from "./rule_attrs.wado";
+use { Diagnostics, DiagnosticKind, DiagnosticOwner } from "./gir.wado";
+use { GenSettings } from "./gen_settings.wado";
+use { HashMap } from "core:collections";
+use {
+    action_language_is_emittable,
+    parser_action_language_is_emittable,
+    translate_action,
+    translate_members,
+} from "./java2wado.wado";
+use { MemberDecls } from "./java2wado/jmembers.wado";
+use { AltBinding } from "./attr_resolve.wado";
+
+/// Every gate-relevant action body as the translator renders it, by action id.
+///
+/// A member write is spelled `{noBrace = 1;}` in Java and `{p.noBrace = 1}` in
+/// Wado, and both come out of the translator as `p.<declared member> = 1`. That
+/// is the form `scan_gate.wado` reads, so the translator is the one answer to
+/// what a member is called: guessing it from the grammar text is right for Java
+/// by construction and wrong for every Wado grammar.
+///
+/// A body the translator refuses is simply absent, and the gate analysis refuses
+/// it in turn.
+pub fn translate_gate_bodies(grammar: &Grammar, settings: &GenSettings) -> HashMap<i32, String> {
+    let mut out = HashMap::<i32, String>::new();
+    if !settings.emit_actions {
+        return out;
+    }
+    let attrs = rule_attrs_table(&grammar.parser_rules);
+    for let mut i = 0; i < attrs.len(); i += 1 {
+        for let src of rule_gate_sources(&grammar.parser_rules[i]) {
+            if src.action_id < 0 {
+                continue;
+            }
+            if let Some(code) = translate_gate_body(&src.text, &attrs[i], &attrs, grammar, settings) {
+                out[src.action_id] = code;
+            }
+        }
+    }
+    return out;
+}
+
+/// The bodies a gate can live in: an alternative's actions, and the `@init` /
+/// `@after` pair that scopes one. Predicates are not among them — a gate's
+/// condition is rendered per dispatch by `gate_condition_for`.
+fn rule_gate_sources(rule: &ParserRule) -> List<ActionSource> {
+    let mut out: List<ActionSource> = [];
+    if let Some(a) = &rule.init_action {
+        out.push(*a);
+    }
+    if let Some(a) = &rule.after_action {
+        out.push(*a);
+    }
+    for let alt of &rule.alternatives {
+        for let a of &alt.actions {
+            if a.kind matches { _::Predicate } {
+                continue;
+            }
+            out.push(a.source);
+        }
+    }
+    return out;
+}
+
+fn translate_gate_body<S: AsStrSlice>(
+    text: S,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
+    grammar: &Grammar,
+    settings: &GenSettings,
+) -> Option<String> {
+    return match translate_action(
+        &grammar.action_language,
+        rule,
+        rules,
+        text,
+        /*vals_in_scope=*/ true,
+        &NO_GATE_BINDINGS,
+        &grammar.name,
+        &settings.action_members,
+    ) {
+        Ok(code) => Option::Some(code),
+        Err(_) => null,
+    };
+}
+
+/// A gate body is `<member> = <int literal>` and the `$L` of its scope, neither
+/// of which reads an alternative's labels.
+global NO_GATE_BINDINGS: List<AltBinding> = [];
+
+/// Translate one recognizer's `@members` blocks to struct fields + methods.
+/// ANTLR concatenates a recognizer's blocks and so does this, as one body: a
+/// method in the second calls one declared in the first, and which methods
+/// mutate is a fixed point over all of them.
+pub fn collect_members(
+    grammar: &Grammar,
+    settings: &GenSettings,
+    diagnostics: &mut Diagnostics,
+    lexer: bool,
+) -> MemberDecls {
+    let empty = MemberDecls { fields: [], methods: [] };
+    // Members are a translator product, so a wired base — which turns
+    // `emit_actions` on for a carved-out host language — must not un-carve the
+    // lexer's, whose base owns the action surface too. The parser's base is
+    // predicate-only and the rewrite leaves java2wado a body to translate, so
+    // there the carve-out does not apply.
+    let emittable = if lexer {
+        action_language_is_emittable(grammar);
+    } else {
+        parser_action_language_is_emittable(grammar);
+    };
+    if !settings.emit_actions || !emittable {
+        return empty;
+    }
+    let mut body = String::new();
+    for let act of &grammar.named_actions {
+        let mine = if lexer { is_lexer_members(act, &grammar.kind) } else { is_parser_members(act, &grammar.kind) };
+        if !mine {
+            continue;
+        }
+        body.push_str(&act.body.text);
+        body.push('\n');
+    }
+    if body.is_empty() {
+        return empty;
+    }
+    let owner = if lexer { "@lexer::members" } else { "@members" };
+    return match translate_members(&settings.action_language, &body, &grammar.name, lexer) {
+        Ok(m) => m,
+        Err(msg) => {
+            diagnostics.warn(&DiagnosticOwner::host(&owner), DiagnosticKind::UnsupportedAction, msg);
+            empty;
+        },
+    };
+}

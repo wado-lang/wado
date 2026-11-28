@@ -1,7 +1,8 @@
-//! The generator's modules import one another without a cycle. A cycle is how
-//! one phase comes to hold another's state: `gen_context` once reached `lower`
-//! through `recovery_sets` and `atn`, and the context it carried was filled
-//! half by lowering and half by emit.
+//! The generator's modules import one another without a cycle, and the parser
+//! emit imports nothing of the surface IR. Either is how one phase comes to
+//! hold another's state: `gen_context` once reached `lower` through
+//! `recovery_sets` and `atn`, and the context it carried was filled half by
+//! lowering and half by emit.
 
 use fs from "core:fs";
 use { Preopens } from "core:fs";
@@ -78,6 +79,48 @@ fn find_cycle(
     stack.pop();
     done.push(*node);
     return [];
+}
+
+/// The names `source` imports from the module it names `target`, as written.
+fn names_imported_from<S: AsStrSlice>(source: &String, target: S) -> List<String> {
+    let mut out: List<String> = [];
+    let marker = `} from "${target}"`;
+    let mut rest = source.as_str_slice();
+    while let Some(end) = rest.find(&marker) {
+        let head = rest.slice(0, end);
+        let start = head.rfind("use {").unwrap() + "use {".len();
+        for let name of head.slice(start, head.len()).split(",") {
+            if !name.trim().is_empty() {
+                out.push(name.trim().to_string());
+            }
+        }
+        rest = rest.slice(end + marker.len(), rest.len());
+    }
+    return out;
+}
+
+test "names_imported_from reads a one-line and a multi-line import" {
+    let source = "use { A, B } from \"./ir.wado\";\nuse {\n    C,\n    D,\n} from \"./ir.wado\";\nuse { E } from \"./gir.wado\";\n";
+    assert names_imported_from(&source, "./ir.wado") == ["A", "B", "C", "D"] as List<String>;
+}
+
+test "the parser emit reads the GIR, not the surface IR" {
+    let surface: List<String> = ["Grammar", "ParserRule", "Alternative", "Element"];
+    let emit = [
+        "action_gen",
+        "cst_gen",
+        "emit_context",
+        "kind_set_gen",
+        "parser_gen",
+        "parser_plan",
+        "parser_runtime_gen",
+    ];
+    for let module of emit {
+        let source = fs::read_to_string(`src/${module}.wado`).unwrap();
+        for let name of &names_imported_from(&source, "./ir.wado") {
+            assert !surface.contains(name), `${module} imports ${name}`;
+        }
+    }
 }
 
 test "the generator's modules import one another without a cycle" {
