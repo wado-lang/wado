@@ -1,12 +1,11 @@
 //! The Rust recognizer with its base ports installed: the one clause that
-//! generates it, for Gale's tools and tests and for any package reading Rust.
+//! generates it, for any package reading Rust.
 
 use rust from "../assets/grammar/RustLexer.g4"
     with {
         generator: {
-            module: "./generator.wado",
+            module: "wado-lang:gale",
             inputs: ["../assets/grammar/RustParser.g4"],
-            output_dir: "../tests/generated/cst_rust",
         },
     };
 use { RustLexerBase, RustParserBase, LexerView, Parser } from "../assets/grammar/RustLexer.g4";
@@ -23,7 +22,7 @@ pub use {
 
 // A hand-written RustLexerBase port (the real base class is Java, outside the
 // .g4). Stateless: the predicates read only the match window.
-// `tests/grammars/java/RustLexerBase.java` is its Java twin, which
+// `tools/java/RustLexerBase.java` is its Java twin, which
 // `antlr4_oracle.wado --super` runs ANTLR4 against. Edit both or neither.
 struct RustBase {
 }

@@ -76,7 +76,7 @@ just invoke it directly:
 
 ```sh
 samply record --save-only --rate 1000 -o scratchpad/prof.json -- \
-  target/debug/wado test package-gale/tests/driver_cst_rust_test.wado
+  target/debug/wado test package-gale-rust/tests/parse_test.wado
 ```
 
 Interactive call tree (and correct kernel symbols):

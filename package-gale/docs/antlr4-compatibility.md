@@ -1265,7 +1265,7 @@ rest of the input admits. Fixture: `lr_atn_shared_op.g4` (`not like` against
 two suffixes that both reach the end wins (`lr_open_ended_rule_suffix.g4`,
 `lr_complement_op.g4`), and Rust's `x < <T as Tr>::C` takes `shl` because the
 predicate in `shl : LT {this.NextLT()}? LT` follows a token, which prediction
-does not see (`driver_cst_rust_test`).
+does not see (`package-gale-rust/tests/parse_test.wado`).
 
 When the simulator predicts exit, the enclosing invocations of the same loop at
 the same position exit too, unless one of them could enter there on an operator

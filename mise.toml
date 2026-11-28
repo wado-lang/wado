@@ -118,7 +118,7 @@ while IFS= read -r path; do
     i=$((i + 1))
 done < "${dir}/all"
 wado="$(tools/dev-bin.sh --path wado)"
-tool=package-gale/tools/rust_inline_paths.wado
+tool=package-gale-rust/tools/inline_paths.wado
 # Compiles the tool into the build cache once, rather than once per shard.
 head -n 1 "${dir}/all" > "${dir}/warm"
 "${wado}" run "${tool}" -- --check --paths-from "${dir}/warm" > /dev/null
@@ -137,7 +137,7 @@ exit "${status}"
 
 [tasks.list-rust-paths]
 description = "List the inline `crate::` / `super::` paths the named Rust files carry"
-run = "tools/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado --"
+run = "tools/dev-bin.sh wado run package-gale-rust/tools/inline_paths.wado --"
 
 [tasks.check-spec-examples]
 description = "Fail if a `wado` block in the specification does not quote an e2e fixture or a source file"
@@ -193,7 +193,7 @@ mkdir -p target
 list="$(mktemp target/rust-paths.XXXXXX)"
 trap 'rm -f "${list}"' EXIT
 git ls-files '*.rs' > "${list}"
-tools/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --update --paths-from "${list}"
+tools/dev-bin.sh wado run package-gale-rust/tools/inline_paths.wado -- --update --paths-from "${list}"
 """
 
 [tasks.check-deps]

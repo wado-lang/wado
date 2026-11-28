@@ -5,13 +5,12 @@
 use rust from "../assets/grammar/RustLexer.g4"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "wado-lang:gale",
             inputs: ["../assets/grammar/RustParser.g4"],
-            output_dir: "../tests/generated/cst_rust",
         },
     };
-use { parse_rust } from "../src/rust.wado";
-use { collect_paths, ratchet } from "../src/corpus.wado";
+use { parse_rust } from "../src/lib.wado";
+use { collect_paths, ratchet } from "wado-lang:gale";
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";

@@ -1,20 +1,18 @@
-/// Driver test for the Rust grammar parser: items and expressions, plus
-/// negative tripwires. The repository-wide measure is
-/// `tools/rust_corpus_check.wado`; what belongs here is the shape a corpus
-/// failure narrowed to.
+/// The Rust parser on items and expressions, plus negative tripwires. The
+/// repository-wide measure is `tools/corpus_check.wado`; what belongs here is
+/// the shape a corpus failure narrowed to.
 ///
-/// The superClass predicates run through the base ports
-/// `src/rust.wado` installs.
+/// The superClass predicates run through the base ports `src/lib.wado`
+/// installs.
 use rust from "../assets/grammar/RustLexer.g4"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "wado-lang:gale",
             inputs: ["../assets/grammar/RustParser.g4"],
-            output_dir: "./generated/cst_rust",
         },
     };
-use { normalize_tree } from "./support/tree_compare.wado";
-use { with_rust_bases } from "../src/rust.wado";
+use { normalize_tree } from "wado-lang:gale/tests/support/tree_compare.wado";
+use { with_rust_bases } from "../src/lib.wado";
 
 fn rlex_tok<S: AsStrSlice>(input: S) -> rust::TokenStream {
     return with_rust_bases(|| rust::tokenize(input));

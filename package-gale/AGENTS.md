@@ -9,6 +9,7 @@ below hold for every change; the rest lives in companion docs:
 - [`docs/import.md`](./docs/import.md) — grammar composition: how `import S;` resolves and what a delegate contributes.
 - [`docs/testing.md`](./docs/testing.md) — the test layers and the oracle procedures.
 - [`docs/debugging.md`](./docs/debugging.md) — `gale dump`, the `trace` option, and the Rust corpus check.
+- [`package-gale-rust`](../package-gale-rust/AGENTS.md) — the Rust grammar, Gale's largest real-world test: a Gale change runs `wado test package-gale-rust` too.
 - [`docs/perf.md`](./docs/perf.md) — performance notes: budget, levers, and measured perf dead-ends.
 - [`docs/dead-ends.md`](./docs/dead-ends.md) — prediction, predicate and lexer approaches that failed. The static path always has edges; the complete answer is the runtime ATN simulator. Read the area's section before retrying anything in it.
 - [`docs/design.md`](./docs/design.md) — the design.
