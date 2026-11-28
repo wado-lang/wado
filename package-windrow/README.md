@@ -49,18 +49,41 @@ declaration names.
 `tools/recall.wado` replays past commits on this repository and counts those
 where a group joins a node the commit deleted to another node. Commits whose
 subject names a deduplication are measured against feature commits, a baseline
-for chance. At 40 tokens and similarity 0.8:
+for chance. A commit that deletes no hunk of three lines or more is not
+counted. At 40 tokens and similarity 0.8:
 
 | Files | Measure       | Deduplications | Feature commits |
 | ----- | ------------- | -------------- | --------------- |
-| Rust  | shape         | 36% of 286     | 18% of 193      |
-| Rust  | shape + names | 43% of 286     | 27% of 193      |
-| Wado  | shape         | 36% of 70      | 9% of 116       |
-| Wado  | shape + names | 49% of 70      | 18% of 116      |
+| Rust  | shape         | 38% of 289     | 15% of 194      |
+| Rust  | shape + names | 44% of 289     | 23% of 194      |
+| Wado  | shape         | 39% of 72      | 12% of 121      |
+| Wado  | shape + names | 43% of 72      | 13% of 121      |
 
-Names find more deduplications, and about as many more chance matches, so they
-are not on by default. A match on a feature commit is often a real copy nobody
-folded yet, so the baseline overstates the noise.
+Names find a few more deduplications, and in Rust more chance matches as well,
+so they are not on by default. A match on a feature commit is often a real copy
+nobody folded yet, so the baseline overstates the noise.
+
+The commit lists are selected from `e9bace24ce3` by their subjects:
+
+```sh
+R=e9bace24ce3
+git log $R --no-merges --format='%h %s' -- '*.rs' | grep -E '^[0-9a-f]+ refactor' |
+  grep -i -E 'dedup|duplicat|one implementation|share|reuse|unif|consolidat|twin|copies|one (walk|helper|resolver|query|path|loop|place|function|table|source)|single (helper|walk|source|place)|fold .* into|merge .* into|extract|hoist' > rs-dedup.txt
+git log $R --no-merges --format='%h %s' -- '*.rs' | grep -E '^[0-9a-f]+ feat' |
+  grep -v -i -E 'dedup|duplicat|share|reuse|unif|consolidat|one (walk|helper|place)|fold|merge|extract|hoist|refactor' |
+  shuf -n 286 --random-source=<(yes 2) > rs-feat.txt
+P=(-- '*.wado' ':!wado-compiler/tests/**' ':!**/generated/**')
+git log $R --no-merges --format='%h %s' -E -i --grep='^refactor.*(dedup|duplicat|shar|unif|consolidat|hoist|one (helper|place|implementation))' "${P[@]}" |
+  grep -v -F -f <(cut -d' ' -f1 rs-dedup.txt) > wado-dedup.txt
+git log $R --no-merges --format='%h %s' -E -i --grep='^feat' "${P[@]}" | head -200 > wado-feat.txt
+```
+
+Each row replays one list, with `--names` for the shape + names rows:
+
+```sh
+wado run package-windrow/tools/recall.wado -- --commits rs-dedup.txt --files '*.rs' [--names]
+wado run package-windrow/tools/recall.wado -- --commits wado-dedup.txt --files '*.wado' [--names]
+```
 
 Below 30 tokens a match is about as likely by chance as on a deduplication, hence
 the default of 40.

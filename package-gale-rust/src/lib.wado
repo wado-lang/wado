@@ -81,6 +81,12 @@ pub fn parse_rust<S: AsStrSlice>(source: S) -> rust::ParseResult {
     return with_rust_bases(|| rust::parse(source));
 }
 
+/// The syntax errors in Rust `source`, one rendered message each; empty when
+/// it parses. The component's public entry point.
+export fn diagnose(source: String) -> List<String> {
+    return parse_rust(source).diagnostics.into_iter().map(|d| `${d}`).collect();
+}
+
 /// FNV-1a over every row of the tree: what it is, where it sits, and the
 /// alternative that built it. Two parses of one file agree on it exactly when
 /// they built the same tree.
