@@ -16,11 +16,14 @@ pub enum TestMark {
 /// purpose. `sequence` is the node kind whose children are statements.
 /// `declares` is the keyword before a function's name, `member` and `path` the
 /// tokens beside a name that resolves elsewhere, and `calls` those after a
-/// name called.
+/// name called. `pattern` is the node kind of a pattern, and `bar` the token
+/// between its alternatives.
 pub struct Language {
     pub class_of: fn(i32) -> TokenClass,
     pub marks_test: fn(i32, StrSlice) -> TestMark,
     pub sequence: i32,
+    pub pattern: i32,
+    pub bar: i32,
     pub declares: i32,
     pub member: i32,
     pub path: i32,
@@ -47,9 +50,13 @@ impl Language {
 
 /// `raw`, a parser's tree copied with every token `Fixed`, with each token
 /// sorted into its class, each sequence node marked, and test code left out.
+/// A pattern of alternatives keeps one token: the cases an exhaustive match
+/// lists are the enum's, so two matches over one enum share them whatever
+/// their arms do.
 pub fn classify(raw: &Tree, lang: &Language) -> Tree {
     let n = raw.len();
     let mut test_code: List<bool> = List::filled(n, false);
+    let mut alternatives: List<bool> = List::filled(n, false);
     let mut token_kinds: List<i32> = [];
     let mut open: List<i32> = [];
     for let mut i = 0; i < n; i += 1 {
@@ -66,12 +73,18 @@ pub fn classify(raw: &Tree, lang: &Language) -> Tree {
             _::Close => {
                 open.pop();
             },
-            _::Token => token_kinds.push(raw.kind[i]),
+            _::Token => {
+                token_kinds.push(raw.kind[i]);
+                if raw.kind[i] == lang.bar && let Some(parent) = open.last() && raw.kind[parent] == lang.pattern {
+                    alternatives[parent] = true;
+                }
+            },
         }
     }
     let mut tree = Tree { path: raw.path, source: raw.source };
     let mut depth = 0;
     let mut skip_until = -1;
+    let mut collapse_until = -1;
     let mut token = -1;
     let mut classes: List<TokenClass> = [];
     for let mut i = 0; i < n; i += 1 {
@@ -95,9 +108,21 @@ pub fn classify(raw: &Tree, lang: &Language) -> Tree {
         if skipping {
             continue;
         }
+        if collapse_until >= 0 {
+            if row matches { _::Close } && collapse_until == depth + 1 {
+                collapse_until = -1;
+                tree.close();
+            }
+            continue;
+        }
         match row {
             _::Open => {
                 tree.open(raw.kind[i], raw.start[i], raw.end[i]);
+                if alternatives[i] {
+                    tree.token(lang.bar, TokenClass::Fixed, raw.start[i], raw.end[i]);
+                    collapse_until = depth;
+                    continue;
+                }
                 if raw.kind[i] == lang.sequence {
                     tree.mark_sequence();
                 }

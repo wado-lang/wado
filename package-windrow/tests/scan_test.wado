@@ -184,6 +184,56 @@ test "a node repeating one small shape is not compared" {
     assert find_similar(&trees, 30, 0.5).is_empty();
 }
 
+/// The arm an exhaustive match ends with, every case left listed by name.
+fn every_case(qualifier: String) -> String {
+    let mut cases: List<String> = [];
+    for let name of [
+        "Dead", "Local", "Global", "Binary", "Unary", "Cast", "Index", "Tuple", "Array", "Switch", "Tag", "Test",
+    ] {
+        cases.push(`${qualifier}${name}(_)`);
+    }
+    return cases.join(" | ");
+}
+
+test "the cases an exhaustive match lists are no copy" {
+    let rest = every_case("Kind::");
+    let a = `fn reads(e: &Expr) -> bool {
+    match e.kind {
+        Kind::Load { slot } => slot >= 0,
+        ${rest} => false,
+    }
+}`;
+    let b = `fn weight(e: &Expr, scale: i32) -> i32 {
+    match e.kind {
+        Kind::Store { slot, value } => slot * scale + value,
+        ${rest} => 0,
+    }
+}`;
+    let rust: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    assert find_similar(&rust, 20, 0.8).is_empty();
+    let cases = every_case("_::");
+    let c = `fn reads(e: &Expr) -> bool {
+    return match e.kind {
+        _::Load(slot) => slot >= 0,
+        ${cases} => false,
+    };
+}`;
+    let d = `fn weight(e: &Expr, scale: i32) -> i32 {
+    return match e.kind {
+        _::Store([slot, value]) => slot * scale + value,
+        ${cases} => 0,
+    };
+}`;
+    let wado: List<Tree> = [
+        read_wado("c.wado", c).unwrap(),
+        read_wado("d.wado", d).unwrap(),
+    ];
+    assert find_similar(&wado, 20, 0.8).is_empty();
+}
+
 test "a run of statements in a longer block is compared" {
     let a = "fn f(p: &P, c: &C) -> G {
     let n = p.width() * 2;
