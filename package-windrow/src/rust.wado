@@ -38,7 +38,8 @@ fn marks_test(kind: i32, text: StrSlice) -> TestMark {
             compact.push(c);
         }
     }
-    let predicate = compact.trim_prefix("#!").trim_prefix("#");
+    let bare = without_string_values(compact.as_str_slice());
+    let predicate = bare.trim_prefix("#!").trim_prefix("#");
     if predicate == "[test]" {
         return TestMark::Parent;
     }
@@ -48,6 +49,65 @@ fn marks_test(kind: i32, text: StrSlice) -> TestMark {
         return TestMark::Parent;
     }
     return TestMark::None;
+}
+
+/// `s` with each `= "…"` or `= r#"…"#` value emptied to `""`, so no character
+/// inside one reads as a delimiter or a predicate. `s` has no whitespace.
+fn without_string_values(s: StrSlice) -> String {
+    let mut out = "";
+    let mut kept = 0;
+    let mut i = 0;
+    while i < s.len() {
+        let mut j = i + 1;
+        if unchecked s.byte_at(i) != b'=' {
+            i = j;
+            continue;
+        }
+        let raw = j < s.len() && unchecked s.byte_at(j) == b'r';
+        let mut hashes = 0;
+        if raw {
+            j += 1;
+            while j < s.len() && unchecked s.byte_at(j) == b'#' {
+                hashes += 1;
+                j += 1;
+            }
+        }
+        if j >= s.len() || unchecked s.byte_at(j) != b'"' {
+            i = j;
+            continue;
+        }
+        out.push_str(s.slice(kept, i + 1));
+        out.push_str("\"\"");
+        j += 1;
+        loop {
+            assert j < s.len(), "a parsed string literal closes";
+            let b = unchecked s.byte_at(j);
+            if !raw && b == b'\\' {
+                j += 2;
+            } else if b == b'"' && closes_raw(s, j + 1, hashes) {
+                j += 1 + hashes;
+                break;
+            } else {
+                j += 1;
+            }
+        }
+        kept = j;
+        i = j;
+    }
+    out.push_str(s.slice(kept, s.len()));
+    return out;
+}
+
+fn closes_raw(s: StrSlice, from: i32, hashes: i32) -> bool {
+    if from + hashes > s.len() {
+        return false;
+    }
+    for let k of from..<from + hashes {
+        if unchecked s.byte_at(k) != b'#' {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// Whether a `cfg` predicate implies `test`: `test` itself, an `all` one of
