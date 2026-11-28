@@ -4,8 +4,8 @@
 //! reuses the identity translator (`action_translate.wado`) for `$`-leaves. A
 //! body outside the supported subset is a loud diagnostic, never a silent no-op.
 
+use { RuleAttrs } from "./rule_attrs.wado";
 use {
-    ParserRule,
     Grammar,
     ActionLanguage,
     AttrDecl,
@@ -38,8 +38,8 @@ use { AltBinding } from "./attr_resolve.wado";
 /// constants.
 pub fn translate_action<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice = String>(
     lang: &ActionLanguage,
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     body: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -70,7 +70,7 @@ global NO_EXPECTED: String = "";
 /// A rule's argument names in their surface spelling, which is how a Java body
 /// reaches one. The generated parameter is spelled differently (escaped and
 /// snake_cased), so the name a body writes resolves through the value channel.
-fn arg_names(rule: &ParserRule) -> List<String> {
+fn arg_names(rule: &RuleAttrs) -> List<String> {
     let mut out: List<String> = [];
     for let a of &rule.args {
         out.push(a.name);
@@ -82,8 +82,8 @@ fn arg_names(rule: &ParserRule) -> List<String> {
 /// expression, dispatching on the action language as `translate_action` does.
 pub fn translate_predicate<S: AsStrSlice, S1: AsStrSlice>(
     lang: &ActionLanguage,
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     body: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,

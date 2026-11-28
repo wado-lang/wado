@@ -2,7 +2,7 @@
 //! Method bodies reuse the statement translator with the recognizer handle bound
 //! to `self`; a synthetic empty rule stands in for the absent value channel.
 
-use { ParserRule, Visibility } from "../ir.wado";
+use { RuleAttrs } from "../rule_attrs.wado";
 use { JToken } from "./jlexer.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_stmts, parse_java_expr, punct_is, ident_at, JExpr, JStmt } from "./jparser.wado";
@@ -103,8 +103,8 @@ pub fn translate_java_members<S: AsStrSlice, S1: AsStrSlice>(
     let mut_methods = mutating_methods(&parsed);
     let mut methods: List<MemberMethod> = [];
     for let m of &parsed {
-        let dummy = ParserRule::new("", Visibility::Default, [], []);
-        let no_rules: List<ParserRule> = [];
+        let dummy = RuleAttrs { name: "" };
+        let no_rules: List<RuleAttrs> = [];
         let no_bindings: List<AltBinding> = [];
         // The parameters shadow a field of the same name, as Java's scoping does,
         // and so do the body's own locals.
@@ -386,8 +386,8 @@ fn java_field_default<S: AsStrSlice>(ty: S) -> Option<String> {
 
 /// Emit a field initializer, which has no rule / value-channel context.
 fn emit_member_expr(e: &JExpr, env: &JEnv) -> Result<String, String> {
-    let dummy = ParserRule::new("", Visibility::Default, [], []);
-    let no_rules: List<ParserRule> = [];
+    let dummy = RuleAttrs { name: "" };
+    let no_rules: List<RuleAttrs> = [];
     let no_bindings: List<AltBinding> = [];
     return emit_expr(&dummy, &no_rules, e, false, &no_bindings, env);
 }

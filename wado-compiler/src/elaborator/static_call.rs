@@ -21,8 +21,8 @@ use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::solver_bridge::Ordered;
 use super::synth::ArgClass;
-use super::trait_env::{ImplHeader, ImplTargetKey};
-use super::trait_query::{DerivedAt, NewtypePeel};
+use super::trait_env::{ImplHeader, ImplMethodEntry, ImplTargetKey};
+use super::trait_query::DerivedAt;
 use super::types::{OverloadedCallForm, TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
@@ -76,7 +76,8 @@ impl ReceiverId {
         &self.key
     }
 
-    /// The type the call knows the receiver at; `None` for a bare spelling.
+    /// The type the call knows the receiver at; `None` for a bare spelling of
+    /// a generic declaration, whose arguments the call has yet to settle.
     pub(super) fn ty(&self) -> Option<TypeId> {
         self.ty
     }
@@ -455,7 +456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolutions = &self.tysys.resolutions;
         let key = match resolutions.walked(segment.id)? {
             Resolution::Def(def) if resolutions.defs().kind(def).is_type() => {
-                ImplTargetKey::of_decl(resolutions.defs(), def)
+                return Some(self.receiver_declared(def));
             }
             Resolution::Def(_) => return None,
             Resolution::Binder(binder) => ImplTargetKey::TypeParam {
@@ -465,6 +466,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Resolution::Projection(_) | Resolution::Unresolved => return None,
         };
         Some(ReceiverId::keyed(key, None))
+    }
+
+    /// The type `def` declares, as a call spelling its bare name knows it.
+    pub(super) fn receiver_declared(&self, def: DefId) -> ReceiverId {
+        let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
+        let ty = primitive_receiver_type(&key).or_else(|| self.monomorphic_declared_type(def));
+        ReceiverId::keyed(key, ty)
+    }
+
+    /// The type `def` declares where it declares no parameter, so the name
+    /// alone is the whole type.
+    fn monomorphic_declared_type(&self, def: DefId) -> Option<TypeId> {
+        let lookup = self.type_lookup();
+        if let Some(newtype) = lookup.newtype_of(def) {
+            return Some(newtype);
+        }
+        if lookup.declared_type_param_ids(def).is_some() {
+            return None;
+        }
+        let ty = lookup.nominal_type_of(def, &mut self.tysys.type_table.borrow_mut());
+        (ty != TypeTable::UNKNOWN).then_some(ty)
     }
 
     /// The receiver the call resolved to `ty`, which a reference keys by kind.
@@ -809,35 +831,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((link, owner.receiver.key))
     }
 
-    /// The link below the newtype `key` its static named `method_name`
-    /// belongs to. `None` where `key` is no newtype, where it owns the static
-    /// itself, or where no link answers the name.
+    /// The link below the newtype `receiver` its static named `method_name`
+    /// belongs to. `None` where `receiver` is no newtype, where it owns the
+    /// static itself, or where no link answers the name.
     pub(super) fn newtype_static_target(
         &mut self,
-        key: &ImplTargetKey,
+        receiver: &ReceiverId,
         method_name: &str,
     ) -> Option<ImplTargetKey> {
+        self.newtype_static_link(receiver, method_name)
+            .map(|link| link.key)
+    }
+
+    /// [`Self::newtype_static_target`], at the type the chain gives that link.
+    fn newtype_static_link(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+    ) -> Option<ReceiverId> {
+        let key = &receiver.key;
         if !self.is_newtype_key(key) {
             return None;
         }
         let def = key.decl().expect("a newtype is a declaration");
-        // At the type the newtype declares: a blanket whose bound holds there
-        // owns the static, and no blanket is asked of a receiver without one.
-        let declared = self.declared_self_type(def);
-        let receiver = ReceiverId::of_decl(self.tysys.resolutions.defs(), def, declared);
-        let owner = self.static_owner(&StaticQuery::of(&receiver, method_name));
-        (owner.receiver.key != *key).then_some(owner.receiver.key)
+        // At the instance the call knows, else the one the newtype declares: a
+        // blanket whose bound holds there owns the static, and no blanket is
+        // asked of a receiver without a type.
+        let at = receiver.at_type(receiver.ty.or_else(|| self.declared_self_type(def)));
+        let owner = self.static_owner(&StaticQuery::of(&at, method_name));
+        (owner.receiver.key != *key).then_some(owner.receiver)
     }
 
-    /// The key of the link a static named `method_name` on `key` belongs to:
-    /// `key` itself, unless it is a newtype inheriting the static.
+    /// The index entry of the inherent `method_name` a call on `receiver`
+    /// reaches: at the link owning the static, in the block written for the
+    /// instance the call names: `receiver_args` where it inferred them, else
+    /// the receiver's own. Blocks for two instances of one generic type share
+    /// a key, and each declares a visibility of its own.
+    pub(super) fn reached_static_entry(
+        &mut self,
+        receiver: &ReceiverId,
+        receiver_args: &[TypeId],
+        method_name: &str,
+    ) -> Option<&ImplMethodEntry> {
+        let owner = self
+            .newtype_static_link(receiver, method_name)
+            .unwrap_or_else(|| receiver.clone());
+        let instance = self
+            .tysys
+            .receiver_declaring_args(owner.ty, receiver_args, owner.key.decl())
+            .unwrap_or_default();
+        self.impl_method_entries(&owner.key, method_name)
+            .find(|entry| self.declaration_reaches(entry.method_id, &instance))
+    }
+
+    /// The key of the link a static named `method_name` on `receiver` belongs
+    /// to: its own, unless it is a newtype inheriting the static.
     pub(super) fn static_owner_key(
         &mut self,
-        key: &ImplTargetKey,
+        receiver: &ReceiverId,
         method_name: &str,
     ) -> ImplTargetKey {
-        self.newtype_static_target(key, method_name)
-            .unwrap_or_else(|| key.clone())
+        self.newtype_static_target(receiver, method_name)
+            .unwrap_or_else(|| receiver.key.clone())
     }
 
     /// The link of the newtype `head`'s chain that `owner` declares, and
@@ -1672,7 +1727,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(receiver_type) = receiver_type else {
             return Vec::new();
         };
-        self.applicable_blanket_statics(receiver_type, method_name, NewtypePeel::Here)
+        self.applicable_blanket_statics(receiver_type, method_name)
             .into_iter()
             .filter_map(|blanket| {
                 let header = &self.tysys.trait_env.impl_headers[&blanket.def];
@@ -1892,6 +1947,24 @@ impl TypeSystem {
         match receiver {
             Some(receiver) => table.bind_impl_slots_asked(impl_def, asked, receiver, &mut slots),
             None => table.bind_each_into(&written, asked, &mut slots),
+        }
+        // A parameter `asked` settles is the receiver's too wherever the
+        // target places it: `impl<T> Mark<T> for W<List<T>>` answers
+        // `Mark<String>` for `W<List<String>>` alone.
+        if let Some(receiver) = receiver
+            && let Some(decl) = table.impl_target_decl(impl_def)
+            && let Some(held) = table.args_at_decl(receiver, decl)
+            && !held.iter().any(|&arg| table.awaits_inference(arg))
+        {
+            let placed: Vec<TypeId> = table
+                .impl_target_args(impl_def)
+                .to_vec()
+                .into_iter()
+                .map(|arg| table.substitute_type_params(arg, &slots))
+                .collect();
+            if table.bind_type_params(&placed, &held).is_none() {
+                return false;
+            }
         }
         written.iter().zip(asked).all(|(&arg, &want)| {
             let held = table.substitute_type_params(arg, &slots);

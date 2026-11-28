@@ -1,0 +1,23 @@
+pub struct P { pub v: i32 }
+
+impl P {
+    pub fn origin() -> P { return P { v: 0 }; }
+}
+
+pub trait Marked with () {
+    fn mark(&self) -> i32;
+}
+
+impl Marked for P {
+    fn mark(&self) -> i32 { return 4; }
+}
+
+pub trait Make with () {
+    fn ap(f: fn(i32) -> i32) -> i32;
+    fn wide(n: i64) -> i64;
+}
+
+impl<T: Marked> Make for T {
+    fn ap(f: fn(i32) -> i32) -> i32 { return f(20); }
+    fn wide(n: i64) -> i64 { return n; }
+}

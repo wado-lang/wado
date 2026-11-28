@@ -1,4 +1,5 @@
 use { resolve_attrs } from "../src/attr_resolve.wado";
+use { rule_attrs_table } from "../src/rule_attrs.wado";
 use { parse } from "../src/g4/parser.wado";
 
 test "resolve_attrs classifies labels, refs, attrs, and specials" {
@@ -6,9 +7,9 @@ test "resolve_attrs classifies labels, refs, attrs, and specials" {
 r returns [int v] : a=e op=B { $v = $a.v; } ;
 e returns [int v] : ID ;
 ").unwrap();
-    let rule = &g.parser_rules[0];
+    let rule = &rule_attrs_table(&g.parser_rules)[0];
     let body = " $v = $a.v; ";
-    let refs = resolve_attrs(body, rule, &g.parser_rules).unwrap();
+    let refs = resolve_attrs(body, rule, &rule_attrs_table(&g.parser_rules)).unwrap();
     assert refs.len() == 2;
     assert refs[0].name == "v" && refs[0].target matches { _::RuleAttr }, "v is a returns attr";
     assert refs[1].name == "a" && refs[1].target matches { _::RuleLabel }, "a is a rule label";
@@ -21,7 +22,9 @@ test "resolve_attrs resolves token labels and token members" {
     let g = parse("grammar T;
 r : x=ID { print($x.text); } ;
 ").unwrap();
-    let refs = resolve_attrs(" print($x.text); ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    let refs = resolve_attrs(" print($x.text); ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(
+        &g.parser_rules,
+    )).unwrap();
     assert refs.len() == 1;
     assert refs[0].target matches { _::TokenLabel }, "x is a token label";
 }
@@ -31,7 +34,9 @@ test "resolve_attrs resolves unlabeled token and rule refs" {
 r : e ID ;
 e : ID ;
 ").unwrap();
-    let refs = resolve_attrs(" $e.start $ID.text ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    let refs = resolve_attrs(" $e.start $ID.text ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(
+        &g.parser_rules,
+    )).unwrap();
     assert refs.len() == 2;
     assert refs[0].name == "e" && refs[0].target matches { _::RuleRef }, "e is a rule ref";
     assert refs[1].name == "ID" && refs[1].target matches { _::TokenRef }, "ID is a token ref";
@@ -43,7 +48,7 @@ r : ~ID ;
 ID : 'a' ;
 X : 'b' ;
 ").unwrap();
-    let refs = resolve_attrs(" $ID.text ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    let refs = resolve_attrs(" $ID.text ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(&g.parser_rules)).unwrap();
     assert refs.len() == 1 && refs[0].target matches { _::TokenRef }, "ID is a token ref";
 }
 
@@ -51,11 +56,11 @@ test "resolve_attrs list label" {
     let g = parse("grammar T;
 r : (xs+=ID)* ;
 ").unwrap();
-    let refs = resolve_attrs(" $xs ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    let refs = resolve_attrs(" $xs ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(&g.parser_rules)).unwrap();
     assert refs.len() == 1;
     assert refs[0].target matches { _::ListLabel }, "xs is a list label";
     // ANTLR4 error(63): a list label has no attributes.
-    let res = resolve_attrs(" $xs.text ", &g.parser_rules[0], &g.parser_rules);
+    let res = resolve_attrs(" $xs.text ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(&g.parser_rules));
     assert res matches { Err(m) && m.contains("invalid member") };
 }
 
@@ -63,7 +68,7 @@ test "resolve_attrs errors on an unknown reference" {
     let g = parse("grammar T;
 r : ID ;
 ").unwrap();
-    let res = resolve_attrs(" $nope ", &g.parser_rules[0], &g.parser_rules);
+    let res = resolve_attrs(" $nope ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(&g.parser_rules));
     assert res.is_err(), "unknown $nope must be an error";
 }
 
@@ -71,7 +76,7 @@ test "resolve_attrs errors on an invalid token member" {
     let g = parse("grammar T;
 r : x=ID ;
 ").unwrap();
-    let res = resolve_attrs(" $x.bogus ", &g.parser_rules[0], &g.parser_rules);
+    let res = resolve_attrs(" $x.bogus ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(&g.parser_rules));
     assert res.is_err(), "invalid token member must be an error";
 }
 
@@ -80,7 +85,11 @@ test "resolve_attrs: $rule resolves to its label binding when the element is lab
 s : q=e { print($e.v); } ;
 e returns [int v] : ID ;
 ").unwrap();
-    let refs = resolve_attrs(" print($e.v); ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    let refs = resolve_attrs(
+        " print($e.v); ",
+        &rule_attrs_table(&g.parser_rules)[0],
+        &rule_attrs_table(&g.parser_rules),
+    ).unwrap();
     assert refs.len() == 1;
     assert refs[0].target matches { _::RuleLabel }, "e resolves through the label q=e";
     assert refs[0].name == "q", "binding name should be the label q";
@@ -95,7 +104,7 @@ test "resolve_attrs: a declared attribute wins over a same-named labeled-ref ali
 s returns [int e] : q=e { $e = 0; } ;
 e : ID ;
 ").unwrap();
-    let refs = resolve_attrs(" $e = 0; ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    let refs = resolve_attrs(" $e = 0; ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(&g.parser_rules)).unwrap();
     assert refs.len() == 1;
     assert refs[0].target matches { _::RuleAttr }, "declared returns attr e wins, not the q=e label";
     assert refs[0].name == "e";
@@ -105,7 +114,9 @@ test "resolve_attrs: $TOKEN resolves to its label binding when the token is labe
     let g = parse("grammar T;
 s : x=ID { print($ID.text); } ;
 ").unwrap();
-    let refs = resolve_attrs(" print($ID.text); ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    let refs = resolve_attrs(" print($ID.text); ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(
+        &g.parser_rules,
+    )).unwrap();
     assert refs.len() == 1;
     assert refs[0].target matches { _::TokenLabel }, "ID resolves through the label x=ID";
     assert refs[0].name == "x", "binding name should be the label x";
@@ -116,7 +127,7 @@ test "resolve_attrs: $rule stays ambiguous (unresolved) with two labeled refs to
 s : a=e '+' b=e { print($e.v); } ;
 e returns [int v] : ID ;
 ").unwrap();
-    let res = resolve_attrs(" print($e.v); ", &g.parser_rules[0], &g.parser_rules);
+    let res = resolve_attrs(" print($e.v); ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(&g.parser_rules));
     assert res.is_err(), "ambiguous $e (two labeled refs) must not silently resolve";
 }
 
@@ -125,8 +136,8 @@ test "resolve_attrs errors on an unknown rule member" {
 r : e ;
 e returns [int v] : ID ;
 ").unwrap();
-    let res = resolve_attrs(" $e.w ", &g.parser_rules[0], &g.parser_rules);
+    let res = resolve_attrs(" $e.w ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(&g.parser_rules));
     assert res.is_err(), "unknown rule member must be an error";
-    assert resolve_attrs(" $e.v ", &g.parser_rules[0], &g.parser_rules).is_ok();
-    assert resolve_attrs(" $e.start ", &g.parser_rules[0], &g.parser_rules).is_ok();
+    assert resolve_attrs(" $e.v ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(&g.parser_rules)).is_ok();
+    assert resolve_attrs(" $e.start ", &rule_attrs_table(&g.parser_rules)[0], &rule_attrs_table(&g.parser_rules)).is_ok();
 }

@@ -303,7 +303,7 @@ pub enum Cause {
     Generic(String),
     /// A list whose elements are lists, nullable or callbacks.
     ListElement,
-    /// A union of several expressible types, or one narrowed in a result.
+    /// A union narrowed in a result, or one of a callback and another type.
     Union,
     /// A callback in a result, as an event handler attribute is.
     CallbackResult,
@@ -512,6 +512,27 @@ impl<'a> Merged<'a> {
                 self.members.push(member);
             }
         }
+    }
+
+    /// Drop each dashed attribute whose camel-cased attribute is a member: the
+    /// two name one CSS property.
+    fn drop_dashed_aliases(&mut self) {
+        let attributes: IndexSet<&'a str> = self
+            .members
+            .iter()
+            .copied()
+            .filter_map(|member| {
+                if let Member::Attribute { name, .. } = member {
+                    Some(name.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        self.members.retain(|member| {
+            !matches!(member, Member::Attribute { name, .. }
+                if name.contains('-') && attributes.contains(camel_cased(name).as_str()))
+        });
     }
 }
 
@@ -867,7 +888,27 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
             target.add(&mixin.members);
         }
     }
+    for iface in merged.values_mut() {
+        iface.drop_dashed_aliases();
+    }
     Ok(merged)
+}
+
+/// CSSOM's camel-cased attribute for the property a dashed attribute names:
+/// each `-` before a lowercase letter dropped, and the letter uppercased.
+fn camel_cased(dashed: &str) -> String {
+    let mut out = String::new();
+    let mut chars = dashed.chars().peekable();
+    while let Some(c) = chars.next() {
+        match chars.peek() {
+            Some(next) if c == '-' && next.is_ascii_lowercase() => {
+                out.push(next.to_ascii_uppercase());
+                chars.next();
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// The Wado type of a `WebIDL` scalar or string type.
@@ -884,7 +925,8 @@ fn scalar(name: &str) -> Option<WadoType> {
         "unsigned long long" => WadoType::U64,
         "float" | "unrestricted float" => WadoType::F32,
         "double" | "unrestricted double" => WadoType::F64,
-        "DOMString" | "USVString" | "ByteString" => WadoType::String,
+        // CSSOM leaves `CSSOMString` to be either of the first two.
+        "DOMString" | "USVString" | "ByteString" | "CSSOMString" => WadoType::String,
         _ => return None,
     })
 }
@@ -1346,6 +1388,11 @@ impl Lowering<'_> {
             fields.extend(inherited);
         }
         for field in parts.iter().flat_map(|part| &part.members) {
+            assert!(
+                glue::is_identifier(&field.name),
+                "a dictionary member's name must be a JavaScript identifier: `{}`",
+                field.name
+            );
             match self.lower_type(&field.idl_type, Flow::Out) {
                 Ok(ty) => fields.push(DictionaryField {
                     host_name: field.name.clone(),
@@ -1418,7 +1465,7 @@ impl Lowering<'_> {
             mut unions,
             ..
         } = named;
-        let mut values = IndexMap::new();
+        let mut values: IndexMap<String, Vec<String>> = IndexMap::new();
         for declared in &snapshot.enums {
             let name = to_upper_camel_case(&declared.name);
             if !enums.contains(&name) {
@@ -1469,6 +1516,21 @@ impl Lowering<'_> {
             }));
         }
         unions.sort_keys();
+        for union in unions.values() {
+            let mut seen = IndexSet::new();
+            for case in &union.cases {
+                if let WadoType::StringEnum(name) = &case.ty {
+                    for value in &values[name] {
+                        assert!(
+                            seen.insert(value),
+                            "a union's enums must share no value, or the glue cannot tell \
+                             which case the host means: `{value}` in {}",
+                            union.name
+                        );
+                    }
+                }
+            }
+        }
         for union in unions.into_values() {
             module.types.push(WadoTypeDef::Variant(WadoVariant {
                 cm_attr: Some(type_path(&union.name)),
@@ -1882,13 +1944,6 @@ impl Lowering<'_> {
                     texts.join("; ")
                 };
                 match expressible.len() {
-                    1 if reasons.is_empty() || flow == Flow::In => (),
-                    1 => {
-                        return Err(Reason::new(
-                            Cause::Union,
-                            format!("union narrowed in a result: {}", texts()),
-                        ));
-                    }
                     // Its first constituent has to lower before the union can.
                     0 => {
                         return Err(Reason::new(
@@ -1896,12 +1951,14 @@ impl Lowering<'_> {
                             format!("union: {}", texts()),
                         ));
                     }
-                    n if flow == Flow::Out => {
+                    // The host may return a constituent the union dropped.
+                    _ if !reasons.is_empty() && flow == Flow::Out => {
                         return Err(Reason::new(
                             Cause::Union,
-                            format!("union of {n} expressible types in a result"),
+                            format!("union narrowed in a result: {}", texts()),
                         ));
                     }
+                    1 => (),
                     _ => return Ok(optional(union_of(expressible)?, nullable)),
                 }
                 (expressible.pop().unwrap(), nullable)

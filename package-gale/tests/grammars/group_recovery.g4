@@ -1,6 +1,6 @@
 // A multi-element group `(A B C)` inside an alt: a missing middle element
 // must be inserted in place (not just deleted/unwound), exercising the
-// sync threading in `gen_elements_with_non_greedy`.
+// sync threading through a group's leaves.
 grammar GroupRecovery;
 
 s : LP (A B C) RP EOF ;

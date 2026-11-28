@@ -3827,28 +3827,15 @@ fn _parse_deep__inner(p: &mut Parser, follow: i64 = 0) -> DeepVals {
     let mut r: Option<()> = null;
     if !SYNC_2.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if p.peek_kind() == TK_A {
-        if !SYNC_3.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
-        let mut opt_scan_pos: i32 = -1;
-        opt_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_a(tokens, pos, &mut p.atn);
-            if pos < 0 { break opt_scan; }
-            if pos >= tokens.len() || tokens[pos] != TK_B { break opt_scan; }
-            pos += 1;
-            opt_scan_pos = pos;
-        }
-        if opt_scan_pos >= 0 {
-            vals._span_lo_r = p.pos;
-            p.site = 4;
-            p.atn_ret_pending = 65;
-            r = Option::Some(_parse_a(p));
-            vals._span_hi_r = p.pos - 1;
-            p.expect(TK_B, &SYNC_4, false);
-        }
-        p.expect(TK_C, &SYNC_5, false);
+        vals._span_lo_r = p.pos;
+        p.site = 4;
+        p.atn_ret_pending = 65;
+        r = Option::Some(_parse_a(p));
+        vals._span_hi_r = p.pos - 1;
+        p.expect(TK_B, &SYNC_3, false);
+        p.expect(TK_C, &SYNC_4, false);
     } else if p.peek_kind() == TK_C {
-        p.expect(TK_C, &SYNC_5, false);
+        p.expect(TK_C, &SYNC_4, false);
     }
     p.expect(TK_D, &EMPTY_SYNC, true);
     if !p.speculating {
@@ -3892,18 +3879,18 @@ fn _parse_loop_text__inner(p: &mut Parser) {
     let _rule_start_tok = p.pos;
     if !SYNC_1.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
     _first_iter: {
-        p.expect(TK_A, &SYNC_3, false);
+        p.expect(TK_A, &SYNC_5, false);
         if !p.speculating {
              p.emit(p.rule_text(_rule_start_tok)) 
         }
     }
-    if !SYNC_3.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
+    if !SYNC_5.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_5, &EXPECTED_5); }
     while !p.recovering && p.peek_kind() == TK_A {
         p.take();
         if !p.speculating {
              p.emit(p.rule_text(_rule_start_tok)) 
         }
-        if !SYNC_3.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
+        if !SYNC_5.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_5, &EXPECTED_5); }
     }
     p.expect(TK_C, &EMPTY_SYNC, true);
     return;
@@ -4049,10 +4036,10 @@ global SYNC_1: KindSet = [1];
 global EXPECTED_1: List<i32> = [TK_A];
 global SYNC_2: KindSet = [13];
 global EXPECTED_2: List<i32> = [TK_A, TK_C, TK_D];
-global SYNC_3: KindSet = [5];
-global EXPECTED_3: List<i32> = [TK_A, TK_C];
-global SYNC_4: KindSet = [4];
-global SYNC_5: KindSet = [8];
+global SYNC_3: KindSet = [4];
+global SYNC_4: KindSet = [8];
+global SYNC_5: KindSet = [5];
+global EXPECTED_5: List<i32> = [TK_A, TK_C];
 
 global FOLLOW_TABLES: FollowTables = FollowTables {
     stride: 1,

@@ -9,6 +9,9 @@ use std::process::{self, Child, ChildStdin, ChildStdout, Command, Stdio};
 use serde_json::{Value, json};
 use wado_lsp::{Uri, UriScheme};
 
+/// The error code of a request the server dropped because a document changed.
+const CONTENT_MODIFIED: i64 = -32801;
+
 pub struct Client {
     child: Child,
     stdin: ChildStdin,
@@ -58,25 +61,30 @@ impl Client {
     }
 
     /// Sends a request and reads until its response. An error response is
-    /// the server's message.
+    /// the server's message. One the server dropped because a document changed
+    /// under it is sent again, as the specification asks of a client.
     pub fn request(&mut self, method: &str, params: Value) -> Result<Value, String> {
-        self.next_id += 1;
-        let id = self.next_id;
-        self.send(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
         loop {
-            let message = self.receive();
-            if message.get("method").is_some() {
+            self.next_id += 1;
+            let id = self.next_id;
+            self.send(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
+            let response = loop {
+                let message = self.receive();
+                if message.get("method").is_none() {
+                    break message;
+                }
                 self.handle_server_message(message);
-                continue;
-            }
-            assert_eq!(message["id"], id, "responses must arrive in request order");
-            if let Some(error) = message.get("error") {
+            };
+            assert_eq!(response["id"], id, "responses must arrive in request order");
+            let Some(error) = response.get("error") else {
+                return Ok(response["result"].clone());
+            };
+            if error["code"] != CONTENT_MODIFIED {
                 let message = error["message"].as_str();
                 return Err(message
                     .expect("an error response has a message")
                     .to_string());
             }
-            return Ok(message["result"].clone());
         }
     }
 

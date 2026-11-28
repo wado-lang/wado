@@ -1,9 +1,9 @@
 //! `rust-rename`: renames a Rust symbol through rust-analyzer's
 //! `textDocument/rename`.
 
-mod edit;
-mod lsp;
-mod symbol;
+pub(crate) mod edit;
+pub(crate) mod lsp;
+pub(crate) mod symbol;
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -101,7 +101,8 @@ pub fn rename(
         .canonicalize()
         .map_err(|e| format!("{}: {e}", workspace.display()))?;
     let mut client = start_server(&root);
-    let result = request_rename(&mut client, &root, locator, new_name);
+    let result = await_workspace(&mut client)
+        .and_then(|()| request_rename(&mut client, &root, locator, new_name));
     client.shutdown();
     let changes = result?;
     if mode == Mode::Apply {
@@ -110,7 +111,7 @@ pub fn rename(
     Ok(changes)
 }
 
-fn start_server(root: &Path) -> Client {
+pub(crate) fn start_server(root: &Path) -> Client {
     let capabilities = json!({
         "general": { "positionEncodings": ["utf-8"] },
         "textDocument": {
@@ -139,12 +140,8 @@ fn start_server(root: &Path) -> Client {
     client
 }
 
-fn request_rename(
-    client: &mut Client,
-    root: &Path,
-    locator: &Locator,
-    new_name: &str,
-) -> Result<Vec<Change>, String> {
+/// Waits for the server to finish loading the workspace.
+pub(crate) fn await_workspace(client: &mut Client) -> Result<(), String> {
     let status = client.wait_until_quiescent();
     let message = status["message"].as_str().unwrap_or_default();
     match status["health"].as_str() {
@@ -156,10 +153,25 @@ fn request_rename(
         Some("warning") => eprintln!("warning: {message}"),
         _ => {}
     }
-    let target = match locator {
-        Locator::Position(location) => location.clone(),
-        Locator::Symbol(notation) => symbol::resolve(client, notation)?,
-    };
+    Ok(())
+}
+
+impl Locator {
+    pub(crate) fn resolve(&self, client: &mut Client) -> Result<Location, String> {
+        match self {
+            Locator::Position(location) => Ok(location.clone()),
+            Locator::Symbol(notation) => symbol::resolve(client, notation),
+        }
+    }
+}
+
+fn request_rename(
+    client: &mut Client,
+    root: &Path,
+    locator: &Locator,
+    new_name: &str,
+) -> Result<Vec<Change>, String> {
+    let target = locator.resolve(client)?;
     let edit = client.request(
         "textDocument/rename",
         json!({
@@ -234,7 +246,7 @@ fn display_location(location: &Location) -> String {
     )
 }
 
-fn display_path(path: &Path) -> String {
+pub(crate) fn display_path(path: &Path) -> String {
     let cwd = env::current_dir()
         .and_then(|dir| dir.canonicalize())
         .expect("the current directory must resolve");
@@ -242,7 +254,7 @@ fn display_path(path: &Path) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::fs;
 
     use tempfile::TempDir;
@@ -253,7 +265,7 @@ mod tests {
 
     /// A Cargo package named `probe` holding `files`, pinned to the repository's
     /// toolchain so rustup resolves the same rust-analyzer.
-    fn probe(files: &[(&str, &str)]) -> TempDir {
+    pub(crate) fn probe(files: &[(&str, &str)]) -> TempDir {
         let dir = TempDir::new().unwrap();
         let write = |path: &str, text: &str| {
             let path = dir.path().join(path);
@@ -271,7 +283,7 @@ mod tests {
         dir
     }
 
-    fn read(dir: &TempDir, path: &str) -> String {
+    pub(crate) fn read(dir: &TempDir, path: &str) -> String {
         fs::read_to_string(dir.path().join(path)).unwrap()
     }
 
