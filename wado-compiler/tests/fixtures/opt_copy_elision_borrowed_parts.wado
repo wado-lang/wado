@@ -1,0 +1,53 @@
+// A part a body borrows and stores into an aggregate it only reads shares its
+// source rather than taking a copy: into a local list, into a list literal,
+// and into a struct literal.
+struct Range { lo: i32, hi: i32 }
+struct Elem { name: String, ranges: List<Range> }
+struct Wrap { inner: Elem, n: i32 }
+
+fn width(e: &Elem) -> i32 {
+    let mut w = 0;
+    for let r of &e.ranges { w += r.hi - r.lo; }
+    return w;
+}
+
+fn total(es: &List<Elem>) -> i32 {
+    let mut t = 0;
+    for let e of es { t += width(e); }
+    return t;
+}
+
+#[inline("never")]
+fn suffix_total(src: &List<Elem>, from: i32) -> i32 {
+    let mut rest: List<Elem> = [];
+    for let mut j = from; j < src.len(); j += 1 {
+        rest.push(src[j]);
+    }
+    return total(&rest);
+}
+
+#[inline("never")]
+fn one_total(w: &Wrap) -> i32 {
+    return total(&[w.inner]);
+}
+
+#[inline("never")]
+fn wrapped_width(e: &Elem) -> i32 {
+    let w = Wrap { inner: *e, n: 1 };
+    return width(&w.inner) + w.n;
+}
+
+test "the parts read as their sources" {
+    let e = Elem { name: "a", ranges: [Range { lo: 1, hi: 3 }] };
+    let src: List<Elem> = [e, e, e];
+    assert suffix_total(&src, builtin::black_box(1)) == 4;
+    assert one_total(&Wrap { inner: e, n: 2 }) == 2;
+    assert wrapped_width(&e) == 3;
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["nir/copy_elision"]},
+    "test": {},
+    "wir_not_expect:O2": ["$value_copy$"]
+}

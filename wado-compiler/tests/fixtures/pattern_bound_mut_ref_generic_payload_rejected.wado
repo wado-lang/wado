@@ -1,0 +1,19 @@
+// A generic body hides a payload that assignment replaces from the check at
+// the binding, so its instance is refused here.
+
+fn overwrite<T>(slot: &mut Option<T>, value: T) {
+    if let Some(held) = slot {
+        *held = value;
+    }
+}
+
+test "a generic body writes through a scalar payload binding" {
+    let mut count: Option<i32> = Option::Some(1);
+    overwrite(&mut count, 5);
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+}

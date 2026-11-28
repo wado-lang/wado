@@ -1,0 +1,12 @@
+// `Flags::none()` declares no type parameters, so it takes no turbofish.
+
+flags Perms { Read, Write }
+
+fn run() {
+    let p = Perms::none::<i32>();
+}
+
+__DATA__
+{
+  "compile_error": ":6:13: analysis error: `Perms::none` takes no type arguments, but 1 was supplied"
+}

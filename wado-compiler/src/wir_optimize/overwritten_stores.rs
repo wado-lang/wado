@@ -4,18 +4,19 @@
 //! `reuse_struct_loads` hands each read the value stored before it, a run of
 //! `List::push` writes `used` once per push and reads none of them back.
 
+use crate::parallel::Executor;
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
 use super::reuse_loads::Key;
 use super::util::Footprint;
 
-pub(super) fn elide_overwritten_stores(module: &mut WirPackage) {
-    for func in &mut module.functions {
+pub(super) fn elide_overwritten_stores(module: &mut WirPackage, exec: &Executor) {
+    exec.for_each_mut(&mut module.functions, |func| {
         if let Some(body) = &mut func.body {
             Eliminator.visit_body(body);
         }
-    }
+    });
 }
 
 struct Eliminator;

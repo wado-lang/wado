@@ -59,7 +59,7 @@ struct S {
     o: Option<i32>,
 }
 
-fn peek(o: &mut Option<i32>) -> i32 { return o.unwrap_or(0); }
+fn peek(o: &mut Option<i32>) -> i32 { return (*o).unwrap_or(0); }
 
 fn put(o: &mut Option<i32>, v: i32 = peek(o) + 1) { *o = Option::Some(v); }
 

@@ -101,7 +101,7 @@ Per-literal wrappers cast the canonical `env` back to `$Closure_N` and forward t
 
 ### A closure crosses the Component Model boundary only as an `externref`
 
-An exported signature may not carry a closure type in any position, including one buried in a container, a named struct's field, or a variant payload. An imported one carries it only as a whole parameter, a callback taking scalars and handles and returning nothing.
+An exported signature may not carry a closure type in any position, including one buried in a container, a named struct's field, or a variant payload. An imported one carries it only as a whole parameter, a callback taking scalars and handles and returning nothing, a scalar or a handle.
 
 The closure's own struct crosses as an `externref`, and the host calls it back through a core export of the main module. See [Extern Handles § A closure crosses as itself](./wep-2026-11-14-extern-handles.md#a-closure-crosses-as-itself).
 
@@ -112,13 +112,13 @@ The closure's own struct crosses as an `externref`, and the host calls it back t
 - A program that inspects closures of some `(arity, ret)` pays two refs on every canonical value of that shape, plus wrappers and source strings for the affected literals only.
 - Effects ride the closure type's `with` clause, so a closure body is checked against its own effect set rather than the enclosing function's.
 
-## Open
+## Known gaps
 
 - [ ] **Value-copy analysis does not model an environment read.** The escape, liveness and `carries` walks in the lower phase have no case for a capture read, so a value flowing out of one frame's environment into a nested closure's is invisible to them. No program is known where that changes a decision, since the read is synthesized after those walks run.
-- [ ] **Return `Iterator<Item = ...>` from adapters.** They return named structs (`IterMap<Self, U>`, `IterFilter<Self>`); the anonymous form needs the elaborator to elaborate a trait-object-style return type.
+- [ ] **An iterator adapter's return type names its struct.** `map` returns `IterMap<Self, U>` and `filter` returns `IterFilter<Self>`; no return type says `Iterator<Item = ...>` alone.
 - [ ] **Effect-polymorphic iterator methods** (`<effect E>`). Closure literals already inherit caller effects, so this is convenience rather than a correctness fix.
 - [ ] **`Fn` / `FnMut` as user-namable traits**, for user-defined callable types. Closure literals never need them.
-- [ ] **Surface the dispatch choice in the LSP** as an inline hint on closure-typed expressions. Purely additive.
+- [ ] **The dispatch choice is invisible in the editor.** Nothing tells a reader whether a closure-typed expression is specialised or canonical.
 
 ## See Also
 

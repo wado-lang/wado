@@ -1,15 +1,16 @@
 //! The program a tree compiles to: a Pike VM's instructions over UTF-8 bytes.
 
 use { simple_fold_closure } from "core:icu";
-use { Flag, Node } from "./ast.wado";
+use { Flag, Lookaround, Node, each_child } from "./ast.wado";
 use { MAX_CODE_POINT, complement, line_terminators, resolve } from "./charset.wado";
 use { PatternError } from "./parse.wado";
 use { sequences } from "./utf8.wado";
 
-/// How many instructions a program may hold, so that a pattern read at run
-/// time cannot spend unbounded memory on its expanded counts (`a{1000}{1000}`).
-/// One inside optional iterations of an empty-matching body counts once for
-/// each of them and once more, as the Pike VM tracks it once for each.
+/// How many instructions the programs of a pattern may hold between them, so
+/// that a pattern read at run time cannot spend unbounded memory on its
+/// expanded counts (`a{1000}{1000}`). One inside optional iterations of an
+/// empty-matching body counts once for each of them and once more, as the
+/// Pike VM tracks it once for each.
 #[param(name = "re.max_program")]
 internal global MAX_PROGRAM: i32 = 1_000_000;
 
@@ -36,6 +37,10 @@ internal variant Inst {
     /// atom does (RepeatMatcher, step 4).
     Clear([i32, i32]),
     Assert(Look),
+    /// Passes where the lookaround of this index holds. A second number that
+    /// is not negative is the slot it leaves its position in, for the groups
+    /// it holds to be read there once the match is known.
+    Lookaround([i32, i32]),
     /// Passes only past the position slot `k` holds: an optional iteration
     /// that matched empty fails (RepeatMatcher, step 2.b).
     Progress(i32),
@@ -58,40 +63,158 @@ internal struct Program {
     internal state_base: List<i32>,
     /// How many bytes every match spans, where they all span as many.
     internal match_len: Option<i32>,
+    internal direction: Direction,
+    /// The lookarounds whose instruction leaves a position in a slot.
+    internal marked: List<i32>,
+}
+
+impl Program {
+    /// How many states a thread may be in.
+    internal fn states(&self) -> i32 {
+        return self.state_base[self.insts.len()];
+    }
 }
 
 /// Which way a program reads the text.
 internal enum Direction {
     Forward,
-    /// From a match's end back to its start: the program matches what the
-    /// forward one matches, reversed. Its preferences and slots mean nothing.
+    /// From a match's end back to its start, as ECMA-262 reads a lookbehind
+    /// (CompileSubpattern under a _direction_ of backward, §22.2.2.3): the
+    /// parts of a sequence last to first, and each group's end saved before
+    /// its start.
     Reverse,
 }
 
-/// The program matching `node`, whose capturing groups number `groups`.
-internal fn compile(node: &Node, groups: i32, direction: Direction) -> Result<Program, PatternError> {
+impl Direction {
+    /// The byte a program reading this way consumes at `pos`.
+    internal fn byte_at(&self, text: StrSlice, pos: i32) -> u8 {
+        return text.byte_at(if *self == Direction::Forward { pos } else { pos - 1 });
+    }
+}
+
+/// What a lookaround compiles to.
+internal struct LookaroundPrograms {
+    internal negated: bool,
+    /// The body read against its own direction, so that one pass over the
+    /// text, from where a match would end, tells every position it holds at.
+    internal holds: Program,
+    /// The body read in its own direction, for the groups it holds, which
+    /// only one that is not negated leaves set.
+    internal reads: Option<Reads>,
+}
+
+internal struct Reads {
+    internal program: Program,
+    /// The slots of the groups in the body: `[from, until)`.
+    internal from: i32,
+    internal until: i32,
+}
+
+/// The program matching `node` under `flags`, whose pattern holds `groups`
+/// capturing groups and programs of `used` states already.
+internal fn compile(
+    node: &Node,
+    groups: i32,
+    direction: Direction,
+    flags: Flag = Flag::none(),
+    used: i32 = 0,
+) -> Result<Program, PatternError> {
     let captures = 2 * (groups + 1);
     let mut c = Compiler {
         insts: [],
         depths: [],
         state_base: [0],
         depth: 0,
-        flags: Flag::none(),
+        flags,
         slots: captures,
         direction,
+        used,
     };
-    c.push(Inst::Save(0))?;
-    c.node(node)?;
-    c.push(Inst::Save(1))?;
+    c.group(0, |c| c.node(node))?;
     c.push(Inst::Match)?;
     let match_len = match_len(&c.insts);
+    let mut marked: List<i32> = [];
+    collect_marked(node, &mut marked);
     return Ok(Program {
         insts: c.insts,
         slots: c.slots,
         captures,
         state_base: c.state_base,
         match_len,
+        direction,
+        marked,
     });
+}
+
+/// The lookarounds whose instruction in the program of `node` leaves a
+/// position in a slot: not those inside another lookaround, whose
+/// instructions are in its programs.
+fn collect_marked(node: &Node, marked: &mut List<i32>) {
+    if let Lookaround(l) = *node {
+        if slots_read(&l) matches { Some(_) } {
+            marked.push(l.index);
+        }
+        return;
+    }
+    each_child(node, |n| collect_marked(n, marked));
+}
+
+/// The programs of each lookaround in `tree`, by index, where `main` is the
+/// program of `tree` itself.
+internal fn compile_lookarounds(
+    tree: &Node,
+    groups: i32,
+    main: &Program,
+) -> Result<List<LookaroundPrograms>, PatternError> {
+    let mut found: List<[Lookaround, Flag, bool]> = [];
+    collect_lookarounds(tree, Flag::none(), true, &mut found);
+    let mut used = main.states();
+    let mut programs: List<LookaroundPrograms> = [];
+    for let [l, flags, keeps_groups] of &found {
+        assert l.index == programs.len();
+        let [own, against] = if l.ahead {
+            [Direction::Forward, Direction::Reverse];
+        } else {
+            [Direction::Reverse, Direction::Forward];
+        };
+        let holds = compile(&l.body, groups, against, *flags, used)?;
+        used += holds.states();
+        let mut reads: Option<Reads> = null;
+        if *keeps_groups && let Some([from, until]) = slots_read(l) {
+            let program = compile(&l.body, groups, own, *flags, used)?;
+            used += program.states();
+            reads = Some(Reads { program, from, until });
+        }
+        programs.push(LookaroundPrograms { negated: l.negated, holds, reads });
+    }
+    return Ok(programs);
+}
+
+/// Each lookaround under `node`, in the order of their indices, with the flags
+/// in force where it stands and whether a match keeps the groups set there.
+/// `keeps_groups` says so of `node`: no negated lookaround encloses it.
+fn collect_lookarounds(node: &Node, flags: Flag, keeps_groups: bool, found: &mut List<[Lookaround, Flag, bool]>) {
+    let mut kept_inside = keeps_groups;
+    if let Lookaround(l) = *node {
+        found.push([l, flags, keeps_groups]);
+        kept_inside = keeps_groups && !l.negated;
+    }
+    let flags_inside = if let Modified(m) = *node {
+        m.inside(flags);
+    } else {
+        flags;
+    };
+    each_child(node, |n| collect_lookarounds(n, flags_inside, kept_inside, found));
+}
+
+/// The slots `[from, until)` of the groups `l` leaves set: those in its body,
+/// unless it is negated: a negative lookaround goes on with the captures it
+/// was given (CompileAssertion, §22.2.2.4).
+fn slots_read(l: &Lookaround) -> Option<[i32, i32]> {
+    if !l.negated && let Some([lo, hi]) = group_span(&l.body) {
+        return Some([2 * lo, 2 * hi + 2]);
+    }
+    return null;
 }
 
 /// How many bytes every match of `insts` spans, if they all span as many.
@@ -129,7 +252,7 @@ fn match_len(insts: &List<Inst>) -> Option<i32> {
             },
             Jump(target) => at(target, pc, &to_match),
             Split([first, second]) => merge(at(first, pc, &to_match), at(second, pc, &to_match)),
-            Save(_) | Clear(_) | Assert(_) | Progress(_) => to_match[pc + 1],
+            Save(_) | Clear(_) | Assert(_) | Lookaround(_) | Progress(_) => to_match[pc + 1],
         };
     }
     return if to_match[0] >= 0 { Some(to_match[0]) } else { null };
@@ -145,13 +268,15 @@ struct Compiler {
     flags: Flag,
     slots: i32,
     direction: Direction,
+    /// How many states the pattern's programs before this one hold.
+    used: i32,
 }
 
 /// Whether `node` can match without consuming a character.
 fn can_match_empty(node: &Node) -> bool {
     return match *node {
         Char(_) | _::Any | Set(_) => false,
-        _::Start | _::End | _::WordBoundary | _::NotWordBoundary => true,
+        _::Start | _::End | _::WordBoundary | _::NotWordBoundary | Lookaround(_) => true,
         Group(g) => can_match_empty(&g.body),
         Modified(m) => can_match_empty(&m.body),
         Repeat(r) => r.min == 0 || can_match_empty(&r.body),
@@ -183,7 +308,8 @@ fn relocate(inst: Inst, delta: i32) -> Inst {
     };
 }
 
-/// The lowest and highest capturing group `node` holds.
+/// The lowest and highest capturing group `node` holds, those inside a
+/// lookaround included.
 fn group_span(node: &Node) -> Option<[i32, i32]> {
     let mut span: Option<[i32, i32]> = null;
     let mut widen = |inner: Option<[i32, i32]>| {
@@ -197,23 +323,10 @@ fn group_span(node: &Node) -> Option<[i32, i32]> {
             };
         }
     };
-    match *node {
-        Group(g) => {
-            if let Some(i) = g.index {
-                widen(Some([i, i]));
-            }
-            widen(group_span(&g.body));
-        },
-        Modified(m) => widen(group_span(&m.body)),
-        Repeat(r) => widen(group_span(&r.body)),
-        Concat(nodes) | Alternation(nodes) => {
-            for let n of &nodes {
-                widen(group_span(n));
-            }
-        },
-        _ => {
-        },
+    if let Group(g) = *node && let Some(i) = g.index {
+        widen(Some([i, i]));
     }
+    each_child(node, |n| widen(group_span(n)));
     return span;
 }
 
@@ -228,7 +341,7 @@ impl Compiler {
 
     fn push_at(&mut self, inst: Inst, depth: i32) -> Result<i32, PatternError> {
         let states = self.state_base[self.insts.len()] + depth + 1;
-        if states > MAX_PROGRAM {
+        if self.used + states > MAX_PROGRAM {
             return Err(PatternError {
                 offset: 0,
                 message: `the pattern compiles to a program over re.max_program (${MAX_PROGRAM})`,
@@ -277,16 +390,23 @@ impl Compiler {
             Set(set) => self.ranges(&resolve(&set, self.ignore_case()))?,
             Group(g) => {
                 if let Some(i) = g.index {
-                    self.push(Inst::Save(2 * i))?;
-                    self.node(&g.body)?;
-                    self.push(Inst::Save(2 * i + 1))?;
+                    self.group(i, |c| c.node(&g.body))?;
                 } else {
                     self.node(&g.body)?;
                 }
             },
+            Lookaround(l) => {
+                // No instruction of this program saves a group of the body,
+                // so the first of their slots is free until they are read.
+                let mark = match slots_read(&l) {
+                    Some([from, _]) => from,
+                    null => -1,
+                };
+                self.push(Inst::Lookaround([l.index, mark]))?;
+            },
             Modified(m) => {
                 let outer = self.flags;
-                self.flags = (self.flags | m.add) & ~m.remove;
+                self.flags = m.inside(outer);
                 self.node(&m.body)?;
                 self.flags = outer;
             },
@@ -298,6 +418,16 @@ impl Compiler {
             },
             Alternation(nodes) => self.choice(&nodes, |c, n| c.node(n))?,
         }
+        return Ok(());
+    }
+
+    /// What `emit` writes, between the saves of group `index`'s two ends as
+    /// this program meets them.
+    fn group(&mut self, index: i32, emit: fn(&mut Compiler) -> Result<(), PatternError>) -> Result<(), PatternError> {
+        let reverse = (self.direction == Direction::Reverse) as i32;
+        self.push(Inst::Save(2 * index + reverse))?;
+        emit(self)?;
+        self.push(Inst::Save(2 * index + 1 - reverse))?;
         return Ok(());
     }
 

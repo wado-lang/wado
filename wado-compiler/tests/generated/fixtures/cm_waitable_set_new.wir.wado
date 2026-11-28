@@ -12,31 +12,31 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-struct core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask> {  // TypeId(2)
+struct core:prelude/async.wado//WaitableSet<core:prelude/async.wado/Subtask> {  // TypeId(2)
     mut raw: ref null "core:prelude//$Resource",
-    mut members: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>",
-    mut ready: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
+    mut members: ref null "core:prelude/list.wado//List<core:prelude/async.wado/Subtask>",
+    mut ready: ref null "core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/Subtask>>",
 }
 
-struct core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask> {}  // TypeId(3)
+struct core:prelude/async.wado//Ready<core:prelude/async.wado/Subtask> {}  // TypeId(3)
 
-struct core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> {  // TypeId(4)
-    mut repr: ref null "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
+struct core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/Subtask>> {  // TypeId(4)
+    mut repr: ref null "Array<core:prelude/async.wado/Ready<core:prelude/async.wado/Subtask>>",
     mut used: i32,
 }
 
-struct core:prelude/list.wado//List<core:prelude/types.wado/Subtask> {  // TypeId(5)
-    mut repr: ref null "Array<core:prelude/types.wado/Subtask>",
+struct core:prelude/list.wado//List<core:prelude/async.wado/Subtask> {  // TypeId(5)
+    mut repr: ref null "Array<core:prelude/async.wado/Subtask>",
     mut used: i32,
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(6)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(6)
 
 array Array<u8> (mut u8);  // TypeId(7)
 
-array Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> (mut ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>");  // TypeId(8)
+array Array<core:prelude/async.wado/Ready<core:prelude/async.wado/Subtask>> (mut ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/Subtask>");  // TypeId(8)
 
-array Array<core:prelude/types.wado/Subtask> (mut ref null "core:prelude//$Resource");  // TypeId(9)
+array Array<core:prelude/async.wado/Subtask> (mut ref null "core:prelude//$Resource");  // TypeId(9)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
 
@@ -58,13 +58,13 @@ type "functype//cm_waitable_set_new.wado/$cm_export__run" = fn();  // TypeId(18)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(19)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(20)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>", ref null "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>");  // TypeId(23)
+type "functype//core:prelude/async.wado/core:prelude/async.wado/WaitableSet<core:prelude/async.wado/Subtask>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude//$Resource", ref null "core:prelude/list.wado//List<core:prelude/async.wado/Subtask>", ref null "core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/Subtask>>");  // TypeId(23)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
@@ -90,56 +90,56 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 global global:cm_waitable_set_new.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(101, 109, 112, 116, 121, 58, 32);
-global global:cm_waitable_set_new.wado::$const_obj_1: ref "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>" = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Subtask>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 };
-global global:cm_waitable_set_new.wado::$const_obj_2: ref "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>" = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>" { repr: array.new_fixed<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">(), used: 0 };
+global global:cm_waitable_set_new.wado::$const_obj_1: ref "core:prelude/list.wado//List<core:prelude/async.wado/Subtask>" = struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Subtask>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 };
+global global:cm_waitable_set_new.wado::$const_obj_2: ref "core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/Subtask>>" = struct.new "core:prelude/list.wado//List<core:prelude/async.wado/Ready<core:prelude/async.wado/Subtask>>" { repr: array.new_fixed<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/Subtask>">(), used: 0 };
 
 fn "cm_waitable_set_new.wado/run"() with Stdout {
-    let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
+    let set: ref null "core:prelude/async.wado//WaitableSet<core:prelude/async.wado/Subtask>";
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_113: i32;
     let new_repr: ref Array<u8>;
-    let $sroa_t_h0_129: bool;
-    let $sroa_slot_379: ref null Array<u8>;
-    let $sroa_out_repr_381: ref Array<u8>;
-    let $sroa_out_used_382: i32;
-    let $sroa_write_back_384: ref "core:prelude/string.wado//String";
-    $sroa_t_h0_129 = (local.tee set(struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: global:cm_waitable_set_new.wado::$const_obj_1, ready: global:cm_waitable_set_new.wado::$const_obj_2 }).members.used + set.ready.used) == 0;
-    $sroa_out_repr_381 = builtin::array_new<u8>(23);
-    $sroa_out_used_382 = 7;
-    builtin::array_copy<u8>($sroa_out_repr_381, 0, global:cm_waitable_set_new.wado::$const_obj_0, 0, 7);
-    if $sroa_t_h0_129 {
-        $sroa_slot_379 = array.new_fixed<u8>(116, 114, 117, 101);
-        $sroa_t_h0_129 = 4;
+    let $sroa_t_h0_131: bool;
+    let $sroa_slot_385: ref null Array<u8>;
+    let $sroa_out_repr_387: ref Array<u8>;
+    let $sroa_out_used_388: i32;
+    let $sroa_write_back_390: ref "core:prelude/string.wado//String";
+    $sroa_t_h0_131 = (local.tee set(struct.new "core:prelude/async.wado//WaitableSet<core:prelude/async.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"(), backing: ref.null eq }, members: global:cm_waitable_set_new.wado::$const_obj_1, ready: global:cm_waitable_set_new.wado::$const_obj_2 }).members.used + set.ready.used) == 0;
+    $sroa_out_repr_387 = builtin::array_new<u8>(23);
+    $sroa_out_used_388 = 7;
+    builtin::array_copy<u8>($sroa_out_repr_387, 0, global:cm_waitable_set_new.wado::$const_obj_0, 0, 7);
+    if $sroa_t_h0_131 {
+        $sroa_slot_385 = array.new_fixed<u8>(116, 114, 117, 101);
+        $sroa_t_h0_131 = 4;
     } else {
-        $sroa_slot_379 = array.new_data<u8>("false");
-        $sroa_t_h0_129 = 5;
+        $sroa_slot_385 = array.new_data<u8>("false");
+        $sroa_t_h0_131 = 5;
     }
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 $sroa_t_h0_129 == 0;
-            if @unlikely(local.tee $sroa_out_used_382(7 + $sroa_t_h0_129) > 23) {
+            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 $sroa_t_h0_131 == 0;
+            if @unlikely(local.tee $sroa_out_used_388(7 + $sroa_t_h0_131) > 23) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_384(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_381, used: 7 }), $sroa_out_used_382);
-                $sroa_out_repr_381 = $sroa_write_back_384.repr;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_390(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_387, used: 7 }), $sroa_out_used_388);
+                $sroa_out_repr_387 = $sroa_write_back_390.repr;
             }
-            builtin::array_copy<u8>($sroa_out_repr_381, 7, $sroa_slot_379, 0, $sroa_t_h0_129);
+            builtin::array_copy<u8>($sroa_out_repr_387, 7, $sroa_slot_385, 0, $sroa_t_h0_131);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
     $inline_core_prelude_string_wado_String__internal_push_view_46: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_46;
     };
-    $sroa_t_h0_129 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_t_h0_131 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_113 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_t_h0_129 = "cm_waitable_set_new.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_129);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($sroa_out_used_382 + 1)), 0, $sroa_out_repr_381, 0, $sroa_out_used_382);
-    builtin::array_set_u8(new_repr, $sroa_out_used_382, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    $sroa_t_h0_131 = "cm_waitable_set_new.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_131);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($sroa_out_used_388 + 1)), 0, $sroa_out_repr_387, 0, $sroa_out_used_388);
+    builtin::array_set_u8(new_repr, $sroa_out_used_388, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $sroa_out_used_382 = $sroa_out_used_382 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_113, new_repr, 0, $sroa_out_used_382);
+        $sroa_out_used_388 = $sroa_out_used_388 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_113, new_repr, 0, $sroa_out_used_388);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -147,10 +147,10 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_129);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_131);
     }
     if ref.is_null(set) == 0 {
-        "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop"(set.raw, set.members, set.ready);
+        "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<core:prelude/async.wado/Subtask>^core:prelude/traits.wado/Drop::drop"(set.raw, set.members, set.ready);
     }
 }
 
@@ -241,11 +241,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_5: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
@@ -276,11 +276,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop"($mv$self$raw, $mv$self$members, $mv$self$ready) {
-    let $slots_1_4: ref null "Array<core:prelude/types.wado/Subtask>";
+fn "core:prelude/async.wado/core:prelude/async.wado/WaitableSet<core:prelude/async.wado/Subtask>^core:prelude/traits.wado/Drop::drop"($mv$self$raw, $mv$self$members, $mv$self$ready) {
+    let $slots_1_4: ref null "Array<core:prelude/async.wado/Subtask>";
     let $end_2_5: i32;
     let $index_3_6: i32;
-    let $slots_1_9: ref null "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>";
+    let $slots_1_9: ref null "Array<core:prelude/async.wado/Ready<core:prelude/async.wado/Subtask>>";
     $slots_1_4 = $mv$self$members.repr;
     $end_2_5 = $mv$self$members.used;
     $index_3_6 = 0;
@@ -312,13 +312,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     b29: block {
         l30: loop {
             break_if b29 (builtin::i64_extend_i32_s($index_3_6) + 3_i64) >= builtin::i64_extend_i32_s($end_2_5);
-            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+            drop(builtin::array_get_value<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
-            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+            drop(builtin::array_get_value<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
-            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+            drop(builtin::array_get_value<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
-            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+            drop(builtin::array_get_value<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
             continue l30;
         };
@@ -326,7 +326,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     b31: block {
         l32: loop {
             break_if b31 $index_3_6 >= $end_2_5;
-            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
+            drop(builtin::array_get_value<ref null "core:prelude/async.wado//Ready<core:prelude/async.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
             continue l32;
         };

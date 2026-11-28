@@ -33,6 +33,7 @@ use cranelift_entity::EntityRef;
 use super::arena_query::{is_local_operand, is_pure_operand, operand_local, place_root_local};
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
+use super::until_quiet;
 use crate::ast::Visibility;
 use crate::nir::FuncId;
 use crate::nir_visitor::reachable_exprs;
@@ -62,6 +63,17 @@ struct SroaInfo {
 }
 
 pub fn sroa_single_field_parameters(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    state: &mut SroaParamState,
+) -> bool {
+    // A clone's scalar parameter can be a one-field struct reference again, one
+    // level down a nested chain. Peeling it now rather than next round keeps a
+    // chain deeper than the round cap from holding the fixpoint open.
+    until_quiet(|| scalarize_one_level(project, gate, state))
+}
+
+fn scalarize_one_level(
     project: &mut NirPackage,
     gate: &mut FunctionGate,
     state: &mut SroaParamState,
@@ -1153,7 +1165,7 @@ fn mint_scalarized_clones(
                 .iter()
                 .map(|s| (s.local, s.scalar_type_id))
                 .collect();
-            body.values.retype_locals(&retyped);
+            body.retype_locals(&retyped);
             let root = body.root();
             rewrite_param_reads(body, NodeRef::Block(root), &affected);
         }
@@ -1161,7 +1173,7 @@ fn mint_scalarized_clones(
         project.func_index.insert(func_key, id);
         project.sroa_param_clones.insert(id);
         project.reshapes.insert(id, reshape);
-        copy_function_strings(project, &origin, (clone.module_source.clone(), name));
+        project.copy_function_strings(&origin, (clone.module_source.clone(), name));
         clones.insert(*key, id);
         // Pushed now, so a later source in this run reaching the same clone
         // finds it standing.
@@ -1174,19 +1186,6 @@ fn mint_scalarized_clones(
         project.functions.push(FuncCell::new(clone));
     }
     clones
-}
-
-/// Give the clone its own entry in `function_strings`, which is name-keyed: DCE
-/// reads it to decide which string literals survive, so without one the clone's
-/// literals are pruned out from under it.
-fn copy_function_strings(
-    project: &mut NirPackage,
-    origin: &(ModuleSource, String),
-    clone: (ModuleSource, String),
-) {
-    if let Some(strings) = project.function_strings.get(origin).cloned() {
-        project.function_strings.insert(clone, strings);
-    }
 }
 
 /// A parameter this clone scalarized: the local it occupies and its new type,

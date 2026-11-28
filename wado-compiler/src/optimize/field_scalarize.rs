@@ -61,15 +61,15 @@ pub fn scalarize_hot_fields(
     // Phase 2: Run scalarization (mutable access)
     let type_table = project.type_table.borrow();
     let effects = heap.effects(project, &type_table, gate.exec());
-    let mut changed = false;
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
-        if scalarize_function(&mut func, &type_table, &cache, &effects) {
-            gate.mark_changed(FuncId::new(i));
-            changed = true;
-        }
+    let type_table = &*type_table;
+    let functions = &project.functions;
+    let changed = gate.exec().indices_where(functions.len(), |i| {
+        scalarize_function(&mut functions[i].borrow_mut(), type_table, &cache, &effects)
+    });
+    for &i in &changed {
+        gate.mark_changed(FuncId::new(i));
     }
-    changed
+    !changed.is_empty()
 }
 
 fn build_field_usage_cache(project: &NirPackage) -> FieldUsageCache {
@@ -575,7 +575,9 @@ fn scalarize_loop(
         candidates.push(ScalarizeCandidate {
             local_index: local_idx,
             local_name: info.local_name.clone(),
-            local_type_id: info.local_type_id,
+            // The declared type, not a read's: an inlined `&self` read of a
+            // `&mut` local is typed `&`, and the write-back must not be.
+            local_type_id: locals[local_idx as usize].type_id,
             field_index: field_idx,
             field_name: info.field_name.clone(),
             type_id: info.field_type_id,

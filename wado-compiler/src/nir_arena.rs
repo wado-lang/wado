@@ -812,6 +812,21 @@ impl Body {
         *self.root = root;
     }
 
+    /// Give each named local's `Opaque` leaf its new type. A pass that re-types
+    /// locals owes this: extraction names a `FieldAccess` field by that type.
+    /// Borrows the pool mutably only for a leaf whose type moves, since a
+    /// mutable borrow counts as an edit.
+    pub fn retype_locals(&mut self, types: &[(u32, TypeId)]) {
+        let retypes = self.values.local_retypes(types);
+        if retypes.is_empty() {
+            return;
+        }
+        let values = &mut *self.values;
+        for (id, ty) in retypes {
+            values.set_type(id, ty);
+        }
+    }
+
     /// Push `block` and make it the root.
     pub fn push_root(&mut self, block: BlockNode) {
         let root = self.blocks.push(block);
@@ -2106,6 +2121,44 @@ impl Body {
                 ValueKind::Opaque(oid) => Some(self.values.promoted_opaque_local(*oid)),
                 _ => None,
             },
+        }
+    }
+
+    /// Hands `leaf` each expression `e`'s value can be, by the path that runs:
+    /// `e` itself, or through an `if`, a `match` or a `switch` the value of
+    /// each arm, and through a labeled block each `break` value and its tail.
+    /// A pool value is no expression and is left out.
+    pub fn for_each_value_leaf(&self, e: ExprId, leaf: &mut dyn FnMut(ExprId)) {
+        let of_operand = |op: Option<Operand>, leaf: &mut dyn FnMut(ExprId)| {
+            if let Some(Operand::Expr(e)) = op {
+                self.for_each_value_leaf(e, leaf);
+            }
+        };
+        match &self.exprs[e].kind {
+            ExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                of_operand(self.block_tail(*then_branch), leaf);
+                of_operand(else_branch.and_then(|b| self.block_tail(b)), leaf);
+            }
+            ExprKind::Match { arms, .. } => {
+                for arm in arms {
+                    of_operand(Some(arm.body), leaf);
+                }
+            }
+            ExprKind::Switch { arms, default, .. } => {
+                for &arm in arms.iter().chain([default]) {
+                    of_operand(self.block_tail(arm), leaf);
+                }
+            }
+            ExprKind::LabeledBlock { .. } => {
+                for exit in self.block_exits(e).into_iter().flatten() {
+                    of_operand(exit, leaf);
+                }
+            }
+            _ => leaf(e),
         }
     }
 

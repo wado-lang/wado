@@ -27,7 +27,7 @@ use crate::symbol::{
     ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
     WorldExportSymbol, WorldImportSymbol, WorldSymbol,
 };
-use crate::syntax::{is_statement_keyword, statement_keyword_name_message};
+use crate::syntax::undeclarable_name_message;
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::exported_interfaces;
@@ -41,12 +41,13 @@ fn is_wasm_asset_use_decl(use_decl: &UseDecl) -> bool {
 }
 
 /// Every item, type or effect parameter, and enum, variant or flags member `module`
-/// declares under an expression keyword's name. A member reached by `.` may.
-fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
+/// declares under a name no declaration may take: an expression keyword's, or
+/// the `builtin` prefix's. A member reached by `.` may.
+fn undeclarable_named_declarations(module: &Module) -> Vec<(String, Span)> {
     struct Names(Vec<(String, Span)>);
     impl Names {
         fn check(&mut self, name: &str, span: Span) {
-            if is_statement_keyword(name) {
+            if undeclarable_name_message(name).is_some() {
                 self.0.push((name.to_string(), span));
             }
         }
@@ -207,8 +208,9 @@ pub enum AnalyzeError {
     },
     /// A function declared without a body where nothing supplies one.
     MissingFunctionBody { name: String, span: Span },
-    /// A declaration or import spelled like a keyword that begins an expression.
-    KeywordName { name: String, span: Span },
+    /// A declaration or import under a name neither may take: a keyword that
+    /// begins an expression, or the `builtin` prefix.
+    UndeclarableName { name: String, span: Span },
     /// An `#[unavailable]` that cannot report what it was written to report.
     MalformedUnavailable { fault: UnavailableFault, span: Span },
     /// Undefined symbol reference
@@ -286,7 +288,7 @@ impl UnavailableFault {
                 "`#[unavailable]` needs a reason, as `#[unavailable(\"write `x` instead\")]`"
             }
             Self::Placement => {
-                "`#[unavailable]` belongs on a module function, an `impl` method, or a trait method"
+                "`#[unavailable]` belongs on a module function, or on a method of an `impl`, a trait or a resource"
             }
             Self::Exported => {
                 "`export` lowers a function at the component boundary; an `#[unavailable]` one has none to lower"
@@ -363,9 +365,9 @@ impl AnalyzeError {
                 format!("function '{name}' has no body"),
                 *span,
             ),
-            AnalyzeError::KeywordName { name, span } => (
+            AnalyzeError::UndeclarableName { name, span } => (
                 Code::InvalidSyntax,
-                statement_keyword_name_message(name),
+                undeclarable_name_message(name).expect("only an undeclarable name is reported"),
                 *span,
             ),
             AnalyzeError::MalformedUnavailable { fault, span } => (
@@ -1019,10 +1021,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         for (source, module) in modules {
             self.check_function_declarations(module, source);
             if !takes_names_from_elsewhere(source) {
-                for (name, span) in keyword_named_declarations(module) {
+                for (name, span) in undeclarable_named_declarations(module) {
                     let _ = self
                         .logger
-                        .error_in(source, AnalyzeError::KeywordName { name, span });
+                        .error_in(source, AnalyzeError::UndeclarableName { name, span });
                 }
             }
         }
@@ -1381,19 +1383,19 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         )
     }
 
-    /// Reject `name` if it is spelled like a keyword that begins an expression.
-    fn reject_keyword_name(
+    /// Reject `name` if no import may bind it.
+    fn reject_undeclarable_name(
         &self,
         module_source: &ModuleSource,
         name: &str,
         span: Span,
     ) -> Result<(), Bail> {
-        if !is_statement_keyword(name) {
+        if undeclarable_name_message(name).is_none() {
             return Ok(());
         }
         self.logger.error_in(
             module_source,
-            AnalyzeError::KeywordName {
+            AnalyzeError::UndeclarableName {
                 name: name.to_string(),
                 span,
             },
@@ -1493,7 +1495,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         local_name: &str,
         span: Span,
     ) -> Result<(), Bail> {
-        self.reject_keyword_name(module_source, local_name, span)?;
+        self.reject_undeclarable_name(module_source, local_name, span)?;
         let Some(declared) = self
             .symbols
             .defined_span_in_module(module_source, local_name)
@@ -1647,7 +1649,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             name: ns,
                             name_span,
                         } => {
-                            self.reject_keyword_name(from_module_source, ns, *name_span)?;
+                            self.reject_undeclarable_name(from_module_source, ns, *name_span)?;
                             // Register each reachable member under its `ns$member`
                             // alias, matching how the elaborator canonicalizes
                             // `ns::member` at lookup time

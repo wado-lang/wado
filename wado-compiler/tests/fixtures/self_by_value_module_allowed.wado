@@ -1,0 +1,16 @@
+#![allow(self_by_value)]
+
+// `#![allow(self_by_value)]` waives the warning for the whole module.
+
+struct Point { x: i32, y: i32 }
+
+impl Point {
+    fn first(self) -> i32 { return self.x; }
+}
+
+export fn run() {
+    assert Point { x: 1, y: 2 }.first() == 1;
+}
+
+__DATA__
+{"warnings_not_contains":["`self` by value copies"]}

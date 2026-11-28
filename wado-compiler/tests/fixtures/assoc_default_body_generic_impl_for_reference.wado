@@ -1,0 +1,80 @@
+// A generic impl whose target is a reference inherits a default method naming
+// `Self::Item`, as an impl for a named type does.
+
+trait Pull with () {
+    type Item;
+
+    fn pull(&mut self) -> Option<Self::Item>;
+
+    fn pull_twice(&mut self) -> [Option<Self::Item>, Option<Self::Item>] {
+        let first = self.pull();
+        let second = self.pull();
+        return [first, second];
+    }
+
+    fn pull_or<D: Fallback<Value = Self::Item>>(&mut self, fallback: D) -> Self::Item {
+        return match self.pull() {
+            Some(item) => item,
+            null => fallback.value(),
+        };
+    }
+}
+
+trait Fallback with () {
+    type Value;
+
+    fn value(&self) -> Self::Value;
+}
+
+struct Fixed {
+    n: i32,
+}
+
+impl Fallback for Fixed {
+    type Value = i32;
+
+    fn value(&self) -> i32 {
+        return self.n;
+    }
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Pull for Counter {
+    type Item = i32;
+
+    fn pull(&mut self) -> Option<i32> {
+        self.n += 1;
+        return Option::Some(self.n - 1);
+    }
+}
+
+impl<P: Pull> Pull for &mut P {
+    type Item = P::Item;
+
+    fn pull(&mut self) -> Option<P::Item> {
+        return (**self).pull();
+    }
+}
+
+test "the default method on the value" {
+    let mut c = Counter { n: 0 };
+    assert c.pull_twice() == [Option::Some(0), Option::Some(1)];
+    assert c.pull() == Option::Some(2);
+}
+
+test "the default method through the reference impl advances the referent" {
+    let mut c = Counter { n: 0 };
+    let mut r = &mut c;
+    assert Pull::pull_twice(&mut r) == [Option::Some(0), Option::Some(1)];
+    assert c.pull() == Option::Some(2);
+}
+
+test "a default method's own parameter bound names Self::Item" {
+    let mut c = Counter { n: 0 };
+    let mut r = &mut c;
+    assert Pull::pull_or(&mut r, Fixed { n: 9 }) == 0;
+    assert c.pull() == Option::Some(1);
+}

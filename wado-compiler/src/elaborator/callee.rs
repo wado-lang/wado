@@ -25,8 +25,6 @@ pub(super) enum CalleeRef {
         module: ModuleSource,
         name: String,
     },
-    /// A callee no declaration names: a builtin probed by its bare name.
-    Rendered { module: ModuleSource, name: String },
 }
 
 impl CalleeRef {
@@ -36,13 +34,6 @@ impl CalleeRef {
             def,
             module: defs.module(def).clone(),
             name: defs.name(def).to_string(),
-        }
-    }
-
-    pub fn rendered(module: ModuleSource, name: impl Into<String>) -> Self {
-        Self::Rendered {
-            module,
-            name: name.into(),
         }
     }
 
@@ -60,7 +51,7 @@ impl CalleeRef {
     pub fn def(&self) -> Option<DefId> {
         match self {
             Self::Declared { def, .. } => Some(*def),
-            Self::Operation { .. } | Self::Rendered { .. } => None,
+            Self::Operation { .. } => None,
         }
     }
 
@@ -68,34 +59,26 @@ impl CalleeRef {
     pub fn type_param_owner(&self) -> DefId {
         match self {
             Self::Declared { def, .. } | Self::Operation { def, .. } => *def,
-            Self::Rendered { name, .. } => {
-                unreachable!("a probe `{name}` is never called with type arguments")
-            }
         }
     }
 
     /// What a call of this instantiates.
-    pub fn template(&self, signatures: &Signatures) -> Option<TemplateId> {
+    pub fn template(&self, signatures: &Signatures) -> TemplateId {
         match self {
-            Self::Declared { def, .. } => Some(signatures.declared_template(*def)),
-            Self::Operation { def, .. } => Some(TemplateId::Operation { def: *def }),
-            Self::Rendered { .. } => None,
+            Self::Declared { def, .. } => signatures.declared_template(*def),
+            Self::Operation { def, .. } => TemplateId::Operation { def: *def },
         }
     }
 
     pub fn module(&self) -> &ModuleSource {
         match self {
-            Self::Declared { module, .. }
-            | Self::Operation { module, .. }
-            | Self::Rendered { module, .. } => module,
+            Self::Declared { module, .. } | Self::Operation { module, .. } => module,
         }
     }
 
     pub fn name(&self) -> &str {
         match self {
-            Self::Declared { name, .. }
-            | Self::Operation { name, .. }
-            | Self::Rendered { name, .. } => name,
+            Self::Declared { name, .. } | Self::Operation { name, .. } => name,
         }
     }
 

@@ -10,6 +10,12 @@ Maps and sets that iterate in insertion order. `HashMap<K, V>` and
 `map[key] = value` overwrites; `try_insert` / `get_or_insert` insert only
 when the key is absent.
 
+`HashIndex` is the table alone, for an interner whose keys already sit in
+rows of its own: it holds a row number per key, and the caller supplies
+each key's hash and says which row equals it. It gives up `HashMap`'s
+protections for speed. Nothing seeds the hash, and a hash whose top bits
+do not differ between keys turns every lookup into a walk of the table.
+
 ## Synopsis
 
 ```wado
@@ -167,7 +173,11 @@ The key-value pairs, in insertion order.
 
 #### `pub fn clear(&mut self)`
 
-Removes all key-value pairs from the map.
+Removes all key-value pairs from the map, keeping the capacity.
+
+#### `pub fn shrink_to_fit(&mut self)`
+
+Shrinks the capacity to match the current length.
 
 #### `pub fn get_str<S: AsStrSlice>(&self, key: S) -> Option<V>`
 
@@ -281,7 +291,11 @@ Returns true if the value was present, false otherwise.
 
 #### `pub fn clear(&mut self)`
 
-Removes all elements from the set.
+Removes all elements from the set, keeping the capacity.
+
+#### `pub fn shrink_to_fit(&mut self)`
+
+Shrinks the capacity to match the current length.
 
 #### `pub fn iter_ref(&self) -> MapKeysRefIter<T, ()>`
 
@@ -399,7 +413,12 @@ The key-value pairs, in insertion order.
 
 #### `pub fn clear(&mut self)`
 
-Removes all key-value pairs from the map. The seed stays.
+Removes all key-value pairs from the map, keeping the capacity. The seed
+stays.
+
+#### `pub fn shrink_to_fit(&mut self)`
+
+Shrinks the capacity to match the current length.
 
 #### `pub fn get_str<S: AsStrSlice>(&self, key: S) -> Option<V>`
 
@@ -507,7 +526,11 @@ Removes a value, and reports whether it was present.
 
 #### `pub fn clear(&mut self)`
 
-Removes all elements from the set.
+Removes all elements from the set, keeping the capacity.
+
+#### `pub fn shrink_to_fit(&mut self)`
+
+Shrinks the capacity to match the current length.
 
 #### `pub fn iter_ref(&self) -> MapKeysRefIter<T, ()>`
 
@@ -544,3 +567,55 @@ Returns true if some element spells the same text as `value`.
 #### `impl Deserialize for HashSet<T>`
 
 ##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<HashSet<T>, DeserializeError>`
+
+### `pub struct HashIndex`
+
+An index over rows the caller keeps elsewhere: it holds a row number per
+key and never the key. The caller hashes a key and says which row equals
+it. It keeps no order and removes nothing but everything.
+
+A hash is the caller's, used as it comes: its top bits pick the slot, so
+they must differ between keys. `HashIndex::spread` makes them, of a hash
+whose bits differ anywhere.
+
+_Fields are private._
+
+#### `pub fn new() -> HashIndex`
+
+An empty index.
+
+#### `pub fn spread(hash: u64) -> u64`
+
+`hash` with a difference in any bit carried into the top ones. A
+multiply carries a difference only upward, so a hash built of
+multiplies alone, as FNV is, leaves its top bits blind to the low bits
+of the last word and its low bits blind to the high bits of every
+word. Folding the high half into the low and multiplying once more
+closes both.
+
+#### `pub fn len(&self) -> i32`
+
+The number of rows indexed.
+
+#### `pub fn find(&self, hash: u64, is_row: fn(i32) -> bool) -> i32`
+
+The row `is_row` accepts among those indexed under `hash`, or `-1`.
+
+#### `pub fn find_or_insert(&mut self, hash: u64, is_row: fn(i32) -> bool, row: i32) -> i32`
+
+- `contract row >= 0`
+
+The row `is_row` accepts among those indexed under `hash`, or `row`
+once it is indexed there.
+
+#### `pub fn insert(&mut self, hash: u64, row: i32)`
+
+- `contract row >= 0`
+
+Indexes `row` under `hash`. No row indexed there may equal it.
+
+#### `pub fn clear(&mut self)`
+
+Forgets every row. A table far wider than what it held is cut to fit
+that, so one large fill does not make every later `clear` pay for its
+width.

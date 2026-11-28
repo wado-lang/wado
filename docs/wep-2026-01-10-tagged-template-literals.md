@@ -343,9 +343,9 @@ impl String {
 
 What a template string compiles to is written in Wado, where a reader can see
 it, and the per-hole rendering is the one piece the compiler synthesizes
-(`TemplateHole::fmt`). It replaced a direct lowering of the untagged case
-([String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md)),
-which rendered each hole before it evaluated the next.
+(`TemplateHole::fmt`). It replaced a direct lowering of the untagged case,
+which pushed each literal and rendered each hole into one buffer, and so
+rendered each hole before it evaluated the next.
 
 ### Cost
 
@@ -490,7 +490,7 @@ introduces a mechanism; each item names the existing one it extends.
   would name a struct WIR never registered — the same failure a struct literal
   with a newtype field had.
 
-### Prelude (`lib/core/prelude/traits.wado`, `lib/core/builtin.wado`)
+### Prelude (`lib/core/prelude/reflect.wado`, `lib/core/builtin.wado`)
 
 - `#[compiler_item("reflect_template")] pub trait ReflectTemplate: Reflect`
   with `Holes`, `Members`, `members()`, `tail(t)`, `raw_tail(t)`, each method
@@ -538,7 +538,7 @@ the tag's result type:
    the `TirStruct` onto `pending_anonymous_structs` — the minting
    `resolve_anonymous_struct_literal` does, factored into one helper both call.
 3. Resolve the tag as a one-argument call whose argument type is known and has
-   no AST: `resolve_call_with_args` is `resolve_call` over arguments already
+   no AST: `resolve_call_with_pretyped_args` is `resolve_call` over arguments already
    typed, keyed by the template's `AstId`, so signature lookup, instantiation,
    the projection of `..V` from `Holes`, the bound check and the
    `StaticMethodDispatch` fact are the ones a spelled call records. A tag of
@@ -926,7 +926,6 @@ warm-up phase takes that cost. Three runs:
 
 ## Related WEPs
 
-- [String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md) — the untagged lowering, and `TemplateHole::fmt`'s per-specifier body
 - [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md) — the walk
 - [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) — the pack bound and pack binding
 - [Library-Defined Derivation over `Reflect*`](./wep-2026-06-13-reflect-derivation.md) — the kind and member-handle model this joins

@@ -618,7 +618,20 @@ impl ClosureLowerer {
             // candidate map. `LocalMethodName` stays unqualified so codegen
             // re-mangles it consistently with other methods.
             let qualified_method_name = closure_call_name(&self.module_source, collected.id);
-            let self_ref_type = type_table.make_ref(struct_type_id);
+            // A `fn mut` writes its functor; a `fn` may still write through a
+            // `&mut` the functor holds. A `&` grants neither.
+            let writes_captures = matches!(
+                type_table.get(collected.func_type_id),
+                ResolvedType::Function { is_mut: true, .. }
+            ) || collected
+                .captures
+                .iter()
+                .any(|cap| type_table.reaches_mut_ref(cap.type_id));
+            let self_ref_type = if writes_captures {
+                type_table.make_mut_ref(struct_type_id)
+            } else {
+                type_table.make_ref(struct_type_id)
+            };
 
             let call_params: Vec<TirLocal> = collected
                 .params
@@ -1148,24 +1161,24 @@ impl ClosureLowerer {
         let mut spec_locals: Vec<SpecializedLocal> = Vec::new();
         for (arg_idx, &functor_type) in &arg_to_functor {
             let slot = (*arg_idx + param_offset) as usize;
-            let functor_ref_type = type_table.make_ref(functor_type);
+            let functor = self
+                .functor_infos
+                .iter()
+                .find(|f| f.struct_type_id == functor_type)
+                .expect("a specialization key names a planned functor");
+            // The reference `$call` takes, a `&mut` where it writes its functor.
+            let functor_ref_type = functor.ref_type_id;
             if slot < new_params.len() {
                 new_params[slot].type_id = functor_ref_type;
             }
             if slot < new_locals.len() {
                 new_locals[slot].type_id = functor_ref_type;
             }
-            if let Some(functor) = self
-                .functor_infos
-                .iter()
-                .find(|f| f.struct_type_id == functor_type)
-            {
-                spec_locals.push(SpecializedLocal {
-                    local_index: slot as u32,
-                    functor_id: functor.id,
-                    functor_ref_type,
-                });
-            }
+            spec_locals.push(SpecializedLocal {
+                local_index: slot as u32,
+                functor_id: functor.id,
+                functor_ref_type,
+            });
         }
 
         // The body is cloned as-is. The TIR → NIR translator handles
@@ -1623,6 +1636,44 @@ impl ClosureCallSiteLowerer<'_> {
             .then(|| &self.functor_infos[self.local_to_closure[&index] as usize])
     }
 
+    /// Retypes an argument naming a functor type to that functor, through the
+    /// blocks [`yielded`] reads past: a closure literal becomes the struct it
+    /// builds, and a forwarded functor param passes as the functor it holds.
+    fn pass_as_functor(&self, expr: &mut TirExpr) -> TypeId {
+        let ref_type_id = match &mut expr.kind {
+            TirExprKind::Block(block) => {
+                let Some(TirStmtKind::Expr(tail)) =
+                    block.stmts.last_mut().map(|stmt| &mut stmt.kind)
+                else {
+                    unreachable!("`yielded` reads past a block only through its tail");
+                };
+                self.pass_as_functor(tail)
+            }
+            TirExprKind::Closure {
+                captures,
+                functor_id: Some(closure_id),
+                ..
+            } => {
+                let functor = &self.functor_infos[*closure_id as usize];
+                let fields = build_capture_fields(captures, self.enclosing_self, expr.span);
+                expr.kind = TirExprKind::StructLiteral {
+                    struct_type: functor.struct_type_id,
+                    struct_name: functor.struct_name.clone(),
+                    fields,
+                };
+                functor.ref_type_id
+            }
+            TirExprKind::Local { index, .. } => {
+                self.functor_param(*index)
+                    .expect("only a functor param is forwarded")
+                    .ref_type_id
+            }
+            _ => unreachable!("only a closure or a functor param names a functor type"),
+        };
+        expr.type_id = ref_type_id;
+        ref_type_id
+    }
+
     /// `arg_offset` is the count of leading `args` that are not value
     /// arguments — 1 for a trait-qualified `Call` carrying its receiver in
     /// `args[0]`, 0 for a free call and for
@@ -1664,29 +1715,7 @@ impl ClosureCallSiteLowerer<'_> {
         // Closure args → struct literals; a forwarded functor param passes as
         // the functor it holds.
         for arg_idx in &raw_indices {
-            let arg = &mut args[*arg_idx];
-            match &arg.expr.kind {
-                TirExprKind::Closure {
-                    captures,
-                    functor_id: Some(closure_id),
-                    ..
-                } => {
-                    let functor = &self.functor_infos[*closure_id as usize];
-                    arg.expr.kind = TirExprKind::StructLiteral {
-                        struct_type: functor.struct_type_id,
-                        struct_name: functor.struct_name.clone(),
-                        fields: build_capture_fields(captures, self.enclosing_self, arg.expr.span),
-                    };
-                    arg.expr.type_id = functor.ref_type_id;
-                }
-                TirExprKind::Local { index, .. } => {
-                    arg.expr.type_id = self
-                        .functor_param(*index)
-                        .expect("only a functor param is forwarded")
-                        .ref_type_id;
-                }
-                _ => unreachable!("only a closure or a functor param names a functor type"),
-            }
+            self.pass_as_functor(&mut args[*arg_idx].expr);
         }
 
         let functor_suffix = build_functor_suffix(&functor_types, self.type_table);
@@ -2031,13 +2060,23 @@ fn functor_arg_type(
     functor_infos: &[ClosureFunctor],
     forwarded: impl Fn(u32) -> Option<TypeId>,
 ) -> Option<TypeId> {
-    match &arg.expr.kind {
+    match &yielded(&arg.expr).kind {
         TirExprKind::Closure {
             functor_id: Some(id),
             ..
         } => Some(functor_infos[*id as usize].struct_type_id),
         TirExprKind::Local { index, .. } => forwarded(*index),
         _ => None,
+    }
+}
+
+/// The expression `expr` yields: itself, or the tail of the blocks around it.
+/// `capture_ref` binds a closure literal's `&T` proxies in a block ahead of
+/// it, and a contract's clauses ride ahead of the last argument the same way.
+fn yielded(expr: &TirExpr) -> &TirExpr {
+    match &expr.kind {
+        TirExprKind::Block(block) => block.tail_expr().map_or(expr, yielded),
+        _ => expr,
     }
 }
 

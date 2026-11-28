@@ -350,7 +350,7 @@ fn build_mut_escaped(
 
 /// Memoised "a callee receiving this by value or immutable reference cannot
 /// mutate it" predicate. A value is mutable through a call only if it carries
-/// shared mutable state — a `&mut T`, a cell, a `List`, a raw array, a
+/// shared mutable state — a `&mut T`, a `List`, a raw array, a
 /// resource handle, or an opaque shape. Anything else is deep-copied on
 /// pass-by-value, so no callee reaches the fields the `ValueGraph` forwards.
 pub(super) struct CallImmutability<'a> {
@@ -359,6 +359,8 @@ pub(super) struct CallImmutability<'a> {
     /// Filled by whichever visit asks first; a verdict depends only on the
     /// type, so the order changes nothing.
     memo: Mutex<IndexMap<TypeId, bool>>,
+    /// [`Self::reaches_writable`]'s answers, kept as [`Self::memo`] is.
+    writable_memo: Mutex<IndexMap<TypeId, bool>>,
     /// Per-[`FuncId`]: the function's body provably writes through its receiver
     /// (param 0). Sharper than the receiver's type: a `&mut self` method whose
     /// body writes nothing through it leaves the receiver alone. Computed by
@@ -374,15 +376,20 @@ pub(super) struct CallImmutability<'a> {
 }
 
 impl<'a> CallImmutability<'a> {
-    pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable, exec: &Executor) -> Self {
+    pub(super) fn new(
+        project: &NirPackage,
+        type_table: &'a TypeTable,
+        first_param_types: &FirstParamTypes,
+        exec: &Executor,
+    ) -> Self {
         let struct_fields = StructFieldTypes::new(&project.structs);
-        let first_param_types = first_param_types(project);
         let (receiver_mutating, has_body) =
-            compute_receiver_mutating(project, type_table, &first_param_types, exec);
+            compute_receiver_mutating(project, type_table, first_param_types, exec);
         Self {
             type_table,
             struct_fields,
             memo: Mutex::default(),
+            writable_memo: Mutex::default(),
             receiver_mutating,
             has_body,
             effect_free: project.pure_builtin_callee_ids(),
@@ -396,49 +403,148 @@ impl<'a> CallImmutability<'a> {
         self.has_body[func_id].then(|| self.receiver_mutating[func_id])
     }
 
-    pub(super) fn is_call_immutable(&self, type_id: TypeId) -> bool {
-        self.walk(type_id, &mut Vec::new())
+    pub(super) fn effect_free(&self) -> &IndexSet<FuncId> {
+        &self.effect_free
     }
 
-    fn walk(&self, type_id: TypeId, stack: &mut Vec<TypeId>) -> bool {
-        if let Some(&cached) = lock(&self.memo).get(&type_id) {
-            return cached;
-        }
+    pub(super) fn is_call_immutable(&self, type_id: TypeId) -> bool {
+        self.walk(type_id, &mut TypeWalk::new())
+    }
+
+    fn walk(&self, type_id: TypeId, w: &mut TypeWalk) -> bool {
         // A struct can only reach itself through a `List` or reference field
         // (value types cannot be infinite-sized), all of which return
         // `false` before recursing, so a cycle implies an immutable shape.
-        if stack.contains(&type_id) {
-            return true;
+        w.visit(&self.memo, type_id, true, |w| {
+            match self.type_table.get(type_id) {
+                ResolvedType::Primitive(_)
+                | ResolvedType::Unit
+                | ResolvedType::Never
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Flags { .. } => true,
+                // A callee writes nothing through `&T` itself, but may through a
+                // `&mut` it reaches. The pointee being mutated through a
+                // *different* handle is the alias-group closure's concern, not
+                // this type-shape check.
+                ResolvedType::Ref(_) => !self.reaches_writable(type_id),
+                ResolvedType::Newtype { base_type, .. } => self.walk(*base_type, w),
+                _ if self.type_table.struct_parts(type_id).is_some() => {
+                    !is_list(type_id, self.type_table)
+                        && self
+                            .struct_fields
+                            .of_type(type_id, self.type_table)
+                            // Unknown layout (not in the registry) — conservative.
+                            .is_some_and(|fields| fields.iter().all(|&f| self.walk(f, w)))
+                }
+                // `&mut T`, raw arrays, resources, variants, generics, type params,
+                // and unknowns may all carry shared mutable state — conservative.
+                _ => false,
+            }
+        })
+    }
+
+    /// Whether a holder of a `type_id` can write through it to storage the
+    /// caller shares: it is or holds a `&mut`, which a closure's `fn mut` call
+    /// writes its captures through. A `&` grants no write of its own, but a
+    /// `&mut` copied out from behind one still writes. Nor does a `List` it can
+    /// only read grant a write. Read off the fields the package's structs
+    /// register, which a closure's do and the type table's do not.
+    ///
+    /// A reachability question, so one query visits each type once. A `false`
+    /// covers every type the query reached, all of whose types it reached too.
+    pub(super) fn reaches_writable(&self, type_id: TypeId) -> bool {
+        let mut reached = IndexSet::default();
+        let writable = self.reaches_writable_in(type_id, &mut reached);
+        let mut memo = lock(&self.writable_memo);
+        if writable {
+            memo.insert(type_id, true);
+        } else {
+            memo.extend(reached.into_iter().map(|t| (t, false)));
         }
-        stack.push(type_id);
-        let result = match self.type_table.get(type_id) {
+        writable
+    }
+
+    fn reaches_writable_in(&self, type_id: TypeId, reached: &mut IndexSet<TypeId>) -> bool {
+        if let Some(&cached) = lock(&self.writable_memo).get(&type_id) {
+            return cached;
+        }
+        // A type reached before answers where it was first reached.
+        if !reached.insert(type_id) {
+            return false;
+        }
+        let tt = self.type_table;
+        match tt.get(type_id) {
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
-            | ResolvedType::Flags { .. }
-            // `&T` is immutable: a callee cannot write through it. The pointee
-            // being mutated through a *different* handle is the alias-group
-            // closure's concern, not this type-shape check.
-            | ResolvedType::Ref(_) => true,
+            | ResolvedType::Flags { .. } => false,
+            ResolvedType::MutRef(_) => true,
+            ResolvedType::Ref(inner) => self.reaches_writable_in(*inner, reached),
             ResolvedType::Newtype { base_type, .. } => {
-                let base = *base_type;
-                self.walk(base, stack)
+                self.reaches_writable_in(*base_type, reached)
             }
-            _ if self.type_table.struct_parts(type_id).is_some() => {
-                !is_list(type_id, self.type_table)
-                    && self
-                        .struct_fields
-                        .of_type(type_id, self.type_table)
-                        // Unknown layout (not in the registry) — conservative.
-                        .is_some_and(|fields| fields.iter().all(|&f| self.walk(f, stack)))
+            _ if let Some(elem) = tt.list_element(type_id) => {
+                self.reaches_writable_in(elem, reached)
             }
-            // `&mut T`, raw arrays, resources, variants, generics, type params,
-            // and unknowns may all carry shared mutable state — conservative.
-            _ => false,
-        };
-        stack.pop();
-        lock(&self.memo).insert(type_id, result);
+            _ if tt.struct_parts(type_id).is_some() => self
+                .struct_fields
+                .of_type(type_id, tt)
+                // Unknown layout (not in the registry) — conservative.
+                .is_none_or(|fields| fields.iter().any(|&f| self.reaches_writable_in(f, reached))),
+            // Raw arrays, resources, functions, variants, generics, type
+            // params and unknowns may all carry shared mutable state.
+            _ => true,
+        }
+    }
+}
+
+/// The stack of a memoized walk over the type graph, which assumes an answer
+/// for a type it reaches again while still walking it.
+struct TypeWalk {
+    stack: Vec<TypeId>,
+    /// The shallowest stack slot an assumption was made for, `usize::MAX` for
+    /// none: an answer that leaned on it is provisional until that slot pops.
+    leaned_on: usize,
+}
+
+impl TypeWalk {
+    fn new() -> Self {
+        Self {
+            stack: Vec::new(),
+            leaned_on: usize::MAX,
+        }
+    }
+
+    /// `step`'s answer for `type_id`, memoized wherever it is final: a type
+    /// graph is a DAG wherever it is not a cycle, so an unmemoized walk is
+    /// exponential in its depth. Each step is monotone in the answers it
+    /// reads, so one that differs from `assumed` holds whatever the
+    /// assumptions it read.
+    fn visit(
+        &mut self,
+        memo: &Mutex<IndexMap<TypeId, bool>>,
+        type_id: TypeId,
+        assumed: bool,
+        step: impl FnOnce(&mut Self) -> bool,
+    ) -> bool {
+        if let Some(&cached) = lock(memo).get(&type_id) {
+            return cached;
+        }
+        if let Some(depth) = self.stack.iter().position(|&t| t == type_id) {
+            self.leaned_on = self.leaned_on.min(depth);
+            return assumed;
+        }
+        let depth = self.stack.len();
+        self.stack.push(type_id);
+        let result = step(self);
+        self.stack.pop();
+        if self.leaned_on == depth {
+            self.leaned_on = usize::MAX;
+        }
+        if result != assumed || self.leaned_on == usize::MAX {
+            lock(memo).insert(type_id, result);
+        }
         result
     }
 }
@@ -467,20 +573,16 @@ pub(super) fn call_verdicts(
         if arg.is_mut {
             return false;
         }
-        let Some(ae) = arg.expr.as_expr() else {
-            return true; // a promoted constant operand mutates nothing
-        };
-        match &body.exprs[ae].kind {
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                ..
-            } => true,
-            ExprKind::Unary {
-                op: NirUnaryOp::MutRef | NirUnaryOp::Deref,
-                ..
-            } => false,
-            _ => call_immutability.is_call_immutable(body.exprs[ae].type_id),
-        }
+        let handed_mut = arg.expr.as_expr().is_some_and(|ae| {
+            matches!(
+                &body.exprs[ae].kind,
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef | NirUnaryOp::Deref,
+                    ..
+                }
+            )
+        });
+        !handed_mut && call_immutability.is_call_immutable(body.operand_type(arg.expr))
     };
     // Walk reachable nodes only: `body.exprs` also holds orphaned nodes left by
     // earlier promotion, whose stale `type_id`s are no longer in the table.
@@ -504,19 +606,29 @@ pub(super) fn call_verdicts(
         }
         // A receiver is judged by the callee's declared `self` mode, which
         // stays conservative for a callee absent from `first_param_types`;
-        // `arg_safe` alone would clear an unknown one.
+        // `arg_safe` alone would clear an unknown one. The receiver-write
+        // summary counts writes to the receiver's own storage, not through a
+        // `&mut` it holds, as a closure's call writes its captures: a
+        // receiver whose value reaches one is never cleared. A by-value `self`
+        // is an argument like any other, a `List` it holds shared with the
+        // caller.
         let (receiver, rest) = args.split();
+        let by_value_self =
+            first_param_types[*func_id].is_some_and(|tp| !type_table.is_reference(tp));
         let receiver_safe = receiver.is_none_or(|r| {
             r.expr.as_expr().is_some_and(|re| {
-                !method_mutates_receiver(
-                    body,
-                    re,
-                    *func_id,
-                    first_param_types,
-                    type_table,
-                    true,
-                    Some(call_immutability),
-                )
+                let receiver_type = body.exprs[re].type_id;
+                !call_immutability.reaches_writable(type_table.peel_refs(receiver_type))
+                    && (!by_value_self || arg_safe(r))
+                    && !method_mutates_receiver(
+                        body,
+                        re,
+                        *func_id,
+                        first_param_types,
+                        type_table,
+                        true,
+                        Some(call_immutability),
+                    )
             })
         });
         if receiver_safe {
@@ -998,7 +1110,9 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> 
             | ResolvedType::Flags { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
-            ResolvedType::InferVar(var) => panic!("{var} reached alias analysis"),
+            ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+                panic!("{var} reached alias analysis")
+            }
         }
     }
     key(type_id, false, type_table)
@@ -1088,7 +1202,9 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Flags { .. }
         | ResolvedType::Unknown
         | ResolvedType::Error => false,
-        ResolvedType::InferVar(var) => panic!("{var} reached alias analysis"),
+        ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+            panic!("{var} reached alias analysis")
+        }
     }
 }
 

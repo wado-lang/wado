@@ -28,15 +28,14 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
-use crate::elaborator::orchestration::first_infer_span;
-use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
+use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo, ForOfStart};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::elaborator::util::reserve_float_pattern_locals;
 use crate::name::{
-    constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
+    Receiver, constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
     namespace_member_alias, range_local_name,
 };
 use crate::primitive::PrimitiveType;
@@ -232,6 +231,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// from the AST; desugared constructs that expand to multiple statements
     /// record their `DesugarKind` tag here.
     pub(super) fn resolve_stmt(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) {
+        self.in_statement(stmt.span(), |this| this.resolve_stmt_kind(stmt, ctx));
+    }
+
+    /// Walk `walk` as the statement at `span`, whose reports absorb the
+    /// variables it mints and none minted outside it.
+    pub(super) fn in_statement<R>(&mut self, span: Span, walk: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = self.infer_holes.statement.replace(span);
+        let walked = walk(self);
+        self.infer_holes.statement = outer;
+        walked
+    }
+
+    fn resolve_stmt_kind(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) {
         match stmt {
             Stmt::Let(let_stmt) => self.resolve_let(let_stmt, ctx),
             Stmt::Expr(expr_stmt) => self.resolve_expr_stmt(expr_stmt, ctx),
@@ -416,7 +428,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report every `..X` in a written type whose `X` no type parameter list
     /// declares a pack.
-    pub(super) fn reject_non_pack_spreads(&mut self, ty: &ast::Type) {
+    pub(super) fn reject_non_pack_spreads(&self, ty: &ast::Type) {
         let bad: Vec<(String, Span)> = ty
             .pack_spreads()
             .into_iter()
@@ -546,15 +558,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
-        if let_stmt
-            .ty
-            .as_ref()
-            .is_some_and(|ty| first_infer_span(ty).is_some())
-        {
-            self.closing_holes_on_error(|e| e.resolve_let_annotated(let_stmt, ctx));
-        } else {
-            self.resolve_let_annotated(let_stmt, ctx);
-        }
+        self.resolve_let_annotated(let_stmt, ctx);
     }
 
     fn resolve_let_annotated(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
@@ -905,7 +909,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Check the binding of a walk over a type pack, a `for` or a tuple
     /// comprehension: a name, `_`, or a tuple of them as long as the element.
     pub(super) fn check_pack_binding(
-        &mut self,
+        &self,
         binding: &Pattern,
         binding_type: TypeId,
         span: Span,
@@ -975,7 +979,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Why `pattern` itself, apart from its parts, can fail against `scrutinee`.
     /// A case cannot when no other case of its type holds a value.
-    fn refutation(&mut self, pattern: &Pattern, scrutinee: TypeId) -> Option<String> {
+    fn refutation(&self, pattern: &Pattern, scrutinee: TypeId) -> Option<String> {
         match pattern {
             Pattern::Variant { variant_name, .. }
                 if !self.another_case_holds_a_value(scrutinee, variant_name) =>
@@ -1011,7 +1015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .any(|(case, payload)| case.name != name && !self.is_uninhabited(payload))
     }
 
-    fn reject_refutable(&mut self, site: BindingSite, reason: &str, span: Span) {
+    fn reject_refutable(&self, site: BindingSite, reason: &str, span: Span) {
         let (position, remedy) = match site {
             BindingSite::Let => ("`let` binding", "use `let ... else` or `if let` instead"),
             BindingSite::ForOf => (
@@ -1230,7 +1234,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// wrap happens, because it is where `&mut` onto a scalar is refused: Wasm
     /// GC has no interior pointer to one, so it would reference a copy.
     fn pattern_binding_type(
-        &mut self,
+        &self,
         name: &str,
         type_id: TypeId,
         ref_binding: RefBinding,
@@ -1742,16 +1746,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow()
                     .tuple_representation(scrutinee_type);
-                let element_types = if let Some(types) = elements {
-                    types
-                } else {
-                    let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: "tuple type".to_string(),
-                        found: self.tysys.type_table.borrow().name(scrutinee_type),
-                        span,
-                    });
-                    vec![TypeTable::UNKNOWN; patterns.len()]
-                };
+                let element_types =
+                    if self.reports_open_pack(scrutinee_type, "match its elements", span) {
+                        vec![TypeTable::ERROR; patterns.len()]
+                    } else if let Some(types) = elements {
+                        types
+                    } else {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
+                            expected: "tuple type".to_string(),
+                            found: self.tysys.type_table.borrow().name(scrutinee_type),
+                            span,
+                        });
+                        vec![TypeTable::UNKNOWN; patterns.len()]
+                    };
                 let element_types = self.tuple_pattern_element_types(
                     patterns.len(),
                     *has_rest,
@@ -2235,7 +2242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A narrowing tests the class a handle carries, so its target must number one.
-    fn require_handle_classes(&mut self, target: TypeId, span: Span) {
+    fn require_handle_classes(&self, target: TypeId, span: Span) {
         let unnumbered = {
             let tt = self.tysys.type_table.borrow();
             tt.narrowing_classes(target)
@@ -2283,7 +2290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// A narrowing is the host's answer about the value itself: it binds that
     /// value whole, and not through a reference.
-    fn check_narrowing_shape(&mut self, inner: &Pattern, ref_binding: RefBinding, span: Span) {
+    fn check_narrowing_shape(&self, inner: &Pattern, ref_binding: RefBinding, span: Span) {
         let message = if ref_binding != RefBinding::None {
             "a type pattern narrows a resource value, not a reference to one"
         } else if !matches!(
@@ -2302,7 +2309,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// A narrowing where the pattern cannot fail over to anything.
     fn reject_refutable_narrowing(
-        &mut self,
+        &self,
         value: TypeId,
         target: TypeId,
         span: Span,
@@ -2421,8 +2428,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: Span,
     ) {
         let (errors, inexact) = if self.settles_literal_patterns(scrutinee_type) {
-            let mut type_table = self.tysys.type_table.borrow_mut();
-            match util::settle_instance_pattern(pattern, scrutinee_type, &mut type_table) {
+            let type_table = self.tysys.type_table.borrow();
+            match util::settle_instance_pattern(pattern, scrutinee_type, &type_table) {
                 Ok(settled) => {
                     if let util::SettledPattern::Float(_) = settled {
                         reserve_float_pattern_locals(scrutinee_type, &type_table, |name, ty| {
@@ -2459,7 +2466,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn emit_pattern_literal_error(
-        &mut self,
+        &self,
         error: util::PatternLiteralError,
         scrutinee_type: TypeId,
         span: Span,
@@ -2547,8 +2554,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let error = match util::range_bound(bound, &self.tysys.resolutions) {
                 Some(Ok(bound)) => {
-                    let mut type_table = self.tysys.type_table.borrow_mut();
-                    util::bound_value(&bound, scrutinee, &mut type_table).err()
+                    let type_table = self.tysys.type_table.borrow();
+                    util::bound_value(&bound, scrutinee, &type_table).err()
                 }
                 Some(Err(message)) => message.map(util::PatternLiteralError::Invalid),
                 None => Some(util::PatternLiteralError::Invalid(
@@ -2635,6 +2642,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.resolve_block(&for_of.body, &mut scope, None);
             return;
         }
+
+        let iterable_type_id =
+            if self.reports_open_pack(iterable_type_id, "walk its elements", for_of.span) {
+                TypeTable::ERROR
+            } else {
+                iterable_type_id
+            };
 
         // Check if it's a tuple type — looking through a single `&`/`&mut`
         // wrapper. A reference iterable (`&[..T]`) iterates element-by-ref
@@ -2738,7 +2752,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// What a for-of binds per element: the element, or `[i32, element]` under
     /// `.enumerate()`.
-    fn for_of_binding_type(&mut self, is_enumerate: bool, element: TypeId) -> TypeId {
+    fn for_of_binding_type(&self, is_enumerate: bool, element: TypeId) -> TypeId {
         if is_enumerate {
             self.tysys
                 .type_table
@@ -2923,22 +2937,79 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let iter_var = minted_name("iter", unique_id);
         let label = minted_name("for_of", unique_id);
 
+        let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
+        // An `IntoIterator` or `ForOf` written for the reference itself says
+        // what a walk of it is, and answers first as a reference's own impl
+        // always does. A newtype inherits its base's, a link at a time.
+        let reference_states = |item: CompilerItem| {
+            let tt = self.tysys.type_table.borrow();
+            let walk_trait = self
+                .tysys
+                .compiler_trait(item)
+                .and_then(|fq| fq.canonical());
+            tt.ref_kind(into_iter_receiver_type)
+                .zip(tt.ref_pointee(into_iter_receiver_type))
+                .zip(walk_trait)
+                .is_some_and(|((kind, referent), trait_)| {
+                    std::iter::successors(Some(referent), |&link| match tt.get(link) {
+                        ResolvedType::Newtype { base_type, .. } => Some(*base_type),
+                        _ => None,
+                    })
+                    .map(|link| tt.fq_type_name(link))
+                    .filter(|name| name.binder_name().is_none())
+                    .any(|name| {
+                        self.tysys
+                            .trait_env
+                            .methodful_impls_by_receiver(
+                                &Receiver::RefTo(kind, name.head_only()),
+                                trait_,
+                            )
+                            .any(|entry| tt.impl_reaches_instance(entry, into_iter_receiver_type))
+                    })
+                })
+        };
+        let reference_starts_its_walk = reference_states(CompilerItem::ForOf);
+        let reference_states_its_walk =
+            reference_starts_its_walk || reference_states(CompilerItem::IntoIterator);
+        // An iterator that is a reference advances what it points to, so the
+        // loop walks it as it stands: `into_iter` and `start` reach the
+        // referent, and would walk a copy of it or move it out. An iterator
+        // of a type the instance settles may be such a reference, and is
+        // walked the same way, which copies or moves any other as `into_iter`
+        // and `start` would.
+        let walks_operand = !reference_states_its_walk
+            && {
+                let tt = self.tysys.type_table.borrow();
+                tt.is_reference(into_iter_receiver_type)
+                    || tt.representation_awaits_substitution(into_iter_receiver_type)
+            }
+            && iterator.as_ref().is_some_and(|trait_| {
+                self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    into_iter_receiver_type,
+                    trait_,
+                )
+            });
         // An affine value moves into the loop through `ForOf::start`, so the
         // loop owns what it walks. A copyable one walks its `IntoIterator`,
         // whose iterator shares the operand's storage where a moved one would
         // cost a copy of a list read after the loop (WEP: Affine Types).
-        let walks_value = self.tysys.is_affine(
-            into_iter_receiver_type,
-            &self.annotate_ctx.trait_ctx.affine_params(),
-        ) && self.tysys.compiler_trait(CompilerItem::ForOf).is_some_and(
-            |trait_| {
-                self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
+        let walks_value = reference_starts_its_walk
+            || !walks_operand
+                && self.tysys.is_affine(
                     into_iter_receiver_type,
-                    &trait_,
+                    &self.annotate_ctx.trait_ctx.affine_params(),
                 )
-            },
-        );
+                && self
+                    .tysys
+                    .compiler_trait(CompilerItem::ForOf)
+                    .is_some_and(|trait_| {
+                        self.tysys.type_implements_trait(
+                            &self.annotate_ctx,
+                            into_iter_receiver_type,
+                            &trait_,
+                        )
+                    });
         let (start_name, start_trait) = if walks_value {
             (
                 "start",
@@ -2953,28 +3024,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // outcome's `dispatch` carries the `(self_kind, FunctionRef)` reify
         // needs to reproduce the same call shape
         // (WEP 2026-05-26).
-        let into_iter_outcome = self.resolve_method_call_with(
-            MethodCallInput {
-                receiver: into_iter_receiver_type,
-                receiver_ast: None,
-                method_name: start_name,
-                method_id: None,
-                call_id: None,
-                defaults_site: None,
-                type_args: vec![],
-                args: &[],
-                expected_type: None,
-                span,
-                required_trait: start_trait,
-            },
-            ctx,
-        );
-        let into_iter_dispatch = into_iter_outcome.dispatch;
-        let iter_type = into_iter_outcome.type_id;
+        let (start, iter_type) = if walks_operand {
+            (None, into_iter_receiver_type)
+        } else {
+            let outcome = self.resolve_method_call_with(
+                MethodCallInput {
+                    receiver: into_iter_receiver_type,
+                    receiver_ast: None,
+                    method_name: start_name,
+                    method_id: None,
+                    call_id: None,
+                    defaults_site: None,
+                    type_args: vec![],
+                    args: &[],
+                    expected_type: None,
+                    span,
+                    required_trait: start_trait,
+                },
+                ctx,
+            );
+            (outcome.dispatch, outcome.type_id)
+        };
 
         // Iterator-trait conformance check, mirroring the pre-refactor
         // surface error. A `ForOf` state answers `next` without being one.
-        let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
         if !walks_value
             && !iterator.is_some_and(|trait_| {
                 self.tysys
@@ -3082,15 +3155,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // WEP 2026-05-26: record the iterator-path
         // dispatch decision so reify can re-emit the synthetic
         // `into_iter()` / `next()` calls without re-dispatching. Only
-        // record when both dispatches succeeded (the trait-check error
-        // path above bailed without resolving them).
-        if let (Some(into_iter), Some(next)) = (into_iter_dispatch, next_dispatch) {
+        // record when every dispatch the loop makes succeeded (the
+        // trait-check error path above bailed without resolving them).
+        if let Some(next) = next_dispatch
+            && (walks_operand || start.is_some())
+        {
             self.record_for_of_iterator(
                 for_of.id,
                 ForOfIteratorInfo {
-                    into_iter_def: into_iter.method_def,
-                    into_iter: into_iter.func,
-                    into_iter_self_kind: into_iter.self_kind,
+                    start: start.map(|start| ForOfStart {
+                        def: start.method_def,
+                        func: start.func,
+                        self_kind: start.self_kind,
+                    }),
                     next_def: next.method_def,
                     next: next.func,
                     next_self_kind: next.self_kind,
@@ -3134,7 +3211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report a `break` or `continue` written in a for-of the compiler expands:
     /// the expansion leaves neither a loop to name. `kind` names the for-of.
-    fn reject_expanded_control_flow(&mut self, body: &Block, kind: &str) -> bool {
+    fn reject_expanded_control_flow(&self, body: &Block, kind: &str) -> bool {
         let mut finder = LoopControlFlowFinder { found: None };
         finder.visit_block(body);
         let Some((written, span)) = finder.found else {

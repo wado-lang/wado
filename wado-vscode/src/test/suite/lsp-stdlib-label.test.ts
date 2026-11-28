@@ -115,14 +115,14 @@ suite('Wado LSP (stdlib editor label)', () => {
     test('labels a core: submodule document with its basename', async function () {
         this.timeout(120_000);
 
-        const uri = vscode.Uri.parse('core:prelude/types.wado');
+        const uri = vscode.Uri.parse('core:prelude/option.wado');
         const doc = await openStdlibDocument(uri, 90_000);
         await vscode.window.showTextDocument(doc);
 
         const tab = await waitForTab(uri, 90_000);
         assert.strictEqual(
             tab.label,
-            'types.wado',
+            'option.wado',
             `Expected the submodule tab label to be the basename, got: ${tab.label}`,
         );
     });

@@ -238,9 +238,10 @@ The declaration takes part in name resolution and nothing else:
   beside an instance method of the same name is ambiguous, as two methods are.
 - `wado doc` does not render it.
 
-It goes on a module function, an `impl` method, or a trait method. Anywhere else
-is an error. `export` is refused with it, since there is no function to lower at
-the component boundary.
+It goes on a module function, or on a method of an `impl`, a trait or a
+resource. Anywhere else is an error. `export` is refused with it, since there is
+no function to lower at the component boundary. On a resource it may take an
+inherited name; [Methods](./spec-components.md#methods) states what that does.
 
 Rationale: [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
 
@@ -256,9 +257,11 @@ Test block attribute. Marks a test for an unimplemented feature, reported apart 
 
 Module-level inner attribute. Marks every test in the module as `#[TODO]`, and tolerates a module that fails to compile. The source must still parse, since otherwise the attribute cannot be recognized. [`#![TODO]` Modules](./spec-testing.md#todo-modules) states the outcomes.
 
-### `#[timeout_ms(N)]`
+### `#[timeout(seconds = N)]`
 
-Test block attribute. Overrides the default test timeout. [`#[timeout_ms(N)]` Attribute](./spec-testing.md#timeout_msn-attribute) states the rule.
+Test block attribute. Overrides the default test timeout. [`#[timeout(seconds = N)]` Attribute](./spec-testing.md#timeoutseconds--n-attribute) states the rule.
+
+Rationale: [WEP: Test Timeout in Seconds](./wep-2026-11-26-test-timeout.md).
 
 ### `#[synopsis]`
 
@@ -276,7 +279,7 @@ test {
 
 A synopsis documents the module that holds it, not one item. `wado test` counts
 it in the ordinary pass/fail total, and it combines with `#[expect_trap]`,
-`#[TODO]` and `#[timeout_ms]`. It is conventionally unnamed, since it is the
+`#[TODO]` and `#[timeout]`. It is conventionally unnamed, since it is the
 example rather than one case among several.
 
 `wado doc` places the `## Synopsis` section after the module's `//!` doc and
@@ -292,7 +295,7 @@ Rationale: [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
 Test block attribute. The test runs like any other, and it also states the
 package's real workload, which
 [Recording a Profile](./spec-pgo.md#recording-a-profile) measures. It combines
-with `#[timeout_ms]` and `#[synopsis]`, and is an error with `#[expect_trap]`
+with `#[timeout]` and `#[synopsis]`, and is an error with `#[expect_trap]`
 or `#[TODO]`, or in a module marked `#![TODO]`, since a workload must not trap.
 
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).

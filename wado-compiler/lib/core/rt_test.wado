@@ -15,7 +15,7 @@ use {
     extern_slot_free,
     handle_eq,
 } from "core:rt";
-use { ExternObject } from "core:prelude/types.wado";
+use { ExternObject } from "core:prelude/async.wado";
 use { MonotonicClock } from "wasi:clocks";
 
 struct Tag {
@@ -262,6 +262,14 @@ test "a set hands back the call that resolved and cancels the rest as it drops" 
     set.insert(MonotonicClock::wait_for(1_000_000));
     set.wait().member.wait();
     assert set.len() == 1;
+}
+
+test "a call that returned as it started is ready in a set without the host" {
+    let mut set = WaitableSet::<AsyncCall<()>>::new();
+    set.insert(MonotonicClock::wait_for(0));
+    let ready = set.poll().unwrap();
+    assert ready.event matches { Call(_::Returned) };
+    ready.member.wait();
 }
 
 test "log_stdout writes without an effect" {

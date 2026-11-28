@@ -78,6 +78,7 @@ mod reflect_marker;
 pub mod remarks;
 pub mod remote;
 pub mod resolve;
+pub mod self_by_value;
 pub mod self_comparison;
 pub mod semantics;
 pub mod signature_reach;
@@ -172,6 +173,7 @@ pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use package::TestSelection;
 pub use parser::{ParseError, ParseErrorKind, Parser};
+use self_by_value::self_by_value_diagnostics;
 use self_comparison::self_comparison_diagnostics;
 use synthesis::SynthesisError;
 pub use token::Span;
@@ -573,8 +575,9 @@ pub struct CompilerOptions {
     /// it recorded no run of. A module is looked up under its name
     /// ([`coverage::ModulePlan::name`]).
     pub profile: Option<Arc<pgo::Profile>>,
-    /// How many threads the optimizer visits functions on. The output does not
-    /// depend on it. A host compiling several files at once passes 1.
+    /// How many threads lowering and the optimizer visit functions on. The
+    /// output does not depend on it. A host compiling several files at once
+    /// passes 1.
     pub parallelism: usize,
 }
 
@@ -927,6 +930,7 @@ pub fn lint_diagnostics(
     let mut out = shadowing_diagnostics(sem, lints);
     out.extend(undecided_effect_diagnostics(sem, lints));
     out.extend(undeclared_effect_diagnostics(sem, lints));
+    out.extend(self_by_value_diagnostics(sem, lints));
     out.extend(self_comparison_diagnostics(sem, lints));
     out.extend(constant_arithmetic_diagnostics(sem, lints));
     out.extend(hex_suffix_lookalike_diagnostics(sem, lints));
@@ -2568,6 +2572,7 @@ fn build_after_load<H: CompilerHost>(
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
         bind_monomorphized(&mut flat, &mut mono, logger)?;
         refuse_instances(mono.outranked_disagreement(&flat), logger)?;
+        refuse_instances(mono.shared_mut_leak(&flat), logger)?;
         mono.finish(&mut flat);
         synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }
@@ -2603,7 +2608,12 @@ fn build_after_load<H: CompilerHost>(
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let mut nir = {
         let _span = logger.span("lower");
-        lower(flat, logger, logger)?
+        lower(
+            flat,
+            logger,
+            logger,
+            &parallel::Executor::new(options.parallelism),
+        )?
     };
     if let Some(views) = views.as_deref_mut() {
         views.lowered_nir_text = Some(nir_unparse::unparse_nir_package(&nir));
@@ -2746,7 +2756,12 @@ fn build_after_load<H: CompilerHost>(
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(&mut wir_package, options.opt_level, logger);
+        wir_optimize::optimize_wir(
+            &mut wir_package,
+            options.opt_level,
+            logger,
+            &parallel::Executor::new(options.parallelism),
+        );
     }
     wir_package.declare_memory64();
 

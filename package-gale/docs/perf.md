@@ -900,6 +900,103 @@ embedding the blob as base64/`#data` rather than an `i32`-array literal — a
 source-size/compile-time lever, worth revisiting only once a _large_ grammar's
 ATN literal is a measured problem.)
 
+### `core:collections`' `HashMap` behind the simulator's `AtnKeyMap` — GO (2026-11)
+
+`AtnKeyMap` (`atn_predict.wado`) maps an `i64` key to an `i32`. It is a newtype
+over `HashMap<i64, i32>`. A hand-written open-addressing table in its place
+measures the same within the noise:
+
+| grammar    | time, `clear` freeing | time, `clear` filling | fuel, `clear` filling |   fuel |
+| ---------- | --------------------: | --------------------: | --------------------: | -----: |
+| TypeScript |                 2.06× |                 0.85× |                1.016× | 0.999× |
+| Rust       |                 1.38× |                 1.05× |                1.016× | 1.006× |
+| SQLite     |                 0.95× |                 1.01× |                1.000× | 1.000× |
+
+Each figure is `HashMap` over the open-addressing table. The times are
+`wado run -O2 package-gale/benchmark/<grammar>/<grammar>.wado` on the dev build,
+the arms alternating in one session, and a run varies by a tenth either way. The
+fuel is that file's `input parses` test under `wado test -O2 --report-fuel`,
+which is one cold parse.
+
+`HashMap` was the slower by far until four things changed in it, and a map
+that lacks one of them will lose this comparison again:
+
+- `clear` keeps the table and the entry arrays. A map cleared at every
+  prediction step otherwise grows from nothing each time: the first column.
+- `clear` empties a table far wider than its entries slot by slot, not by
+  filling it. One hard prediction otherwise leaves every later step filling the
+  table it grew: the `clear` filling columns.
+- A key of one word is hashed with one folded multiply, not two.
+- A lookup reads the entry where it probes, not the slot again afterwards.
+
+What remains is what an insertion-ordered map costs: a hit reads the slot, the
+fingerprint, the key, the liveness flag and the value from five arrays, where
+the open-addressing table read two.
+
+### A `List` per context node, interned by `HashMap` — NO-GO (2026-11)
+
+The simulator's interned tables (`AtnKeyLists`, `RealStacks`, `CtxArena` in
+`atn_predict.wado`) each keep their keys in one flat column, with a start and a
+length per entry. Holding each entry as a `List` of its own, interned through a
+`HashMap` keyed by that list, reads shorter and runs slower:
+
+| step, cumulative                              | TypeScript time | Rust time | TypeScript fuel | Rust fuel |
+| --------------------------------------------- | --------------: | --------: | --------------: | --------: |
+| the keyed lists are `HashMap` keys            |           1.09× |     1.03× |                 |           |
+| a real stack is an interned `List<AtnEdge>`   |           1.57× |     1.14× |                 |           |
+| an arena node is a `List<AtnEdge>`            |           1.91× |     1.35× |           0.92× |     0.91× |
+| flat columns, an edge packed in one `AtnEdge` |           0.97× |     0.88× |           0.97× |     0.95× |
+
+Each figure is the step over the three-column tables it replaced, measured as
+the `HashMap` table above is. The last row is what landed.
+
+Fuel read the list form as the faster one. Fuel counts instructions and does
+not see the collector, and the collector is where the time went. A node stays
+live until its pool is replaced (`AtnDfa::make_room` for the arena,
+`CtxArena::enter_caller_stack` for the real stacks), and the
+benchmark's input fills neither that far, so every collection traces one more object per node. `wado run -O2 --gc-log` shows
+it as a larger live set and longer pauses. An interner holding a heap key in
+both its list and its map doubles that.
+
+So a table that outlives a prediction keeps flat columns, and a change
+to one is judged by time, with fuel beside it.
+
+### The keyed lists are indexed by `HashIndex` (2026-11)
+
+`AtnKeyLists` interned through a hand-written chain: an `AtnKeyMap` from the
+key's hash to the newest entry with that hash, and a `same_hash_next` column
+linking the rest. `core:collections`' `HashIndex` replaces both. It holds one
+word per slot, an entry's number under the top half of its hash, and asks
+`AtnKeyLists` which entry equals the pending key.
+
+| heap | TypeScript |  Rust |
+| ---: | ---------: | ----: |
+| 192m |      1.17× | 1.14× |
+| 256m |      0.92× | 1.11× |
+| 384m |      1.19× | 1.11× |
+| 512m |      1.06× | 1.10× |
+| 768m |      1.09× | 1.16× |
+
+Each figure is the chain's time over `HashIndex`'s, so above 1× is faster,
+each time the mean of two alternating runs of
+`wado run -O2 --gc-heap-initial <heap> package-gale/benchmark/<grammar>/<grammar>.wado`
+on the dev build. SQLite does not move.
+
+The heap is swept because TypeScript's live set grows with every iteration of
+the benchmark, so where a collection lands decides a run, and at one size the
+ranking flips. Judge a change to these tables across the sweep, not at the
+default heap.
+
+`HashIndex` uses the hash as it comes, and its top bits pick the slot. FNV's
+multiply carries a difference only upward, so two keys that differ in an
+edge's high bits differ only in the hash's top few bits, and two that differ in
+a small state number do not differ there at all. `hash_from` therefore ends
+in `HashIndex::spread`. Without it a lookup walks a run of full slots, and the
+TypeScript benchmark runs about thirty times slower.
+
+`AtnKeyMap` stays a `HashMap<i64, i32>`: it maps a key to a value and keeps no
+rows, so there is nothing for the index to leave out.
+
 ### Measured non-levers
 
 General findings — forcing inlining, raising the inline threshold, `br_table`

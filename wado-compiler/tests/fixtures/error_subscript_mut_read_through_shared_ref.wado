@@ -1,0 +1,17 @@
+// A subscript read out of a container behind a `&` reads a `&mut` element as
+// a `&`, as a field or tuple read does, so the element cannot write.
+
+struct S { f: i32 }
+
+fn leak(xs: &List<&mut S>) -> &mut S {
+    return xs[0];
+}
+
+test {
+    let mut s = S { f: 1 };
+    let xs: List<&mut S> = [&mut s];
+    leak(&xs).f = 2;
+}
+
+__DATA__
+{"compile_error": ":7:5: analysis error: type mismatch: expected '&mut S', found '&S'"}

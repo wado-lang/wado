@@ -1,0 +1,16 @@
+// A `&mut` to a `&mut` to an iterator is not itself asked for the adapter: the
+// call would read the inner reference out of the outer one. A written `*`
+// names the reference that iterates.
+
+fn two(rr: &mut &mut RangeExclusive<i32>) -> List<i32> {
+    return rr.take(2).collect();
+}
+
+export fn run() {
+    let mut r = 0..<6;
+    let mut m = &mut r;
+    assert two(&mut m) == [0, 1];
+}
+
+__DATA__
+{"compile_error": ":6:12: analysis error: `take` takes `self` by value, and the receiver is `&mut &mut RangeExclusive<i32>`; write `*` to copy what it points to"}

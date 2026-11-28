@@ -253,7 +253,7 @@ yields `Head` when its head is known and `Opaque(Inference)` when it is not.
 | assignment, compound assignment              | `Exact(unit)`                                                                            |
 | call — named function, variant constructor   | the declared return type                                                                 |
 | call — `fn`-typed value                      | the function type's return type                                                          |
-| method call                                  | the resolved method's return type                                                        |
+| method call                                  | the return type of the method its own arguments' classes select                          |
 | static method call                           | `Opaque(Inference)` — a generic receiver head takes its arguments from the expected type |
 | field access, tuple field                    | the field's type                                                                         |
 | `e[i]`                                       | the `IndexValue` / `IndexRef` `Output` for the key's type                                |
@@ -686,6 +686,11 @@ Trade-offs:
   (`T: Take<fn()> + Take<fn() with Stdout>`) never waits for a closure
   argument's body, so a pair differing only in the closure's row is reported
   ambiguous.
+- A method call in argument position whose own arguments do not select among
+  its trait's argument lists is synthesized as the first of them, and reported
+  ambiguous there. With `Source<String>` and `Source<bool>` on the receiver,
+  `sink.accept(two.first())` is refused though `Accept<bool>` is the one
+  argument list of `accept` either result fits.
 
 ## See Also
 

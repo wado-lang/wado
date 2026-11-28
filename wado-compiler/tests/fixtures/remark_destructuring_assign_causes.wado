@@ -1,6 +1,6 @@
 // A destructuring assignment that keeps its copying desugaring, rather than a move or an `index_swap`, is remarked with a note naming why.
-// One function per cause, and one in a trait's default body declared in another module. Each is
-// free to splice into `run`, and its remark stays on the line the assignment is written on.
+// One function per cause, and one in a trait's default body declared in another module. Each is free to splice into `run`, and its remark stays on the line the assignment is written on. A swap
+// nothing writes after loses its copies to the optimizer, so such a line writes an element too.
 
 use { println, Stdout } from "core:cli";
 use { Rotate } from "./sub/remark_destructuring_default_body.wado";
@@ -23,7 +23,7 @@ fn reference_readable() -> i32 {
     let mut a: List<i32> = [builtin::black_box(1)];
     let mut b: List<i32> = [2];
     let r = &a;
-    [a, b] = [b, a];
+    [a, b] = [b, a]; a[0] = 5;
     return r.len() + b.len();
 }
 
@@ -35,7 +35,7 @@ fn not_owned(rs: &mut List<List<i32>>, x: &mut List<i32>) -> i32 {
 fn other_container() -> i32 {
     let mut ts = rows();
     let mut us = rows();
-    [ts[0], us[1]] = [us[1], ts[0]];
+    [ts[0], us[1]] = [us[1], ts[0]]; ts[0][0] = 5;
     return ts.len() + us.len();
 }
 
@@ -43,13 +43,13 @@ fn index_referenced() -> i32 {
     let mut ts = rows();
     let i = builtin::black_box(0);
     let r = &i;
-    [ts[i], ts[1]] = [ts[1], ts[i]];
+    [ts[i], ts[1]] = [ts[1], ts[i]]; ts[0][0] = 5;
     return ts[0].len() + *r;
 }
 
 fn mutable_global_index() -> i32 {
     let mut ts = rows();
-    [ts[K], ts[1]] = [ts[1], ts[K]];
+    [ts[K], ts[1]] = [ts[1], ts[K]]; ts[0][0] = 5;
     return ts[0].len();
 }
 
@@ -93,7 +93,7 @@ fn container_not_local() -> i32 {
 fn unplain_index() -> i32 {
     let mut ts = rows();
     let ks: List<i32> = [0, 1];
-    [ts[ks[0]], ts[ks[1]]] = [ts[ks[1]], ts[ks[0]]];
+    [ts[ks[0]], ts[ks[1]]] = [ts[ks[1]], ts[ks[0]]]; ts[0][0] = 5;
     return ts[0].len();
 }
 

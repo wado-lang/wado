@@ -3,7 +3,9 @@
 use super::Elaborator;
 use super::call::DefaultWalk;
 use super::infer::{infer_var_answers, unify};
+use super::instantiate::Instantiated;
 use super::scope::Scope;
+use super::synth::ArgClass;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
@@ -506,7 +508,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn try_coerce_numeric_literal_inner(
-        &mut self,
+        &self,
         literal: NumericLiteral<'_>,
         target_type: TypeId,
     ) -> Option<TypeId> {
@@ -833,7 +835,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// What `ret` says of each variable its declared type names, where that is
     /// a type a numeric literal can be: in `let x: u64 = unbox(Box { v: 1 })`
     /// it answers `T` ahead of the literal's default.
-    fn literal_hints(&mut self, ret: Option<ExpectedReturn>) -> IndexMap<TypeId, TypeId> {
+    fn literal_hints(&self, ret: Option<ExpectedReturn>) -> IndexMap<TypeId, TypeId> {
         let Some(ret) = ret else {
             return IndexMap::default();
         };
@@ -849,7 +851,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// substitution [`Elaborator::context_literal_expected`] applies: the
     /// type a call's site expects reaches its arguments first, as a hint.
     pub(super) fn expected_return_hints(
-        &mut self,
+        &self,
         own_vars: &[TypeId],
         ret: Option<ExpectedReturn>,
     ) -> IndexMap<InferVarId, TypeId> {
@@ -874,7 +876,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// tuple. A typed argument is checked against `expected` alone, so it
     /// still decides what the hint only suggests.
     pub(super) fn context_literal_expected(
-        &mut self,
+        &self,
         arg: &Expr,
         expected: TypeId,
         hints: &IndexMap<InferVarId, TypeId>,
@@ -893,7 +895,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .substitute_infer_vars(expected, hints)
     }
 
-    fn unify_expected_return(&mut self, ret: ExpectedReturn) -> IndexMap<TypeId, TypeId> {
+    fn unify_expected_return(&self, ret: ExpectedReturn) -> IndexMap<TypeId, TypeId> {
         let declared = self.apply_infer_holes(ret.declared);
         let expected = self.apply_infer_holes(ret.expected);
         let mut bindings = IndexMap::default();
@@ -968,7 +970,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expected,
             });
             self.chain_expected_return(&pending.own_vars, ret);
-            self.settle_pending_literals(pending, &[], ret, ctx);
+            self.settle_pending_literals(pending, &[], None, ret, ctx);
         }
         self.apply_infer_holes(projected)
     }
@@ -1006,11 +1008,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             this.resolve_struct_literal(struct_lit, ctx, Some(open))
         });
         self.equate(resolved, open);
-        self.settle_pending_literals(pending, &[], ret, ctx);
-        // A variable still open is the outer call's to answer, or reported at
-        // finalize; the struct's own parameter would stand for no type there.
-        let solved = self.apply_infer_holes_each(&inst.vars);
-        self.blame_unsolved(&inst, &solved);
+        self.settle_pending_literals(pending, &[], None, ret, ctx);
         Some(self.apply_infer_holes(resolved))
     }
 
@@ -1022,7 +1020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .last_mut()
             .expect("the projection's collection is pushed");
         let pending = std::mem::replace(collection, PendingLiterals::of_call(&[]));
-        self.settle_pending_literals(pending, &[], None, ctx);
+        self.settle_pending_literals(pending, &[], None, None, ctx);
     }
 
     /// [`Scope::awaits_pending_call`] on `ty` with the solved variables
@@ -1054,6 +1052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         pending: PendingLiterals,
         args: &[Expr],
+        inst: Option<&Instantiated>,
         ret: Option<ExpectedReturn>,
         ctx: &mut FunctionContext,
     ) -> IndexMap<AstId, TypeId> {
@@ -1072,6 +1071,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // where its owner's projection leaves it open.
         by_var.sort_by_key(|&var, _| self.projection_answers(var));
         let hints = self.literal_hints(ret);
+        self.infer_holes.defaulting_literals = by_var
+            .iter()
+            .map(|(&var, literals)| {
+                let class = if shared_literal_default(literals) == TypeTable::F64 {
+                    ArgClass::FloatLit
+                } else {
+                    ArgClass::IntLit
+                };
+                (self.apply_infer_holes(var), class)
+            })
+            .collect();
+        self.run_obligations();
+        if let Some(inst) = inst {
+            self.settle_slot_bounds_by_sole_impl(inst);
+        }
+        self.infer_holes.defaulting_literals.clear();
         let is_arg = |expr: &Expr| args.iter().any(|arg| arg.id() == expr.id());
         let mut settled = IndexMap::default();
         for (var, literals) in by_var {
@@ -1431,7 +1446,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `newtype` with the inference variables its `base` names answered by
     /// `built`, the value that base was checked against.
-    fn instantiate_from_base(&mut self, newtype: TypeId, base: TypeId, built: TypeId) -> TypeId {
+    fn instantiate_from_base(&self, newtype: TypeId, base: TypeId, built: TypeId) -> TypeId {
         let mut bindings = IndexMap::default();
         unify(&self.tysys.type_table, base, built, &mut bindings);
         let answers = infer_var_answers(&self.tysys.type_table.borrow(), bindings);
@@ -1763,11 +1778,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Assemble the `from` call's facts for a resolved `From<Array<E>>`,
     /// already remangled.
-    fn literal_from_call(
-        &mut self,
-        from_info: &FromArrayInfo,
-        output_type: TypeId,
-    ) -> LiteralFromCall {
+    fn literal_from_call(&self, from_info: &FromArrayInfo, output_type: TypeId) -> LiteralFromCall {
         LiteralFromCall {
             from_type: from_info.array_type,
             output_type,
@@ -1783,7 +1794,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Name the trait method a literal calls on `output_type`, remangled.
     fn literal_callee(
-        &mut self,
+        &self,
         impl_def: Option<DefId>,
         impl_module_source: ModuleSource,
         trait_name: FqTraitName,

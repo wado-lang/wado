@@ -8,18 +8,19 @@
 //! standalone optimization.
 
 use crate::hashmap::IndexSet;
+use crate::parallel::Executor;
 use crate::wir::{WirInstr, WirLocals, WirPackage};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 
 use super::util::{for_each_null_trapping_operand, is_side_effect_free, own_traps};
 
-pub(super) fn cleanup(module: &mut WirPackage) {
+pub(super) fn cleanup(module: &mut WirPackage, exec: &Executor) {
     let nonnull_calls = nonnull_result_functions(module);
-    for func in &mut module.functions {
+    exec.for_each_mut(&mut module.functions, |func| {
         if let Some(body) = &mut func.body {
             clean_body(body, &nonnull_calls);
         }
-    }
+    });
 }
 
 /// The `WirFuncId` indices of the defined functions whose one result is a
@@ -225,13 +226,13 @@ fn relax_nonnull(object: &mut WirInstr, locals: &WirLocals) {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use super::*;
     use crate::wir::{WirFuncId, WirName, WirType, WirTypeId};
 
     fn array_ty() -> WirTypeId {
-        WirTypeId::new(0, Rc::from("a"))
+        WirTypeId::new(0, Arc::from("a"))
     }
 
     /// A non-null read of a nullable global slot, which codegen narrows.
@@ -316,7 +317,7 @@ mod tests {
 
     fn effect() -> WirInstr {
         WirInstr::Call {
-            func_id: WirFuncId::new(0, Rc::from("f")),
+            func_id: WirFuncId::new(0, Arc::from("f")),
             args: Vec::new(),
         }
     }

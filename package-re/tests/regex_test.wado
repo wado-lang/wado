@@ -236,6 +236,92 @@ test "i folds the classes of a whole pattern" {
     assert !r.is_match("STRASSE_");
 }
 
+test "a lookaround asserts what is around a position, and consumes nothing" {
+    assert found(#"a(?=b)"#, "ac ab") == "3..4 a";
+    assert found(#"a(?!b)"#, "ab ac") == "3..4 a";
+    assert found(#"(?<=x)a"#, "a xa") == "3..4 a";
+    assert found(#"(?<!x)a"#, "xa a") == "3..4 a";
+    assert found(#"(?<=é)."#, "aéb") == "3..4 b";
+    assert found(#"(?=a)(?!ab)\w+"#, "abc acd") == "4..7 acd";
+    assert all(#"\w+(?=,)"#, "one, two three, four") == "0:one 9:three";
+    assert all(#"(?<![\w.])\d+(?![\w.])"#, "1 2.5 x3 44") == "0:1 9:44";
+    assert !re(#"^(?!.*secret)"#).is_match("a secret");
+    assert re(#"^(?=.*\d)(?=.*[a-z]).{4,}$"#).is_match("ab12");
+}
+
+test "a lookaround holds only on a character boundary" {
+    assert found(#"(?!^)"#, "éa") == "2..2 ";
+    assert found(#"(?!é)"#, "é") == "2..2 ";
+    assert !re(#"(?<!^)(?!$)"#).is_match("é");
+    assert all(#"(?!^)"#, "é€") == "2: 5:";
+    assert all(#"(?=)(?<!^)"#, "é€") == "2: 5:";
+    assert found(#"(?<=((?<!(?=€)))+)a"#, "€€1b1€bcc€a") == "18..19 a";
+    assert re(#"(?<!x)"#).split("éa").count() == 4;
+}
+
+test "a lookaround reads the text around the search's start" {
+    assert re(#"(?<=a)b"#).find_at("ab", 1).unwrap().start() == 1;
+    assert re(#"(?<!a)b"#).find_at("ab", 1) matches { null };
+}
+
+test "a lookaround takes the modifiers around it, and nests" {
+    assert found(#"(?i:a(?=B))"#, "Ab") == "0..1 A";
+    assert found(#"(?i:a(?=(?-i:B)))"#, "Ab AB") == "3..4 A";
+    assert found(#"a(?=b(?!c))"#, "abc abd") == "4..5 a";
+    assert found(#"(?<=(?<!x)a)b"#, "xab ab") == "5..6 b";
+    assert found(#"(?<=a(?=bc))b"#, "ab abc") == "4..5 b";
+}
+
+test "a lookaround leaves the groups of its own first match" {
+    assert groups(#"(?=(a+))a"#, "aaa") == "a,aaa";
+    assert groups(#"(?=(a+?))a"#, "aaa") == "a,a";
+    assert groups(#"(?<=(\d+)(\d+))$"#, "1053") == ",1,053";
+    assert groups(#"(?<=([ab]+)([bc]+))$"#, "abc") == ",a,bc";
+    assert groups(#"(?=(a)(?=(b)))ab"#, "ab") == "ab,a,b";
+    assert groups(#"(?=(?=(b))|(a))a"#, "a") == "a,-,a";
+    assert groups(#"(?<=(?=(a))a)b"#, "ab") == "b,a";
+    assert groups(#"(?<=(a)(?=(b)))b"#, "ab") == "b,a,b";
+}
+
+test "a lookaround that fails, or is negated, leaves its groups unset" {
+    assert groups(#"(?!(a))b"#, "b") == "b,-";
+    assert groups(#"(?:(?=(a))a|b)*"#, "ab") == "ab,-";
+    assert groups(#"(?:(?=(a))a|b)*"#, "ba") == "ba,a";
+    assert groups(#"(?:(?=(a)))*a"#, "a") == "a,-";
+    assert groups(#"(?:(?<=(a))b)+"#, "ab") == "b,a";
+}
+
+test "each match reads its own lookarounds" {
+    let mut seen: List<String> = [];
+    for let caps of re(#"(?<=(\w))-(?=(\w))"#).captures_iter("a-b c-d") {
+        seen.push(`${caps[1].unwrap().as_str()}${caps[2].unwrap().as_str()}`);
+    }
+    assert seen == ["ab", "cd"];
+    assert re(#"(?<=\d)(?=(?:\d{3})+$)"#).replace_all("1234567", ",") == "1,234,567";
+}
+
+test "a lookaround's body counts toward the bound on the program" {
+    assert Regex::new(#"(?<=a{400000})"#).is_ok();
+    // Each lookahead compiles twice: to find where it holds, and to read
+    // its group.
+    assert Regex::new(#"(?=(a{300000}))(?=(a{300000}))"#).is_err();
+    // Inside a negated lookaround no group stays set, so none is read.
+    assert Regex::new(#"(?!(?=(a{500000})))"#).is_ok();
+}
+
+test "a lookaround is asked at each position without reading its body again" {
+    let text = "a".repeat(100000);
+    assert !re(#"(?=(?:a+)+b)"#).is_match(&text);
+    assert !re(#"(?<=b(?:a+)+)$"#).is_match(&text);
+    assert re(#"a(?=a*$)"#).find_iter(&text).count() == 100000;
+    assert re(#"(?<=^a*)a"#).find_iter(&text).count() == 100000;
+}
+
+test "a pattern with lookaround prints as it parses" {
+    let printed = `${re(#"(?<=a)(?:(?!b)c)*(?<!d)(?=e|f)"#)}`;
+    assert printed == #"(?<=a)(?:(?!b)c)*(?<!d)(?=e|f)"#;
+}
+
 test "groups of a match too long for the backtracker" {
     let mut text = "x";
     for let _i of 0..<60000 {

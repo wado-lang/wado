@@ -2,6 +2,7 @@
 //! on a constant field of one passed by reference.
 //! Compiler items and cached clones retain their contracts for synthesized calls.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use cranelift_entity::EntityRef;
@@ -35,6 +36,7 @@ use super::dce::{DescriptorCache, ReachabilityCache, reachable_function_position
 use super::extract::is_place_read;
 use super::gate::{FunctionGate, GatedPass};
 use super::inline::{body_callees, recursive_functions};
+use super::until_quiet;
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
@@ -864,39 +866,67 @@ fn summarize_params(
                 .map(move |(local, facts)| ((FuncId::new(index), *local), facts.clone()))
         })
         .collect();
+    close_over_forwards(&mut facts);
+    facts
+}
 
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for index in 0..facts.len() {
-            for slot in 0..facts[index].forwards.len() {
-                let current = &facts[index];
-                let added = match facts.get(&current.forwards[slot]) {
-                    Some(target) => ParamFacts {
-                        reads: target.reads.difference(&current.reads).copied().collect(),
-                        writes: target.writes.difference(&current.writes).copied().collect(),
-                        opaque: target.opaque && !current.opaque,
-                        forwards: Vec::new(),
-                    },
-                    // No summary means the callee's parameter is not a tracked
-                    // struct reference, so nothing is known about it.
-                    None => ParamFacts {
-                        opaque: !current.opaque,
-                        ..ParamFacts::default()
-                    },
-                };
-                if added == ParamFacts::default() {
-                    continue;
+/// Join into each parameter's facts those of every parameter it is forwarded
+/// to, to the least fixpoint: a worklist revisits only the parameters
+/// forwarding to one that grew.
+fn close_over_forwards(facts: &mut IndexMap<(FuncId, u32), ParamFacts>) {
+    // Per entry, the entries it forwards to; `None` where the callee's
+    // parameter is not a tracked struct reference, so nothing is known about it.
+    let targets: Vec<Vec<Option<usize>>> = facts
+        .values()
+        .map(|f| {
+            f.forwards
+                .iter()
+                .map(|key| facts.get_index_of(key))
+                .collect()
+        })
+        .collect();
+    let mut forwarders: Vec<Vec<usize>> = vec![Vec::new(); facts.len()];
+    for (index, targets) in targets.iter().enumerate() {
+        for &target in targets.iter().flatten() {
+            forwarders[target].push(index);
+        }
+    }
+    let mut queued = vec![true; facts.len()];
+    let mut work: VecDeque<usize> = (0..facts.len()).collect();
+    while let Some(index) = work.pop_front() {
+        queued[index] = false;
+        let mut grew = false;
+        for &target in &targets[index] {
+            let current = &facts[index];
+            let (reads, writes, opaque): (Vec<u32>, Vec<u32>, bool) = match target {
+                Some(target) => {
+                    let from = &facts[target];
+                    (
+                        from.reads.difference(&current.reads).copied().collect(),
+                        from.writes.difference(&current.writes).copied().collect(),
+                        from.opaque && !current.opaque,
+                    )
                 }
-                let current = &mut facts[index];
-                current.reads.extend(added.reads);
-                current.writes.extend(added.writes);
-                current.opaque |= added.opaque;
-                changed = true;
+                None => (Vec::new(), Vec::new(), !current.opaque),
+            };
+            if reads.is_empty() && writes.is_empty() && !opaque {
+                continue;
+            }
+            let current = &mut facts[index];
+            current.reads.extend(reads);
+            current.writes.extend(writes);
+            current.opaque |= opaque;
+            grew = true;
+        }
+        if grew {
+            for &forwarder in &forwarders[index] {
+                if !queued[forwarder] {
+                    queued[forwarder] = true;
+                    work.push_back(forwarder);
+                }
             }
         }
     }
-    facts
 }
 
 // ---------------------------------------------------------------------------
@@ -1573,10 +1603,8 @@ pub(super) fn specialize_const_params(
     let mut reachable =
         reachable_function_positions(project, descriptors, reachability, gate.exec(), cached);
     let mut memos = RoundMemos::default();
-    let mut changed = false;
-    while specialize_round(project, state, gate, &mut memos, &mut reachable) {
-        changed = true;
-    }
+    let changed =
+        until_quiet(|| specialize_round(project, state, gate, &mut memos, &mut reachable));
     gate.catch_up(GatedPass::ParamSpec, project.functions.len());
     changed
 }
@@ -1634,7 +1662,7 @@ fn specialize_round(
     // would become its only caller, whose constants then fold the original
     // into a copy of the clone.
     retarget_calls(project, &retarget);
-    let minted = build_clones(project, state, &planned);
+    let minted = build_clones(project, state, &planned, gate.exec());
     // A clone is reachable through the call just pointed at it, and reaches
     // nothing its original did not.
     let first_minted = project.functions.len();
@@ -1669,7 +1697,7 @@ fn collect_call_constants(
     let mut constants = CallConsts::default();
     for &pos in reachable {
         for (callee, here) in &per_function[pos] {
-            join_call(&mut constants, *callee, here.clone());
+            join_call(&mut constants, *callee, here);
         }
     }
     for global in &project.globals {
@@ -1679,14 +1707,14 @@ fn collect_call_constants(
 }
 
 /// Join one call's arguments into what the earlier calls of `callee` agree on.
-fn join_call(into: &mut CallConsts, callee: FuncId, here: Vec<Option<FieldConst>>) {
+fn join_call(into: &mut CallConsts, callee: FuncId, here: &[Option<FieldConst>]) {
     let Some(previous) = into.get_mut(&callee) else {
-        into.insert(callee, here);
+        into.insert(callee, here.to_vec());
         return;
     };
     assert_eq!(previous.len(), here.len());
     for (old, new) in previous.iter_mut().zip(here) {
-        if *old != new {
+        if old != new {
             *old = None;
         }
     }
@@ -1706,7 +1734,7 @@ fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
                     .flatten()
             })
             .collect();
-        join_call(constants, *func_id, here);
+        join_call(constants, *func_id, &here);
     });
 }
 
@@ -1728,7 +1756,7 @@ fn propagate_scalar_constants(
         if !is_dae_sroa_eligible(&func, false)
             || func.compiler_item.is_some()
             || state.is_clone(id)
-            || project.sroa_param_clones.contains(&id)
+            || project.may_gain_callers(id)
         {
             continue;
         }
@@ -1915,16 +1943,25 @@ fn build_clones(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
     planned: &[Planned<'_>],
+    exec: &Executor,
 ) -> Vec<FuncRef> {
     if planned.is_empty() {
         return Vec::new();
     }
-    let mut settler = BranchSettler::new(project);
+    let mut settler = BranchSettler::new(project, exec);
     settler.run_clones_as_originals(planned);
+    let clones = {
+        let types = project.type_table.borrow();
+        let (functions, types, settler) = (&project.functions, &*types, &settler);
+        exec.map(planned, |&(site, id, ordinal)| {
+            build_clone(functions, types, site, id, ordinal, settler)
+        })
+    };
     planned
         .iter()
-        .map(|&(site, id, ordinal)| {
-            let clone = build_clone(project, site, id, ordinal, &settler);
+        .zip(clones)
+        .map(|(&(site, id, _), clone)| {
+            register_clone(project, site, id, &clone.function);
             // A clone of a clone knows what its source did, and what it adds.
             let mut seeds = state
                 .param_consts
@@ -1942,7 +1979,7 @@ fn build_clones(
                 }
             }
             state.param_consts.insert(id, seeds);
-            clone.function
+            FuncCell::new(clone.function)
         })
         .collect()
 }
@@ -1972,9 +2009,9 @@ struct BranchSettler {
 }
 
 impl BranchSettler {
-    fn new(project: &NirPackage) -> Self {
+    fn new(project: &NirPackage, exec: &Executor) -> Self {
         BranchSettler {
-            callees: build_callee_map(project, &Executor::default(), |_| false),
+            callees: build_callee_map(project, exec, |_| false),
             ctfe_builtins: build_ctfe_builtin_map(project),
             pure_builtin_callees: project.pure_builtin_callee_ids(),
             markers: MarkerBuiltins::of(project),
@@ -2017,25 +2054,25 @@ impl BranchSettler {
 
 /// A freshly minted clone and the facts recorded for it.
 struct Clone {
-    function: FuncRef,
+    function: NirFunction,
     param_consts: IndexMap<String, ParamSeed>,
 }
 
-/// Clone `site.callee` with its bindings substituted, registered so its call
-/// sites are born resolved. The size budget is the caller's to check.
+/// Clone `site.callee` with its bindings substituted. The size budget is the
+/// caller's to check.
 ///
 /// The clone's identity must differ from the original's along every axis the
 /// call graph keys on, `method_name` included — DCE resolves a method call
 /// through `method_info`, and would prune the clone as unreachable.
 fn build_clone(
-    project: &mut NirPackage,
+    functions: &[FuncRef],
+    types: &TypeTable,
     site: &Site,
     id: FuncId,
     ordinal: usize,
     settler: &BranchSettler,
 ) -> Clone {
-    let mut clone = project.functions[site.callee.index()].borrow().clone();
-    let origin = (clone.module_source.clone(), clone.name.clone());
+    let mut clone = functions[site.callee.index()].borrow().clone();
     let name = param_spec_name(&clone.name, ordinal);
     clone.name.clone_from(&name);
     if let Some(info) = &mut clone.method_info {
@@ -2065,7 +2102,6 @@ fn build_clone(
         }
     }
 
-    let types = project.type_table.borrow();
     let body = clone.body.as_mut().expect("specialized callee has a body");
     let mut buffers = EngineBuffers::default();
     let params = bound.keys().copied().collect();
@@ -2074,41 +2110,44 @@ fn build_clone(
         read_through.insert(alias, bound[&base].clone());
     }
     let (locals, own_params) = (&mut clone.locals, &clone.params);
-    substitute_fields(
-        body,
-        locals,
-        own_params,
-        &mut buffers,
-        &types,
-        &read_through,
-    );
-    substitute_locals(body, locals, own_params, &mut buffers, &types, &whole);
-    settler.settle(body, locals, own_params, &mut buffers, &types);
+    substitute_fields(body, locals, own_params, &mut buffers, types, &read_through);
+    substitute_locals(body, locals, own_params, &mut buffers, types, &whole);
+    settler.settle(body, locals, own_params, &mut buffers, types);
 
     let param_consts: IndexMap<String, ParamSeed> = clone
         .params
         .iter()
         .filter_map(|param| {
             let consts = bound.get(&param.local_index)?.clone();
-            let pointee = held_struct(param.type_id, &types)?;
+            let pointee = held_struct(param.type_id, types)?;
             Some((param.name.clone(), ParamSeed { pointee, consts }))
         })
         .collect();
-    drop(types);
+    Clone {
+        function: clone,
+        param_consts,
+    }
+}
 
-    let key = FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
+/// Register `clone`, minted as `id` for `site`, so its call sites are born
+/// resolved.
+fn register_clone(project: &mut NirPackage, site: &Site, id: FuncId, clone: &NirFunction) {
+    let key = FunctionRef::from_resolved(clone, clone.module_source.clone()).function_id();
     project.func_index.insert(key, id);
     if let Some(reshape) = project.reshapes.get(&site.callee) {
         let method_name = clone.method_info.as_ref().map(|m| m.method_name.clone());
-        let respelled = reshape.respelled(name.clone(), method_name);
+        let respelled = reshape.respelled(clone.name.clone(), method_name);
         project.reshapes.insert(id, respelled);
     }
-    copy_function_strings(project, &origin, (clone.module_source.clone(), name));
-
-    Clone {
-        function: FuncCell::new(clone),
-        param_consts,
-    }
+    let origin = {
+        let original = project.functions[site.callee.index()].borrow();
+        (original.module_source.clone(), original.name.clone())
+    };
+    copy_function_strings(
+        project,
+        &origin,
+        (clone.module_source.clone(), clone.name.clone()),
+    );
 }
 
 /// Give the clone its own entry in `function_strings`, which is name-keyed:

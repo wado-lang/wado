@@ -142,6 +142,8 @@ pub struct WadoField {
     pub doc_comment: Option<String>,
     /// Original WIT kebab-case name for the `#[cm("...")]` attribute
     pub cm_attr: String,
+    /// What the field is when a literal leaves it out, as written in Wado.
+    pub default: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -168,6 +170,8 @@ pub struct WadoNewtype {
     pub name: String,
     pub cm_attr: Option<String>,
     pub target: WadoType,
+    /// The constants of the `impl` block following the newtype.
+    pub constants: Vec<WadoConstant>,
 }
 
 #[derive(Debug, Clone)]
@@ -184,6 +188,28 @@ pub struct WadoResource {
     /// The parent resource of a `resource X extends Y`.
     pub extends: Option<String>,
     pub methods: Vec<WadoFunction>,
+    /// The names this resource declares absent: inherited instance methods a
+    /// handle of it must not reach, and the bare name of an overloaded member.
+    pub unavailable: Vec<WadoUnavailable>,
+    /// The constants of the `impl` block following the resource.
+    pub constants: Vec<WadoConstant>,
+}
+
+/// A name declared absent, with the reason its `#[unavailable]` gives.
+#[derive(Debug, Clone)]
+pub struct WadoUnavailable {
+    pub name: String,
+    /// An instance method's name, reserved with `self`, rather than a static's.
+    pub instance: bool,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct WadoConstant {
+    pub name: String,
+    pub ty: WadoType,
+    /// The value, as Wado source.
+    pub value: String,
 }
 
 #[derive(Debug, Clone)]
@@ -262,7 +288,7 @@ pub struct WadoWorldExportFn {
 }
 
 /// Wado type representation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WadoType {
     // Primitives
     Bool,
@@ -296,21 +322,120 @@ pub enum WadoType {
 
     // Named types
     Named(String),
+    /// A `WebIDL` enum by its Wado name: a string to the host, and its case's
+    /// index across the boundary.
+    StringEnum(String),
+    /// A `WebIDL` dictionary: an object to the host, and a record across the
+    /// boundary.
+    Dictionary(WadoDictionary),
+    /// A `WebIDL` union the guest supplies: any one of its cases to the host,
+    /// and a variant across the boundary.
+    Union(WadoUnion),
 
     // References
     Borrow(Box<WadoType>),
 
-    /// `fn mut(params) with effect`, which the host calls back.
+    /// `fn mut(params) -> result with effect`, which the host calls back.
     Callback {
+        /// The newtype naming the function type, where one does.
+        name: Option<String>,
         params: Vec<WadoType>,
+        result: Option<Box<WadoType>>,
         effect: Option<String>,
     },
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct WadoDictionary {
+    /// Its Wado name.
+    pub name: String,
+    pub fields: Vec<DictionaryField>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DictionaryField {
+    /// The member's name on the host's object.
+    pub host_name: String,
+    pub ty: WadoType,
+    /// Whether the host refuses an object without it.
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WadoUnion {
+    /// Its Wado name.
+    pub name: String,
+    pub cases: Vec<UnionCase>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnionCase {
+    pub name: String,
+    pub ty: WadoType,
+}
+
 impl WadoType {
-    /// What a callback export's name calls an argument of this type; `None`
-    /// where the host cannot call a closure back with one.
-    pub fn callback_argument_word(&self) -> Option<&'static str> {
+    /// Visits this type and each type it is made of, itself first.
+    pub fn walk<'a>(&'a self, visit: &mut impl FnMut(&'a WadoType)) {
+        visit(self);
+        match self {
+            Self::Option(inner)
+            | Self::List(inner)
+            | Self::Stream(inner)
+            | Self::Future(inner)
+            | Self::Borrow(inner) => inner.walk(visit),
+            Self::HashMap(key, value) => {
+                key.walk(visit);
+                value.walk(visit);
+            }
+            Self::Result { ok, err } => {
+                for side in [ok, err].into_iter().flatten() {
+                    side.walk(visit);
+                }
+            }
+            Self::Tuple(types) => {
+                for ty in types {
+                    ty.walk(visit);
+                }
+            }
+            Self::Callback { params, result, .. } => {
+                for ty in params.iter().chain(result.as_deref()) {
+                    ty.walk(visit);
+                }
+            }
+            Self::Dictionary(dictionary) => {
+                for field in &dictionary.fields {
+                    field.ty.walk(visit);
+                }
+            }
+            Self::Union(union) => {
+                for case in &union.cases {
+                    case.ty.walk(visit);
+                }
+            }
+            Self::StringEnum(_)
+            | Self::Bool
+            | Self::Char
+            | Self::I8
+            | Self::I16
+            | Self::I32
+            | Self::I64
+            | Self::I128
+            | Self::U8
+            | Self::U16
+            | Self::U32
+            | Self::U64
+            | Self::U128
+            | Self::F32
+            | Self::F64
+            | Self::String
+            | Self::Named(_) => {}
+        }
+    }
+
+    /// What a callback export's name calls an argument or a result of this
+    /// type; `None` where neither crosses as one core value.
+    pub fn callback_value_word(&self) -> Option<&'static str> {
         match self {
             Self::Named(_) => Some(CALLBACK_HANDLE_WORD),
             _ => self.primitive_name(),

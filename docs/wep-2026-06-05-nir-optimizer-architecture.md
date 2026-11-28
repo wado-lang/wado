@@ -548,7 +548,7 @@ Each was built, verified, and reverted. Do not retry as-is.
 
 - [`docs/optimizer.md`](./optimizer.md), the pass inventory this architecture runs.
 - [Normalized IR (NIR) Layer](./wep-2026-05-11-nir.md), the type boundary at `lower` that NIR is.
-- [Wasm IR (WIR) Layer](./wep-2026-02-14-wir-layer.md), the separately-typed backend IR NIR extracts into.
+- WIR (`wado-compiler/src/wir.rs`), the separately-typed backend IR NIR extracts into.
 - [Optimizer Remarks for Missed Optimizations](./wep-2026-06-03-optimizer-remarks.md), how a missed rewrite is reported.
 - Cranelift's aegraph mid-end and `egg` (https://egraphs-good.github.io/), the model the value tier set out to adapt.
 - `.claude/skills/profiling-wado-compiler`, the workflow behind the cost numbers.

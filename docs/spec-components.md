@@ -140,19 +140,24 @@ test {
 }
 ```
 
-- A callback's parameters are scalars and handles, and it returns nothing. Any
-  other function type on a `#[cm]` declaration is a compile error.
+- A callback's parameters are scalars and handles, and it returns nothing, a
+  scalar or a handle. Any other function type on a `#[cm]` declaration is a
+  compile error.
+- A newtype over a function type is a callback as the function type is. It is
+  bound to an interface with `#[cm]`, as any type a `#[cm]` declaration names.
 - The closure crosses as itself: one reference the host holds, and the
   collector reclaims the closure once the host lets go of it. An import that
   takes one is a core import of the main module, as an import of an
   [extern handle](./wep-2026-11-14-extern-handles.md#a-closure-crosses-as-itself)
   is.
 - The host calls the closure back through a core export of the main module. It
-  exports one function per argument shape, named `$cm_callback__call` followed
-  by `-` and one word per argument: the argument's primitive type, or `handle`
-  for a handle (`$cm_callback__call`, `$cm_callback__call-i32`,
-  `$cm_callback__call-handle`). Each takes the closure first and returns
-  nothing. The component lifts none of them, so `wado wit` lists none.
+  exports one function per shape, named `$cm_callback__call` followed by `-`
+  and one word per argument, then `-to-` and a word for the result where there
+  is one. A word is the value's primitive type, or `handle` for a handle
+  (`$cm_callback__call`, `$cm_callback__call-i32`,
+  `$cm_callback__call-handle-to-u16`). Each takes the closure first and returns
+  what the closure does. The component lifts none of them, so `wado wit` lists
+  none.
 - The host may call a callback during an import call, which reenters the
   component, or while `run` is suspended.
 - A callback runs outside any Component Model task. It may perform an effect a
@@ -418,6 +423,8 @@ an operation.
 
 `#[cm_params("name", ...)]` on an operation gives the CM-side names of its parameters. Without it, each parameter's CM name is its Wado name in kebab-case.
 
+`#[cm("name")]` on a field, a case or a flag of a `#[cm(...)]` type gives the member's CM name. Without it, the member's CM name is its Wado name in kebab-case.
+
 #### Resource Linearity
 
 A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`, and a resource without `#[cm(...)]` is affine: `linearity` is a field of `#[cm(...)]`, so nothing declares one copyable.
@@ -584,9 +591,16 @@ assert n matches { Some(_: HtmlInputElement) };
 
 A method call resolves statically. `recv.m()` gathers every `m` declared along `recv`'s `extends` chain and every `m` of a trait impl that applies to it. None is an error, and one resolves the call, upcasting the receiver to the resource that declares it. Two or more is ambiguous: write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
 
-- A child may not redeclare a method it inherits.
+- A child may not redeclare a method it inherits. It may declare the name
+  [`#[unavailable]`](./spec-attributes.md#unavailablereason): the name is then an
+  error through the child and through whatever extends it, and the method still
+  answers through the resource that declares it.
 - Static methods (no `&self`) are not inherited.
 - `Self` in an inherited method names the resource that declares it, not the receiver's type.
+
+#### Constants
+
+A resource holds the associated constants of every resource it extends: `Child::NAME` names the constant a resource along the `extends` chain declares as `NAME`, in an expression and in a pattern alike. A child may not declare a constant under a name it inherits. A constant in a trait impl belongs to that impl and is not inherited.
 
 #### Handle Classes
 

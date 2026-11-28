@@ -9,7 +9,7 @@ let f = |x| x + 1;
 let g = || count += 1;
 ```
 
-This WEP defines the user-visible closure type system, capture semantics, and effect integration. Compiler-internal details (Wasm GC representation, internal `Fn` / `FnMut` trait machinery, canonical-closure vtable, migration plan from the current implementation) live in [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md).
+This WEP defines the user-visible closure type system, capture semantics, and effect integration. Compiler-internal details (dispatch, capture environments, the Wasm GC representation) live in [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md).
 
 The original 2026-01-16 design captured by value, exposed a single `fn` type, and avoided any `Fn` / `FnMut` distinction. Iterator API ergonomics, optimizer needs at type-erased call sites, and consistency with Rust idioms led to the redesign documented here.
 
@@ -277,11 +277,11 @@ Each closure literal generates an anonymous functor struct paired with a functio
 
 Escape analysis drives the choice. From the user's perspective both paths satisfy the same `fn(T) -> U` type. Captures resolve to references stored in the functor's environment, and a closure that escapes its declaring scope needs nothing arranged for them: each referent is a GC allocation already (see [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md) §2).
 
-`fn` vs `fn mut` lives entirely in the type system; both compile to identical Wasm calling conventions. The full Wasm GC layout, the internal trait machinery, and the migration plan from the current implementation are documented in [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md).
+`fn` vs `fn mut` lives entirely in the type system; both compile to identical Wasm calling conventions. Dispatch, capture environments and the Wasm GC layout are documented in [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md).
 
 ## Component Model Boundary
 
-The Component Model has no closure type. A closure crosses only as a `#[cm]` import's parameter: its `u32` key crosses, and the host calls it back through a synthesized export ([Web § Callbacks](./wep-2026-04-01-web.md#callbacks)). Such a callback takes scalars and handles and returns nothing. A closure type anywhere else in an imported or exported signature is a compile error, a return type or a container included.
+The Component Model has no closure type. A closure crosses only as a `#[cm]` import's parameter: its `u32` key crosses, and the host calls it back through a synthesized export ([Web § Callbacks](./wep-2026-04-01-web.md#callbacks)). Such a callback takes scalars and handles, and returns nothing, a scalar or a handle. A closure type anywhere else in an imported or exported signature is a compile error, a return type or a container included.
 
 ## Comparison with Rust
 
@@ -335,7 +335,7 @@ The Component Model has no closure type. A closure crosses only as a `#[cm]` imp
 
 ## References
 
-- [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md) — Wasm GC layout, internal trait machinery, migration plan.
+- [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md) — dispatch, capture environments, Wasm GC layout.
 - [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)
 - [Effect System Design](./wep-2026-01-27-effect-system-design.md)
 - [Iterator Traits Design](./wep-2026-01-24-iterator-traits.md)

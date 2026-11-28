@@ -1,0 +1,21 @@
+variant Shape {
+    Circle(i32),
+    Dot,
+}
+
+fn clear(shape: &mut Shape) {
+    *shape = Shape::Dot;
+}
+
+test "a callee replaces through a payload binding" {
+    let mut held: Option<Shape> = Option::Some(Shape::Circle(1));
+    if let Some(shape) = &mut held {
+        clear(shape);
+    }
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+}

@@ -115,6 +115,13 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
     format!("{deep_name}$shallow")
 }
 
+/// The name of the clone `copy_elision` mints of a function that returns
+/// copies of its arguments' parts, lending the parts instead: the function's
+/// name with a `$lend` suffix.
+pub fn lending_clone_name(name: &str) -> String {
+    format!("{name}$lend")
+}
+
 /// The name of the function `cold_outline` moves a `cold_path()` region into:
 /// the enclosing function's name with a `$cold` suffix, numbered when it opens
 /// more than one region.
@@ -814,11 +821,18 @@ impl CmChannelHelper {
 pub const CALLBACK_HANDLE_WORD: &str = "handle";
 
 /// The shape of the export the host calls a closure back through, given a word
-/// per argument: its Wado primitive, or [`CALLBACK_HANDLE_WORD`]
-/// (`call-handle`).
-pub fn callback_export_name<'a>(params: impl IntoIterator<Item = &'a str>) -> String {
+/// per argument and one for the result where there is one: its Wado
+/// primitive, or [`CALLBACK_HANDLE_WORD`] (`call-handle`,
+/// `call-handle-to-u16`). `to` is no type's word, so it parts the arguments
+/// from the result.
+pub fn callback_export_name<'a>(
+    params: impl IntoIterator<Item = &'a str>,
+    result: Option<&'a str>,
+) -> String {
+    let result = result.into_iter().flat_map(|word| ["to", word]);
     std::iter::once("call")
         .chain(params)
+        .chain(result)
         .collect::<Vec<_>>()
         .join("-")
 }
@@ -1366,16 +1380,16 @@ const TEST_PREFIX: &str = "$test";
 
 /// Build a test block's exported name: `$test_{index}[_{snake}]`, with the
 /// prefix encoding attributes — `$test_trap_…` for `#[expect_trap]`,
-/// `$test_todo_…` for `#[TODO]`, `$test_tm{ms}_…` for `#[timeout_ms]`, and
-/// combinations such as `$test_trap_tm{ms}_…`. Both the annotate walk and reify
-/// call here, so the two cannot drift.
+/// `$test_todo_…` for `#[TODO]`, `$test_tm{seconds}_…` for `#[timeout]`, and
+/// combinations such as `$test_trap_tm{seconds}_…`. Both the annotate walk and
+/// reify call here, so the two cannot drift.
 pub fn test_function_name(meta: &TestMetadata, test_index: usize, name: Option<&str>) -> String {
-    let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_ms) {
-        (true, _, Some(ms)) => format!("{TEST_PREFIX}_todo_tm{ms}"),
+    let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_seconds) {
+        (true, _, Some(seconds)) => format!("{TEST_PREFIX}_todo_tm{seconds}"),
         (true, _, None) => format!("{TEST_PREFIX}_todo"),
-        (_, true, Some(ms)) => format!("{TEST_PREFIX}_trap_tm{ms}"),
+        (_, true, Some(seconds)) => format!("{TEST_PREFIX}_trap_tm{seconds}"),
         (_, true, None) => format!("{TEST_PREFIX}_trap"),
-        (_, _, Some(ms)) => format!("{TEST_PREFIX}_tm{ms}"),
+        (_, _, Some(seconds)) => format!("{TEST_PREFIX}_tm{seconds}"),
         (_, _, None) => TEST_PREFIX.to_string(),
     };
     match name {
@@ -1469,10 +1483,10 @@ mod tests {
             "$value_copy"
         );
         // A type argument carries a module path of its own.
-        let traits = interner.core("prelude/traits.wado");
+        let reflect = interner.core("prelude/reflect.wado");
         assert_eq!(
             named(
-                &traits,
+                &reflect,
                 "TemplateHole<a.wado/$tmpl$59e1,core:prelude/string.wado/String>::lit$sroa[self.index]"
             ),
             "TemplateHole<$tmpl$59e1,String>::lit"

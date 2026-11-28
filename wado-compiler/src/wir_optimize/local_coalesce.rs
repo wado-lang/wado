@@ -8,6 +8,7 @@
 //! absorb a local that never overlaps it.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::parallel::Executor;
 use crate::wir::{WirInstr, WirLocals, WirPackage, WirType};
 use crate::wir_optimize::local_layout::WasmClass;
 use crate::wir_optimize::local_nullability::relax_unset_nonnull_locals_in;
@@ -18,12 +19,13 @@ use super::util::Bits;
 
 /// Rename each local to the slot it shares, dropping the declarations and the
 /// self-copies the renaming leaves.
-pub(super) fn coalesce_locals(module: &mut WirPackage) {
-    for func in &mut module.functions {
+pub(super) fn coalesce_locals(module: &mut WirPackage, exec: &Executor) {
+    let types = &module.types;
+    exec.for_each_mut(&mut module.functions, |func| {
         let Some(body) = func.body.as_mut() else {
-            continue;
+            return;
         };
-        let func_type = module.types[func.type_id.index() as usize].expect_func();
+        let func_type = types[func.type_id.index() as usize].expect_func();
         let params: Vec<(&str, &WirType)> = func
             .param_names
             .iter()
@@ -31,7 +33,7 @@ pub(super) fn coalesce_locals(module: &mut WirPackage) {
             .zip(&func_type.params)
             .collect();
         coalesce_body(body, &params);
-    }
+    });
 }
 
 /// A slot holds one Wasm type, so each local's nullability is settled before

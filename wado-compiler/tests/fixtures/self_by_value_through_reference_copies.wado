@@ -1,0 +1,22 @@
+// A by-value `self` called on a `&` to a copyable value takes a copy: a shared
+// reference cannot write, so the referent is the same either way.
+
+fn head(r: &Option<i32>) -> i32 {
+    return r.unwrap();
+}
+
+test "the receiver is copied out of a shared reference" {
+    let o = Option::Some(1);
+    assert head(&o) == 1;
+    assert o matches { Some(1) };
+}
+
+fn first_two<I: Iterator<Item = i32>>(it: &I) -> List<i32> with _ {
+    return it.take(2).collect();
+}
+
+test "an adapter over a shared reference leaves the iterator where it was" {
+    let mut r = 0..<5;
+    assert first_two(&r) == [0, 1];
+    assert r.next() matches { Some(0) };
+}

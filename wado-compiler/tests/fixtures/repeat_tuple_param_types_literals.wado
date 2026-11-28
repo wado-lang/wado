@@ -1,0 +1,39 @@
+// A parameter spread over a non-pack type expects that type of every element,
+// so a literal there is typed by it. The literals once took their default
+// first, and `[i32, i32, i32]` did not fit `[..i64]`.
+fn sum(values: [..i64]) -> i64 {
+    let mut total: i64 = 0;
+    for let v of values {
+        total += v;
+    }
+    return total;
+}
+
+fn first_wide(head: u8, rest: [..f32]) -> f32 {
+    let mut total: f32 = head as f32;
+    for let v of rest {
+        total += v;
+    }
+    return total;
+}
+
+fn collect<T>(items: [..T]) -> List<T> {
+    let mut out: List<T> = [];
+    for let item of items {
+        out.push(item);
+    }
+    return out;
+}
+
+test "each literal takes the repeated element type" {
+    assert sum([1, 2, 3]) == 6;
+    assert sum([]) == 0;
+    assert first_wide(1, [1, 2.5]) == 4.5;
+}
+
+test "one typed element settles the rest" {
+    let wide = collect([1 as i64, 2, 3]);
+    assert wide.len() == 3;
+    let last: i64 = wide[2];
+    assert last == 3;
+}

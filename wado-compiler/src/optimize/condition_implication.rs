@@ -5,28 +5,29 @@
 //! and value pool, with flow-correctness from a position-aware modification scan.
 
 use std::ops::ControlFlow;
-use std::rc::Rc;
 
 use cranelift_entity::EntityRef;
 
 use super::arena_query::local_written_by;
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
-use crate::nir::{FuncId, FuncParts, FunctionKind, NirBinaryOp, NirUnaryOp};
+use crate::nir::{FuncParts, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+    BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::{
-    Place, WriteRoot, binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
-    operand_read_locals, place_path, storage_root, write_root,
+    Place, binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
+    operand_read_locals, place_path,
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
-use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
-use crate::tir::{BuiltinDeclaration, TypeId};
+use crate::optimize::writes::{
+    EngineFacts, Stored, Summaries, Summary, Write, for_each_write, is_panic_call,
+    modifies_any_root, reachable_elsewhere, read_kinds, subtree_quiet,
+};
+use crate::tir::TypeId;
 use crate::type_table::TypeTable;
 use crate::{hashmap, nir_arena};
 
@@ -61,76 +62,6 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     changed
 }
 
-/// The [`FuncId`](crate::nir::FuncId)s of every function that cannot return.
-/// Resolved once per pass run so the panic-block matcher identifies a diverging
-/// callee by id. The driver hands the result to the engine via
-/// [`Engine::set_panic_callee_ids`].
-pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncId> {
-    let type_table = project.type_table.borrow();
-    project
-        .functions
-        .iter()
-        .filter_map(|f| {
-            let f = f.borrow();
-            // A `-> !` return type, not a name: the matcher needs the arm to be
-            // unable to continue, which is what the type says. A name list would
-            // miss `unwrap_failed` and the helper `cold_outline` moves a panic
-            // guard into, and would claim a `panic_free_parse` that merely reads
-            // like one. `dce` retires the type slots only a dead function names,
-            // and a dead function is uncallable, so skipping one loses nothing.
-            f.id.filter(|_| !f.is_dead && type_table.is_never(f.return_type))
-        })
-        .collect()
-}
-
-/// The callees that do nothing a trap would hide: an unobservable builtin, such
-/// as `builtin::unreachable` (all a contract check calls under
-/// `-f bare-asserts`), a value copy, or a trap that reports nothing but a
-/// failed contract: a contract report, or a function doing nothing else but call
-/// a quiet one, as `cold_outline` leaves. The driver hands the result to the
-/// engine via [`Engine::set_quiet_callee_ids`].
-pub(super) fn resolve_quiet_callee_ids(
-    project: &NirPackage,
-    panic_ids: &hashmap::IndexSet<FuncId>,
-) -> hashmap::IndexSet<FuncId> {
-    let mut quiet: hashmap::IndexSet<FuncId> = project
-        .functions
-        .iter()
-        .filter_map(|f| {
-            let f = f.borrow();
-            let id = f.id?;
-            (f.is_value_copy()
-                || project
-                    .builtin_declarations
-                    .get(&*f)
-                    .is_some_and(BuiltinDeclaration::is_unobservable))
-            .then_some(id)
-        })
-        .collect();
-    loop {
-        let grown: Vec<FuncId> = project
-            .functions
-            .iter()
-            .filter_map(|f| {
-                let f = f.borrow();
-                let id =
-                    f.id.filter(|id| panic_ids.contains(id) && !quiet.contains(id))?;
-                let reports_nothing_else = matches!(f.kind, FunctionKind::ContractReport)
-                    || f.body.as_ref().is_some_and(|body| {
-                        subtree_quiet(body, NodeRef::Block(body.root()), |callee| {
-                            quiet.contains(&callee)
-                        })
-                    });
-                reports_nothing_else.then_some(id)
-            })
-            .collect();
-        if grown.is_empty() {
-            return quiet;
-        }
-        quiet.extend(grown);
-    }
-}
-
 /// Standalone post-`promote_fields` run of the structural matcher.
 /// `promote_fields` freezes an invariant field read such as `arr.used` into an
 /// `Operand::Value`, but runs *after* the optimization loop, so the in-loop pass
@@ -142,12 +73,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
         return false;
     }
     let type_table = project.type_table.borrow();
-    let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
-    let panic_ids = resolve_panic_ids(project);
-    let quiet_callee_ids = resolve_quiet_callee_ids(project, &panic_ids);
-    let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let type_table = &*type_table;
+    let facts = EngineFacts::new(project, &type_table, gate.exec());
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::CondImplPostPromote, len, |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
@@ -162,19 +88,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             ..
         } = func.parts();
         let body = body.expect("checked above");
-        let alias = builder_alias_sets(
-            body,
-            locals,
-            address_taken_locals,
-            type_table,
-            &first_param_types,
-            &call_immutability,
-        );
-        let mut engine = Engine::new(body, buffers, locals, params, type_table);
-        engine.set_alias_sets(alias);
-        engine.set_panic_callee_ids(&panic_ids);
-        engine.set_quiet_callee_ids(&quiet_callee_ids);
-        engine.set_pure_builtin_callees(&pure_builtin_callees);
+        let mut engine = facts.engine(body, buffers, locals, params, address_taken_locals);
         eliminate_at_root(&mut engine)
     })
 }
@@ -534,17 +448,13 @@ fn resolve_through_opaque(engine: &Engine, binds: &Binds, op: Operand) -> Operan
     let mut cur = resolve(engine, binds, op);
     for _ in 0..MAX_BIND_CHAIN {
         let Operand::Value(v) = cur else { break };
-        let Some(&b) = opaque_local(engine, v).and_then(|i| binds.get(&i)) else {
+        let Some(&b) = operand_local(engine.body, Operand::Value(v)).and_then(|i| binds.get(&i))
+        else {
             break;
         };
         cur = resolve(engine, binds, b);
     }
     cur
-}
-
-/// The `Local idx` an `Opaque` value sources from, if any.
-pub(super) fn opaque_local(engine: &Engine, v: ValueId) -> Option<u32> {
-    operand_local(engine.body, Operand::Value(v))
 }
 
 /// The root and field path a [`BoundKey::Field`] keys on. Path-sensitive on
@@ -598,13 +508,15 @@ fn parse_resolved_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<B
             _ => None,
         },
         Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Opaque(_) => opaque_local(engine, v).map(BoundKey::Local),
+            ValueKind::Opaque(_) => {
+                operand_local(engine.body, Operand::Value(v)).map(BoundKey::Local)
+            }
             ValueKind::FieldAccess {
                 receiver,
                 field_index,
                 ..
             } => Some(BoundKey::Field(
-                opaque_local(engine, *receiver)?,
+                operand_local(engine.body, Operand::Value(*receiver))?,
                 FieldPath::ROOT.then(*field_index)?,
             )),
             _ => None,
@@ -631,7 +543,7 @@ pub(super) fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool
             } => (
                 *field_index,
                 engine.body.values.type_of(*receiver).or_else(|| {
-                    let l = opaque_local(engine, *receiver)?;
+                    let l = operand_local(engine.body, Operand::Value(*receiver))?;
                     engine.locals().get(l as usize).map(|l| l.type_id)
                 }),
             ),
@@ -721,7 +633,7 @@ fn parse_var_offset_depth(
 /// Decompose a pooled value as `Opaque(Local) + const`.
 fn parse_value_offset(engine: &Engine, v: ValueId) -> Option<(u32, i64)> {
     match engine.body.values.kind(v) {
-        ValueKind::Opaque(_) => opaque_local(engine, v).map(|i| (i, 0)),
+        ValueKind::Opaque(_) => operand_local(engine.body, Operand::Value(v)).map(|i| (i, 0)),
         ValueKind::Binary {
             op: NirBinaryOp::Add,
             lhs,
@@ -1126,352 +1038,7 @@ fn guard_roots(var: u32, bound: BoundKey) -> impl Iterator<Item = u32> {
     [Some(var), bound_root(bound)].into_iter().flatten()
 }
 
-/// One write an expression node may perform, in the engine's alias sets, so it
-/// and a scoped walk cannot disagree over what a store reaches.
-#[derive(Clone, Copy)]
-enum Write {
-    /// The slot or storage of this local.
-    Root(u32),
-    /// Storage another handle may reach: every aliased local's, as far as
-    /// what was stored can change it.
-    Aliased(Stored),
-    /// What a call may do unseen: write every local escaped by `&mut`.
-    Call,
-}
-
-/// What a store through an aliased handle can change, by the kinds of object
-/// it writes ([`TypeTable::object_kind`]). A `&T` is the handle of `T`'s
-/// object, so a store changes a read only through an object of a kind the read
-/// passes.
-#[derive(Clone, Copy)]
-enum Stored {
-    /// A field or element of a `container`, and, where `value` is of an
-    /// in-place type, the leaves of the object the slot held.
-    Slot {
-        container: TypeId,
-        value: TypeId,
-    },
-    /// Anything a value of this type reaches: a whole-value store, or a callee
-    /// handed it.
-    Reaching(TypeId),
-    Unknown,
-}
-
-impl Stored {
-    /// Whether this store may change a read through objects of `kinds`, which
-    /// [`read_kinds`] named. `reached` remembers each type walk, which every
-    /// read of a bind would otherwise repeat for each store since it.
-    fn may_change(
-        self,
-        engine: &Engine,
-        kinds: &[TypeId],
-        reached: &mut hashmap::IndexMap<(TypeId, TypeId), bool>,
-    ) -> bool {
-        let types = engine.type_table();
-        let mut reaches = |ty: TypeId| {
-            kinds.iter().any(|&k| {
-                *reached
-                    .entry((ty, k))
-                    .or_insert_with(|| types.reaches_object(ty, k))
-            })
-        };
-        match self {
-            Stored::Slot { container, value } => {
-                kinds.contains(&types.object_kind(container)) || reaches(value)
-            }
-            Stored::Reaching(ty) => reaches(ty),
-            Stored::Unknown => true,
-        }
-    }
-
-    /// What a store into `place` writes.
-    fn into_place(body: &nir_arena::Body, place: ExprId) -> Stored {
-        match &body.exprs[place].kind {
-            ExprKind::FieldAccess {
-                expr: container, ..
-            }
-            | ExprKind::Index {
-                expr: container, ..
-            } => Stored::Slot {
-                container: body.operand_type(*container),
-                value: body.exprs[place].type_id,
-            },
-            ExprKind::Cast { expr: inner, .. } => inner
-                .as_expr()
-                .map_or(Stored::Unknown, |e| Stored::into_place(body, e)),
-            ExprKind::Local { .. }
-            | ExprKind::Unary {
-                op: NirUnaryOp::Deref,
-                ..
-            } => Stored::Reaching(body.exprs[place].type_id),
-            _ => Stored::Unknown,
-        }
-    }
-}
-
-/// The kinds of object `op` reads a field, an element or a box of, by
-/// [`TypeTable::object_kind`]; `None` where it reads what this cannot name.
-fn read_kinds(engine: &Engine, op: Operand) -> Option<Vec<TypeId>> {
-    let mut kinds = Vec::new();
-    collect_read_kinds(engine, engine.type_table(), op, &mut kinds).then_some(kinds)
-}
-
-fn collect_read_kinds(
-    engine: &Engine,
-    types: &TypeTable,
-    op: Operand,
-    kinds: &mut Vec<TypeId>,
-) -> bool {
-    let body = &*engine.body;
-    let read_of = |container: Operand, kinds: &mut Vec<TypeId>| {
-        kinds.push(types.object_kind(body.operand_type(container)));
-        collect_read_kinds(engine, types, container, kinds)
-    };
-    let local = |l: u32, kinds: &mut Vec<TypeId>| {
-        if engine.aliased().contains(&l) {
-            kinds.push(types.object_kind(engine.locals()[l as usize].type_id));
-        }
-        true
-    };
-    match op {
-        Operand::Value(v) => match body.values.kind(v) {
-            k if k.is_constant() => true,
-            ValueKind::Opaque(_) => opaque_local(engine, v).is_some_and(|l| local(l, kinds)),
-            ValueKind::Binary { lhs, rhs, .. } => {
-                collect_read_kinds(engine, types, Operand::Value(*lhs), kinds)
-                    && collect_read_kinds(engine, types, Operand::Value(*rhs), kinds)
-            }
-            ValueKind::Unary {
-                op: NirUnaryOp::Deref,
-                operand,
-                ..
-            }
-            | ValueKind::FieldAccess {
-                receiver: operand, ..
-            } => read_of(Operand::Value(*operand), kinds),
-            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
-                collect_read_kinds(engine, types, Operand::Value(*operand), kinds)
-            }
-            _ => false,
-        },
-        Operand::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Local { index, .. } => local(*index, kinds),
-            ExprKind::Unary {
-                op: NirUnaryOp::Deref,
-                expr: container,
-            }
-            | ExprKind::FieldAccess {
-                expr: container, ..
-            } => read_of(*container, kinds),
-            ExprKind::Index {
-                expr: container,
-                index,
-            } => read_of(*container, kinds) && collect_read_kinds(engine, types, *index, kinds),
-            ExprKind::Binary { left, right, .. } => {
-                collect_read_kinds(engine, types, *left, kinds)
-                    && collect_read_kinds(engine, types, *right, kinds)
-            }
-            ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-                collect_read_kinds(engine, types, *inner, kinds)
-            }
-            _ => false,
-        },
-    }
-}
-
-/// Every write the expression node `e` itself may perform. A receiver counts as
-/// the callee declares: boxing can erase the `&mut self` a type test would read.
-fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(Write)) {
-    let body = &*engine.body;
-    let no_signatures = hashmap::IndexMap::default();
-    let oracle = MutationOracle::new(&no_signatures);
-    let handed = |arg: ExprId| Stored::Reaching(body.exprs[arg].type_id);
-    expr_witnesses(body, e, &oracle, &mut |w| match w {
-        Witness::Rebind(l) => sink(Write::Root(l)),
-        Witness::MutRef(place) => {
-            if let Some(root) = storage_root(body, place) {
-                sink(Write::Root(root));
-            }
-        }
-        Witness::Write(inner) => {
-            if let Some(place) = inner.as_expr() {
-                write_through(engine, place, Stored::into_place(body, place), sink);
-            }
-        }
-        Witness::CalleeArg {
-            expr,
-            verdict,
-            is_mut,
-        } => {
-            if verdict.unwrap_or(is_mut) {
-                write_through(engine, expr, handed(expr), sink);
-            }
-        }
-        Witness::Receiver { expr, .. } | Witness::IndirectArg(expr) => {
-            write_through(engine, expr, handed(expr), sink);
-        }
-    });
-    match &body.exprs[e].kind {
-        ExprKind::Call { func_id, .. } => {
-            if !engine.is_panic_callee(*func_id) && !engine.is_pure_builtin_callee(*func_id) {
-                sink(Write::Call);
-            }
-        }
-        ExprKind::IndirectCall { .. } => sink(Write::Call),
-        _ => {}
-    }
-}
-
-/// A store into `place`: its root's storage, and every aliased local's when the
-/// root is aliased or the chain crosses a reference to storage it does not own.
-fn write_through(engine: &Engine, place: ExprId, stored: Stored, sink: &mut impl FnMut(Write)) {
-    match write_root(engine.body, place, false) {
-        WriteRoot::Local(root) => {
-            sink(Write::Root(root));
-            if engine.aliased().contains(&root)
-                || engine
-                    .body
-                    .place_crosses_reference(place, engine.type_table())
-            {
-                sink(Write::Aliased(stored));
-            }
-        }
-        WriteRoot::Aliased => sink(Write::Aliased(stored)),
-        WriteRoot::Temp => {}
-    }
-}
-
-/// Whether `w` may change what `root` holds. A call reaches a reference's
-/// pointee through a global without taking the reference.
-fn write_hits(engine: &Engine, w: Write, root: u32) -> bool {
-    match w {
-        Write::Root(r) => r == root,
-        Write::Aliased(_) => reachable_elsewhere(engine, root),
-        Write::Call => engine.mut_escaped().contains(&root) || is_reference(engine, root),
-    }
-}
-
-/// Whether another handle may reach what `root` holds: an aliased local, or a
-/// reference, whose pointee the frame does not own.
-fn reachable_elsewhere(engine: &Engine, root: u32) -> bool {
-    engine.aliased().contains(&root) || is_reference(engine, root)
-}
-
-/// Whether `local` may name storage rather than hold a value. A local minted
-/// past the type table's reach might.
-fn is_reference(engine: &Engine, local: u32) -> bool {
-    engine
-        .locals()
-        .get(local as usize)
-        .is_none_or(|l| engine.type_table().is_reference(l.type_id))
-}
-
-/// Whether anything under `node` may change what one of `roots` holds for the
-/// code after it.
-pub(super) fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
-    Summaries::default().modifies_any_root(engine, node, roots)
-}
-
-/// What a subtree may do for the code after it, as [`modifies_any_root`] and
-/// [`is_quiet`] read it: the roots it writes, whether it stores through an
-/// alias or calls a callee that may write, whether a jump sits in it, and
-/// whether it stays quiet. A block that panics with no `return`, `break` or
-/// `continue` before it never hands control on, so its writes do not count.
-struct Summary {
-    roots: hashmap::IndexSet<u32>,
-    aliased: bool,
-    call: bool,
-    jumps: bool,
-    quiet: bool,
-}
-
-/// Each node's [`Summary`], computed once for a walk that asks of every node
-/// once per enclosing level. The walk's edits only drop nodes, so a summary
-/// kept past one claims more than remains: a fact it drops, never one kept
-/// wrongly.
-#[derive(Default)]
-struct Summaries {
-    of: hashmap::IndexMap<NodeRef, Rc<Summary>>,
-}
-
-impl Summaries {
-    fn of(&mut self, engine: &Engine, node: NodeRef) -> Rc<Summary> {
-        if let Some(s) = self.of.get(&node) {
-            return Rc::clone(s);
-        }
-        let body = &*engine.body;
-        let mut children: Vec<Rc<Summary>> = Vec::new();
-        body.for_each_child(node, |c| children.push(self.of(engine, c)));
-        let mut own = Summary {
-            roots: hashmap::IndexSet::default(),
-            aliased: false,
-            call: false,
-            jumps: matches!(node, NodeRef::Stmt(s) if body.stmts[s].kind.is_jump()),
-            quiet: node_quiet(body, node, |id| engine.is_quiet_callee(id)),
-        };
-        if let NodeRef::Expr(e) = node {
-            for_each_write(engine, e, &mut |w| match w {
-                Write::Root(r) => {
-                    own.roots.insert(r);
-                }
-                Write::Aliased(_) => own.aliased = true,
-                Write::Call => own.call = true,
-            });
-        }
-        for child in &children {
-            own.jumps |= child.jumps;
-            own.quiet &= child.quiet;
-        }
-        // A block that panics before any exit hands control on to nothing
-        // after it, so its writes do not count.
-        let diverges = match node {
-            NodeRef::Block(b) => self.panics_before_any_exit(engine, b),
-            _ => false,
-        };
-        if !diverges {
-            for child in &children {
-                own.roots.extend(child.roots.iter().copied());
-                own.aliased |= child.aliased;
-                own.call |= child.call;
-            }
-        }
-        let summary = Rc::new(own);
-        self.of.insert(node, Rc::clone(&summary));
-        summary
-    }
-
-    /// Whether `block` reaches a top-level panic with no `return`, `break` or
-    /// `continue` before it, which could leave the block first.
-    fn panics_before_any_exit(&mut self, engine: &Engine, block: BlockId) -> bool {
-        for &s in &engine.body.blocks[block].stmts {
-            if let StmtKind::Expr(op) = &engine.body.stmts[s].kind
-                && op.as_expr().is_some_and(|e| is_panic_call(engine, e))
-            {
-                return true;
-            }
-            if self.of(engine, NodeRef::Stmt(s)).jumps {
-                return false;
-            }
-        }
-        false
-    }
-
-    /// [`modifies_any_root`] read off `node`'s summary.
-    fn modifies_any_root(&mut self, engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
-        let s = self.of(engine, node);
-        roots.iter().any(|&root| s.modifies(engine, root))
-    }
-}
-
 impl Summary {
-    /// Whether the subtree may change what `root` holds, as [`write_hits`]
-    /// answers for each write it summarizes.
-    fn modifies(&self, engine: &Engine, root: u32) -> bool {
-        self.roots.contains(&root)
-            || (self.aliased && write_hits(engine, Write::Aliased(Stored::Unknown), root))
-            || (self.call && write_hits(engine, Write::Call, root))
-    }
-
     /// Whether the subtree may change `var` or what `bound` reads, as
     /// [`node_modifies`] answers.
     fn modifies_guard(&self, engine: &Engine, var: u32, bound: BoundKey) -> bool {
@@ -2309,13 +1876,6 @@ pub(super) fn is_panic_block(engine: &Engine, block: BlockId) -> bool {
         })
 }
 
-fn is_panic_call(engine: &Engine, e: ExprId) -> bool {
-    match &engine.body.exprs[e].kind {
-        ExprKind::Call { func_id, .. } => engine.is_panic_callee(*func_id),
-        _ => false,
-    }
-}
-
 /// Whether `left < right` holds by `left`'s own range against a constant
 /// `right`: an `x & MASK` lies in `[0, MASK]`, and [`index_upper_bound`] caps a
 /// clamped index.
@@ -2722,34 +2282,6 @@ fn widen_site(engine: &mut Engine, facts: &mut Vec<Fact>, index: Index, bound: B
 /// where the program would have trapped anyway.
 fn is_quiet(engine: &Engine, node: NodeRef) -> bool {
     subtree_quiet(engine.body, node, |id| engine.is_quiet_callee(id))
-}
-
-/// [`is_quiet`] over `body`, with `quiet_call` saying which callees qualify.
-fn subtree_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
-    let mut quiet = true;
-    body.for_each_node_under(node, |n| quiet &= node_quiet(body, n, &quiet_call));
-    quiet
-}
-
-/// [`subtree_quiet`] of `node` alone, its children aside.
-fn node_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
-    match node {
-        NodeRef::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Call { func_id, .. } => quiet_call(*func_id),
-            kind => !matches!(
-                kind,
-                ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
-            ),
-        },
-        NodeRef::Stmt(s) => !matches!(
-            body.stmts[s].kind,
-            StmtKind::Loop { .. }
-                | StmtKind::Return { .. }
-                | StmtKind::Break { .. }
-                | StmtKind::Continue
-        ),
-        NodeRef::Block(_) | NodeRef::Pat(_) => true,
-    }
 }
 
 /// Whether `var + j` cannot wrap for any `var` in `span`.

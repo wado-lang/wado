@@ -1,0 +1,32 @@
+// A `&mut` handed to a call as the by-value `self` of an impl written for the
+// reference is a `&mut` the callee may store through.
+// Regression: only a `&mut self` receiver counted, so a reference into an
+// affine local escaped through this one.
+
+affine struct Tok { id: i32 }
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+affine trait Sink with () {
+    fn take(self, t: &Tok);
+}
+
+impl Sink for &mut List<&Tok> {
+    #[allow(self_by_value)]
+    fn take(self, t: &Tok) { (*self).push(t); }
+}
+
+fn keep(out: &mut List<&Tok>) {
+    let t = Tok { id: 7 };
+    out.take(&t);
+}
+
+test {
+    let mut seen: List<&Tok> = [];
+    keep(&mut seen);
+}
+
+__DATA__
+{"compile_error": ":23:15: analysis error: `out` keeps a reference into `t` past the body, where `t` drops"}

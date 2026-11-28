@@ -11,7 +11,7 @@
 // - the flags beyond `dgy` are `i`, `m` and `s`, which become a modifier group;
 //   `v` is left out;
 // - Node accepts the pattern with the `u` flag;
-// - it holds no lookaround or backreference, which Re refuses;
+// - it holds no backreference, which Re refuses;
 // - the subject is well formed, which a Wado string must be, and short.
 //
 // Run from the repository root, with vendor/test262 checked out:
@@ -47,9 +47,8 @@ function metadata(source) {
   return { includes: list("includes"), skip: flags.includes("async") || flags.includes("module") || flags.includes("raw") };
 }
 
-// Whether a `u`-mode pattern holds what WEP: Re lists as a known gap:
-// lookaround, a backreference, a repeated group name, or a count above
-// 4294967295.
+// Whether a `u`-mode pattern holds what Re refuses: a backreference, a
+// repeated group name, or a count above 4294967295.
 function refused(pattern) {
   const names = new Set();
   let inClass = false;
@@ -67,7 +66,7 @@ function refused(pattern) {
       inClass = true;
     } else if (c === "(") {
       const name = /^\?<([^=!>]+)>/.exec(rest)?.[1];
-      if (/^\?(=|!|<=|<!)/.test(rest) || (name && names.has(name))) {
+      if (name && names.has(name)) {
         return true;
       }
       names.add(name);

@@ -69,7 +69,11 @@ pub(crate) struct MethodDispatch {
     /// transfers ownership of the receiver. The resource move check reads this
     /// to flag a use of the receiver binding after a consuming call.
     pub(crate) consumes_self: bool,
-    /// The pending selection this call waits on, whose dispatch the module-end
+    /// The receiver, a reference, where that `self` is read out of what it
+    /// points to: the method is the referent's, not one of an impl written
+    /// for the reference.
+    pub(crate) self_out_of_reference: Option<TypeId>,
+    /// The pending selection this call waits on, whose dispatch the body's
     /// sweep writes over `method_def` and `function_ref`.
     pub(crate) selection: Option<usize>,
 }
@@ -343,6 +347,12 @@ macro_rules! define_body_facts {
                 }
             }
 
+            /// Put back what [`Self::split_off`] peeled off.
+            pub(crate) fn append(&mut self, tail: BodyFacts) {
+                $(self.$name.extend(tail.$name);)+
+                self.default_overlays.extend(tail.default_overlays);
+            }
+
             #[cfg(debug_assertions)]
             pub(crate) fn fact_count(&self) -> usize {
                 0 $(+ self.$name.len())+
@@ -590,7 +600,7 @@ impl BodyFacts {
             .chain(&self.index_swap_dispatch)
             .filter_map(|(id, op)| Some((*id, op.method_def?)));
         let iterators = self.for_of_iterator.iter().flat_map(|(id, info)| {
-            [info.into_iter_def, info.next_def]
+            [info.start.as_ref().and_then(|s| s.def), info.next_def]
                 .into_iter()
                 .flatten()
                 .map(move |def| (*id, def))
@@ -767,7 +777,7 @@ pub(crate) struct LiteralCallee {
 
 impl LiteralCallee {
     /// Recompute the names from the recorded `TypeId`s. They are a function of
-    /// the types alone, so the module-end sweep calls this once a solved
+    /// the types alone, so the body's sweep calls this once a solved
     /// inference variable changes one.
     pub(crate) fn remangle(&mut self, tt: &TypeTable) {
         self.type_arg_names = self
@@ -1221,20 +1231,19 @@ pub(crate) fn impl_self_layers(
 /// Recorded only on the iterator path (`DesugarKind::ForOfIterator`);
 /// tuple and variadic paths don't dispatch, so they don't record here.
 ///
-/// The two `FunctionRef`s are the same dispatch targets the elaborator
+/// Its `FunctionRef`s are the same dispatch targets the elaborator
 /// resolved through `resolve_method_call_with(method_id: None,
 /// call_id: None)`, captured here so reify emits the synthetic calls
 /// without re-dispatching.
 #[derive(Clone)]
 pub(crate) struct ForOfIteratorInfo {
-    /// The `into_iter` and `next` declarations dispatch chose. The loop spells
-    /// no method name, so nothing else names them.
-    pub(crate) into_iter_def: Option<DefId>,
+    /// The call that turns the operand into what the loop walks. `None` where
+    /// the loop walks the operand as it stands: an iterator that is a
+    /// reference, or of a type its instance settles.
+    pub(crate) start: Option<ForOfStart>,
+    /// The `next` declaration dispatch chose. The loop spells no method name,
+    /// so nothing else names it.
     pub(crate) next_def: Option<DefId>,
-    /// Resolved `IntoIterator::into_iter` dispatch target.
-    pub(crate) into_iter: FunctionRef,
-    /// Receiver-adjustment kind for the `.into_iter()` call.
-    pub(crate) into_iter_self_kind: ast::SelfKind,
     /// Resolved `Iterator::next` dispatch target.
     pub(crate) next: FunctionRef,
     /// Receiver-adjustment kind for the `.next()` call.
@@ -1242,12 +1251,22 @@ pub(crate) struct ForOfIteratorInfo {
     /// Item type — what the loop variable is bound to. Reify uses this
     /// to type-annotate the synthesised `let <var> = …;`.
     pub(crate) item_type: TypeId,
-    /// Iterator type — the resolved return type of
-    /// `iterable.into_iter()` (`info.into_iter` returns this).
+    /// Iterator type: what `start` returns, or the operand's own type.
     /// Reify uses this to type the synthesised iterator local
     /// `let mut $iter_N: <iter_type> = …;` without re-running
     /// method dispatch.
     pub(crate) iter_type: TypeId,
+}
+
+/// The `IntoIterator::into_iter` or `ForOf::start` call a for-of loop opens
+/// with.
+#[derive(Clone)]
+pub(crate) struct ForOfStart {
+    /// The declaration dispatch chose.
+    pub(crate) def: Option<DefId>,
+    pub(crate) func: FunctionRef,
+    /// Receiver-adjustment kind for the call.
+    pub(crate) self_kind: ast::SelfKind,
 }
 
 /// Where a call reads its callee from, when that callee is a value and not a

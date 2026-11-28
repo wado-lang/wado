@@ -141,7 +141,7 @@ impl TypeSystem {
     }
 
     /// Whether `type_id` is, or holds at any depth, an affine type: what
-    /// makes a binding of it move-only, and a by-value `self` on it legal.
+    /// makes a binding of it move-only.
     pub(crate) fn carries_affine(&self, type_id: TypeId) -> bool {
         holds_affine(self, type_id)
     }
@@ -278,6 +278,7 @@ impl TypeSystem {
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => return false,
             ResolvedType::BuiltinArray(inner) => (vec![inner], Vec::new()),
@@ -343,6 +344,7 @@ impl TypeSystem {
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => return false,
             ResolvedType::Ref(inner) | ResolvedType::BuiltinArray(inner) => vec![inner],

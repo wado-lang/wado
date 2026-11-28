@@ -869,7 +869,7 @@ impl<'a> Reify<'a> {
     /// annotate recorded them during its body walk.
     // Read in the declaration's own module scope, never in the type parameters
     // of whatever body referenced the global.
-    fn resolve_global_type(&mut self, ty: &ast::Type) -> TypeId {
+    fn resolve_global_type(&self, ty: &ast::Type) -> TypeId {
         let lookup = self.type_lookup();
         let resolved = lookup.resolve(ty, &mut self.tysys.type_table.borrow_mut());
         self.apply_function_type_effects(ty, resolved)
@@ -1334,7 +1334,7 @@ impl<'a> Reify<'a> {
     }
 
     /// Reify a `variant V<T> { … }` declaration.
-    fn reify_variant_decl(&mut self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
+    fn reify_variant_decl(&self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
         let def = self.tysys.def_at(variant_decl.id);
         let case_info = &self.tysys.data.variant_cases[&def];
 
@@ -1384,7 +1384,7 @@ impl<'a> Reify<'a> {
     /// Reify an `interface E { … }` declaration. Effects have no
     /// `Self` type — `&self` / `&mut self` on an effect method is a
     /// surface error annotate already diagnosed.
-    fn reify_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> tir::TirEffect {
+    fn reify_effect_decl(&self, decl: &ast::InterfaceDecl) -> tir::TirEffect {
         // Single source of truth: the body walk resolved the op
         // signatures with the decl's type-param / `Self` scope in place and
         // recorded them; reify reads them back rather than re-resolving.
@@ -1404,7 +1404,7 @@ impl<'a> Reify<'a> {
     /// 0; for generic resources `Self` is a `Resource` with the
     /// decl's own `TypeParam`s as type args. The op signatures are read
     /// from the facts the decl pass recorded.
-    fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
+    fn reify_resource_decl(&self, decl: &ast::ResourceDecl) -> tir::TirResource {
         let operations = self
             .ann_effect_ops(decl.id)
             .expect("the decl pass records op signatures for every resource reify emits");
@@ -1548,7 +1548,7 @@ impl<'a> Reify<'a> {
     /// `TirModule::functions`). A block whose only content is a rest clause
     /// still produces a record, which is the point: the effect-dispatch
     /// synthesis has no method to learn about it from.
-    fn reify_impl_decl(&mut self, impl_block: &ast::ImplBlock) -> Option<TirImpl> {
+    fn reify_impl_decl(&self, impl_block: &ast::ImplBlock) -> Option<TirImpl> {
         if impl_block.is_synthesize_request {
             return None;
         }
@@ -1763,7 +1763,7 @@ impl<'a> Reify<'a> {
     /// `TirFunction` plus the `TirTest` metadata. Mirrors
     /// `Elaborator::resolve_test_decl`: the function
     /// name encodes `test_index` + attributes (`expect_trap`, `TODO`,
-    /// `timeout_ms`); the body reifies into a unit-returning
+    /// `timeout`); the body reifies into a unit-returning
     /// no-parameter function.
     fn reify_test_decl(
         &mut self,
@@ -1775,7 +1775,7 @@ impl<'a> Reify<'a> {
         let ast::TestMetadata {
             expect_trap,
             is_todo,
-            timeout_ms,
+            timeout_seconds,
             is_synopsis,
             is_workload,
         } = meta;
@@ -1830,7 +1830,7 @@ impl<'a> Reify<'a> {
             span: test_decl.span,
             expect_trap,
             is_todo,
-            timeout_ms,
+            timeout_seconds,
             is_synopsis,
             is_workload,
         };
@@ -3566,22 +3566,22 @@ impl<'a> Reify<'a> {
         let iter_var = minted_name("iter", unique_id);
         let label = minted_name("for_of", unique_id);
 
-        let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
-        let into_iter_receiver = self.adjust_receiver_for(
-            into_iter_receiver,
-            info.into_iter_self_kind,
-            &info.into_iter,
-            ctx,
-        );
+        let operand = self.reify_expr(&for_of.iterable, ctx, None);
         let iter_type = info.iter_type;
-        let into_iter_call = build_tir_method_call(
-            into_iter_receiver,
-            info.into_iter.clone(),
-            vec![],
-            vec![],
-            iter_type,
-            span,
-        );
+        let walked = match &info.start {
+            Some(start) => {
+                let receiver = self.adjust_receiver_for(operand, start.self_kind, &start.func, ctx);
+                build_tir_method_call(
+                    receiver,
+                    start.func.clone(),
+                    vec![],
+                    vec![],
+                    iter_type,
+                    span,
+                )
+            }
+            None => operand,
+        };
 
         let iter_local_index =
             ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
@@ -3591,7 +3591,7 @@ impl<'a> Reify<'a> {
                 local_index: iter_local_index,
                 is_mut: true,
                 type_id: iter_type,
-                value: Some(into_iter_call),
+                value: Some(walked),
                 storage: LetStorage::Planned,
             },
             span,
@@ -4017,7 +4017,7 @@ impl<'a> Reify<'a> {
     /// name of a tuple binding reads its element from. Answers the bound name,
     /// its local, and the `Let`s that destructure the temp.
     fn reify_pack_binding(
-        &mut self,
+        &self,
         binding: &ast::Pattern,
         binding_type: TypeId,
         is_mut: bool,
@@ -4421,7 +4421,7 @@ impl<'a> Reify<'a> {
     /// The trait-method call `left.method(right)` an operator dispatched to, each
     /// side adjusted as the method declares it.
     fn binary_operator_call(
-        &mut self,
+        &self,
         dispatch: OperatorDispatch,
         left: TirExpr,
         right: TirExpr,
@@ -4558,7 +4558,7 @@ impl<'a> Reify<'a> {
     /// `left OP right` for the operator node `id`: the trait call the
     /// elaborator recorded for it, else the native operation.
     fn reify_binary_op(
-        &mut self,
+        &self,
         id: ast::AstId,
         op: ast::BinaryOp,
         left: TirExpr,
@@ -4784,7 +4784,7 @@ impl<'a> Reify<'a> {
     /// cooked and raw text, and the statements binding the holes it cannot
     /// read where it stands: a place that a later computed hole may write.
     fn reify_template_literal(
-        &mut self,
+        &self,
         template_ty: TypeId,
         values: Vec<TirExpr>,
         segments: &[[String; 2]],
@@ -5304,7 +5304,7 @@ impl<'a> Reify<'a> {
     /// The combined value `read OP rhs`, through the operator's trait method
     /// where annotate dispatched one (`u128 /= u128` → `Div::div`).
     fn build_compound_combined(
-        &mut self,
+        &self,
         read: TirExpr,
         rhs: TirExpr,
         op: TirBinaryOp,
@@ -5719,7 +5719,7 @@ impl<'a> Reify<'a> {
     /// `Option<T>`'s `?`-op desugar — mirrors
     /// `Elaborator::resolve_question_mark_option`.
     fn reify_question_mark_option(
-        &mut self,
+        &self,
         inner: TirExpr,
         ctx: &mut FunctionContext,
         span: Span,
@@ -5812,7 +5812,7 @@ impl<'a> Reify<'a> {
     /// `Result<T, E>`'s `?`-op desugar — mirrors
     /// `Elaborator::resolve_question_mark_result`.
     fn reify_question_mark_result(
-        &mut self,
+        &self,
         inner: TirExpr,
         ctx: &mut FunctionContext,
         span: Span,
@@ -6290,7 +6290,7 @@ impl<'a> Reify<'a> {
     /// Record on a default's `TypePackExpansion` the tuple the call settled the
     /// pack to, read off the parameter's own concrete type. The caller it is
     /// spliced into may be one nothing instantiates, so this is the last chance.
-    fn settle_packs_in_default(&mut self, expr: &mut TirExpr, expected: TypeId) {
+    fn settle_packs_in_default(&self, expr: &mut TirExpr, expected: TypeId) {
         let TirExprKind::TupleLiteral { elements } = &mut expr.kind else {
             return;
         };
@@ -6670,7 +6670,7 @@ impl<'a> Reify<'a> {
     /// The `From::from(value)` call a `?` converts its error through, from
     /// the facts [`super::Elaborator::resolve_from_call`] recorded.
     fn reify_from_call(
-        &mut self,
+        &self,
         target_type: TypeId,
         value: TirExpr,
         span: Span,
@@ -7854,11 +7854,8 @@ impl<'a> Reify<'a> {
         // `resolve_call` skips them. Reify reproduces the same
         // `IntLiteral` here.
         if let ast::Expr::Ident(ident) = &call.callee
-            && let Some(pos) = ident.name.find("::")
-            && !ident.name[pos + 2..].contains("::")
+            && let Some((_, suffix)) = ident.name.rsplit_once("::")
         {
-            let suffix = &ident.name[pos + 2..];
-
             // The call's own type names the flags declaration, whatever the
             // receiver was written as: a `Self` binder names none at its site.
             let owner = self.tysys.type_table.borrow().nominal_def(recorded_type);
@@ -8568,7 +8565,7 @@ impl<'a> Reify<'a> {
     }
 
     fn reify_literal(
-        &mut self,
+        &self,
         lit: &ast::LiteralExpr,
         recorded_type: TypeId,
         ctx: &FunctionContext,
@@ -8719,7 +8716,7 @@ impl<'a> Reify<'a> {
     /// A numeric literal as TIR, from the decimal / hex / float spelling every
     /// such literal reduces to. `repr` rides along because later readers parse
     /// the value back out of it — `i128` / `u128` lowering is one.
-    fn reify_numeric_literal(&mut self, repr: &str, recorded_type: TypeId, span: Span) -> TirExpr {
+    fn reify_numeric_literal(&self, repr: &str, recorded_type: TypeId, span: Span) -> TirExpr {
         // The *recorded type* decides Int vs Float TIR literal; the literal's
         // *syntactic form* (`defaults_to_float`) decides how to read its
         // value, so `let x: f64 = 0xFF` reads as an integer then converts. Peel
@@ -8900,7 +8897,7 @@ impl<'a> Reify<'a> {
             let bound = range_bound(bounds[i], &self.tysys.resolutions)
                 .and_then(Result::ok)
                 .expect("annotate reports a bound naming nothing");
-            let value = bound_value(&bound, scrutinee, &mut self.tysys.type_table.borrow_mut());
+            let value = bound_value(&bound, scrutinee, &self.tysys.type_table.borrow());
             let Ok(value) = value else {
                 unreachable!("annotate reports a bound naming no value of the scrutinee");
             };
@@ -8955,12 +8952,12 @@ impl<'a> Reify<'a> {
         site: Span,
         ctx: &mut FunctionContext,
     ) -> TirPattern {
-        let mut type_table = self.tysys.type_table.borrow_mut();
+        let type_table = self.tysys.type_table.borrow();
         if settles_literal_patterns(&type_table, scrutinee_type) {
             let lowered = lower_instance_pattern(
                 &pattern,
                 scrutinee_type,
-                &mut type_table,
+                &type_table,
                 |name, ty| ctx.add_local(name, ty, false, None),
                 site,
             );
@@ -9024,11 +9021,7 @@ impl<'a> Reify<'a> {
     /// Lower a nullary variant-case pattern (e.g. `null`) to
     /// `TirPattern::Variant` with no bindings, resolving the case's
     /// payload type from the scrutinee's variant decl.
-    fn reify_nullary_variant_case(
-        &mut self,
-        scrutinee_type: TypeId,
-        case_name: &str,
-    ) -> TirPattern {
+    fn reify_nullary_variant_case(&self, scrutinee_type: TypeId, case_name: &str) -> TirPattern {
         // The head the cases come from, peeled the way `scrutinee_has_variant_case`
         // already asks: references for match ergonomics, then newtypes.
         let head = self
@@ -9072,7 +9065,7 @@ impl<'a> Reify<'a> {
     /// A constant pattern whose `==` annotate dispatched to `Eq`: the scrutinee
     /// held in the local annotate reserved, matching where the call holds.
     fn compare_constant_by_eq(
-        &mut self,
+        &self,
         written: &ast::Pattern,
         pattern: TirPattern,
         scrutinee_type: TypeId,
@@ -9417,7 +9410,7 @@ impl<'a> Reify<'a> {
     /// `name: R` over a supertype of `R`: the value binds at `R`, and the pattern
     /// holds only when the class the handle carries lies in `R`'s classes.
     fn reify_narrowing(
-        &mut self,
+        &self,
         inner: &ast::Pattern,
         target: TypeId,
         shown: String,
@@ -9713,20 +9706,24 @@ impl TypeSystem {
         self.apply_scrutinee_ref_kind(scrutinee_type, target)
     }
 
-    /// The type of the `*…` result a dispatched index read produces: the recorded
-    /// one when resolved, else the `&Output` the index trait returns, peeled.
+    /// The type a dispatched index read produces: the recorded one when
+    /// resolved, which reads a `&mut` element behind a `&` as a `&`, else what
+    /// the index trait returns, a `&Output` peeled.
     fn index_deref_type(&self, recorded: Option<TypeId>, dispatch: &OperatorDispatch) -> TypeId {
-        if !dispatch.needs_deref {
-            return dispatch.return_type;
-        }
         recorded
             .filter(|t| !matches!(self.type_table.borrow().get(*t), ResolvedType::Unknown))
-            .unwrap_or_else(|| self.through_ref(dispatch.return_type))
+            .unwrap_or_else(|| {
+                if dispatch.needs_deref {
+                    self.through_ref(dispatch.return_type)
+                } else {
+                    dispatch.return_type
+                }
+            })
     }
 
     /// The trait read `*recv.index(idx)` (or `recv.index_value(idx)`) `dispatch`
     /// records, on a receiver already adjusted to its `self_kind`; `deref_type`
-    /// types the `*…` when `dispatch.needs_deref`.
+    /// types the read, the `*…` or the by-value call.
     fn build_index_read_from_dispatch(
         &self,
         adjusted: TirExpr,
@@ -9755,6 +9752,8 @@ impl TypeSystem {
                 span,
             )
         } else {
+            let mut method_call = method_call;
+            method_call.type_id = deref_type;
             method_call
         }
     }

@@ -6,32 +6,19 @@
 //! again. With no `else` the nested form duplicates nothing. A `b` that is pure
 //! and cannot trap is left alone: WIR turns that `&&` into a branchless `a & b`.
 
-use crate::nir::{FuncParts, NirBinaryOp};
+use crate::nir::NirBinaryOp;
 use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule, visit_every_body};
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 use crate::token::Span;
 
 use super::arena_query::is_pure_nontrapping_operand_typed;
 
-pub fn split_and_conditions(project: &mut NirPackage) -> bool {
-    let type_table = project.type_table.borrow();
-    let mut buffers = EngineBuffers::default();
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        let FuncParts {
-            body,
-            locals,
-            params,
-            ..
-        } = func.parts();
-        if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals, params, &type_table);
-            changed |= engine.run(&[&SplitAndConditionRule]);
-        }
-    }
-    changed
+pub fn split_and_conditions(project: &mut NirPackage, exec: &Executor) -> bool {
+    visit_every_body(project, exec, |engine| {
+        engine.run(&[&SplitAndConditionRule])
+    })
 }
 
 struct SplitAndConditionRule;

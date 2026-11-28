@@ -1,0 +1,724 @@
+test "f64::from_str basic" {
+    assert f64::from_str("3.14") matches { Ok(v) && v == 3.14 };
+    assert f64::from_str("0.5") matches { Ok(v) && v == 0.5 };
+    assert f64::from_str("123") matches { Ok(v) && v == 123.0 };
+    assert f64::from_str("0") matches { Ok(v) && v == 0.0 };
+}
+
+test "f64::from_str with exponent" {
+    assert f64::from_str("1e2") matches { Ok(v) && v == 100.0 };
+    assert f64::from_str("1.5e-3") matches { Ok(v) && v == 0.0015 };
+    assert f64::from_str("25E+2") matches { Ok(v) && v == 2500.0 };
+}
+
+test "f64::from_str with sign" {
+    assert f64::from_str("-42") matches { Ok(v) && v == -42.0 };
+    assert f64::from_str("+3.14") matches { Ok(v) && v == 3.14 };
+    assert f64::from_str("-0.5e2") matches { Ok(v) && v == -50.0 };
+}
+
+test "f64::from_str infinity" {
+    assert f64::from_str("inf") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("-inf") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str("+infinity") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("-Infinity") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str("INF") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("INFINITY") matches { Ok(v) && v == f64::INFINITY };
+}
+
+test "f64::from_str nan" {
+    assert f64::from_str("nan") matches { Ok(v) && v.is_nan() };
+    assert f64::from_str("NaN") matches { Ok(v) && v.is_nan() };
+    assert f64::from_str("NAN") matches { Ok(v) && v.is_nan() };
+}
+
+test "f64::from_str negative zero" {
+    assert f64::from_str("-0") matches { Ok(v) && v == 0.0 };
+}
+
+test "f64::from_str overflow underflow" {
+    assert f64::from_str("1e999") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("-1e999") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str("1e-999") matches { Ok(v) && v == 0.0 };
+
+    // Inside the pow10 table's domain, and still past f64's range either way.
+    assert f64::from_str("1e350") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("1e351") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("-1e351") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str("1e-351") matches { Ok(v) && v == 0.0 };
+    assert f64::from_str("1e-352") matches { Ok(v) && v == 0.0 };
+
+    // The largest finite value, and the first decimal past its rounding edge.
+    assert f64::from_str("1.7976931348623157e308") matches { Ok(v) && v.to_bits() == 0x7fefffffffffffff };
+    assert f64::from_str("1.8e308") matches { Ok(v) && v == f64::INFINITY };
+}
+
+test "f64::from_str malformed" {
+    assert f64::from_str("") matches { Err(e) && e.kind() == FloatErrorKind::Empty };
+    assert f64::from_str("abc") matches { Err(e) && e.kind() == FloatErrorKind::Invalid };
+    assert f64::from_str(".5") matches { Err(_) };
+    assert f64::from_str("5.") matches { Err(_) };
+    assert f64::from_str("+") matches { Err(_) };
+    assert f64::from_str("-") matches { Err(_) };
+    assert f64::from_str("1.2.3") matches { Err(_) };
+    assert f64::from_str("e5") matches { Err(_) };
+    assert f64::from_str("1e") matches { Err(_) };
+    assert f64::from_str("infi") matches { Err(_) };
+    assert f64::from_str("nana") matches { Err(_) };
+}
+
+test "f32::from_str basic" {
+    assert f32::from_str("3.14") matches { Ok(v) && v == 3.14 };
+    assert f32::from_str("-42") matches { Ok(v) && v == -42.0 };
+    assert f32::from_str("inf") matches { Ok(v) && v == f32::INFINITY };
+    assert f32::from_str("") matches { Err(e) && e.kind() == FloatErrorKind::Empty };
+    assert f32::from_str(".5") matches { Err(e) && e.kind() == FloatErrorKind::Invalid };
+}
+
+test "f32 displays a non-finite value by name" {
+    assert `${f32::NEG_INFINITY}` == "-inf";
+    assert `${f32::NAN}` == "NaN";
+}
+
+test "i32::from_str basic" {
+    assert i32::from_str("0") matches { Ok(0) };
+    assert i32::from_str("42") matches { Ok(42) };
+    assert i32::from_str("+42") matches { Ok(42) };
+    assert i32::from_str("-42") matches { Ok(-42) };
+    assert i32::from_str("2147483647") matches { Ok(v) && v == i32::MAX };
+    assert i32::from_str("-2147483648") matches { Ok(v) && v == i32::MIN };
+}
+
+test "i32::from_str errors" {
+    assert i32::from_str("") matches { Err(e) && e.kind() == IntErrorKind::Empty };
+    assert i32::from_str("+") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str("-") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str("abc") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str("12x") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str("2147483648") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i32::from_str("-2147483649") matches { Err(e) && e.kind() == IntErrorKind::NegOverflow };
+}
+
+test "u32::from_str basic" {
+    assert u32::from_str("0") matches { Ok(0) };
+    assert u32::from_str("42") matches { Ok(42) };
+    assert u32::from_str("+42") matches { Ok(42) };
+    assert u32::from_str("4294967295") matches { Ok(v) && v == u32::MAX };
+}
+
+test "u32::from_str errors" {
+    assert u32::from_str("") matches { Err(e) && e.kind() == IntErrorKind::Empty };
+    assert u32::from_str("-0") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert u32::from_str("-1") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert u32::from_str("4294967296") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+}
+
+test "i32::from_str_radix" {
+    assert i32::from_str_radix("1010", 2) matches { Ok(10) };
+    assert i32::from_str_radix("777", 8) matches { Ok(v) && v == 511 };
+    assert i32::from_str_radix("ff", 16) matches { Ok(255) };
+    assert i32::from_str_radix("FF", 16) matches { Ok(255) };
+    assert i32::from_str_radix("-ff", 16) matches { Ok(-255) };
+    assert i32::from_str_radix("z", 36) matches { Ok(35) };
+    assert i32::from_str_radix("2", 2) matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert i32::from_str_radix("g", 16) matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+}
+
+test "u32::from_str_hex" {
+    assert u32::from_str_hex("0") matches { Ok(0) };
+    assert u32::from_str_hex("ff") matches { Ok(255) };
+    assert u32::from_str_hex("FF") matches { Ok(255) };
+    assert u32::from_str_hex("DeadBeef") matches { Ok(v) && v == 3735928559 };
+    assert u32::from_str_hex("ffffffff") matches { Ok(v) && v == u32::MAX };
+    assert u32::from_str_hex("") matches { Err(e) && e.kind() == IntErrorKind::Empty };
+    assert u32::from_str_hex("zz") matches { Err(e) && e.kind() == IntErrorKind::InvalidDigit };
+    assert u32::from_str_hex("100000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+}
+
+test "i64::from_str bounds" {
+    assert i64::from_str("9223372036854775807") matches { Ok(v) && v == i64::MAX };
+    assert i64::from_str("-9223372036854775808") matches { Ok(v) && v == i64::MIN };
+    assert i64::from_str("9223372036854775808") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i64::from_str("-9223372036854775809") matches { Err(e) && e.kind() == IntErrorKind::NegOverflow };
+}
+
+test "u64::from_str bounds" {
+    assert u64::from_str("18446744073709551615") matches { Ok(v) && v == u64::MAX };
+    assert u64::from_str("18446744073709551616") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+}
+
+test "u64::from_str_hex" {
+    assert u64::from_str_hex("ffffffffffffffff") matches { Ok(v) && v == u64::MAX };
+    assert u64::from_str_hex("10000000000000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+}
+
+test "i8 u8 i16 u16 from_str bounds" {
+    assert i8::from_str("127") matches { Ok(127) };
+    assert i8::from_str("-128") matches { Ok(-128) };
+    assert i8::from_str("128") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i8::from_str("-129") matches { Err(e) && e.kind() == IntErrorKind::NegOverflow };
+
+    assert u8::from_str("255") matches { Ok(255) };
+    assert u8::from_str("256") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+
+    assert i16::from_str("32767") matches { Ok(32767) };
+    assert i16::from_str("-32768") matches { Ok(-32768) };
+    assert i16::from_str("32768") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+
+    assert u16::from_str("65535") matches { Ok(65535) };
+    assert u16::from_str("65536") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+}
+
+test "i8 from_str_hex common cases" {
+    assert u8::from_str_hex("ff") matches { Ok(255) };
+    assert u8::from_str_hex("100") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i16::from_str_hex("7fff") matches { Ok(32767) };
+    assert i16::from_str_hex("8000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
+    assert i16::from_str_hex("-8000") matches { Ok(-32768) };
+}
+
+test "f64 wasm instruction math" {
+    assert f64::abs(-3.5) == 3.5;
+    assert f64::abs(2.0) == 2.0;
+    assert f64::ceil(2.3) == 3.0;
+    assert f64::ceil(-2.3) == -2.0;
+    assert f64::floor(2.7) == 2.0;
+    assert f64::floor(-2.7) == -3.0;
+    assert f64::trunc(2.9) == 2.0;
+    assert f64::trunc(-2.9) == -2.0;
+    assert f64::round_ties_even(2.5) == 2.0;
+    assert f64::round_ties_even(3.5) == 4.0;
+    assert f64::sqrt(4.0) == 2.0;
+    assert f64::ieee754_min(3.0, 5.0) == 3.0;
+    assert f64::ieee754_max(3.0, 5.0) == 5.0;
+    assert f64::ieee754_min(3.0, f64::NAN).is_nan();
+    assert f64::copysign(5.0, -1.0) == -5.0;
+    assert f64::copysign(-5.0, 1.0) == 5.0;
+}
+
+test "f32 wasm instruction math" {
+    assert f32::abs(-3.5) == 3.5;
+    assert f32::abs(2.0) == 2.0;
+    assert f32::ceil(2.3) == 3.0;
+    assert f32::ceil(-2.3) == -2.0;
+    assert f32::floor(2.7) == 2.0;
+    assert f32::floor(-2.7) == -3.0;
+    assert f32::trunc(2.9) == 2.0;
+    assert f32::trunc(-2.9) == -2.0;
+    assert f32::round_ties_even(2.5) == 2.0;
+    assert f32::round_ties_even(3.5) == 4.0;
+    assert f32::sqrt(4.0) == 2.0;
+    assert f32::ieee754_min(3.0, 5.0) == 3.0;
+    assert f32::ieee754_max(3.0, 5.0) == 5.0;
+    assert f32::ieee754_min(3.0, f32::NAN).is_nan();
+    assert f32::copysign(5.0, -1.0) == -5.0;
+    assert f32::copysign(-5.0, 1.0) == 5.0;
+}
+
+test "f64 ieee754 comparisons are false against a NaN, but ne" {
+    let nan = f64::from_bits(builtin::black_box(0x7FF8_0000_0000_0000));
+    let one = builtin::black_box(1.0);
+    assert !nan.ieee754_eq(nan) && nan.ieee754_ne(nan);
+    assert !one.ieee754_eq(nan) && one.ieee754_ne(nan);
+    assert !one.ieee754_lt(nan) && !one.ieee754_le(nan);
+    assert !one.ieee754_gt(nan) && !one.ieee754_ge(nan);
+    assert !nan.ieee754_lt(one) && !nan.ieee754_le(one);
+    assert !nan.ieee754_gt(one) && !nan.ieee754_ge(one);
+}
+
+test "f64 ieee754 comparisons on the two zeroes and an ordinary pair" {
+    let neg = builtin::black_box(-0.0);
+    let pos = builtin::black_box(0.0);
+    assert neg.ieee754_eq(pos) && !neg.ieee754_ne(pos);
+    assert !neg.ieee754_lt(pos) && neg.ieee754_le(pos) && neg.ieee754_ge(pos);
+
+    let one = builtin::black_box(1.0);
+    let two = builtin::black_box(2.0);
+    assert one.ieee754_lt(two) && one.ieee754_le(two) && one.ieee754_ne(two);
+    assert !one.ieee754_gt(two) && !one.ieee754_ge(two) && !one.ieee754_eq(two);
+}
+
+test "f32 ieee754 comparisons answer as f64's do" {
+    let nan = f32::from_bits(builtin::black_box(0x7FC0_0000));
+    let one: f32 = builtin::black_box(1.0);
+    let two: f32 = builtin::black_box(2.0);
+    assert !nan.ieee754_eq(nan) && nan.ieee754_ne(nan);
+    assert !one.ieee754_lt(nan) && !nan.ieee754_ge(one);
+    assert one.ieee754_lt(two) && two.ieee754_gt(one) && one.ieee754_le(one);
+    assert two.ieee754_ge(one) && one.ieee754_ge(one) && !one.ieee754_eq(two);
+    assert builtin::black_box(-0.0 as f32).ieee754_eq(0.0);
+}
+
+test "f16 and bf16 ieee754 comparisons answer widened to f32" {
+    let nan = f16::NAN;
+    let one: f16 = builtin::black_box(1.0);
+    let two: f16 = builtin::black_box(2.0);
+    assert !nan.ieee754_eq(nan) && nan.ieee754_ne(nan) && !one.ieee754_le(nan);
+    assert one.ieee754_lt(two) && two.ieee754_ge(one) && !one.ieee754_gt(two);
+    assert one.ieee754_ne(two) && !one.ieee754_ne(one);
+    assert f16::from_bits(0x8000).ieee754_eq(f16::from_bits(0));
+
+    let bnan = bf16::NAN;
+    let bone: bf16 = builtin::black_box(1.0);
+    let btwo: bf16 = builtin::black_box(2.0);
+    assert !bnan.ieee754_eq(bnan) && bnan.ieee754_ne(bnan) && !bnan.ieee754_ge(bone);
+    assert bone.ieee754_le(btwo) && btwo.ieee754_gt(bone) && !bone.ieee754_eq(btwo);
+    assert bone.ieee754_lt(btwo) && !bone.ieee754_ne(bone);
+    assert bf16::from_bits(0x8000).ieee754_eq(bf16::from_bits(0));
+}
+
+test "ieee754 comparisons of constants fold as IEEE does" {
+    assert !f64::NAN.ieee754_eq(f64::NAN);
+    assert f64::NAN.ieee754_ne(f64::NAN);
+    assert !f32::NAN.ieee754_lt(f32::INFINITY);
+    assert (-0.0).ieee754_ge(0.0);
+}
+
+test "float min and max follow the order, where NaN is greatest" {
+    assert f64::min(3.0, 5.0) == 3.0;
+    assert f64::max(3.0, 5.0) == 5.0;
+    assert f64::min(3.0, f64::NAN) == 3.0;
+    assert f64::max(3.0, f64::NAN).is_nan();
+    assert f32::min(3.0, 5.0) == 3.0;
+    assert f32::max(3.0, 5.0) == 5.0;
+    assert f32::min(f32::NAN, 3.0) == 3.0;
+    assert f32::max(f32::NAN, 3.0).is_nan();
+}
+
+test "f64 constants" {
+    assert 3.14159 < f64::PI < 3.14160;
+    assert f64::TAU == f64::PI * 2.0;
+    assert 2.71828 < f64::E < 2.71829;
+    assert f64::FRAC_PI_2 == f64::PI / 2.0;
+    assert f64::FRAC_PI_4 == f64::PI / 4.0;
+}
+
+test "f64 safe integer constants" {
+    // 2^53 - 1, the largest integer exactly representable in f64
+    // (JS Number.MAX_SAFE_INTEGER / MIN_SAFE_INTEGER).
+    assert f64::MAX_SAFE_INTEGER == 9007199254740991.0;
+    assert f64::MIN_SAFE_INTEGER == -9007199254740991.0;
+    assert f64::MAX_SAFE_INTEGER as i64 == 9007199254740991;
+}
+
+test "f32 constants" {
+    assert 3.14 < f32::PI < 3.15;
+    assert f32::TAU == f32::PI * 2.0;
+    assert 2.71 < f32::E < 2.72;
+    assert f32::FRAC_PI_2 == f32::PI / 2.0;
+    assert f32::FRAC_PI_4 == f32::PI / 4.0;
+}
+
+test "f64.is_nan and f64.is_finite" {
+    assert f64::NAN.is_nan();
+    assert !0.0.is_nan();
+    assert !f64::INFINITY.is_nan();
+    assert !f64::NEG_INFINITY.is_nan();
+    assert (0.0 / 0.0).is_nan();
+
+    assert 1.0.is_finite();
+    assert 0.0.is_finite();
+    assert (-42.5).is_finite();
+    assert !f64::INFINITY.is_finite();
+    assert !f64::NEG_INFINITY.is_finite();
+    assert !f64::NAN.is_finite();
+}
+
+test "f32.is_nan and f32.is_finite" {
+    assert f32::NAN.is_nan();
+    assert !(0.0 as f32).is_nan();
+    assert !f32::INFINITY.is_nan();
+
+    assert (1.0 as f32).is_finite();
+    assert !f32::INFINITY.is_finite();
+    assert !f32::NAN.is_finite();
+}
+
+#[allow(self_comparison)]
+test "f64::NAN and f32::NAN" {
+    // Every NaN is one value, greater than every other.
+    let nan = f64::NAN;
+    assert nan == nan;
+    assert !(nan < 0.0);
+    assert nan > 0.0;
+    assert nan > f64::INFINITY;
+
+    let nan32 = f32::NAN;
+    assert nan32 == nan32;
+    assert nan32 > f32::INFINITY;
+}
+
+test "i32::clz" {
+    assert i32::clz(0) == 32;
+    assert i32::clz(1) == 31;
+    assert i32::clz(0xFF) == 24;
+    assert i32::clz(-1) == 0;
+    assert i32::clz(i32::MIN) == 0;
+    assert i32::clz(0x00010000) == 15;
+}
+
+test "i32::ctz" {
+    assert i32::ctz(1) == 0;
+    assert i32::ctz(8) == 3;
+    assert i32::ctz(0) == 32;
+    assert i32::ctz(i32::MIN) == 31;
+}
+
+test "i32::popcnt" {
+    assert i32::popcnt(0) == 0;
+    assert i32::popcnt(1) == 1;
+    assert i32::popcnt(0xFF) == 8;
+    assert i32::popcnt(-1) == 32;
+}
+
+test "i64::clz" {
+    assert i64::clz(0) == 64;
+    assert i64::clz(1) == 63;
+    assert i64::clz(i64::MIN) == 0;
+}
+
+test "i64::ctz" {
+    assert i64::ctz(1) == 0;
+    assert i64::ctz(0) == 64;
+    assert i64::ctz(i64::MIN) == 63;
+}
+
+test "i64::popcnt" {
+    assert i64::popcnt(0) == 0;
+    assert i64::popcnt(1) == 1;
+    assert i64::popcnt(-1) == 64;
+    assert i64::popcnt(0xFF) == 8;
+}
+
+test "f64::to_bits and f64::from_bits" {
+    let pi = 3.141592653589793;
+    let pi_bits = pi.to_bits();
+    assert pi_bits == 4614256656552045848;
+
+    let back_to_pi = f64::from_bits(pi_bits);
+    assert back_to_pi == 3.141592653589793;
+
+    let zero_bits = 0.0.to_bits();
+    assert zero_bits == 0;
+
+    let neg_zero_bits = (-0.0).to_bits();
+    assert neg_zero_bits == 0x8000000000000000;
+}
+
+test "f32::to_bits and f32::from_bits" {
+    let pi32 = 3.14159265 as f32;
+    let pi32_bits = pi32.to_bits();
+    assert pi32_bits == 1078530011;
+
+    let back_to_pi32 = f32::from_bits(pi32_bits);
+    assert back_to_pi32 == pi32;
+
+    let zero32_bits = (0.0 as f32).to_bits();
+    assert zero32_bits == 0;
+}
+
+test "negative i8/i16 base formats print the two's complement bits" {
+    // Matches Rust's {:x}/{:b}/{:o} semantics: the bit pattern of the
+    // value's own width, not a sign + magnitude.
+    let a: i8 = -1;
+    assert `${a:b}` == "11111111";
+    let b: i8 = -86;
+    assert `${b:x}` == "aa";
+    let c: i8 = -128;
+    assert `${c:x}` == "80";
+    let d: i16 = -1;
+    assert `${d:x}` == "ffff";
+    let e: i16 = -2;
+    assert `${e:X}` == "FFFE";
+}
+
+test "negative i32 base formats print the two's complement bits" {
+    let a: i32 = -1;
+    assert `${a:x}` == "ffffffff";
+    assert `${a:#x}` == "0xffffffff";
+    let b: i32 = -42;
+    assert `${b:x}` == "ffffffd6";
+    assert `${b:o}` == "37777777726";
+    assert `${b:b}` == "11111111111111111111111111010110";
+}
+
+test "negative i64 base formats print the two's complement bits" {
+    let a: i64 = -1;
+    assert `${a:x}` == "ffffffffffffffff";
+    let min: i64 = -9223372036854775808;
+    assert `${min:x}` == "8000000000000000";
+    assert `${min:b}` == "1000000000000000000000000000000000000000000000000000000000000000";
+    assert `${min:#o}` == "0o1000000000000000000000";
+}
+
+test "u64 base formats around the 32-bit boundary" {
+    // The digit count comes off the highest set bit, so bit 31 and bit 32 are
+    // the seam: one digit apart in hex, and either side of a 32-bit word.
+    let below: u64 = 0x80000000;
+    assert `${below:x}` == "80000000";
+    assert `${below:b}` == "10000000000000000000000000000000";
+    let at: u64 = 0x100000000;
+    assert `${at:x}` == "100000000";
+    assert `${at:o}` == "40000000000";
+    // A highest bit that is not a multiple of any of the three digit widths.
+    let odd: u64 = 0x1_5555_5555;
+    assert `${odd:x}` == "155555555";
+    assert `${odd:b}` == "101010101010101010101010101010101";
+}
+
+test "i64 decimal formatting at every digit-count boundary" {
+    // `count_digits_u64` sizes the buffer and `write_decimal_digits` fills it
+    // backwards, so an off-by-one in either shows up as a lost or stray digit
+    // exactly at a power of ten.
+    let mut p: i64 = 10;
+    let mut digits = 2;
+    while digits <= 18 {
+        assert `${p - 1}`.len() == digits - 1;
+        assert `${p}`.len() == digits;
+        p *= 10;
+        digits += 1;
+    }
+    assert `${0 as i64}` == "0";
+    assert `${9 as i64}` == "9";
+    assert `${10 as i64}` == "10";
+    assert `${99 as i64}` == "99";
+    assert `${100 as i64}` == "100";
+    assert `${999999999 as i64}` == "999999999";
+    assert `${1000000000 as i64}` == "1000000000";
+    assert `${1728000000000 as i64}` == "1728000000000";
+}
+
+test "i64 decimal formatting at the type's extremes" {
+    let max: i64 = 9223372036854775807;
+    assert `${max}` == "9223372036854775807";
+    let min: i64 = -9223372036854775808;
+    assert `${min}` == "-9223372036854775808";
+    let near_min: i64 = -9223372036854775807;
+    assert `${near_min}` == "-9223372036854775807";
+}
+
+test "i64 negative decimal formatting keeps the sign out of the digit count" {
+    assert `${-1 as i64}` == "-1";
+    assert `${-9 as i64}` == "-9";
+    assert `${-10 as i64}` == "-10";
+    assert `${-100 as i64}` == "-100";
+    assert `${-1000000000000 as i64}` == "-1000000000000";
+}
+
+test "i32 and u32 decimal formatting at their extremes" {
+    assert `${0}` == "0";
+    assert `${2147483647}` == "2147483647";
+    let min: i32 = -2147483648;
+    assert `${min}` == "-2147483648";
+    assert `${0 as u32}` == "0";
+    assert `${4294967295 as u32}` == "4294967295";
+    assert `${1000000 as u32}` == "1000000";
+}
+
+test "integer clamp confines a value to the range" {
+    assert i32::clamp(5, 1, 10) == 5;
+    assert i32::clamp(0, 1, 10) == 1;
+    assert i32::clamp(11, 1, 10) == 10;
+    assert i32::clamp(-5, -3, 3) == -3;
+    assert i32::clamp(7, 4, 4) == 4;
+}
+
+test "clamp reaches each integer type's extremes" {
+    assert i8::clamp(-128, -100, 100) == -100;
+    assert i8::clamp(127, -100, 100) == 100;
+    assert u8::clamp(0, 10, 250) == 10;
+    assert u8::clamp(255, 10, 250) == 250;
+    assert i16::clamp(-32768, -1, 1) == -1;
+    assert u16::clamp(65535, 0, 1000) == 1000;
+    assert i32::clamp(i32::MIN, -1, 1) == -1;
+    assert u32::clamp(4294967295, 0, 7) == 7;
+    assert i64::clamp(-9223372036854775808, -1, 1) == -1;
+    assert u64::clamp(18446744073709551615, 0, 7) == 7;
+}
+
+test "integer abs is the magnitude, and MIN wraps to itself" {
+    assert i8::abs(-5) == 5;
+    assert i8::abs(i8::MIN) == i8::MIN;
+    assert i16::abs(-300) == 300;
+    assert i16::abs(i16::MIN) == i16::MIN;
+    assert i32::abs(-7) == 7;
+    assert i32::abs(7) == 7;
+    assert i32::abs(0) == 0;
+    assert i32::abs(i32::MIN) == i32::MIN;
+    assert i64::abs(-9_000_000_000) == 9_000_000_000;
+    assert i64::abs(i64::MIN) == i64::MIN;
+    assert i128::abs(-170141183460469231731687303715884105727) == i128::MAX;
+    assert i128::abs(i128::MIN) == i128::MIN;
+    assert i128::abs(42) == 42;
+}
+
+test "integer abs of an opaque value negates at run time" {
+    assert i8::abs(builtin::black_box(-5)) == 5;
+    assert i8::abs(builtin::black_box(i8::MIN)) == i8::MIN;
+    assert i16::abs(builtin::black_box(-300)) == 300;
+    assert i16::abs(builtin::black_box(i16::MIN)) == i16::MIN;
+    assert i32::abs(builtin::black_box(-7)) == 7;
+    assert i32::abs(builtin::black_box(7)) == 7;
+    assert i32::abs(builtin::black_box(0)) == 0;
+    assert i32::abs(builtin::black_box(i32::MIN)) == i32::MIN;
+    assert i64::abs(builtin::black_box(-9_000_000_000)) == 9_000_000_000;
+    assert i64::abs(builtin::black_box(i64::MIN)) == i64::MIN;
+    assert i128::abs(builtin::black_box(-170141183460469231731687303715884105727)) == i128::MAX;
+    assert i128::abs(builtin::black_box(i128::MIN)) == i128::MIN;
+    assert i128::abs(builtin::black_box(42)) == 42;
+}
+
+test "float clamp confines a value to the range" {
+    assert f64::clamp(0.5, 0.0, 1.0) == 0.5;
+    assert f64::clamp(-1.0, 0.0, 1.0) == 0.0;
+    assert f64::clamp(2.0, 0.0, 1.0) == 1.0;
+    assert f32::clamp(0.5, 0.0, 1.0) == 0.5;
+    assert f32::clamp(-1.0, 0.0, 1.0) == 0.0;
+    assert f32::clamp(2.0, 0.0, 1.0) == 1.0;
+
+    // The order puts NaN above `high`, but a clamp keeps it rather than hide
+    // bad input behind a bound.
+    assert f64::clamp(f64::NAN, 0.0, 1.0).is_nan();
+    assert f32::clamp(f32::NAN, 0.0, 1.0).is_nan();
+}
+
+#[expect_trap]
+test "an empty integer clamp range is refused" {
+    let _ = i32::clamp(0, 10, 1);
+}
+
+#[expect_trap]
+test "an empty float clamp range is refused" {
+    let _ = f64::clamp(0.0, 1.0, 0.0);
+}
+
+#[expect_trap]
+test "a NaN clamp bound is refused" {
+    let _ = f64::clamp(0.0, f64::NAN, 1.0);
+}
+
+#[expect_trap]
+test "a NaN high clamp bound is refused" {
+    let _ = f32::clamp(0.0, 0.0, f32::NAN);
+}
+
+test "ParseIntError and ParseFloatError render their reason" {
+    assert `${i32::from_str("").unwrap_err()}` == "cannot parse integer from empty string";
+    assert `${i32::from_str("x").unwrap_err()}` == "invalid digit found in string";
+    assert `${i8::from_str("999").unwrap_err()}` == "number too large to fit in target type";
+    assert `${i8::from_str("-999").unwrap_err()}` == "number too small to fit in target type";
+    assert `${f64::from_str("").unwrap_err()}` == "cannot parse float from empty string";
+    assert `${f64::from_str("x").unwrap_err()}` == "invalid float literal";
+}
+
+test "to_string spells an integer as its Display" {
+    assert i64::MIN.to_string() == "-9223372036854775808";
+    assert u64::MAX.to_string() == "18446744073709551615";
+}
+
+test "BITS is the width in bits" {
+    assert i8::BITS == 8 && u8::BITS == 8;
+    assert i16::BITS == 16 && u16::BITS == 16 && f16::BITS == 16 && bf16::BITS == 16;
+    assert i32::BITS == 32 && u32::BITS == 32 && f32::BITS == 32;
+    assert i64::BITS == 64 && u64::BITS == 64 && f64::BITS == 64;
+    assert i128::BITS == 128 && u128::BITS == 128;
+}
+
+test "cmp answers each Ordering, a float's NaN greatest" {
+    let one: f32 = builtin::black_box(1.0);
+    let nan: f32 = builtin::black_box(f32::NAN);
+    assert one.cmp(&nan) matches { _::Less } && nan.cmp(&one) matches { _::Greater };
+    assert nan.cmp(&nan) matches { _::Equal };
+    let low: u64 = builtin::black_box(1);
+    let high: u64 = builtin::black_box(u64::MAX);
+    assert low.cmp(&high) matches { _::Less } && high.cmp(&low) matches { _::Greater };
+    assert low.cmp(&low) matches { _::Equal };
+    let wide: f64 = builtin::black_box(1.0);
+    let wide_nan: f64 = builtin::black_box(f64::NAN);
+    assert wide.cmp(&wide_nan) matches { _::Less } && wide_nan.cmp(&wide) matches { _::Greater };
+    assert wide.cmp(&wide) matches { _::Equal };
+    let half: f16 = builtin::black_box(0.5);
+    let brain: bf16 = builtin::black_box(0.5);
+    assert half.cmp(&half) matches { _::Equal } && brain.cmp(&brain) matches { _::Equal };
+}
+
+test "an f32 inspects as the same value in f64 does" {
+    let exact: List<f64> = [1.5, 2.0, 0.25, 1048576.0, -0.0, f64::INFINITY, -f64::INFINITY, f64::NAN];
+    for let x of exact {
+        let narrow = builtin::black_box(x as f32);
+        assert `${narrow:?}` == `${x:?}`;
+    }
+    let tiny: f32 = builtin::black_box(0.00001);
+    let vast: f32 = builtin::black_box(1.0e20);
+    assert `${tiny:?}` == `${0.00001:?}` && `${vast:?}` == `${1.0e20:?}`;
+    let half: f32 = builtin::black_box(1.5);
+    assert `${half:.2?}` == "1.50";
+}
+
+test "wrapping_neg negates an unsigned value modulo its width" {
+    assert builtin::black_box(1 as u8).wrapping_neg() == u8::MAX;
+    assert builtin::black_box(0 as u8).wrapping_neg() == 0;
+    assert builtin::black_box(2 as u16).wrapping_neg() == u16::MAX - 1;
+    assert builtin::black_box(1 as u32).wrapping_neg() == u32::MAX;
+    assert builtin::black_box(0x8000_0000 as u32).wrapping_neg() == 0x8000_0000;
+    assert builtin::black_box(1 as u64).wrapping_neg() == u64::MAX;
+}
+
+test "div_floor rounds a signed quotient toward negative infinity" {
+    assert builtin::black_box(7 as i8).div_floor(2) == 3;
+    assert builtin::black_box(-7 as i8).div_floor(2) == -4;
+    assert builtin::black_box(7 as i16).div_floor(-2) == -4;
+    assert builtin::black_box(-7 as i16).div_floor(-2) == 3;
+    assert builtin::black_box(-8).div_floor(2) == -4;
+    assert builtin::black_box(-7).div_floor(2) == -4;
+    assert builtin::black_box(7).div_floor(-2) == -4;
+    assert builtin::black_box(-7 as i64).div_floor(2) == -4;
+    assert builtin::black_box(-7 as i64).div_floor(-2) == 3;
+    assert builtin::black_box(i64::MIN).div_floor(2) == i64::MIN / 2;
+    assert builtin::black_box(i64::MIN + 1).div_floor(2) == i64::MIN / 2;
+}
+
+// Magnitudes past the narrower widths, so a sign mask shifted by too few bits
+// shows as a correction other than -1.
+test "div_floor and div_ceil correct by one at every magnitude" {
+    assert builtin::black_box(-100 as i8).div_floor(3) == -34;
+    assert builtin::black_box(100 as i8).div_ceil(-3) == -33;
+    assert builtin::black_box(i8::MIN).div_floor(3) == -43 && builtin::black_box(i8::MIN).div_ceil(-3) == 43;
+    assert builtin::black_box(-30000 as i16).div_floor(7) == -4286;
+    assert builtin::black_box(30000 as i16).div_ceil(-7) == -4285;
+    assert builtin::black_box(i16::MIN).div_floor(3) == -10923 && builtin::black_box(i16::MIN).div_ceil(-3) == 10923;
+    assert builtin::black_box(-2_000_000_000).div_floor(7) == -285_714_286;
+    assert builtin::black_box(2_000_000_000).div_ceil(-7) == -285_714_285;
+    assert builtin::black_box(i32::MIN).div_floor(3) == -715_827_883
+        && builtin::black_box(i32::MIN).div_ceil(-3) == 715_827_883;
+    assert builtin::black_box(-9_000_000_000_000_000_000 as i64).div_floor(7) == -1_285_714_285_714_285_715;
+    assert builtin::black_box(9_000_000_000_000_000_000 as i64).div_ceil(-7) == -1_285_714_285_714_285_714;
+}
+
+test "div_ceil rounds a signed quotient toward positive infinity" {
+    assert builtin::black_box(7 as i8).div_ceil(2) == 4;
+    assert builtin::black_box(-7 as i8).div_ceil(2) == -3;
+    assert builtin::black_box(7 as i16).div_ceil(-2) == -3;
+    assert builtin::black_box(-7 as i16).div_ceil(-2) == 4;
+    assert builtin::black_box(8).div_ceil(2) == 4;
+    assert builtin::black_box(7).div_ceil(2) == 4;
+    assert builtin::black_box(-7).div_ceil(-2) == 4;
+    assert builtin::black_box(7 as i64).div_ceil(2) == 4;
+    assert builtin::black_box(-7 as i64).div_ceil(2) == -3;
+}
+
+test "div_ceil rounds an unsigned quotient up" {
+    assert builtin::black_box(7 as u8).div_ceil(2) == 4;
+    assert builtin::black_box(u8::MAX).div_ceil(2) == 128;
+    assert builtin::black_box(8 as u16).div_ceil(2) == 4;
+    assert builtin::black_box(u16::MAX).div_ceil(2) == 32768;
+    assert builtin::black_box(u32::MAX).div_ceil(2) == 0x8000_0000;
+    assert builtin::black_box(0 as u32).div_ceil(3) == 0;
+    assert builtin::black_box(u64::MAX).div_ceil(u64::MAX) == 1;
+    assert builtin::black_box(u64::MAX).div_ceil(2) == 0x8000_0000_0000_0000;
+}
+
+#[expect_trap]
+test "div_ceil traps on a zero divisor" {
+    builtin::black_box(builtin::black_box(1).div_ceil(0));
+}

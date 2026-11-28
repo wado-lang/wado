@@ -845,7 +845,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     /// Reject `impl From<source> for target` where the language provides the
     /// conversion (WEP: Conversion Traits).
-    fn reject_provided_from(&mut self, target: TypeId, source: TypeId, span: Span) {
+    fn reject_provided_from(&self, target: TypeId, source: TypeId, span: Span) {
         let (provided, header) = {
             let tt = self.tysys.type_table.borrow();
             if !tt.converts_without_impl(target, source) {
@@ -908,7 +908,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// and trait arguments alone, so one they never mention has no value to be
     /// given (Rust's E0207). A bound's arguments count as mentions, its subject
     /// does not; an effect parameter is bound by the handler.
-    fn check_impl_params_constrained(&mut self, impl_block: &ast::ImplBlock) {
+    fn check_impl_params_constrained(&self, impl_block: &ast::ImplBlock) {
         let mut named: Vec<String> = Vec::new();
         impl_block.ty.mentioned_names(&mut named);
         if let Some(trait_type) = &impl_block.trait_type {
@@ -950,7 +950,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     /// Require that an `impl` header's trait position names a trait, an
     /// `interface` or a resource, at the header's own reference site.
-    fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
+    fn check_impl_trait_resolves(&self, impl_block: &ast::ImplBlock, trait_type: &Type) {
         if self.impl_trait_decl(trait_type).is_some() {
             return;
         }
@@ -960,7 +960,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         });
     }
 
-    fn reject_second_effect_param(&mut self, type_params: &[ast::GenericParam]) {
+    fn reject_second_effect_param(&self, type_params: &[ast::GenericParam]) {
         if let Some(second) = type_params.iter().filter(|p| p.is_effect).nth(1) {
             let _ = self.emit(TypeError::SecondEffectParam { span: second.span });
         }
@@ -1206,7 +1206,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// type parameter. A projection supplies one type per parameter, so a pack,
     /// an effect or a default has nothing to take.
     pub(super) fn reject_unsupported_assoc_params(
-        &mut self,
+        &self,
         assoc_name: &str,
         params: &[ast::GenericParam],
     ) {
@@ -1269,13 +1269,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ctx: &mut FunctionContext,
     ) {
         let defaulted = self.apply_type_param_defaults(type_params, type_id);
-        let resolved = self.resolve_expr(default_ast, ctx, Some(defaulted));
-        let expected = if resolved == type_id {
-            type_id
-        } else {
-            defaulted
-        };
-        self.typecheck_value(default_ast, resolved, expected);
+        // A statement of its own: a report here stands for no slot another
+        // default leaves open.
+        self.in_statement(default_ast.span(), |s| {
+            let resolved = s.resolve_expr(default_ast, ctx, Some(defaulted));
+            let expected = if resolved == type_id {
+                type_id
+            } else {
+                defaulted
+            };
+            s.typecheck_value(default_ast, resolved, expected);
+        });
     }
 
     /// Bind a parameter in its function's body frame. A default is walked for
@@ -1348,25 +1352,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.tysys.type_table.borrow_mut().make_mut_ref(inner)
             }
             ast::SelfKind::None => self.resolve_type(&param.ty),
-        }
-    }
-
-    /// A by-value `self` transfers ownership, so a concrete aggregate takes it
-    /// only when it is affine. A generic aggregate's instance may be affine
-    /// through its arguments, so it is permitted.
-    fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {
-        let (is_concrete_value, type_name) = {
-            let tt = self.tysys.type_table.borrow();
-            let is_concrete_value = match tt.get(self_ty) {
-                ResolvedType::Enum { .. } => true,
-                ResolvedType::Struct { type_args, .. }
-                | ResolvedType::Variant { type_args, .. } => type_args.is_empty(),
-                _ => false,
-            };
-            (is_concrete_value, tt.name(self_ty))
-        };
-        if is_concrete_value && !self.tysys.carries_affine(self_ty) {
-            let _ = self.emit(TypeError::SelfByValueOnCopyable { type_name, span });
         }
     }
 
@@ -1502,7 +1487,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Reject a resource no other component can hold, anywhere within
     /// `type_id`, the type of `position` in the `export` `func`.
     fn check_export_resources(
-        &mut self,
+        &self,
         func: &ast::Function,
         position: String,
         type_id: TypeId,
@@ -1575,13 +1560,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Diagnose the first type in `position` of the `export fn` `function`
     /// that [`Self::unpublished_within`] finds.
-    fn check_published(
-        &mut self,
-        function: &Function,
-        position: &str,
-        type_id: TypeId,
-        span: Span,
-    ) {
+    fn check_published(&self, function: &Function, position: &str, type_id: TypeId, span: Span) {
         let module = self
             .tysys
             .resolutions
@@ -1713,20 +1692,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Diagnose a closure in parameter `param` of the import `function`. A bare
     /// closure crosses as a callback, which the host calls with scalars and handles.
     pub(super) fn check_import_param_closure(
-        &mut self,
+        &self,
         function: &str,
         param: &str,
         type_id: TypeId,
         span: Span,
     ) {
-        let callback = match self.tysys.type_table.borrow().get(type_id) {
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => Some((params.clone(), *return_type)),
-            _ => None,
-        };
+        let callback = self
+            .tysys
+            .type_table
+            .borrow()
+            .function_signature(type_id)
+            .map(|(params, return_type)| (params.to_vec(), return_type));
         let Some((params, return_type)) = callback else {
             if self.type_contains_closure(type_id) {
                 let _ = self.emit(TypeError::ClosureAtCmBoundary {
@@ -1745,7 +1722,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     ResolvedType::Primitive(p) if wado_primitive_name_to_cm(p.as_str()).is_some()
                 )
         };
-        let admitted = return_type == TypeTable::UNIT && params.iter().all(|&p| crosses(p));
+        let admitted = (return_type == TypeTable::UNIT || crosses(return_type))
+            && params.iter().all(|&p| crosses(p));
         drop(tt);
         if !admitted {
             let _ = self.emit(TypeError::CallbackAtCmBoundary {
@@ -1788,8 +1766,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         for (field, &type_id) in struct_decl.fields.iter().zip(field_types) {
             if let Some(default_ast) = &field.default {
-                let resolved = self.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
-                self.typecheck_value(default_ast, resolved, type_id);
+                self.in_statement(default_ast.span(), |s| {
+                    let resolved = s.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
+                    s.typecheck_value(default_ast, resolved, type_id);
+                });
             }
         }
     }
@@ -1973,7 +1953,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.restoring_decls(|this| {
             for func in bodies {
                 this.annotate_ctx.abstract_selections = Some(hashmap::IndexMap::default());
-                this.walk_trait_body(def, func);
+                this.as_body(|this| this.walk_trait_body(def, func));
                 let selections = this
                     .annotate_ctx
                     .abstract_selections
@@ -2041,12 +2021,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// [`Self::resolve_operation_param_defaults`] for a `trait`'s methods, whose
     /// scope binds `Self` as a slot rather than a concrete type.
     pub(super) fn resolve_trait_param_defaults(&mut self, trait_decl: &ast::TraitDecl) {
-        if !declares_a_default(&trait_decl.methods) {
+        let methods = bodiless_with_defaults(&trait_decl.methods);
+        if methods.is_empty() {
             return;
         }
         let (mut scope, _) = self.enter_trait_scope(trait_decl);
         scope.sem.decls.clear_fn_local_items();
-        for method in &trait_decl.methods {
+        for method in methods {
             let mut method_scope = scope.enter_inherited_type_param_scope();
             let method_def = method_scope.tysys.def_at(method.id);
             method_scope.register_generic_params(method_def, &method.type_params, 0);
@@ -2414,7 +2395,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// declaration says only what the language delivers. Each row pairs the
     /// offending shape with the message explaining why it cannot work.
     pub(super) fn reject_unsupported_operation_clauses(
-        &mut self,
+        &self,
         owner: &str,
         methods: &[ast::Function],
         kind: OperationOwner,
@@ -2507,7 +2488,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// is reported as any function with a body is: here, because a default no
     /// impl takes is walked nowhere else.
     pub(super) fn reject_declaration_attrs_on_requirement(
-        &mut self,
+        &self,
         owner: &str,
         method: &ast::Function,
     ) {
@@ -2554,7 +2535,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         methods: &[ast::Function],
         resource_self: Option<DefId>,
     ) {
-        if !declares_a_default(methods) {
+        let methods = bodiless_with_defaults(methods);
+        if methods.is_empty() {
             return;
         }
         let (mut scope, _) = self.enter_operation_scope(owner, type_params, resource_self);
@@ -2675,19 +2657,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Resolve a function for its facts.
     pub(super) fn resolve_function(&mut self, func: &Function) {
-        self.resolve_function_with_self(func, None);
+        self.as_body(|this| this.resolve_function_with_self(func, None));
     }
 
     /// [`Self::resolve_function`] on a resource operation's default, where
     /// `Self` is the resource of type `resource`.
     pub(super) fn resolve_resource_default(&mut self, func: &Function, resource: TypeId) {
-        self.resolve_function_with_self(
-            func,
-            Some(SelfBinding {
-                type_id: resource,
-                declaring_trait: None,
-            }),
-        );
+        let binding = SelfBinding {
+            type_id: resource,
+            declaring_trait: None,
+        };
+        self.as_body(|this| this.resolve_function_with_self(func, Some(binding)));
     }
 
     fn resolve_function_with_self(&mut self, func: &Function, self_binding: Option<SelfBinding>) {
@@ -3109,11 +3089,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         // method's lexical scope with earlier parameters already bound.
         assert_eq!(param_types.len(), func.params.len());
         for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
-            // A trait method's receiver is declared against `Self`, a generic
-            // type, so the trait's declaration decides it for every impl.
-            if param.self_kind == ast::SelfKind::Value && trait_name.is_none() {
-                self.check_self_by_value(type_id, param.span);
-            }
             self.bind_fn_param(param, type_id, &func.type_params, &mut ctx);
         }
 
@@ -3172,11 +3147,14 @@ impl TypeSystem {
     }
 }
 
-/// Whether any of `methods` gives a parameter a default.
-fn declares_a_default(methods: &[ast::Function]) -> bool {
+/// The methods giving a parameter a default that no body walk reaches. A
+/// method with a body walks its defaults in that body, and walking them again
+/// would rewrite facts one body already settled from another.
+fn bodiless_with_defaults(methods: &[ast::Function]) -> Vec<&ast::Function> {
     methods
         .iter()
-        .any(|m| m.params.iter().any(|p| p.default.is_some()))
+        .filter(|m| m.body.is_none() && m.params.iter().any(|p| p.default.is_some()))
+        .collect()
 }
 
 /// Which declaration an operation belongs to. A resource's operations take a

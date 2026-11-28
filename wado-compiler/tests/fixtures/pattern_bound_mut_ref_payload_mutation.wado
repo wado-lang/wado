@@ -1,0 +1,53 @@
+// A payload binding under a `&mut` scrutinee still reaches what the payload
+// holds in place, at any depth, and a generic body whose instance has an
+// in-place payload still replaces it.
+
+struct Point {
+    x: i32,
+}
+
+variant Shape {
+    Circle(Point),
+    Dot,
+}
+
+struct Holder {
+    shape: Shape,
+    count: i32,
+}
+
+fn overwrite<T>(slot: &mut Option<T>, value: T) {
+    if let Some(held) = slot {
+        *held = value;
+    }
+}
+
+test "a nested payload is mutated through a payload binding" {
+    let mut held: Option<Shape> = Option::Some(Shape::Circle(Point { x: 1 }));
+    if let Some(shape) = &mut held {
+        if let Circle(point) = shape {
+            point.x = 7;
+        }
+    }
+    assert held matches { Some(Circle(point)) && point.x == 7 };
+}
+
+test "a payload is mutated through a destructured field" {
+    let mut holder = Holder { shape: Shape::Circle(Point { x: 1 }), count: 0 };
+    let { shape, .. } = &mut holder;
+    if let Circle(point) = shape {
+        point.x = 7;
+    }
+    assert holder.shape matches { Circle(point) && point.x == 7 };
+}
+
+test "a generic body replaces an in-place payload" {
+    let mut point: Option<Point> = Option::Some(Point { x: 1 });
+    overwrite(&mut point, Point { x: 5 });
+    assert point.unwrap().x == 5;
+}
+
+__DATA__
+{
+    "test": {}
+}

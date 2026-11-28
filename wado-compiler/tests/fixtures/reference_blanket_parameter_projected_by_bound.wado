@@ -1,0 +1,85 @@
+// A blanket over a reference may hold a parameter its receiver does not
+// carry, set by a bound's associated type: the call binds it by projecting
+// the bound off the referent, as a value blanket's does.
+// Regression: the instance was keyed by the referent alone, so the projected
+// parameter stayed open and the call was refused at monomorphization.
+
+trait Source with () {
+    type Item;
+    fn first(&self) -> Self::Item;
+}
+
+trait Tag<A> with () {
+    fn tag(self) -> A;
+}
+
+impl<A, T: Source<Item = A>> Tag<A> for &T {
+    #[allow(self_by_value)]
+    fn tag(self) -> A { return (*self).first(); }
+}
+
+struct Ints { n: i32 }
+struct Words { w: String }
+
+impl Source for Ints {
+    type Item = i32;
+    fn first(&self) -> i32 { return self.n; }
+}
+
+impl Source for Words {
+    type Item = String;
+    fn first(&self) -> String { return self.w; }
+}
+
+fn tagged<A, X: Tag<A>>(x: X) -> A {
+    return x.tag();
+}
+
+fn through_bound<S: Source<Item = i32>>(s: &S) -> i32 {
+    return s.tag() + 1;
+}
+
+test "the call binds the projected parameter per referent" {
+    let ints = Ints { n: 7 };
+    let words = Words { w: "seven" };
+    assert (&ints).tag() == 7;
+    assert (&words).tag() == "seven";
+}
+
+test "and so does a call through a bound" {
+    let ints = Ints { n: 7 };
+    let words = Words { w: "seven" };
+    assert tagged::<i32, &Ints>(&ints) == 7;
+    assert tagged::<String, &Words>(&words) == "seven";
+    assert through_bound(&ints) == 8;
+}
+
+trait Pick<A> with () {
+    fn pick<B>(self, b: B) -> [A, B];
+}
+
+impl<A, T: Source<Item = A>> Pick<A> for &mut T {
+    #[allow(self_by_value)]
+    fn pick<B>(self, b: B) -> [A, B] { return [(*self).first(), b]; }
+}
+
+fn picked<S: Source<Item = i32>>(s: &mut S) -> [i32, bool] {
+    return s.pick(true);
+}
+
+test "a blanket over `&mut` whose method takes a parameter of its own" {
+    let mut ints = Ints { n: 7 };
+    let [n, s] = (&mut ints).pick("x");
+    assert n == 7 && s == "x";
+    let [m, t] = picked(&mut ints);
+    assert m == 7 && t;
+}
+
+type IntsRef = &Ints;
+
+// Regression: the bound's dispatch took the enclosing function's arguments
+// for the blanket's, so `T` was the newtype and `A` whatever came first.
+test "a newtype over the reference reaches the blanket through its base" {
+    let ints = Ints { n: 7 };
+    assert tagged::<i32, IntsRef>(&ints as IntsRef) == 7;
+}

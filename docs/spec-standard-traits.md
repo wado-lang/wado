@@ -11,7 +11,7 @@ The prelude defines iterator traits for generic iteration over collections.
 
 ### Iterator - Core Iteration Trait
 
-<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/iter.wado"} -->
 
 ```wado
 pub affine trait Iterator with _ {
@@ -47,9 +47,47 @@ test {
 }
 ```
 
+A copyable iterator is a value like any other. A loop over it, or an adapter
+called on it, takes a copy and leaves the iterator where it was. A `&mut` to an
+iterator is itself an iterator, one that advances what it points to:
+
+<!-- {"fixture":"iterator_through_mut_reference.wado"} -->
+
+```wado
+test "a loop over the iterator itself walks a copy" {
+    let mut r = 0..<5;
+    for let x of r { if x == 1 { break; } }
+    assert r.next() matches { Some(0) };
+}
+
+test "a loop over `&mut it` advances it" {
+    let mut r = 0..<5;
+    for let x of &mut r { if x == 1 { break; } }
+    assert r.next() matches { Some(2) };
+}
+```
+
+So a function handed a `&mut I` advances its caller's iterator, by a loop or
+by an adapter, and a function taking any `I: Iterator` accepts `&mut it`.
+`it.by_ref()` is `&mut it`, for the middle of a method chain.
+
+<!-- {"fixture":"iterator_through_mut_reference.wado"} -->
+
+```wado
+fn first_two<I: Iterator<Item = i32>>(it: &mut I) -> List<i32> with _ {
+    return it.take(2).collect();
+}
+
+test "an adapter called on a `&mut I` advances the caller's iterator" {
+    let mut r = 0..<5;
+    assert first_two(&mut r) == [0, 1];
+    assert r.next() matches { Some(2) };
+}
+```
+
 ### IntoIterator - Conversion Trait
 
-<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/iter.wado"} -->
 
 ```wado
 pub affine trait IntoIterator with _ {
@@ -63,7 +101,7 @@ pub affine trait IntoIterator with _ {
 
 ### FromIterator - Collection Construction
 
-<!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
+<!-- {"source": "wado-compiler/lib/core/prelude/iter.wado"} -->
 
 ```wado
 /// Trait for creating a collection from any iterator of `Elem`.

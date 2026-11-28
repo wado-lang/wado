@@ -3,7 +3,7 @@
 //! reference a local index, every call a resolved target, and all syntactic
 //! sugar is already desugared.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -231,6 +231,12 @@ pub struct AssocParamId {
 }
 
 /// What a use site fills a declaration's parameters with.
+///
+/// Keyed by the parameter itself. A slot carries its own index, and only the
+/// declaration knows which index each of its parameters holds — a generic,
+/// `&`-target, blanket or variadic-tuple impl numbers its slots differently,
+/// and a partially concrete target leaves gaps no positional list can express.
+/// `impl<T, ..F> Emit for T` is enough to break a positional reconstruction.
 pub type TypeArgMap = IndexMap<TypeParamId, TypeId>;
 
 /// `args` filling `owner`'s parameters in declaration order, which is how a
@@ -241,174 +247,6 @@ pub fn positional_substitution(owner: DefId, args: &[TypeId]) -> TypeArgMap {
         .zip(args)
         .map(|(index, &arg)| (TypeParamId { owner, index }, arg))
         .collect()
-}
-
-/// What a use site chose for a declaration's type parameters.
-///
-/// Keyed by the parameter itself. A slot carries its own index, and only the
-/// declaration knows which index each of its parameters holds — a generic,
-/// `&`-target, blanket or variadic-tuple impl numbers its slots differently,
-/// and a partially concrete target leaves gaps no positional list can express.
-/// Keying by position asks the caller to reconstruct that, which it cannot;
-/// `impl<T, ..F> Emit for T` is enough to break the reconstruction.
-/// `instantiate_call` takes the same view.
-#[derive(Debug, Clone, Default)]
-pub struct SubstitutionContext {
-    substitutions: IndexMap<TypeId, TypeId>,
-}
-
-impl SubstitutionContext {
-    pub fn new() -> Self {
-        Self {
-            substitutions: IndexMap::default(),
-        }
-    }
-
-    /// Bind a declaration's type parameters to the arguments a use site chose.
-    ///
-    /// `params` are the parameters as the declaration holds them: a lookup
-    /// reports them, a declaration record carries them. Nothing recomputes
-    /// them. Parameters past the end of `args` stay unbound.
-    pub fn bind(mut self, params: &[TypeId], args: &[TypeId]) -> Self {
-        for (&param, &arg) in params.iter().zip(args.iter()) {
-            self.substitutions.insert(param, arg);
-        }
-        self
-    }
-
-    /// Substitute type parameters in a type
-    pub fn substitute(&self, type_id: TypeId, type_table: &mut TypeTable) -> TypeId {
-        match type_table.get(type_id).clone() {
-            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => {
-                self.substitutions.get(&type_id).copied().unwrap_or(type_id)
-            }
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_name,
-                args,
-                owning_trait,
-                trait_args,
-                assoc_type_bindings,
-            } => {
-                let concrete_id = self.substitute(param_id, type_table);
-                let new_args: Vec<TypeId> = args
-                    .iter()
-                    .map(|&a| self.substitute(a, type_table))
-                    .collect();
-                let new_trait_args: Option<Vec<TypeId>> = trait_args.as_ref().map(|given| {
-                    given
-                        .iter()
-                        .map(|&a| self.substitute(a, type_table))
-                        .collect()
-                });
-                if let Some(resolved) = type_table.answer_projection(
-                    concrete_id,
-                    &owning_trait,
-                    new_trait_args.as_deref(),
-                    &assoc_name,
-                    &new_args,
-                ) {
-                    return resolved;
-                }
-                // The associated type cannot be resolved yet because the
-                // projected parameter is still abstract (e.g. substituting
-                // `I::Item` with `I -> I`, or `I -> some other type param`).
-                // Preserve the projection over the substituted parameter
-                // rather than collapsing to the bare parameter, so later
-                // monomorphization can resolve `concrete::assoc_name`. What it
-                // carries is written in the same frame, so it substitutes too.
-                let new_bindings: Vec<(String, TypeId)> = assoc_type_bindings
-                    .iter()
-                    .map(|(name, bound)| (name.clone(), self.substitute(*bound, type_table)))
-                    .collect();
-                if concrete_id == param_id
-                    && new_args == args
-                    && new_trait_args == trait_args
-                    && new_bindings == assoc_type_bindings
-                {
-                    type_id
-                } else {
-                    type_table.make_assoc_type_projection(
-                        concrete_id,
-                        owning_trait,
-                        new_trait_args,
-                        assoc_name,
-                        new_args,
-                        new_bindings,
-                    )
-                }
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                let new_elem = self.substitute(elem, type_table);
-                type_table.make_builtin_array(new_elem)
-            }
-            ResolvedType::Ref(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.make_ref(new_inner)
-            }
-            ResolvedType::MutRef(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.make_mut_ref(new_inner)
-            }
-            ResolvedType::Tuple(elems) => {
-                let mut new_elems: Vec<TypeId> = Vec::new();
-                for &elem in &elems {
-                    // A pack in a tuple stands for the elements it took, not
-                    // for the tuple holding them: `[..T]` with `T = [i32,
-                    // bool]` is `[i32, bool]`, never `[[i32, bool]]`.
-                    let is_plain_pack = matches!(
-                        type_table.get(elem),
-                        ResolvedType::TypePack {
-                            mapped_elem: None,
-                            ..
-                        }
-                    );
-                    let substituted = self.substitute(elem, type_table);
-                    if is_plain_pack
-                        && substituted != elem
-                        && let Some(elements) = type_table.as_tuple(substituted)
-                    {
-                        new_elems.extend(elements);
-                        continue;
-                    }
-                    new_elems.push(substituted);
-                }
-                type_table.make_tuple(new_elems)
-            }
-            ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                type_args,
-            }
-            | ResolvedType::Variant { def, type_args }
-            | ResolvedType::Resource { def, type_args } => {
-                let new_args: Vec<TypeId> = type_args
-                    .iter()
-                    .map(|&arg| self.substitute(arg, type_table))
-                    .collect();
-                type_table.make_generic_instance(def, new_args)
-            }
-            ResolvedType::Function {
-                is_mut,
-                params,
-                return_type,
-                effects,
-            } => {
-                let new_params: Vec<TypeId> = params
-                    .iter()
-                    .map(|&p| self.substitute(p, type_table))
-                    .collect();
-                let new_return = self.substitute(return_type, type_table);
-                type_table.make_function_with_mut(is_mut, new_params, new_return, effects)
-            }
-            // Other types don't contain type parameters
-            _ => type_id,
-        }
-    }
-
-    /// Check if this context has any substitutions
-    pub fn is_empty(&self) -> bool {
-        self.substitutions.is_empty()
-    }
 }
 
 /// Type identifier for resolved types in TIR.
@@ -423,11 +261,13 @@ impl std::fmt::Display for TypeId {
 }
 
 /// A set of heap object types, keyed by [`TypeTable::heap_object_key`]; `any`
-/// stands for every type.
+/// stands for every type. The keys are sorted, so a union or a meet merges two
+/// lists rather than hashing every key: the heap-effect summaries do one per
+/// parameter and depth a call reaches.
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 pub struct ObjectTypes {
     any: bool,
-    keys: IndexSet<TypeId>,
+    keys: Vec<TypeId>,
 }
 
 impl ObjectTypes {
@@ -435,7 +275,7 @@ impl ObjectTypes {
     pub fn everything() -> Self {
         Self {
             any: true,
-            keys: IndexSet::default(),
+            keys: Vec::new(),
         }
     }
 
@@ -443,7 +283,7 @@ impl ObjectTypes {
     pub fn one(key: TypeId) -> Self {
         Self {
             any: false,
-            keys: std::iter::once(key).collect(),
+            keys: vec![key],
         }
     }
 
@@ -452,7 +292,7 @@ impl ObjectTypes {
         self.any
     }
 
-    /// The keys of a set that is not [`Self::is_any`].
+    /// The keys of a set that is not [`Self::is_any`], in ascending order.
     pub fn keys(&self) -> impl Iterator<Item = TypeId> + '_ {
         assert!(!self.any, "an `any` set has no key list");
         self.keys.iter().copied()
@@ -460,7 +300,7 @@ impl ObjectTypes {
 
     /// Whether `key` is in the set.
     pub fn contains(&self, key: TypeId) -> bool {
-        self.any || self.keys.contains(&key)
+        self.any || self.keys.binary_search(&key).is_ok()
     }
 
     /// Whether the set has no type.
@@ -470,8 +310,10 @@ impl ObjectTypes {
 
     /// Add `key`.
     pub fn insert(&mut self, key: TypeId) {
-        if !self.any {
-            self.keys.insert(key);
+        if !self.any
+            && let Err(at) = self.keys.binary_search(&key)
+        {
+            self.keys.insert(at, key);
         }
     }
 
@@ -486,7 +328,7 @@ impl ObjectTypes {
         if other.any {
             self.set_any();
         } else if !self.any {
-            self.keys.extend(other.keys.iter().copied());
+            self.merge(&other.keys);
         }
     }
 
@@ -496,7 +338,7 @@ impl ObjectTypes {
             (true, true) => true,
             (true, false) => !other.keys.is_empty(),
             (false, true) => !self.keys.is_empty(),
-            (false, false) => self.keys.iter().any(|k| other.keys.contains(k)),
+            (false, false) => intersection(&self.keys, &other.keys).next().is_some(),
         }
     }
 
@@ -512,15 +354,82 @@ impl ObjectTypes {
             (false, true) => {
                 self.union(a);
             }
-            (false, false) => {
-                for &k in &a.keys {
-                    if b.keys.contains(&k) {
-                        self.insert(k);
-                    }
+            (false, false) if !self.any => {
+                let met: Vec<TypeId> = intersection(&a.keys, &b.keys).collect();
+                self.merge(&met);
+            }
+            (false, false) => {}
+        }
+    }
+
+    /// Add the sorted `other` to the sorted keys.
+    fn merge(&mut self, other: &[TypeId]) {
+        if other.is_empty() {
+            return;
+        }
+        if self.keys.is_empty() {
+            self.keys.extend_from_slice(other);
+            return;
+        }
+        // Most unions add nothing: find the first key `other` adds before
+        // building a new list.
+        let (mut i, mut j) = (0, 0);
+        while j < other.len() {
+            match self.keys.get(i).map(|k| k.cmp(&other[j])) {
+                Some(std::cmp::Ordering::Less) => i += 1,
+                Some(std::cmp::Ordering::Equal) => {
+                    i += 1;
+                    j += 1;
+                }
+                Some(std::cmp::Ordering::Greater) | None => break,
+            }
+        }
+        if j == other.len() {
+            return;
+        }
+        let mut merged = Vec::with_capacity(self.keys.len() + other.len() - j);
+        merged.extend_from_slice(&self.keys[..i]);
+        while i < self.keys.len() && j < other.len() {
+            match self.keys[i].cmp(&other[j]) {
+                std::cmp::Ordering::Less => {
+                    merged.push(self.keys[i]);
+                    i += 1;
+                }
+                std::cmp::Ordering::Greater => {
+                    merged.push(other[j]);
+                    j += 1;
+                }
+                std::cmp::Ordering::Equal => {
+                    merged.push(self.keys[i]);
+                    i += 1;
+                    j += 1;
                 }
             }
         }
+        merged.extend_from_slice(&self.keys[i..]);
+        merged.extend_from_slice(&other[j..]);
+        self.keys = merged;
     }
+}
+
+/// The keys two sorted lists share, in order.
+fn intersection<'a>(a: &'a [TypeId], b: &'a [TypeId]) -> impl Iterator<Item = TypeId> + 'a {
+    let (mut i, mut j) = (0, 0);
+    std::iter::from_fn(move || {
+        while i < a.len() && j < b.len() {
+            match a[i].cmp(&b[j]) {
+                std::cmp::Ordering::Less => i += 1,
+                std::cmp::Ordering::Greater => j += 1,
+                std::cmp::Ordering::Equal => {
+                    let k = a[i];
+                    i += 1;
+                    j += 1;
+                    return Some(k);
+                }
+            }
+        }
+        None
+    })
 }
 
 /// Identity of an inference variable — see [`ResolvedType::InferVar`].
@@ -849,6 +758,16 @@ pub enum ResolvedType {
         id: TypeParamId,
         mapped_elem: Option<TypeId>,
     },
+    /// An inference variable standing for a pack inside a tuple, which its
+    /// answer, a tuple, splices into: a use site instantiates a
+    /// [`ResolvedType::TypePack`] into one. Outside a tuple the variable is
+    /// the plain [`ResolvedType::InferVar`], the whole list as one type
+    /// argument. `mapped_elem` is a pack's, with the variable itself standing
+    /// for element `i` in it.
+    PackVar {
+        var: InferVarId,
+        mapped_elem: Option<TypeId>,
+    },
     /// One element of an identity pack: what `for let v of t` over `t: [..T]`
     /// binds `v` to. Apart from the pack because a tuple splices a pack it
     /// holds: `[v, 7]` is `[T_k, i32]`, where the pack would make it
@@ -1019,8 +938,74 @@ pub struct TirExpr {
     /// What a pass decided about this node, written where it decided it while
     /// it held the body by reference. The node is its own identity: a span is
     /// none, since every synthesized node shares one, and a copy carries the
-    /// decision along.
-    marks: Cell<ExprMarks>,
+    /// decision along. Atomic so lowering's ownership walk can mark the bodies
+    /// of different functions on different threads.
+    marks: MarkCell,
+}
+
+/// An [`ExprMarks`] packed into one atomic byte.
+#[derive(Default)]
+struct MarkCell(std::sync::atomic::AtomicU8);
+
+impl MarkCell {
+    const IN_PLACE: u8 = 1;
+    const MOVES: u8 = 2;
+    const WRITTEN: u8 = 4;
+    const EXTENDED: u8 = 8;
+
+    fn unpack(bits: u8) -> ExprMarks {
+        ExprMarks {
+            in_place: bits & Self::IN_PLACE != 0,
+            moves: bits & Self::MOVES != 0,
+            written: bits & Self::WRITTEN != 0,
+            extended: bits & Self::EXTENDED != 0,
+        }
+    }
+
+    fn pack(marks: ExprMarks) -> u8 {
+        [
+            (marks.in_place, Self::IN_PLACE),
+            (marks.moves, Self::MOVES),
+            (marks.written, Self::WRITTEN),
+            (marks.extended, Self::EXTENDED),
+        ]
+        .into_iter()
+        .filter(|(set, _)| *set)
+        .fold(0, |bits, (_, bit)| bits | bit)
+    }
+
+    fn get(&self) -> ExprMarks {
+        Self::unpack(self.0.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    fn set(&self, marks: ExprMarks) {
+        self.0
+            .store(Self::pack(marks), std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Rewrite the marks in one atomic step, so no other thread's mark is lost.
+    fn update(&self, mut f: impl FnMut(&mut ExprMarks)) {
+        let relaxed = std::sync::atomic::Ordering::Relaxed;
+        self.0.update(relaxed, relaxed, |bits| {
+            let mut marks = Self::unpack(bits);
+            f(&mut marks);
+            Self::pack(marks)
+        });
+    }
+}
+
+impl Clone for MarkCell {
+    fn clone(&self) -> Self {
+        let copy = Self::default();
+        copy.set(self.get());
+        copy
+    }
+}
+
+impl std::fmt::Debug for MarkCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.get().fmt(f)
+    }
 }
 
 /// What lowering's ownership walk decided about one expression.
@@ -1047,7 +1032,7 @@ impl TirExpr {
             kind,
             type_id,
             span,
-            marks: Cell::default(),
+            marks: MarkCell::default(),
         }
     }
 
@@ -1056,10 +1041,8 @@ impl TirExpr {
         self.marks.get()
     }
 
-    pub fn mark(&self, set: impl FnOnce(&mut ExprMarks)) {
-        let mut marks = self.marks.get();
-        set(&mut marks);
-        self.marks.set(marks);
+    pub fn mark(&self, set: impl FnMut(&mut ExprMarks)) {
+        self.marks.update(set);
     }
 
     /// Replace `self` with `with`, the same value spelled another way, which
@@ -4072,9 +4055,8 @@ pub struct TirTest {
     /// a distinct message when the body unexpectedly passes, reminding the developer
     /// to remove the `#[TODO]` attribute.
     pub is_todo: bool,
-    /// Per-test timeout in milliseconds (from `#[timeout_ms(N)]` attribute).
-    /// `None` means use the default timeout (1 second).
-    pub timeout_ms: Option<u64>,
+    /// What `#[timeout(seconds = N)]` wrote. `None` leaves the runner's default.
+    pub timeout_seconds: Option<u64>,
     pub is_synopsis: bool,
     pub is_workload: bool,
 }

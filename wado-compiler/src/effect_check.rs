@@ -14,6 +14,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::{Lints, demanded_imports};
 
 use crate::component_model::{CmInterfaceRegistry, Demand};
+use crate::graph::Reachability;
 use crate::module_source::ModuleSource;
 use crate::name::{
     DeclaredHead, FqTraitName, FqTypeName, TypeHead, is_wasi_fq, mangle_local_method,
@@ -665,15 +666,7 @@ fn run_effect_checks(
                         .collect();
                     let mentioned: Option<Vec<EffectRef>> = trait_key
                         .and_then(|key| index.interfaces.get(&key))
-                        .map(|(effect, _)| {
-                            index
-                                .mentions
-                                .get(effect)
-                                .into_iter()
-                                .flatten()
-                                .cloned()
-                                .collect()
-                        });
+                        .map(|(effect, _)| index.mentions.implied(effect).cloned().collect());
                     for method in &impl_block.methods {
                         let inherits_ambient = trait_key.is_some_and(|key| {
                             index
@@ -1056,6 +1049,7 @@ pub(crate) struct OwnedEffectData {
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    trait_method_decls: IndexMap<TraitMethodKey, AstId>,
     /// The trait methods whose `#[ambient(_)]` every impl inherits.
     ambient_trait_methods: IndexSet<TraitMethodKey>,
     /// The traits that leave their effects to the impl — a `with _` head, or a
@@ -1086,8 +1080,8 @@ pub(crate) struct OwnedEffectData {
     forwarding_blocks: IndexSet<DefId>,
     resources: IndexSet<EffectRef>,
     drop_is_an_operation: IndexSet<DefId>,
-    closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
-    mentions: IndexMap<EffectRef, IndexSet<EffectRef>>,
+    closure: Propagation,
+    mentions: Propagation,
     waiting: IndexSet<EffectRef>,
     /// Each interface and resource declaration's effect and `#[cm]` FQ.
     interfaces: IndexMap<DefId, (EffectRef, Option<String>)>,
@@ -1182,6 +1176,7 @@ impl OwnedEffectData {
         // A declaration has no body, so `fn_effects` holds nothing for it.
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
+        let mut trait_method_decls: IndexMap<TraitMethodKey, AstId> = IndexMap::default();
         let mut open_traits: IndexSet<DefId> = IndexSet::default();
         let mut supertraits: IndexMap<DefId, Vec<DefId>> = IndexMap::default();
         // The trait methods that write no clause of their own, so the head's
@@ -1212,6 +1207,7 @@ impl OwnedEffectData {
                         .map(|effect| resolutions.effect_named(effect, src))
                         .collect();
                     trait_method_effects.insert((def, method.name.clone()), effects);
+                    trait_method_decls.insert((def, method.name.clone()), method.id);
                     if method.effects_source == ast::EffectsSource::Inherited {
                         head_methods.insert((def, method.name.clone()));
                     }
@@ -1354,7 +1350,7 @@ impl OwnedEffectData {
                     .effect_decl(def)
                     .expect("an interface or resource is an effect");
                 if answers_cm_fq
-                    && closure.contains_key(&key)
+                    && closure.declares(&key)
                     && let Some(fq) = &cm_fq
                 {
                     effect_by_cm_fq.entry(fq.clone()).or_insert(key.clone());
@@ -1383,6 +1379,7 @@ impl OwnedEffectData {
             mangled_index,
             mangled_params,
             trait_method_effects,
+            trait_method_decls,
             ambient_trait_methods,
             open_traits,
             supertraits,
@@ -1416,6 +1413,7 @@ impl OwnedEffectData {
             mangled_index: &self.mangled_index,
             mangled_params: &self.mangled_params,
             trait_method_effects: &self.trait_method_effects,
+            trait_method_decls: &self.trait_method_decls,
             ambient_trait_methods: &self.ambient_trait_methods,
             open_traits: &self.open_traits,
             supertraits: &self.supertraits,
@@ -1459,6 +1457,7 @@ struct EffectIndex<'a> {
     /// Trait method → the effects it declares. A call through a type
     /// parameter's bound selects no impl, so this is what it can demand.
     trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    trait_method_decls: &'a IndexMap<TraitMethodKey, AstId>,
     ambient_trait_methods: &'a IndexSet<TraitMethodKey>,
     /// The traits that leave their effects to the impl.
     open_traits: &'a IndexSet<DefId>,
@@ -1484,10 +1483,10 @@ struct EffectIndex<'a> {
     /// operation rather than the release.
     drop_is_an_operation: &'a IndexSet<DefId>,
     /// Effect → implied resources propagation closure.
-    closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
+    closure: &'a Propagation,
     /// The same closure through what operations mention alone, leaving out
     /// the `extends` families: what a handler holds.
-    mentions: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
+    mentions: &'a Propagation,
     /// What waiting on an `AsyncCall` demands, held where the call starts.
     waiting: &'a IndexSet<EffectRef>,
     /// Interface or resource declaration → its effect and `#[cm]` FQ.
@@ -1556,7 +1555,7 @@ fn binding_granted_effects(
             .effects
             .iter()
             .map(|entry| EffectRef::Concrete(entry.effect.clone()))
-            .filter(|effect| index.closure.contains_key(effect))
+            .filter(|effect| index.closure.declares(effect))
             .collect();
         granted = Some(match granted {
             None => walk,
@@ -2064,7 +2063,7 @@ fn build_propagation_closure_sem(
     state: &AnnotateState,
     members: &MemberTables,
     families: Families,
-) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
+) -> Propagation {
     let resolutions = &*state.tysys.resolutions;
     let scan = ResourceScan {
         tt: types,
@@ -2121,38 +2120,62 @@ fn build_propagation_closure_sem(
         }
     }
 
-    // Transitive closure to a fixpoint.
-    loop {
-        let mut changed = false;
-        let keys: Vec<EffectRef> = direct.keys().cloned().collect();
-        for key in &keys {
-            let cur = direct.get(key).cloned().unwrap_or_default();
-            let mut merged = cur.clone();
-            for eff in &cur {
-                if matches!(eff, EffectRef::Concrete(_))
-                    && let Some(child) = direct.get(eff).cloned()
-                {
-                    for e in &child {
-                        if merged.insert(e.clone()) {
-                            changed = true;
-                        }
-                    }
-                }
-            }
-            if merged.len() != cur.len() {
-                direct.insert(key.clone(), merged);
-            }
-        }
-        if !changed {
-            break;
+    Propagation::closing(&direct)
+}
+
+/// What each effect implies, transitively. An `extends` family is a cycle whose
+/// every member implies every other, so the sets are held per component of the
+/// graph and never one per effect.
+struct Propagation {
+    /// The declarations that imply, then what only they imply.
+    effects: IndexSet<EffectRef>,
+    /// How many of `effects` are declarations.
+    declared: usize,
+    reach: Reachability,
+}
+
+impl Propagation {
+    fn closing(direct: &IndexMap<EffectRef, IndexSet<EffectRef>>) -> Self {
+        assert!(
+            direct
+                .keys()
+                .all(|effect| matches!(effect, EffectRef::Concrete(_))),
+            "a declaration's effect is concrete"
+        );
+        let mut effects: IndexSet<EffectRef> = direct.keys().cloned().collect();
+        let mut successors: Vec<Vec<usize>> = direct
+            .values()
+            .map(|implied| {
+                let nodes = implied
+                    .iter()
+                    .map(|effect| effects.insert_full(effect.clone()).0);
+                nodes.collect()
+            })
+            .collect();
+        successors.resize(effects.len(), Vec::new());
+        Self {
+            declared: direct.len(),
+            reach: Reachability::new(&successors),
+            effects,
         }
     }
-    // A family's cycle leads each member back to itself, and what an effect
-    // implies is what it is not.
-    for (key, implied) in &mut direct {
-        implied.shift_remove(key);
+
+    /// Whether `effect` is a declaration this closure was built over.
+    fn declares(&self, effect: &EffectRef) -> bool {
+        self.effects
+            .get_index_of(effect)
+            .is_some_and(|node| node < self.declared)
     }
-    direct
+
+    /// What holding `effect` implies. A family's cycle leads each member back
+    /// to itself, and what an effect implies is what it is not.
+    fn implied<'a>(&'a self, effect: &EffectRef) -> impl Iterator<Item = &'a EffectRef> + use<'a> {
+        let node = self.effects.get_index_of(effect);
+        node.into_iter().flat_map(move |node| {
+            let reached = self.reach.reached_from(node).filter(move |&n| n != node);
+            reached.map(|n| &self.effects[n])
+        })
+    }
 }
 
 /// The effect an attribute argument written in `module` refers to. It has no
@@ -2169,18 +2192,12 @@ fn effect_named_in(name: &str, module: &ModuleSource, index: &EffectIndex) -> Op
 /// Expand an effect set through the propagation closure.
 fn expand_through_closure(
     effects: &IndexSet<EffectRef>,
-    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
+    closure: &Propagation,
 ) -> IndexSet<EffectRef> {
     let mut out: IndexSet<EffectRef> = IndexSet::default();
     for effect in effects {
         out.insert(effect.clone());
-        if matches!(effect, EffectRef::Concrete(_))
-            && let Some(extra) = closure.get(effect)
-        {
-            for e in extra {
-                out.insert(e.clone());
-            }
-        }
+        out.extend(closure.implied(effect).cloned());
     }
     out
 }
@@ -2466,10 +2483,11 @@ fn dispatch_effects(
 ) -> (Resolved, OperationDemands) {
     // A synthesized template (a derived method) is a method of the type it is
     // derived for, so it takes `self`.
-    let has_receiver = match func_ref.template.as_ref().and_then(TemplateId::def) {
-        Some(def) => index
-            .receiver_methods
-            .contains(&index.resolutions.defs().ast_id(def)),
+    let declaration = index
+        .template_body(func_ref)
+        .or_else(|| index.bound_dispatch_decl(func_ref));
+    let has_receiver = match declaration {
+        Some(declaration) => index.receiver_methods.contains(&declaration),
         None => func_ref.method_info.is_some(),
     };
     let effects = index.method_effects(func_ref);
@@ -2988,12 +3006,37 @@ impl EffectIndex<'_> {
 
     /// Parameter type ids for a method / static dispatch target.
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
-        self.callee_entry(func_ref, self.fn_params, self.mangled_params)
+        match self.bound_dispatch_decl(func_ref) {
+            Some(declaration) => self
+                .fn_params
+                .get(&declaration)
+                .cloned()
+                .unwrap_or_default(),
+            None => self.callee_entry(func_ref, self.fn_params, self.mangled_params),
+        }
     }
 
     /// The declared return type of the declaration a dispatch selected.
     fn callee_return(&self, func_ref: &FunctionRef) -> Option<TypeId> {
-        self.fn_returns.get(&self.template_body(func_ref)?).copied()
+        let declaration = self
+            .template_body(func_ref)
+            .or_else(|| self.bound_dispatch_decl(func_ref))?;
+        self.fn_returns.get(&declaration).copied()
+    }
+
+    /// The trait's own declaration of the method a dispatch through a bound
+    /// names. Such a dispatch selects no template, so that declaration is the
+    /// signature its call instantiates.
+    fn bound_dispatch_decl(&self, func_ref: &FunctionRef) -> Option<AstId> {
+        if func_ref.template.is_some() {
+            return None;
+        }
+        let method_info = func_ref.method_info.as_ref()?;
+        let key = (
+            method_info.trait_name.as_ref()?.canonical()?,
+            method_info.declared_method_name().to_string(),
+        );
+        self.trait_method_decls.get(&key).copied()
     }
 
     /// The declaration whose body a dispatch to `func_ref` runs.
@@ -3394,7 +3437,8 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 .cloned()
                 .collect();
             for info in &iterators {
-                for func_ref in [&info.into_iter, &info.next] {
+                let start = info.start.as_ref().map(|start| &start.func);
+                for func_ref in start.into_iter().chain([&info.next]) {
                     let (resolved, resource) = dispatch_effects(
                         self.sem,
                         self.index,

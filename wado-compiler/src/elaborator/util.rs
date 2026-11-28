@@ -256,7 +256,7 @@ impl SettledPattern {
 pub(super) fn settle_instance_pattern(
     pattern: &InstancePattern,
     scrutinee: TypeId,
-    type_table: &mut TypeTable,
+    type_table: &TypeTable,
 ) -> Result<SettledPattern, Vec<PatternLiteralError>> {
     let is_unsigned = type_table.is_unsigned_int(type_table.peel_refs(scrutinee));
     let format = float_format(scrutinee, type_table);
@@ -322,7 +322,7 @@ pub(super) fn settle_instance_pattern(
 pub(crate) fn lower_instance_pattern(
     pattern: &InstancePattern,
     scrutinee: TypeId,
-    type_table: &mut TypeTable,
+    type_table: &TypeTable,
     add_local: impl FnMut(String, TypeId) -> u32,
     span: Span,
 ) -> Result<TirPattern, Vec<PatternLiteralError>> {
@@ -686,7 +686,7 @@ pub(super) fn float_range(
     end: &RangeBound,
     inclusive: bool,
     scrutinee: TypeId,
-    type_table: &mut TypeTable,
+    type_table: &TypeTable,
 ) -> Result<FloatRange, Vec<PatternLiteralError>> {
     let values = [start, end].map(|bound| bound_value(bound, scrutinee, type_table));
     let [
@@ -735,7 +735,7 @@ pub(super) enum BoundValue {
 pub(super) fn bound_value(
     bound: &RangeBound,
     scrutinee: TypeId,
-    type_table: &mut TypeTable,
+    type_table: &TypeTable,
 ) -> Result<BoundValue, PatternLiteralError> {
     let scrutinee = type_table.peel_refs(scrutinee);
     match (bound, float_format(scrutinee, type_table)) {
@@ -947,7 +947,7 @@ impl PatternLiteralError {
 pub(super) fn pattern_literal_error(
     lit: &PatternLiteral,
     scrutinee: TypeId,
-    type_table: &mut TypeTable,
+    type_table: &TypeTable,
 ) -> Option<PatternLiteralError> {
     let scrutinee = type_table.peel_refs(scrutinee);
     if let Some(expected) = pattern_literal_mismatch(lit, scrutinee, type_table) {
@@ -975,7 +975,7 @@ pub(super) fn pattern_literal_error(
 fn pattern_literal_mismatch(
     lit: &PatternLiteral,
     scrutinee: TypeId,
-    type_table: &mut TypeTable,
+    type_table: &TypeTable,
 ) -> Option<String> {
     let scrutinee = type_table.peel_refs(scrutinee);
     let head = type_table.representation_head(scrutinee);

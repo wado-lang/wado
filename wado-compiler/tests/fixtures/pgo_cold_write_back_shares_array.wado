@@ -1,0 +1,65 @@
+// A cold call handed a literal rebuilt from a split local's slots writes the
+// array the slot still holds: the literal and the slot share one handle, so a
+// compile-time run of the call must not leave the slot's bytes as they were.
+struct Buf {
+    repr: Array<u8>,
+    used: i32,
+}
+
+impl Buf {
+    fn reserve(&mut self, n: i32) -> i32 {
+        let new_used = self.used + n;
+        if new_used > self.repr.len() {
+            let mut grown = Array::<u8>::new(new_used * 2);
+            for let i of 0..<self.used {
+                grown[i] = self.repr[i];
+            }
+            self.repr = grown;
+        }
+        let start = self.used;
+        self.used = new_used;
+        return start;
+    }
+
+    fn set(&mut self, index: i32, byte: u8) {
+        unchecked self.set_at(index, byte);
+    }
+
+    fn set_at(&mut self, index: i32, byte: u8)
+        contract 0 <= index < self.used
+    {
+        self.repr[index] = byte;
+    }
+
+    fn push(&mut self, code: i32) {
+        if code < 128 {
+            let start = self.reserve(1);
+            self.set(start, code as u8);
+            return;
+        }
+        self.repr[self.used] = 0xC0;
+        self.used += 1;
+    }
+}
+
+fn encode(input: String) -> Buf {
+    let mut out = Buf { repr: Array::<u8>::new(input.len()), used: 0 };
+    for let c of input.chars() {
+        out.push(c as i32);
+    }
+    return out;
+}
+
+test "a folded cold write reaches the shared array" {
+    let b = encode("hi");
+    assert b.used == 2;
+    assert b.repr[0] == 104;
+    assert b.repr[1] == 105;
+}
+
+__DATA__
+{
+  "test": {},
+  "profile": "testdata/pgo_cold_write_back_shares_array.pgo",
+  "marked_regions": ["pgo_cold_write_back_shares_array.wado:35:23 then unlikely cold"]
+}

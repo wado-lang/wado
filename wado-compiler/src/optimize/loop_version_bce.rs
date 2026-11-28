@@ -42,20 +42,20 @@ use crate::tir::TypeId;
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use super::arena_query::{MarkerBuiltins, block_contains_loop, has_break_to};
 use super::bounds;
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, FieldPath, InductionStep, VAR_OFFSET_MAX_DEPTH, break_guard_cmp,
     build_copy_bindings, capture_block_binding, check_conjuncts, eliminate_condition,
-    induction_entry, induction_step, is_seq_length, modifies_any_root, negated_operand,
-    panic_guard_check, parse_bound, parse_break_guard_head, parse_const_i64, parse_var_offset,
-    peel_capture_block, resolve, resolve_panic_ids, stmt_modifies,
+    induction_entry, induction_step, is_seq_length, negated_operand, panic_guard_check,
+    parse_bound, parse_break_guard_head, parse_const_i64, parse_var_offset, peel_capture_block,
+    resolve, stmt_modifies,
 };
 use super::const_branch_prune::BranchPruneRule;
 use super::dce::{DescriptorCache, callee_descriptor};
 use super::elide_local::ElideRule;
 use super::heap_effect::{HeapEffectsCache, LazyHeapFrame};
+use super::writes::{EngineFacts, modifies_any_root};
 use crate::module_source::ModuleSource;
 use crate::nir::FuncId;
 use crate::nir_arena;
@@ -192,8 +192,6 @@ pub(super) fn version_loops(
         method_info: None,
     });
     let descriptors = cache.descriptors(project);
-    let panic_ids = resolve_panic_ids(project);
-    let pure_builtin_callees = project.pure_builtin_callee_ids();
     let markers = MarkerBuiltins::of(project);
     // Only a body with a loop is versioned, so a program with none pays nothing.
     if !project
@@ -205,136 +203,120 @@ pub(super) fn version_loops(
     }
     let (summaries, builtins) = summarize(project, exec);
     let type_table = project.type_table.borrow();
-    let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table, exec);
+    let facts = EngineFacts::new(project, &type_table, exec);
     let effects = heap.effects(project, &type_table, exec);
-    let mut buffers = EngineBuffers::default();
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        let Some(body_ref) = func.body.as_ref() else {
-            continue;
-        };
-        if !body_contains_loop(body_ref) {
-            continue;
-        }
-        let FuncParts {
-            body,
-            locals,
-            params,
-            address_taken_locals,
-            ..
-        } = func.parts();
-        let frame = LazyHeapFrame::new(&effects, params.iter().map(|p| p.local_index).collect());
-        let body = body.expect("checked above");
-        let alias = builder_alias_sets(
-            body,
-            locals,
-            address_taken_locals,
-            &type_table,
-            &first_param_types,
-            &call_immutability,
-        );
-        let mut engine = Engine::new(body, &mut buffers, locals, params, &type_table);
-        engine.set_alias_sets(alias);
-        engine.set_panic_callee_ids(&panic_ids);
-        engine.set_pure_builtin_callees(&pure_builtin_callees);
+    let type_table = &*type_table;
+    let versioned = exec.map_init(
+        &project.functions,
+        EngineBuffers::default,
+        |buffers, func_rc| {
+            let mut func = func_rc.borrow_mut();
+            if !func.body.as_ref().is_some_and(body_contains_loop) {
+                return false;
+            }
+            let FuncParts {
+                body,
+                locals,
+                params,
+                address_taken_locals,
+                ..
+            } = func.parts();
+            let frame =
+                LazyHeapFrame::new(&effects, params.iter().map(|p| p.local_index).collect());
+            let body = body.expect("checked above");
+            let mut engine = facts.engine(body, buffers, locals, params, address_taken_locals);
 
-        let binds = build_copy_bindings(&engine);
-        let mut loops: Vec<(BlockId, StmtId, BlockId)> = Vec::new();
-        collect_loops(engine.body, engine.body.root(), &mut loops);
-        let mut plans: Vec<Plan> = Vec::new();
-        // The leaf loops with no check to version, which may be a fill as they
-        // stand: one whose stores constant folding proved in bounds is as much
-        // a fill as one a version proves them in.
-        let mut unversioned: Vec<FillLoop> = Vec::new();
-        for (parent, loop_stmt, loop_body) in loops {
-            if let Some(plan) = analyze_loop(
-                &engine,
-                &binds,
-                &type_table,
-                &frame,
-                parent,
-                loop_stmt,
-                loop_body,
-            ) {
-                plans.push(plan);
-            } else if !block_contains_loop(engine.body, loop_body)
+            let binds = build_copy_bindings(&engine);
+            let mut loops: Vec<(BlockId, StmtId, BlockId)> = Vec::new();
+            collect_loops(engine.body, engine.body.root(), &mut loops);
+            let mut plans: Vec<Plan> = Vec::new();
+            // The leaf loops with no check to version, which may be a fill as they
+            // stand: one whose stores constant folding proved in bounds is as much
+            // a fill as one a version proves them in.
+            let mut unversioned: Vec<FillLoop> = Vec::new();
+            for (parent, loop_stmt, loop_body) in loops {
+                if let Some(plan) = analyze_loop(
+                    &engine, &binds, type_table, &frame, parent, loop_stmt, loop_body,
+                ) {
+                    plans.push(plan);
+                } else if !block_contains_loop(engine.body, loop_body)
                 && let Some((0, var, bound, guard_le, 0)) =
                     parse_loop_guard(&engine, &binds, loop_body)
                 // A wrapped `H + 1` counts past any `i32` array only when
                 // `var` is an `i32`.
                 && engine.locals()[var as usize].type_id == TypeTable::I32
-            {
-                unversioned.push(FillLoop {
-                    parent,
-                    block: parent,
-                    loop_stmt,
-                    loop_body,
-                    scope: loop_stmt,
-                    var,
-                    bound,
-                    guard_le,
-                });
+                {
+                    unversioned.push(FillLoop {
+                        parent,
+                        block: parent,
+                        loop_stmt,
+                        loop_body,
+                        scope: loop_stmt,
+                        var,
+                        bound,
+                        guard_le,
+                    });
+                }
             }
-        }
-        if plans.is_empty() && unversioned.is_empty() {
-            continue;
-        }
+            if plans.is_empty() && unversioned.is_empty() {
+                return false;
+            }
 
-        let fast_arms: Vec<FastArm> = plans
-            .iter()
-            .map(|plan| apply_version(&mut engine, &binds, &type_table, plan))
-            .collect();
+            let fast_arms: Vec<FastArm> = plans
+                .iter()
+                .map(|plan| apply_version(&mut engine, &binds, type_table, plan))
+                .collect();
 
-        // Sweep the deleted checks' residue: the `if false { panic }` shells
-        // and any now-write-only condition temps. The proofs are taken after
-        // the splice, so the fast arm's cloned calls carry theirs.
-        let proofs = bounds::analyze(engine.body, &type_table, |fid| builtins[fid.index()]).proofs;
-        let calls = CallFacts {
-            effects: &summaries.effects,
-            proofs: &proofs,
-        };
-        let elide_rule = ElideRule::new(calls);
-        let prune_rule = BranchPruneRule { markers };
-        let rules: [&dyn Rule; 2] = [&prune_rule, &elide_rule];
-        if !plans.is_empty() {
-            engine.run(&rules);
-        }
+            // Sweep the deleted checks' residue: the `if false { panic }` shells
+            // and any now-write-only condition temps. The proofs are taken after
+            // the splice, so the fast arm's cloned calls carry theirs.
+            let proofs =
+                bounds::analyze(engine.body, type_table, |fid| builtins[fid.index()]).proofs;
+            let calls = CallFacts {
+                effects: &summaries.effects,
+                proofs: &proofs,
+            };
+            let elide_rule = ElideRule::new(calls);
+            let prune_rule = BranchPruneRule { markers };
+            let rules: [&dyn Rule; 2] = [&prune_rule, &elide_rule];
+            if !plans.is_empty() {
+                engine.run(&rules);
+            }
 
-        // Fill idiom over the cleaned fast arms; sweep again if it fired.
-        let fast_fills = plans
-            .iter()
-            .zip(&fast_arms)
-            .filter(|(plan, _)| {
-                plan.reload.is_none() && plan.guard_idx == 0 && plan.guard_offset == 0
-            })
-            .filter_map(|(plan, arm)| {
-                let [loop_stmt] = engine.body.blocks[arm.then_block].stmts[..] else {
-                    return None;
-                };
-                Some(FillLoop {
-                    parent: plan.parent,
-                    block: arm.then_block,
-                    loop_stmt,
-                    loop_body: arm.fast_body,
-                    scope: arm.version_if,
-                    var: plan.var,
-                    bound: plan.bound,
-                    guard_le: plan.guard_le,
+            // Fill idiom over the cleaned fast arms; sweep again if it fired.
+            let fast_fills = plans
+                .iter()
+                .zip(&fast_arms)
+                .filter(|(plan, _)| {
+                    plan.reload.is_none() && plan.guard_idx == 0 && plan.guard_offset == 0
                 })
-            })
-            .collect::<Vec<_>>();
-        let mut filled = false;
-        for fill in fast_fills.iter().chain(&unversioned) {
-            filled |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, fill);
-        }
-        if filled {
-            engine.run(&rules);
-        }
-        changed |= filled || !plans.is_empty();
-    }
-    changed
+                .filter_map(|(plan, arm)| {
+                    let [loop_stmt] = engine.body.blocks[arm.then_block].stmts[..] else {
+                        return None;
+                    };
+                    Some(FillLoop {
+                        parent: plan.parent,
+                        block: arm.then_block,
+                        loop_stmt,
+                        loop_body: arm.fast_body,
+                        scope: arm.version_if,
+                        var: plan.var,
+                        bound: plan.bound,
+                        guard_le: plan.guard_le,
+                    })
+                })
+                .collect::<Vec<_>>();
+            let mut filled = false;
+            for fill in fast_fills.iter().chain(&unversioned) {
+                filled |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, fill);
+            }
+            if filled {
+                engine.run(&rules);
+            }
+            filled || !plans.is_empty()
+        },
+    );
+    versioned.into_iter().any(|changed| changed)
 }
 
 /// Whether any statement in `body` is a `Loop` (cheap pre-filter).

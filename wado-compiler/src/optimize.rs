@@ -19,6 +19,7 @@ mod const_branch_prune;
 mod const_folding;
 mod const_object_globalization;
 mod container_sroa;
+mod copy_elision;
 mod copy_prop;
 mod dae;
 pub mod dce;
@@ -60,6 +61,7 @@ mod tuple_projection;
 mod unsigned_range_check;
 mod value_copy;
 mod value_copy_demote;
+mod writes;
 
 #[cfg(debug_assertions)]
 use std::ops::ControlFlow;
@@ -69,18 +71,25 @@ use std::sync::Arc;
 #[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
 #[cfg(debug_assertions)]
-use crate::nir_arena::{ExprKind, NodeRef, PatKind, StmtKind};
+use crate::nir::NirUnaryOp;
+#[cfg(debug_assertions)]
+use crate::nir_arena::{ExprId, ExprKind, NodeRef, PatKind, StmtKind};
 #[cfg(debug_assertions)]
 use crate::nir_value_graph::ValueKind;
+#[cfg(debug_assertions)]
+use crate::tir::ResolvedType;
 #[cfg(debug_assertions)]
 use crate::trace::filter;
 #[cfg(debug_assertions)]
 use crate::type_table::TypeTable;
+#[cfg(debug_assertions)]
+use cranelift_entity::EntityRef;
 
 use const_branch_prune::prune_constant_branches;
 use const_folding::{fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
+use copy_elision::elide_value_copies;
 use copy_prop::propagate_copies;
 use dae::eliminate_dead_arguments;
 use dce::{
@@ -105,6 +114,7 @@ use value_copy_demote::demote_value_copies;
 
 use gate::{FunctionGate, GatedPass};
 use heap_effect::HeapEffectsCache;
+use peephole::InlineSide;
 
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::nir_package::NirPackage;
@@ -129,7 +139,80 @@ struct OptConfig {
     cap_is_defect: bool,
 }
 
-/// Optimization level. Every level runs DCE; `optimize` below sets each one's
+impl OptConfig {
+    /// `level`'s budget, as `opt` overrides it, or `None` at `-O0`, which runs
+    /// no loop.
+    fn of(level: OptLevel, opt: OptOverrides) -> Option<Self> {
+        let OptOverrides {
+            // The compile entered these, decisions ahead of the optimizer included.
+            skip_passes: _,
+            inline_threshold,
+            inline_hot_callsite_threshold,
+            inline_cold_callsite_threshold,
+            inline_growth,
+            iterations,
+            specializations,
+            // Applying the profile reads these, ahead of reify.
+            predictable_branch_threshold: _,
+            profile_summary_cutoff_hot: _,
+            profile_summary_cutoff_cold: _,
+        } = opt;
+        for threshold in [
+            inline_threshold,
+            inline_hot_callsite_threshold,
+            inline_cold_callsite_threshold,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            assert!(threshold <= MAX_INLINE_THRESHOLD);
+        }
+        let (level_iterations, level_threshold) = match level {
+            OptLevel::O0 => return None,
+            OptLevel::O1 => (2, 6),
+            // Every source in the tree settles by 8, so 15 is slack.
+            //
+            // Threshold 24 against the fuel benchmarks, on prices that count
+            // what a round splices into the callee. At 20 microgpt infer loses
+            // 6.4%; 28 buys no row and grows fts 14% and cbor_twitter 6%.
+            // `inline::net_cost` subtracts the call site a splice removes, so
+            // the gate is `gross - (CALL + params) <= 24`.
+            OptLevel::O2 => (15, 24),
+            // At 24 sqlite_parse, sqlite_highlight and cbor_twitter grow 19-21%
+            // over 16.
+            OptLevel::Os => (15, 16),
+            // The heaviest source in the tree — the Gale-generated SQLite
+            // parser in `benchmark/sqlite_parse` — converges in 6, so 20 is
+            // slack.
+            //
+            // Threshold 39, O2's 24 scaled by the ratio O3 has kept to O2. The
+            // Gale CSS3 parser's test world grows with it in no step: 1.54MB at
+            // 26, 1.67MB at 39, 1.77MB at 45, in about the same time.
+            OptLevel::O3 => (20, 39),
+        };
+        // A hot site at 5x the level's threshold. At 4x the cbor serialize rows
+        // lose 10-13% of fuel: their drivers price 108 with their callees at a
+        // profiled hot site. Fuel does not price a huge function's native code,
+        // and at 8x of as-written prices `cbor_twitter`'s deserializer ran 58%
+        // longer by the wall clock for the same fuel. LLVM's ratio is 3000 to
+        // 225, about 13x. A cold site at a quarter: no fuel region moved from a
+        // half down to an eighth, and a quarter grew gale_gen least.
+        let plain = inline_threshold.unwrap_or(level_threshold);
+        Some(Self {
+            iterations: iterations.unwrap_or(level_iterations),
+            inline_thresholds: inline::Thresholds {
+                cold: inline_cold_callsite_threshold.unwrap_or(plain / 4),
+                plain,
+                hot: inline_hot_callsite_threshold.unwrap_or(plain * 5),
+            },
+            inline_growth,
+            specializations: specializations.unwrap_or(param_spec::MAX_TOTAL_SPECIALIZATIONS),
+            cap_is_defect: level != OptLevel::O1 && iterations.is_none(),
+        })
+    }
+}
+
+/// Optimization level. Every level runs DCE; [`OptConfig::of`] sets each one's
 /// loop and inline budget.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
@@ -174,46 +257,7 @@ pub fn optimize(
     parallelism: usize,
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
-    let OptOverrides {
-        // The compile entered these, decisions ahead of the optimizer included.
-        skip_passes: _,
-        inline_threshold,
-        inline_hot_callsite_threshold,
-        inline_cold_callsite_threshold,
-        inline_growth,
-        iterations: opt_iterations,
-        specializations,
-        // Applying the profile reads these, ahead of reify.
-        predictable_branch_threshold: _,
-        profile_summary_cutoff_hot: _,
-        profile_summary_cutoff_cold: _,
-    } = opt;
-    for threshold in [
-        inline_threshold,
-        inline_hot_callsite_threshold,
-        inline_cold_callsite_threshold,
-    ]
-    .into_iter()
-    .flatten()
-    {
-        assert!(threshold <= MAX_INLINE_THRESHOLD);
-    }
-    // A hot site at 5x the level's threshold. At 4x the cbor serialize rows
-    // lose 10-13% of fuel: their drivers price 108 with their callees at a
-    // profiled hot site. Fuel does not price a huge function's native code,
-    // and at 8x of as-written prices `cbor_twitter`'s deserializer ran 58%
-    // longer by the wall clock for the same fuel. LLVM's ratio is 3000 to 225,
-    // about 13x. A cold site at a quarter: no fuel region moved from a half
-    // down to an eighth, and a quarter grew gale_gen least.
-    let thresholds = |level: usize| {
-        let plain = inline_threshold.unwrap_or(level);
-        inline::Thresholds {
-            cold: inline_cold_callsite_threshold.unwrap_or(plain / 4),
-            plain,
-            hot: inline_hot_callsite_threshold.unwrap_or(plain * 5),
-        }
-    };
-    let specializations = specializations.unwrap_or(param_spec::MAX_TOTAL_SPECIALIZATIONS);
+    let config = OptConfig::of(opt_level, opt);
     let exec = Arc::new(Executor::new(parallelism));
     // Decide the short-string inline threshold once, from the opt level. Read
     // by `wir_build` (`translate_packed_array` / `register_literal_data`) to
@@ -225,117 +269,40 @@ pub fn optimize(
     // says nothing about its body, so clearing bodies leaves every entry current
     // and only an appended function needs a new one.
     let mut descriptors = dce::DescriptorCache::default();
-    match opt_level {
-        OptLevel::O0 => {
-            // DCE alone: it cuts codegen work, and nothing else may change
-            // the program `-O0` emits.
-            run_dce(
-                &mut project,
-                profiler,
-                &mut descriptors,
-                &exec,
-                Initializers::DropUnread,
-            );
-            census::report(&project, "end-of-optimize");
-            #[cfg(debug_assertions)]
-            audit_nir(&project, "end-of-optimize");
-            return project;
-        }
-        OptLevel::O1 => {
-            let config = OptConfig {
-                iterations: opt_iterations.unwrap_or(2),
-                inline_thresholds: thresholds(6),
-                inline_growth,
-                specializations,
-                cap_is_defect: false,
-            };
-            // Early DCE: remove unreachable functions/types before optimization
-            // to reduce the working set for subsequent passes
-            run_dce(
-                &mut project,
-                profiler,
-                &mut descriptors,
-                &exec,
-                Initializers::DropUnread,
-            );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
-            // Final DCE: clean up code made dead by optimizations
-            run_dce(
-                &mut project,
-                profiler,
-                &mut descriptors,
-                &exec,
-                Initializers::KeepEffects,
-            );
-        }
-        OptLevel::O2 | OptLevel::Os => {
-            let config = OptConfig {
-                // Every source in the tree settles by 8, so 15 is slack.
-                iterations: opt_iterations.unwrap_or(15),
-                // Threshold 24 against the fuel benchmarks, on prices that
-                // count what a round splices into the callee. At 20 microgpt
-                // infer loses 6.4%; 28 buys no row and grows fts 14% and
-                // cbor_twitter 6%. `inline::net_cost` subtracts the call site a
-                // splice removes, so the gate is `gross - (CALL + params) <= 24`.
-                //
-                // `-Os` keeps 16: at 24 sqlite_parse, sqlite_highlight and
-                // cbor_twitter grow 19-21% over 16.
-                inline_thresholds: thresholds(if opt_level == OptLevel::Os { 16 } else { 24 }),
-                inline_growth,
-                specializations,
-                cap_is_defect: opt_iterations.is_none(),
-            };
-            run_dce(
-                &mut project,
-                profiler,
-                &mut descriptors,
-                &exec,
-                Initializers::DropUnread,
-            );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
-            run_dce(
-                &mut project,
-                profiler,
-                &mut descriptors,
-                &exec,
-                Initializers::KeepEffects,
-            );
-            if opt_level == OptLevel::Os {
-                project.strip_names = true;
-            }
-        }
-        OptLevel::O3 => {
-            // The heaviest source in the tree — the Gale-generated SQLite parser
-            // in `benchmark/sqlite_parse` — converges in 6, so 20 is slack.
-            //
-            // Threshold 39, O2's 24 scaled by the ratio O3 has kept to O2. The
-            // Gale CSS3 parser's test world grows with it in no step: 1.54MB
-            // at 26, 1.67MB at 39, 1.77MB at 45, in about the same time.
-            let config = OptConfig {
-                iterations: opt_iterations.unwrap_or(20),
-                inline_thresholds: thresholds(39),
-                inline_growth,
-                specializations,
-                cap_is_defect: opt_iterations.is_none(),
-            };
-            run_dce(
-                &mut project,
-                profiler,
-                &mut descriptors,
-                &exec,
-                Initializers::DropUnread,
-            );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
-            run_dce(
-                &mut project,
-                profiler,
-                &mut descriptors,
-                &exec,
-                Initializers::KeepEffects,
-            );
-        }
+    run_dce(
+        &mut project,
+        profiler,
+        &mut descriptors,
+        &exec,
+        Initializers::DropUnread,
+    );
+    if let Some(config) = config {
+        run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
+        run_dce(
+            &mut project,
+            profiler,
+            &mut descriptors,
+            &exec,
+            Initializers::KeepEffects,
+        );
+        shape_for_wir(&mut project, profiler, &mut descriptors, &exec);
+        project.strip_names = opt_level == OptLevel::Os;
     }
+    census::report(&project, "end-of-optimize");
+    #[cfg(debug_assertions)]
+    audit_nir(&project, "end-of-optimize");
+    project
+}
 
+/// The passes after the final DCE: they read bounds the loop froze and leave
+/// the body in the shapes WIR building expects, so nothing but extraction may
+/// run after them.
+fn shape_for_wir(
+    project: &mut NirPackage,
+    profiler: &dyn SpanEmitter,
+    descriptors: &mut dce::DescriptorCache,
+    exec: &Arc<Executor>,
+) {
     // After the final DCE, which a `HeapEffectsCache` must not outlive.
     let mut heap_effects = HeapEffectsCache::default();
     // FieldAccess promotion: scalar fields over stable receivers freeze to
@@ -345,8 +312,8 @@ pub fn optimize(
     // the body into WIR-shaped forms a scoped walk would misread. The
     // two soundness gates (scalar-field + receiver-availability) and the WIR
     // const-local propagation keep it default-safe.
-    run_pass("nir/promote_fields", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, &exec, Some(&mut heap_effects))
+    run_pass("nir/promote_fields", project, profiler, |p| {
+        extract::freeze_pure_arith(p, exec, Some(&mut heap_effects))
     });
     // Re-run the structural BCE matcher now that `promote_fields` froze
     // invariant bounds (`arr.used`) into constant operands the in-loop
@@ -355,9 +322,9 @@ pub fn optimize(
     // `select_lowering`, which reshapes conditions out of matcher form.
     run_bounded_fixpoint(
         "nir/cond_impl_post_promote",
-        &mut project,
+        project,
         profiler,
-        &exec,
+        exec,
         |p, g| condition_implication::eliminate_post_promote(p, g) | prune_constant_branches(p, g),
     );
     // Loop-versioned BCE: a check whose bound is loop-invariant but not
@@ -367,30 +334,30 @@ pub fn optimize(
     // after `cond_impl_post_promote` so only statically-unprovable
     // checks are versioned, and before `select_lowering`, which
     // reshapes conditions out of matcher form.
-    run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
-        loop_version_bce::version_loops(p, &mut descriptors, &exec, &mut heap_effects)
+    run_pass("nir/loop_version_bce", project, profiler, |p| {
+        loop_version_bce::version_loops(p, descriptors, exec, &mut heap_effects)
     });
     // After every bounds-check eliminator, which read the signed halves.
-    run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
-        unsigned_range_check::fuse_unsigned_range_checks(p)
+    run_pass("nir/unsigned_range_check", project, profiler, |p| {
+        unsigned_range_check::fuse_unsigned_range_checks(p, exec)
     });
 
     // Post-optimization rewrites: select lowering for branchless Wasm
-    run_pass("nir/select_lowering", &mut project, profiler, |p| {
-        select_lowering::select_lowering(p)
+    run_pass("nir/select_lowering", project, profiler, |p| {
+        select_lowering::select_lowering(p, exec)
     });
-    run_pass("nir/split_and_condition", &mut project, profiler, |p| {
-        split_and_condition::split_and_conditions(p)
+    run_pass("nir/split_and_condition", project, profiler, |p| {
+        split_and_condition::split_and_conditions(p, exec)
     });
 
     // The multi-value ABI, both sides. These run after every other
     // transformation, so each sees the final NIR shape.
-    run_pass("nir/multi_value_return", &mut project, profiler, |p| {
-        multi_value_return::classify_multi_value_returns(p)
+    run_pass("nir/multi_value_return", project, profiler, |p| {
+        multi_value_return::classify_multi_value_returns(p, exec)
     });
 
-    run_pass("nir/multi_value_param", &mut project, profiler, |p| {
-        multi_value_param::classify_multi_value_params(p, &exec, &mut heap_effects)
+    run_pass("nir/multi_value_param", project, profiler, |p| {
+        multi_value_param::classify_multi_value_params(p, exec, &mut heap_effects)
     });
 
     // Freeze re-emittable pure arithmetic (constants / local reads composed by
@@ -399,17 +366,9 @@ pub fn optimize(
     // orphaned arith / local-read nodes become unreachable from the skeleton
     // root and are simply not emitted. (`FieldAccess` promotion ran above,
     // after SROA.)
-    run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, &exec, None)
+    run_pass("nir/freeze_pure_arith", project, profiler, |p| {
+        extract::freeze_pure_arith(p, exec, None)
     });
-
-    // The born-resolved invariant is now enforced by the type system: a call
-    // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
-
-    census::report(&project, "end-of-optimize");
-    #[cfg(debug_assertions)]
-    audit_nir(&project, "end-of-optimize");
-    project
 }
 
 fn run_dce(
@@ -518,6 +477,16 @@ fn run_bounded_fixpoint(
     })
 }
 
+/// Run `step` until it changes nothing, returning whether any run changed
+/// something.
+fn until_quiet(mut step: impl FnMut() -> bool) -> bool {
+    let mut changed = false;
+    while step() {
+        changed = true;
+    }
+    changed
+}
+
 /// Run a single optimization pass with profiling, returning whether it changed anything.
 ///
 /// Honours the `WADO_LIST_PASSES`, `WADO_DUMP_PASS_BEFORE`, and
@@ -550,6 +519,75 @@ fn audit_nir(project: &NirPackage, pass: &str) {
     audit_promoted_opaques(project, pass);
     audit_promoted_reads(project, pass);
     audit_assign_types(project, pass);
+    audit_writes_through_shared(project, pass);
+}
+
+/// No store or `&mut` reaches its place through a `&`, which grants reading
+/// alone, a cell's included. The nearest reference on the path is what grants
+/// the write: a `&mut` read out from behind a `&` writes the place it names,
+/// not the `&`'s referent. Nor is a `&` handed where a callee writes. A call
+/// handed a `&` writes nothing through it unless it holds a `&mut`, and the
+/// call verdicts lean on that.
+#[cfg(debug_assertions)]
+fn audit_writes_through_shared(project: &NirPackage, pass: &str) {
+    let tt = project.type_table.borrow();
+    for func in &project.functions {
+        let func = func.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let through_shared = |mut place: ExprId| loop {
+            let (ExprKind::FieldAccess { expr: base, .. }
+            | ExprKind::Index { expr: base, .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                expr: base,
+            }) = &body.exprs[place].kind
+            else {
+                return false;
+            };
+            let Some(base) = base.as_expr() else {
+                return false;
+            };
+            match tt.get(body.exprs[base].type_id) {
+                ResolvedType::Ref(_) => return true,
+                ResolvedType::MutRef(_) => return false,
+                _ => place = base,
+            }
+        };
+        body.for_each_reachable_node(|node| {
+            let NodeRef::Expr(e) = node else {
+                return;
+            };
+            let written = match &body.exprs[e].kind {
+                ExprKind::Assign { target, .. } => Some(*target),
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr,
+                } => expr.as_expr(),
+                ExprKind::Call { func_id, args, .. } => {
+                    let callee = project.functions[func_id.index()].borrow();
+                    let shared = args.iter().zip(&callee.params).position(|(arg, param)| {
+                        matches!(tt.get(param.type_id), ResolvedType::MutRef(_))
+                            && matches!(tt.get(body.operand_type(arg.expr)), ResolvedType::Ref(_))
+                    });
+                    assert!(
+                        shared.is_none(),
+                        "[NIR] {pass}: {e:?} of `{}` hands a `&` to `&mut` parameter {shared:?} of `{}`",
+                        func.name,
+                        callee.name
+                    );
+                    None
+                }
+                _ => None,
+            };
+            assert!(
+                !written.is_some_and(through_shared),
+                "[NIR] {pass}: {e:?} of `{}` writes a place reached through a `&`",
+                func.name
+            );
+        });
+    }
 }
 
 /// Every opaque leaf of a promoted operand reads a local. Extraction re-emits
@@ -817,7 +855,8 @@ pub mod pass_dump {
 }
 
 /// Run the NIR passes to a fixed point, exiting early once an iteration changes
-/// nothing. Each pass's position is justified in the comment beside its call.
+/// nothing, then [`settle_after_loop`]. Each pass's position is justified in the
+/// comment beside its call.
 fn run_optimization_passes(
     project: &mut NirPackage,
     config: &OptConfig,
@@ -950,13 +989,25 @@ fn run_optimization_passes(
             // Hosts `MatchToSwitchRule` (`include_match = true`), so `inline` copies
             // `Switch`-shaped bodies, and `const_branch_prune`.
             gated!("nir/peephole", GatedPass::PeepholePre, |p, g| {
-                peephole::run_peephole(p, g, true, &mut heap_effects, &mut mod_ref_summaries)
+                peephole::run_peephole(
+                    p,
+                    g,
+                    InlineSide::Pre,
+                    &mut heap_effects,
+                    &mut mod_ref_summaries,
+                )
+            });
+            // `nir/inline` keeps every value copy a call until the loop first
+            // converges, so each round judges a copy in the body the last round's
+            // splices landed it in. Before `nir/value_copy_demote`, which would
+            // turn a copy this drops whole into a spine copy.
+            gated!("nir/copy_elision", GatedPass::CopyElision, |p, g| {
+                elide_value_copies(p, g, &mut heap_effects)
             });
             // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
             // copies when the binding's elements are provably never mutated through
             // it. Runs before `nir/inline`, where the `$value_copy$T(arg)` shape it
-            // matches disappears. (Copies are inserted precisely at the lower phase,
-            // so there is no elision pass to sequence against.)
+            // matches disappears.
             gate_only!(
                 "nir/value_copy_demote",
                 GatedPass::ValueCopyDemote,
@@ -1000,10 +1051,14 @@ fn run_optimization_passes(
             // inline's freshly dead bindings. No `MatchToSwitchRule` — the
             // pre-inline run lowered every reachable `Match` already.
             gated!("nir/peephole", GatedPass::PeepholePost, |p, g| {
-                peephole::run_peephole(p, g, false, &mut heap_effects, &mut mod_ref_summaries)
+                peephole::run_peephole(
+                    p,
+                    g,
+                    InlineSide::Post,
+                    &mut heap_effects,
+                    &mut mod_ref_summaries,
+                )
             });
-            // `labeled_block_fusion` moved into the post-inline `nir/peephole`
-            // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
             gated!(
                 "nir/let_block_flatten",
                 GatedPass::LetBlockFlatten,
@@ -1085,12 +1140,32 @@ fn run_optimization_passes(
         // round where one walk reaches its fixpoint. A release build pays it.
         debug_assert!(!config.cap_is_defect, "{report}");
     }
+    settle_after_loop(
+        project,
+        profiler,
+        descriptor_cache,
+        exec,
+        &mut gate,
+        &mut heap_effects,
+    );
+}
+
+/// The passes that would not settle inside the loop: each rewrites what a loop
+/// pass would take back up, or matches a shape the loop has to finish first.
+fn settle_after_loop(
+    project: &mut NirPackage,
+    profiler: &dyn SpanEmitter,
+    descriptor_cache: &mut dce::DescriptorCache,
+    exec: &Arc<Executor>,
+    gate: &mut FunctionGate,
+    heap_effects: &mut HeapEffectsCache,
+) {
     // Hot Field Scalarization runs once after the main loop converges.
     // Running inside the loop would cause the write-back/re-read stmts it
     // inserts to be counted as new field accesses on the next iteration,
     // triggering spurious re-scalarization of the same fields.
     run_pass("nir/field_scalarize", project, profiler, |p| {
-        scalarize_hot_fields(p, &mut gate, &mut heap_effects)
+        scalarize_hot_fields(p, gate, heap_effects)
     });
     // Forward the scalarization shadow inits (`$hfs_x = obj.f`) to constants.
     // `field_scalarize` runs after the fixed-point loop, so no in-loop
@@ -1141,7 +1216,7 @@ fn run_optimization_passes(
     // temps into their uses. Runs last, after every scalarization / globalization
     // recognizer has matched its shape, so it only strips dead-weight locals.
     run_pass("nir/scalar_forward", project, profiler, |p| {
-        forward_scalar_temps(p, &mut gate)
+        forward_scalar_temps(p, gate)
     });
     // Forward read-only clones that inlining + const-object globalization leave
     // behind (`array_clone(&array_clone(&$const_obj))` into a read-only
@@ -1150,6 +1225,6 @@ fn run_optimization_passes(
     // flat `let t = array_clone(&global.field)` shape only exists here, after the
     // pre-inline value-copy elider that cannot reach it has long run.
     run_pass("nir/clone_forward", project, profiler, |p| {
-        clone_forward::forward_redundant_clones(p, descriptor_cache)
+        clone_forward::forward_redundant_clones(p, descriptor_cache, exec)
     });
 }

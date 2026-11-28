@@ -3,9 +3,9 @@
 use std::fmt::Write;
 
 use crate::ir::{
-    WadoEnum, WadoFlags, WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource,
-    WadoStruct, WadoType, WadoTypeDef, WadoVariant, WadoWorld, WadoWorldExport, WadoWorldExportFn,
-    WadoWorldExportInterface, WadoWorldImport,
+    WadoConstant, WadoEnum, WadoFlags, WadoFunction, WadoInterface, WadoModule, WadoParam,
+    WadoResource, WadoStruct, WadoType, WadoTypeDef, WadoVariant, WadoWorld, WadoWorldExport,
+    WadoWorldExportFn, WadoWorldExportInterface, WadoWorldImport,
 };
 
 pub struct WadoCodeGenerator {
@@ -114,6 +114,7 @@ impl WadoCodeGenerator {
                     a.name,
                     Self::format_type(&a.target)
                 ));
+                self.write_constants(&a.name, &a.constants);
             }
         }
     }
@@ -168,8 +169,12 @@ impl WadoCodeGenerator {
         for field in &s.fields {
             self.write_doc_comment(field.doc_comment.as_ref());
             self.writeln(&format!("#[cm(\"{}\")]", field.cm_attr));
+            let default = field
+                .default
+                .as_ref()
+                .map_or_else(String::new, |default| format!(" = {default}"));
             self.writeln(&format!(
-                "pub {}: {},",
+                "pub {}: {}{default},",
                 field.name,
                 Self::format_type(&field.ty)
             ));
@@ -227,7 +232,7 @@ impl WadoCodeGenerator {
         // An affine resource drops through its own operation, so a handler
         // installed for it sees each drop (WEP: Affine Types).
         let drops = !resource.unrestricted;
-        if resource.methods.is_empty() && !drops {
+        if resource.methods.is_empty() && resource.unavailable.is_empty() && !drops {
             self.writeln(&format!("pub resource {}{extends};", resource.name));
         } else {
             self.writeln(&format!("pub resource {}{extends} {{", resource.name));
@@ -235,6 +240,11 @@ impl WadoCodeGenerator {
 
             for method in &resource.methods {
                 self.write_function(method);
+            }
+            for absent in &resource.unavailable {
+                let receiver = if absent.instance { "&self" } else { "" };
+                self.writeln(&format!("#[unavailable(\"{}\")]", absent.reason));
+                self.writeln(&format!("fn {}({receiver});", absent.name));
             }
             if drops {
                 self.writeln("/// Drop the resource. Scope exit drops one that nothing moved.");
@@ -245,6 +255,28 @@ impl WadoCodeGenerator {
             self.indent -= 1;
             self.writeln("}");
         }
+
+        self.write_constants(&resource.name, &resource.constants);
+    }
+
+    /// The `impl` block giving `owner` its `constants`, after a blank line.
+    fn write_constants(&mut self, owner: &str, constants: &[WadoConstant]) {
+        if constants.is_empty() {
+            return;
+        }
+        self.writeln("");
+        self.writeln(&format!("impl {owner} {{"));
+        self.indent += 1;
+        for constant in constants {
+            self.writeln(&format!(
+                "pub const {}: {} = {};",
+                constant.name,
+                Self::format_type(&constant.ty),
+                constant.value
+            ));
+        }
+        self.indent -= 1;
+        self.writeln("}");
     }
 
     fn write_interface(&mut self, effect: &WadoInterface) {
@@ -392,7 +424,7 @@ impl WadoCodeGenerator {
             .join(", ")
     }
 
-    fn format_type(ty: &WadoType) -> String {
+    pub(crate) fn format_type(ty: &WadoType) -> String {
         match ty {
             WadoType::Bool
             | WadoType::Char
@@ -442,18 +474,31 @@ impl WadoCodeGenerator {
             }
             WadoType::Stream(inner) => format!("Stream<{}>", Self::format_type(inner)),
             WadoType::Future(inner) => format!("Future<{}>", Self::format_type(inner)),
-            WadoType::Named(name) => name.clone(),
+            WadoType::Named(name) | WadoType::StringEnum(name) => name.clone(),
+            WadoType::Dictionary(dictionary) => dictionary.name.clone(),
+            WadoType::Union(union) => union.name.clone(),
             WadoType::Borrow(inner) => format!("&{}", Self::format_type(inner)),
-            WadoType::Callback { params, effect } => {
+            WadoType::Callback {
+                name: Some(name), ..
+            } => name.clone(),
+            WadoType::Callback {
+                name: None,
+                params,
+                result,
+                effect,
+            } => {
                 let params = params
                     .iter()
                     .map(Self::format_type)
                     .collect::<Vec<_>>()
                     .join(", ");
+                let result = result
+                    .as_ref()
+                    .map_or_else(String::new, |r| format!(" -> {}", Self::format_type(r)));
                 let effect = effect
                     .as_ref()
                     .map_or_else(String::new, |e| format!(" with {e}"));
-                format!("fn mut({params}){effect}")
+                format!("fn mut({params}){result}{effect}")
             }
         }
     }

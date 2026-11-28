@@ -1,8 +1,9 @@
 // Search throughput of Re against Node's `RegExp` (`node.mjs`), which runs the
 // same patterns over the same text: a literal, the literal ignoring case, an
 // email address, a URI, a timestamp read through its groups, and a pattern a
-// backtracking engine takes exponential time on. The literal is also searched
-// for with no regular expression, by each side's substring search.
+// backtracking engine takes exponential time on, and four patterns holding a
+// lookaround. The literal is also searched for with no regular expression, by
+// each side's substring search.
 
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
@@ -25,6 +26,10 @@ struct Cases {
     uri: Regex,
     timestamp: Regex,
     pathological: Regex,
+    lookahead: Regex,
+    lookbehind: Regex,
+    negated_lookaround: Regex,
+    lookbehind_captures: Regex,
 }
 
 fn cases() -> Cases {
@@ -35,6 +40,10 @@ fn cases() -> Cases {
         uri: re#`[a-z][a-z0-9+.-]*://[^\s/?#]+[^\s?#]*(?:\?[^\s#]*)?(?:#\S*)?`#,
         timestamp: re#`(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z`#,
         pathological: re#`(?:x+x+)+y`#,
+        lookahead: re#`\w+(?=@\w)`#,
+        lookbehind: re#`(?<=://)[^\s/?#]+`#,
+        negated_lookaround: re#`(?<!\d)\d{2}(?!\d)`#,
+        lookbehind_captures: re#`(?<=T(\d{2}):\d{2}:\d{2}Z )[A-Z]+`#,
     };
 }
 
@@ -55,11 +64,12 @@ fn count_finds(text: &String, needle: &String) -> i32 {
     return count;
 }
 
-/// The sum of every timestamp's hour, so that each match's groups are read.
-fn sum_hours(regex: &Regex, text: &String) -> i32 {
+/// The sum of every timestamp's hour, which `group` holds, so that each
+/// match's groups are read.
+fn sum_hours(regex: &Regex, text: &String, group: i32) -> i32 {
     let mut sum = 0;
     for let caps of regex.captures_iter(text) {
-        sum += i32::from_str(caps.get(4).unwrap().as_str()).unwrap();
+        sum += i32::from_str(caps.get(group).unwrap().as_str()).unwrap();
     }
     return sum;
 }
@@ -76,8 +86,12 @@ fn check(c: &Cases) {
     assert count_matches(&c.literal_ignore_case, &INPUT) == 452;
     assert count_matches(&c.email, &INPUT) == 176;
     assert count_matches(&c.uri, &INPUT) == 176;
-    assert sum_hours(&c.timestamp, &INPUT) == 1904;
+    assert sum_hours(&c.timestamp, &INPUT, 4) == 1904;
     assert !c.pathological.is_match(pathological_text());
+    assert count_matches(&c.lookahead, &INPUT) == 176;
+    assert count_matches(&c.lookbehind, &INPUT) == 176;
+    assert count_matches(&c.negated_lookaround, &INPUT) == 980;
+    assert sum_hours(&c.lookbehind_captures, &INPUT, 1) == 1904;
 }
 
 test "each case finds what Node's RegExp finds" {
@@ -94,16 +108,24 @@ test "fuel" {
         count_matches(&c.literal_ignore_case, &INPUT);
         count_matches(&c.email, &INPUT);
         count_matches(&c.uri, &INPUT);
-        sum_hours(&c.timestamp, &INPUT);
+        sum_hours(&c.timestamp, &INPUT, 4);
         c.pathological.is_match(&text);
+        count_matches(&c.lookahead, &INPUT);
+        count_matches(&c.lookbehind, &INPUT);
+        count_matches(&c.negated_lookaround, &INPUT);
+        sum_hours(&c.lookbehind_captures, &INPUT, 1);
     });
     measure("re/literal", || count_matches(&c.literal, &INPUT));
     measure("re/literal-find", || count_finds(&INPUT, &NEEDLE));
     measure("re/literal-ignore-case", || count_matches(&c.literal_ignore_case, &INPUT));
     measure("re/email", || count_matches(&c.email, &INPUT));
     measure("re/uri", || count_matches(&c.uri, &INPUT));
-    measure("re/timestamp-captures", || sum_hours(&c.timestamp, &INPUT));
+    measure("re/timestamp-captures", || sum_hours(&c.timestamp, &INPUT, 4));
     measure("re/pathological", || c.pathological.is_match(&text));
+    measure("re/lookahead", || count_matches(&c.lookahead, &INPUT));
+    measure("re/lookbehind", || count_matches(&c.lookbehind, &INPUT));
+    measure("re/negated-lookaround", || count_matches(&c.negated_lookaround, &INPUT));
+    measure("re/lookbehind-captures", || sum_hours(&c.lookbehind_captures, &INPUT, 1));
 }
 
 export fn run() with (Stdout, MonotonicClock) {
@@ -115,7 +137,11 @@ export fn run() with (Stdout, MonotonicClock) {
     b.run("literal-ignore-case", || count_matches(&c.literal_ignore_case, &INPUT));
     b.run("email", || count_matches(&c.email, &INPUT));
     b.run("uri", || count_matches(&c.uri, &INPUT));
-    b.run("timestamp-captures", || sum_hours(&c.timestamp, &INPUT));
+    b.run("timestamp-captures", || sum_hours(&c.timestamp, &INPUT, 4));
+    b.run("lookahead", || count_matches(&c.lookahead, &INPUT));
+    b.run("lookbehind", || count_matches(&c.lookbehind, &INPUT));
+    b.run("negated-lookaround", || count_matches(&c.negated_lookaround, &INPUT));
+    b.run("lookbehind-captures", || sum_hours(&c.lookbehind_captures, &INPUT, 1));
 
     let text = pathological_text();
     b.input_size = Option::Some(text.len());

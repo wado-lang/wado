@@ -610,7 +610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A qualified spelling names a trait, so the receiver's own declaration
     /// is not what it asks for.
     fn link_candidates(
-        &mut self,
+        &self,
         query: &StaticQuery<'_>,
         declaring_args: &[TypeId],
     ) -> (Vec<Candidate>, Vec<Candidate>) {
@@ -821,7 +821,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let def = key.decl().expect("a newtype is a declaration");
-        let receiver = ReceiverId::of_decl(self.tysys.resolutions.defs(), def, None);
+        // At the type the newtype declares: a blanket whose bound holds there
+        // owns the static, and no blanket is asked of a receiver without one.
+        let declared = self.declared_self_type(def);
+        let receiver = ReceiverId::of_decl(self.tysys.resolutions.defs(), def, declared);
         let owner = self.static_owner(&StaticQuery::of(&receiver, method_name));
         (owner.receiver.key != *key).then_some(owner.receiver.key)
     }
@@ -860,7 +863,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The arguments and the expected result of a static the newtype `newtype`
     /// inherits from the link `link` declares (the chain's end where `None`),
     /// read as that link, where the static is solved. Without a newtype, both
-    /// as they are.
+    /// as they are. An expected result holding a variable is left out: the
+    /// call's value is the newtype, which meets the variable once it is typed,
+    /// where the link's result would answer it as the base.
     pub(super) fn at_inherited_base(
         &self,
         newtype: Option<DefId>,
@@ -872,6 +877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return (arg_types.to_vec(), expected);
         };
         let represent = |ty| self.tysys.represent_newtype_in_type(ty, def, link);
+        let expected = expected.filter(|&t| !self.type_has_infer_hole(t));
         (
             arg_types.iter().copied().map(represent).collect(),
             expected.map(represent),
@@ -1156,7 +1162,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The defaults are the trait's and resolve where it wrote them, while the
     /// body is emitted for the block, which `method_ref` already names.
     fn callee_of_trait_declaration(
-        &mut self,
+        &self,
         trait_decl: DefId,
         impl_def: DefId,
         method_name: &str,
@@ -1236,7 +1242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// name has to consume this, or it builds a name with no trait segment and
     /// WIR resolves it to nothing.
     pub(super) fn report_unanswered_static(
-        &mut self,
+        &self,
         lookup: &StaticLookup,
         method_name: &str,
         span: Span,
@@ -1283,7 +1289,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// where impls they leave unseparated are reported too: nothing is left to
     /// pick one, and the call would be mangled with no trait segment.
     pub(super) fn report_unresolved_static(
-        &mut self,
+        &self,
         lookup: &StaticLookup,
         method_name: &str,
         arg_types: &[TypeId],
@@ -1659,7 +1665,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// supplies the name, which blanket the arguments select, and that anything
     /// written for the receiver itself outranks a blanket covering it.
     fn blanket_candidates(
-        &mut self,
+        &self,
         method_name: &str,
         receiver_type: Option<TypeId>,
     ) -> Vec<Candidate> {
@@ -1713,7 +1719,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The resolution for a declaration already picked: its signature, read at
     /// the receiver.
     fn callee_of_declaration(
-        &mut self,
+        &self,
         def: DefId,
         method_ref: StaticMethodRef,
         receiver_type: Option<TypeId>,

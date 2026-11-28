@@ -44,7 +44,7 @@ fn read_two_hops(r: &Holder, q: &mut Point) -> i32 {
 }
 
 #[inline("never")]
-fn write_two_hops(r: &MutHolder, q: &Point) -> i32 {
+fn write_two_hops(r: &mut MutHolder, q: &Point) -> i32 {
     return read_x(*q, then: { r.p.x = 5; 1 });
 }
 
@@ -63,8 +63,8 @@ export fn run() {
     let h = Holder { p: &t };
     assert read_two_hops(&h, &mut t) == 101;
     let mut u = point();
-    let mh = MutHolder { p: &mut u };
-    assert write_two_hops(&mh, &u) == 101;
+    let mut mh = MutHolder { p: &mut u };
+    assert write_two_hops(&mut mh, &u) == 101;
 }
 
 __DATA__

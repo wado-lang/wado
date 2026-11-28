@@ -62,7 +62,7 @@ impl<T> From<Array<T>> for SeqVec<T> {
 __DATA__
 {
     "stdout": "ok\n",
-    "wir_pass": {"O2": ["lower/value_copy/owned"]},
+    "wir_pass": {"O2": ["lower/value_copy/owned", "nir/copy_elision"]},
     "wir_contrast": {"O2": [
         {"    let b = [100, 200] as List<i32>;": "    let mut b: List<i32> = [];\n    b.push(builtin::black_box(100));\n    b.push(200);"}
     ]},

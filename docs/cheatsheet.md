@@ -305,6 +305,9 @@ type Location = Point;
 let loc: Location = { x: 0, y: 0 };  // literal coercion; or `Point { … } as Location`
 loc.distance(&loc2);  // inherits Point methods, params expect &Location
 
+type Scores = HashMap<String, i32>;
+let scores = Scores::new();  // static methods too: no `new` to define, a Scores comes back
+
 impl Location {
     fn name(&self) -> String { ... }  // newtype-specific method
 }
@@ -674,6 +677,9 @@ ref_eq(&x, &a);       // false or true: two places, which may be stored once
 Key differences from Rust:
 
 - No borrow checker: multiple mutable references allowed
+- A `&T` refuses a write anywhere along its path: through `h: &Holder`,
+  `h.r.f = 1` is an error even where `r` is a `&mut`, and `h.r` reads as a `&`.
+  A copy, `*h`, is a value of its own, and its `r` writes
 - Can return references to local variables
 - No lifetime annotations needed
 
@@ -1032,7 +1038,8 @@ The reason is required, and it is the attribute's only argument: a removal
 writes its own version into the sentence. The declaration reserves a name rather
 than a signature, so the parameters it lists are never checked against a call.
 Write `self` to reserve the instance name and leave it out to reserve the static
-one. It goes on a module function, an `impl` method, or a trait method.
+one. It goes on a module function, or on a method of an `impl`, a trait or a
+resource, where it may take back a name the resource inherits.
 
 ### Local Items
 
@@ -1500,6 +1507,9 @@ for let x of arr { println(`${x}`); }
 // Explicit iterator
 let mut iter = arr.into_iter();
 iter.next();                              // Option<i32>
+let two = iter.take(2).collect();         // an adapter takes a copy: iter has not advanced
+let also = (&mut iter).take(2).collect(); // `&mut iter` is an iterator that advances iter
+for let x of &mut iter { break; }         // and so the loop does; iter.by_ref() is `&mut iter`
 let rest = iter.collect();                // List<i32> (default target)
 let bytes: ByteList = s.bytes().collect(); // any FromIterator target, incl. a newtype over List
 
@@ -1770,9 +1780,9 @@ test "not yet implemented" {
     panic("TODO: implement this");
 }
 
-// Timeout override. The default is 5000ms, and a test that runs longer is
+// Timeout override. The default is 5 seconds, and a test that runs longer is
 // interrupted and fails.
-#[timeout_ms(30000)]
+#[timeout(seconds = 30)]
 test "large data processing" {
     process_large_dataset();
 }
@@ -1958,6 +1968,11 @@ server.stop(5_000_000_000)?;   // terminate, then kill after 5 s (a wasi:clocks 
 `HashMap<K, V>` and `HashSet<T>`, iterating in insertion order. See
 [`core:collections`](./stdlib-core-collections.md). `TreeMap` and `TreeSet`
 offer the same API for a key that is `Ord` but not `Hash`.
+
+`HashIndex` is the hash table without the keys, for an interner that keeps them
+in rows of its own. The caller hashes a key and says which row equals it:
+`index.find_or_insert(hash, |row| keys[row] == key, next_row)`. It is the fast
+one and the unguarded one: the hash is used unseeded and as it comes.
 
 `HashMap<K, V>` is also the Wado spelling of the Component Model `map<K, V>`, so
 it crosses a component boundary. There `K` must be `bool`, `char`, `String`, or

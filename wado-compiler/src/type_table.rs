@@ -124,6 +124,10 @@ pub struct TypeTable {
     /// generic impls of one trait at different instantiations are two answers.
     /// An instance's `type_args` substitute it.
     generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, AssocAnswers>,
+    /// What a blanket over a reference (`impl<T: Bound> Tr for &mut T`) binds
+    /// each associated type to, written over its parameter. No declaration
+    /// keys it: the referent is whatever the reference points to.
+    ref_blanket_assoc_type_defs: IndexMap<RefBlanketAssocTypeKey, Vec<RefBlanketAssocType>>,
     /// What each trait declares of its associated types, by declaring trait and
     /// name. See [`AssocTypeSig`].
     assoc_type_sigs: IndexMap<DefId, IndexMap<String, Arc<AssocTypeSig>>>,
@@ -331,6 +335,7 @@ impl TypeTable {
             compiler_items: CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
+            ref_blanket_assoc_type_defs: IndexMap::default(),
             assoc_type_sigs: IndexMap::default(),
             trait_frames: IndexMap::default(),
             projection_bounds_cache: IndexMap::default(),
@@ -383,7 +388,7 @@ impl TypeTable {
             let id = self.types.next_id();
             self.index_type(id, &ty);
             self.push_type(ty.clone());
-            let shared = self.shared_spelling(&ty);
+            let shared = self.immutable_spelling(&ty);
             self.intern_map.insert(ty, id);
             if let Some(shared) = shared {
                 self.intern(shared);
@@ -457,6 +462,7 @@ impl TypeTable {
             | ResolvedType::Enum { .. }
             | ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocParam { .. }
@@ -480,7 +486,7 @@ impl TypeTable {
         }
         let id = self.types.next_id();
         self.push_type(spelling.clone());
-        let shared = self.shared_spelling(&spelling);
+        let shared = self.immutable_spelling(&spelling);
         self.intern_map.insert(spelling, id);
         self.erasures.set_growing(id, id);
         if let Some(shared) = shared {
@@ -537,32 +543,32 @@ impl TypeTable {
     }
 
     /// The type a cell `cell` names its object by: `cell` with every layer
-    /// shared, so a `&X` and a `&mut X` name one cell at each depth, as a
-    /// reference coerces under a shared one, while cells of two depths, whose
+    /// immutable, so a `&X` and a `&mut X` name one cell at each depth, as a
+    /// reference coerces under an immutable one, while cells of two depths, whose
     /// payloads lower apart, stay apart. No struct, variant or function object
     /// is named by a reference, so none shares it.
     #[must_use]
     pub fn cell_key(&self, cell: TypeId) -> TypeId {
         assert!(self.cell_payload(cell).is_some(), "a cell reference");
-        self.shared_form(cell)
+        self.immutable_form(cell)
     }
 
-    /// `ty` with every reference layer shared, interned beside `ty`.
-    fn shared_form(&self, ty: TypeId) -> TypeId {
+    /// `ty` with every reference layer immutable, interned beside `ty`.
+    fn immutable_form(&self, ty: TypeId) -> TypeId {
         match self.get(ty) {
             ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => self
-                .find_ref(RefKind::Shared, self.shared_form(*pointee))
-                .expect("interning a reference interns its shared form"),
+                .find_ref(RefKind::ImmutableReference, self.immutable_form(*pointee))
+                .expect("interning a reference interns its immutable form"),
             _ => ty,
         }
     }
 
-    /// The spelling of `ty`'s shared form, where it is another type.
-    fn shared_spelling(&self, ty: &ResolvedType) -> Option<ResolvedType> {
+    /// The spelling of `ty`'s immutable form, where it is another type.
+    fn immutable_spelling(&self, ty: &ResolvedType) -> Option<ResolvedType> {
         match ty {
             ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => {
-                let shared = ResolvedType::Ref(self.shared_form(*pointee));
-                (shared != *ty).then_some(shared)
+                let immutable = ResolvedType::Ref(self.immutable_form(*pointee));
+                (immutable != *ty).then_some(immutable)
             }
             _ => None,
         }
@@ -573,7 +579,7 @@ impl TypeTable {
     #[must_use]
     pub fn find_ref(&self, kind: RefKind, pointee: TypeId) -> Option<TypeId> {
         let spelling = match kind {
-            RefKind::Shared => ResolvedType::Ref(pointee),
+            RefKind::ImmutableReference => ResolvedType::Ref(pointee),
             RefKind::Mut => ResolvedType::MutRef(pointee),
         };
         self.intern_map.get(&spelling).copied()
@@ -605,7 +611,9 @@ impl TypeTable {
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
             ResolvedType::Newtype { .. } => unreachable!("strip_handles removes every newtype"),
-            ResolvedType::InferVar(var) => panic!("{var} reached heap-effect analysis"),
+            ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+                panic!("{var} reached heap-effect analysis")
+            }
         }
     }
 
@@ -740,18 +748,15 @@ impl TypeTable {
         self.handle_classes(*def)
     }
 
-    /// Each class the resource tree holding `def` numbers, with the resource
-    /// whose own class it is.
+    /// Each class a handle typed `def` can carry, with the resource whose own
+    /// class it is: `def` and what extends it. The rest of its tree is left
+    /// out, or every resource of a tree would list the whole tree.
     pub fn handle_class_owners(&self, def: DefId) -> impl Iterator<Item = (u16, DefId)> {
-        let root = self
-            .resource_chain(def)
-            .last()
-            .expect("a chain starts at `def`");
         self.unrestricted_resources
             .iter()
             .filter_map(move |(&member, classes)| {
                 let lo = classes.as_ref()?.lo;
-                self.is_resource_subtype(member, root)
+                self.is_resource_subtype(member, def)
                     .then_some((lo, member))
             })
     }
@@ -1086,6 +1091,7 @@ impl TypeTable {
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => false,
         }
@@ -1602,13 +1608,6 @@ impl TypeTable {
         self.compiler_item_def(item) == Some(def)
     }
 
-    /// Whether `def` declares a resource, whose instances are handles rather
-    /// than GC objects.
-    #[must_use]
-    pub fn is_resource_def(&self, def: DefId) -> bool {
-        self.defs.kind(def) == DefKind::Resource
-    }
-
     /// The resource `ty` itself is a handle to, generic or not.
     #[must_use]
     pub fn resource_def_of(&self, ty: TypeId) -> Option<DefId> {
@@ -1700,6 +1699,7 @@ impl TypeTable {
             | ResolvedType::Function { .. }
             | ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocParam(_)
@@ -1951,7 +1951,7 @@ impl TypeTable {
                     ResolvedType::BuiltinArray(inner) => components.push(*inner),
                     ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                         components.push(*inner);
-                        components.push(self.shared_form(id));
+                        components.push(self.immutable_form(id));
                     }
                     ResolvedType::Function {
                         params,
@@ -1963,6 +1963,9 @@ impl TypeTable {
                     }
                     ResolvedType::TypePack { mapped_elem, .. } => {
                         components.extend(mapped_elem.iter().copied());
+                    }
+                    ResolvedType::InferVar(_) | ResolvedType::PackVar { .. } => {
+                        unreachable!("an inference variable never outlives the body minting it")
                     }
                     ResolvedType::PackElement { pack, .. } => components.push(*pack),
                     ResolvedType::AssocTypeProjection {
@@ -1994,7 +1997,6 @@ impl TypeTable {
                     | ResolvedType::Flags { .. }
                     | ResolvedType::TypeParam { .. }
                     | ResolvedType::AssocParam { .. }
-                    | ResolvedType::InferVar(_)
                     | ResolvedType::Unknown
                     | ResolvedType::Error => {}
                 }
@@ -2212,26 +2214,6 @@ impl TypeTable {
             .is_some_and(|def| self.is_compiler_item(def, item))
     }
 
-    pub fn compiler_enum_name(&self, item: CompilerItem) -> &str {
-        self.compiler_items.enum_name(item)
-    }
-
-    /// Owned `(module, name)` for a registered struct / enum item — forwards
-    /// the registry's `CompilerItems::struct_owned` so single-expression
-    /// callers query the table directly instead of through `compiler_items()`.
-    pub fn compiler_struct_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
-        self.compiler_items.struct_owned(item)
-    }
-
-    pub fn compiler_enum_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
-        self.compiler_items.enum_owned(item)
-    }
-
-    /// Module source of a registered struct item, if present.
-    pub fn compiler_struct_module(&self, item: CompilerItem) -> Option<&ModuleSource> {
-        self.compiler_items.struct_module(item)
-    }
-
     /// Case name of a registered variant-case item (e.g. `Option::Some`).
     pub fn compiler_variant_case_name(&self, item: CompilerItem) -> &str {
         self.compiler_items.variant_case_name(item)
@@ -2241,18 +2223,6 @@ impl TypeTable {
     /// variant-case item.
     pub fn compiler_variant_case(&self, item: CompilerItem) -> (&ModuleSource, &str, &str, u32) {
         self.compiler_items.require_variant_case(item)
-    }
-
-    /// Module + owner-type name + method name of a registered method item.
-    pub fn compiler_method(&self, item: CompilerItem) -> (&ModuleSource, &str, &str) {
-        self.compiler_items.require_method(item)
-    }
-
-    /// Get the module source where the `Default` trait is defined, if
-    /// the stdlib has registered it. Thin wrapper around
-    /// `CompilerItems::trait_module`.
-    pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
-        self.compiler_items.trait_module(CompilerItem::Default)
     }
 
     /// Make the struct type for a registered `CompilerItem` variant
@@ -2459,6 +2429,39 @@ impl TypeTable {
     /// tuples a pack stands for.
     pub fn is_type_pack(&self, id: TypeId) -> bool {
         matches!(self.get(id), ResolvedType::TypePack { .. })
+    }
+
+    /// Whether `id` stands for a run of a tuple's elements: a pack, or a
+    /// variable standing for one.
+    pub fn is_pack_like(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(id),
+            ResolvedType::TypePack { .. } | ResolvedType::PackVar { .. }
+        )
+    }
+
+    /// The variable `id` is, where it is a pack variable standing for the
+    /// list itself rather than mapping it.
+    pub fn pack_var_list(&self, id: TypeId) -> Option<TypeId> {
+        match self.pack_var_run(id) {
+            Some((var, None)) => Some(var),
+            Some((_, Some(_))) | None => None,
+        }
+    }
+
+    /// The variable `id` is, where it is a pack variable a run of elements
+    /// answers, with the one type each element is where it repeats one: the
+    /// list itself, or a repeat whose element does not mention it.
+    pub fn pack_var_run(&self, id: TypeId) -> Option<(TypeId, Option<TypeId>)> {
+        let ResolvedType::PackVar { var, mapped_elem } = *self.get(id) else {
+            return None;
+        };
+        let var = self.infer_var_type(var);
+        match mapped_elem {
+            None => Some((var, None)),
+            Some(elem) if !self.infer_vars_in(elem).contains(&var) => Some((var, Some(elem))),
+            Some(_) => None,
+        }
     }
 
     /// How a tuple's positions divide into packs and single slots, or `None`
@@ -2975,6 +2978,7 @@ impl TypeTable {
             }
             ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocParam { .. }
@@ -3162,7 +3166,7 @@ impl TypeTable {
     /// Which reference `type_id` is, or `None` for a non-reference.
     pub fn ref_kind(&self, type_id: TypeId) -> Option<RefKind> {
         match self.get(type_id) {
-            ResolvedType::Ref(_) => Some(RefKind::Shared),
+            ResolvedType::Ref(_) => Some(RefKind::ImmutableReference),
             ResolvedType::MutRef(_) => Some(RefKind::Mut),
             _ => None,
         }
@@ -3171,6 +3175,27 @@ impl TypeTable {
     /// Whether `type_id` is a `&mut`, the one handle a holder can write through.
     pub fn is_mut_ref(&self, type_id: TypeId) -> bool {
         matches!(self.get(type_id), ResolvedType::MutRef(_))
+    }
+
+    /// [`Self::ref_kind`] of what `type_id` is represented as: a newtype over
+    /// a reference is that reference to anything asking what it can reach.
+    pub fn represented_ref_kind(&self, type_id: TypeId) -> Option<RefKind> {
+        self.ref_kind(self.representation_head(type_id))
+    }
+
+    /// The references holding `type_id`'s pointee, outermost first, and the
+    /// pointee: `&&mut X` is `[ImmutableReference, Mut]` and `X`. A newtype over a
+    /// reference is that reference, at any depth.
+    pub fn reference_path(&self, mut type_id: TypeId) -> (Vec<RefKind>, TypeId) {
+        let mut kinds = Vec::new();
+        loop {
+            let head = self.representation_head(type_id);
+            let Some((kind, inner)) = self.ref_kind(head).zip(self.ref_pointee(head)) else {
+                return (kinds, type_id);
+            };
+            kinds.push(kind);
+            type_id = inner;
+        }
     }
 
     /// The type the reference `type_id` points at.
@@ -3318,7 +3343,7 @@ impl TypeTable {
     /// A reference of `kind` to `inner`.
     pub fn make_ref_of(&mut self, kind: RefKind, inner: TypeId) -> TypeId {
         match kind {
-            RefKind::Shared => self.make_ref(inner),
+            RefKind::ImmutableReference => self.make_ref(inner),
             RefKind::Mut => self.make_mut_ref(inner),
         }
     }
@@ -3655,6 +3680,21 @@ impl TypeTable {
         Some((self.plain_pack(pack), element))
     }
 
+    /// Whether `ty` (recursively) names the error type: a diagnostic already
+    /// covers it.
+    pub fn mentions_error(&self, ty: TypeId) -> bool {
+        ty == Self::ERROR || self.any_constituent(ty, &mut |t| self.mentions_error(t))
+    }
+
+    /// The one type every element of the run `pack` stands for is, where the
+    /// run repeats one: a declared repeat, or a variable standing for it.
+    pub fn run_element(&mut self, pack: TypeId) -> Option<TypeId> {
+        if let Some((_, element)) = self.repeated_element(pack) {
+            return Some(element);
+        }
+        self.pack_var_run(pack).and_then(|(_, element)| element)
+    }
+
     /// Whether `ty` (recursively) mentions parameter `param`, projections
     /// included.
     pub fn mentions_param(&self, ty: TypeId, param: TypeParamId) -> bool {
@@ -3960,10 +4000,22 @@ impl TypeTable {
         assoc_name: &str,
         args: &[TypeId],
     ) -> Option<TypeId> {
-        if !self.projection_base_is_rigid(base) {
-            return None;
-        }
-        let family = self.projection_family(base, owning_trait, trait_args, assoc_name)?;
+        // A blanket over a reference answers whatever the reference points
+        // to, so it does not wait for the referent to settle. An impl written
+        // for the reference itself outranks it, as it does in dispatch.
+        let on_reference = if self.ref_kind(base).is_some() {
+            self.resolve_assoc_type_of_trait_at(base, owning_trait, trait_args, assoc_name)
+                .or_else(|| self.ref_blanket_projection(base, owning_trait, trait_args, assoc_name))
+        } else {
+            None
+        };
+        let family = match on_reference {
+            Some(family) => family,
+            None if self.projection_base_is_rigid(base) => {
+                self.projection_family(base, owning_trait, trait_args, assoc_name)?
+            }
+            None => return None,
+        };
         Some(self.instantiate_family(*owning_trait, assoc_name, family, args))
     }
 
@@ -4298,6 +4350,93 @@ impl TypeTable {
             })
             .or_default()
             .insert(trait_ref.args, None, type_param_id, impl_def);
+    }
+
+    /// Register what a blanket over a reference to `param` binds `assoc_name`
+    /// to: for `impl<I: Iterator> Iterator for &mut I`, `"Item"` → `I::Item`.
+    pub fn register_ref_blanket_assoc_type_def(
+        &mut self,
+        trait_ref: TraitRef,
+        target_ref: RefKind,
+        assoc_name: String,
+        param: TypeId,
+        binding: TypeId,
+        impl_def: DefId,
+    ) {
+        let blankets = self
+            .ref_blanket_assoc_type_defs
+            .entry(RefBlanketAssocTypeKey {
+                trait_decl: trait_ref.decl,
+                target_ref,
+                assoc_name,
+            })
+            .or_default();
+        let def = RefBlanketAssocType {
+            trait_args: trait_ref.args,
+            param,
+            binding,
+            impl_def,
+        };
+        match blankets.iter_mut().find(|known| known.impl_def == impl_def) {
+            Some(known) => *known = def,
+            None => blankets.push(def),
+        }
+    }
+
+    /// What a blanket over a reference binds `assoc_name` to for `base`, its
+    /// parameter standing for what `base` points to: the blanket whose trait
+    /// arguments, defaults filled, are `trait_args`, or else the one a bare
+    /// bound names. Blankets that differ only in their bounds answer nothing
+    /// here: no bound is checked, so what the elaborator registered for the
+    /// reference is the answer.
+    fn ref_blanket_projection(
+        &mut self,
+        base: TypeId,
+        owning_trait: &DefId,
+        trait_args: Option<&[TypeId]>,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let key = RefBlanketAssocTypeKey {
+            trait_decl: *owning_trait,
+            target_ref: self.ref_kind(base)?,
+            assoc_name: assoc_name.to_string(),
+        };
+        let blankets = self.ref_blanket_assoc_type_defs.get(&key)?.clone();
+        let referent = self.ref_pointee(base)?;
+        let mut answers = AssocAnswers::default();
+        for def in blankets {
+            let substitution = self.bind_params(&[def.param], &[referent]);
+            let written: Vec<TypeId> = def
+                .trait_args
+                .iter()
+                .map(|&arg| self.substitute_type_params(arg, &substitution))
+                .collect();
+            let filled = self.filled_trait_args(
+                &TraitRef {
+                    decl: *owning_trait,
+                    args: written.clone(),
+                },
+                base,
+            );
+            let answer = self.substitute_type_params(def.binding, &substitution);
+            answers.0.push(AssocAnswer {
+                written,
+                filled,
+                answer,
+                impl_def: Some(def.impl_def),
+            });
+        }
+        let at_wanted: Vec<(bool, TypeId)> = answers
+            .0
+            .iter()
+            .filter(|entry| trait_args.is_some() && entry.filled.as_deref() == trait_args)
+            .map(|entry| (true, entry.answer))
+            .collect();
+        if at_wanted.is_empty() {
+            answers.bare()
+        } else {
+            one_assoc_answer(at_wanted.into_iter())
+        }
     }
 
     /// The generic definition of `assoc_name` on `base_decl`, together with
@@ -4763,28 +4902,6 @@ impl TypeTable {
         )
     }
 
-    /// The tuples `id` is built over that hold one of `packs` as an element,
-    /// the outermost where one holds another.
-    pub fn tuples_holding(&self, id: TypeId, packs: &[TypeId]) -> IndexSet<TypeId> {
-        let mut found = IndexSet::default();
-        self.collect_tuples_holding(id, packs, &mut found);
-        found
-    }
-
-    fn collect_tuples_holding(&self, id: TypeId, packs: &[TypeId], found: &mut IndexSet<TypeId>) {
-        if self
-            .as_tuple(id)
-            .is_some_and(|elems| elems.iter().any(|e| packs.contains(e)))
-        {
-            found.insert(id);
-            return;
-        }
-        self.any_constituent(id, &mut |t| {
-            self.collect_tuples_holding(t, packs, found);
-            false
-        });
-    }
-
     /// `type_id` with each effect parameter or variable `rows` names replaced
     /// by its row, wherever a function type in it carries one.
     pub fn substitute_effect_rows(&mut self, type_id: TypeId, rows: &EffectRows) -> TypeId {
@@ -5073,6 +5190,46 @@ impl TypeTable {
         });
     }
 
+    /// Push to `out` what the pack variable `var`, answered with `answer`,
+    /// stands for in a tuple: each element of a tuple answer, mapped through
+    /// `mapped_elem`, or the variable whose class it joined, still a pack.
+    fn splice_pack_var(
+        &mut self,
+        var: InferVarId,
+        mapped_elem: Option<TypeId>,
+        answer: TypeId,
+        leaves: &Leaves<'_>,
+        out: &mut Vec<TypeId>,
+    ) {
+        let each = |this: &mut Self, element: TypeId| match mapped_elem {
+            Some(elem) => {
+                let mut vars = leaves.vars.clone();
+                vars.insert(var, element);
+                this.subst_rec(
+                    elem,
+                    &Leaves {
+                        vars: &vars,
+                        ..*leaves
+                    },
+                )
+            }
+            None => element,
+        };
+        if self.is_infer_var(answer) {
+            let mapped_elem = mapped_elem.map(|_| each(self, answer));
+            out.push(self.make_pack_var(answer, mapped_elem));
+            return;
+        }
+        // An error says nothing of the run's length, so it maps to no element.
+        if answer == Self::ERROR {
+            out.push(answer);
+            return;
+        }
+        for element in self.elem_types_or_self(answer) {
+            out.push(each(self, element));
+        }
+    }
+
     /// The shared traversal behind [`Self::substitute_type_params_with`],
     /// [`Self::substitute_infer_vars`] and [`Self::instantiate_family`].
     fn subst_rec(&mut self, type_id: TypeId, leaves: &Leaves<'_>) -> TypeId {
@@ -5137,6 +5294,21 @@ impl TypeTable {
                 _ => type_id,
             },
             ResolvedType::InferVar(var) => leaves.vars.get(&var).copied().unwrap_or(type_id),
+            // An answered one is spliced by the tuple holding it.
+            ResolvedType::PackVar { var, mapped_elem } => match mapped_elem {
+                Some(elem) => {
+                    let substituted = self.subst_rec(elem, leaves);
+                    if substituted == elem {
+                        type_id
+                    } else {
+                        self.intern(ResolvedType::PackVar {
+                            var,
+                            mapped_elem: Some(substituted),
+                        })
+                    }
+                }
+                None => type_id,
+            },
             ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.subst_rec(elem, leaves);
                 if new_elem == elem {
@@ -5182,6 +5354,12 @@ impl TypeTable {
             ResolvedType::Tuple(elems) => {
                 let mut new_elems: Vec<TypeId> = Vec::new();
                 for &e in &elems {
+                    if let ResolvedType::PackVar { var, mapped_elem } = *self.get(e)
+                        && let Some(&answer) = leaves.vars.get(&var)
+                    {
+                        self.splice_pack_var(var, mapped_elem, answer, leaves, &mut new_elems);
+                        continue;
+                    }
                     let bound_pack = match self.get(e) {
                         ResolvedType::TypePack {
                             id, mapped_elem, ..
@@ -5195,6 +5373,23 @@ impl TypeTable {
                         new_elems.push(self.subst_rec(e, leaves));
                         continue;
                     };
+                    // A use site's variable for the pack: the tuple it is
+                    // answered with is spliced then.
+                    if self.is_infer_var(pack_type) {
+                        let mapped_elem = mapped_elem.map(|elem| {
+                            let mut elem_substitution = leaves.params.clone();
+                            elem_substitution.insert(pack, pack_type);
+                            self.subst_rec(
+                                elem,
+                                &Leaves {
+                                    params: &elem_substitution,
+                                    ..*leaves
+                                },
+                            )
+                        });
+                        new_elems.push(self.make_pack_var(pack_type, mapped_elem));
+                        continue;
+                    }
                     match mapped_elem {
                         // Mapped pack: substitute the element once per source
                         // pack element, binding the pack param to that element
@@ -5674,6 +5869,19 @@ impl TypeTable {
         current
     }
 
+    /// The parameters and result of the function type `id` is, read through
+    /// the newtypes naming it. `None` for any other type.
+    pub fn function_signature(&self, id: TypeId) -> Option<(&[TypeId], TypeId)> {
+        match self.get(self.representation_head(id)) {
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => Some((params, *return_type)),
+            _ => None,
+        }
+    }
+
     /// The function type `receiver` is, read through references and newtypes:
     /// what fills the one position a function-type impl target writes, which
     /// is itself. `None` for a receiver of any other shape.
@@ -5836,7 +6044,10 @@ impl TypeTable {
             ResolvedType::TypePack { .. } => packs_count,
             // One step's element is as rigid as a type parameter.
             ResolvedType::PackElement { .. } => false,
-            ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
+            ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => true,
             // Its arguments are holes of their own: `S::Buf<?0>` awaits `?0`.
             ResolvedType::AssocTypeProjection {
                 param_id,
@@ -5992,6 +6203,7 @@ impl TypeTable {
             ResolvedType::TypeParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
             ResolvedType::AssocParam { .. } => family_is_open,
@@ -6049,6 +6261,10 @@ impl TypeTable {
             | ResolvedType::MutRef(inner) => f(*inner),
             ResolvedType::PackElement { pack, .. } => f(*pack),
             ResolvedType::TypePack {
+                mapped_elem: Some(element),
+                ..
+            }
+            | ResolvedType::PackVar {
                 mapped_elem: Some(element),
                 ..
             } => f(*element),
@@ -6259,6 +6475,23 @@ impl TypeTable {
         self.any_infer_var(id, &mut |_| true)
     }
 
+    /// The type the variable `var` is, which minting it interned.
+    fn infer_var_type(&self, var: InferVarId) -> TypeId {
+        *self
+            .intern_map
+            .get(&ResolvedType::InferVar(var))
+            .expect("a pack variable is minted as a variable first")
+    }
+
+    /// The pack variable `var` written inside a tuple, each element `elem`
+    /// with `var` standing for it, or the list itself where `elem` is `None`.
+    pub fn make_pack_var(&mut self, var: TypeId, mapped_elem: Option<TypeId>) -> TypeId {
+        let ResolvedType::InferVar(var) = *self.get(var) else {
+            panic!("a pack variable is an inference variable");
+        };
+        self.intern(ResolvedType::PackVar { var, mapped_elem })
+    }
+
     /// Whether `id` is an inference variable itself, not a type naming one.
     pub fn is_infer_var(&self, id: TypeId) -> bool {
         matches!(self.get(id), ResolvedType::InferVar(_))
@@ -6289,6 +6522,10 @@ impl TypeTable {
     fn any_infer_var(&self, id: TypeId, pred: &mut impl FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_) => pred(id),
+            ResolvedType::PackVar { var, .. } => {
+                pred(self.infer_var_type(*var))
+                    || self.any_constituent(id, &mut |t| self.any_infer_var(t, pred))
+            }
             ResolvedType::AssocTypeProjection {
                 param_id,
                 args,
@@ -6397,7 +6634,7 @@ impl TypeTable {
                     &effect_names,
                 )
             }
-            ResolvedType::Ref(inner) => ref_type_name(RefKind::Shared, &render(*inner)),
+            ResolvedType::Ref(inner) => ref_type_name(RefKind::ImmutableReference, &render(*inner)),
             ResolvedType::MutRef(inner) => ref_type_name(RefKind::Mut, &render(*inner)),
             ResolvedType::TypeParam { id } => self.param_name(*id).to_string(),
             ResolvedType::AssocParam(id) => self.assoc_param_name(id).to_string(),
@@ -6447,6 +6684,7 @@ impl TypeTable {
                 type_pack_name(&render(*element))
             }
             ResolvedType::TypePack { id, .. } => type_pack_name(self.param_name(*id)),
+            ResolvedType::PackVar { var, .. } => type_pack_name(&self.infer_var_name(*var)),
             ResolvedType::PackElement { pack, walk } => {
                 pack_element_name(self.param_name(self.pack_id(*pack)), *walk)
             }
@@ -6516,9 +6754,10 @@ impl TypeTable {
                 let unqualified = mangle_generic_name(&self.decl_mangled_name(*def), &args);
                 mangle_declared(self.def_module(*def), &unqualified)
             }
-            ResolvedType::Ref(inner) => {
-                ref_type_name(RefKind::Shared, &self.mangle_type_arg_erased(*inner))
-            }
+            ResolvedType::Ref(inner) => ref_type_name(
+                RefKind::ImmutableReference,
+                &self.mangle_type_arg_erased(*inner),
+            ),
             ResolvedType::MutRef(inner) => {
                 ref_type_name(RefKind::Mut, &self.mangle_type_arg_erased(*inner))
             }
@@ -6755,7 +6994,7 @@ impl TypeTable {
                 .with_args(vec![self.fq_type_name_spelled_in(*elem, rows)]),
             ResolvedType::Ref(inner) => self
                 .fq_type_name_spelled_in(*inner, rows)
-                .with_reference(RefKind::Shared),
+                .with_reference(RefKind::ImmutableReference),
             ResolvedType::MutRef(inner) => self
                 .fq_type_name_spelled_in(*inner, rows)
                 .with_reference(RefKind::Mut),
@@ -6796,7 +7035,9 @@ impl TypeTable {
                     RowSpelling::Erased => Vec::new(),
                 },
             ),
-            ResolvedType::InferVar(var) => FqTypeName::infer(*var),
+            ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+                FqTypeName::infer(*var)
+            }
             // What the solver reads as failed where a type id carries it.
             ResolvedType::Unknown | ResolvedType::Error => {
                 FqTypeName::unresolved(&self.mangle_type_name(id))
@@ -6893,6 +7134,9 @@ impl TypeTable {
             }
             ResolvedType::TypePack { id, .. } => {
                 TypeNameInfo::Named(type_pack_name(self.param_name(*id)))
+            }
+            ResolvedType::PackVar { var, .. } => {
+                TypeNameInfo::Named(type_pack_name(&var.to_string()))
             }
             // One parameter list cannot name a pack and a parameter alike, so
             // the bare name is unique to the element of the outermost walk.
@@ -7329,6 +7573,7 @@ impl TypeTable {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
@@ -7942,6 +8187,24 @@ impl TypeSet {
         self.words[word] |= mask;
         newly
     }
+}
+
+/// [`AssocTypeKey`] for a blanket impl over a reference to its parameter.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct RefBlanketAssocTypeKey {
+    trait_decl: DefId,
+    target_ref: RefKind,
+    assoc_name: String,
+}
+
+/// A blanket's binding, the trait arguments its impl wrote, and the parameter
+/// its target refers to.
+#[derive(Debug, Clone)]
+struct RefBlanketAssocType {
+    trait_args: Vec<TypeId>,
+    param: TypeId,
+    binding: TypeId,
+    impl_def: DefId,
 }
 
 /// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather

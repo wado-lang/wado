@@ -1,0 +1,36 @@
+// A resource declaring an inherited name unavailable takes it back from its own
+// handles and those of what extends it. The parent's method still answers
+// through the parent, and nothing else of the resource changes.
+
+#[cm("example:ui/target", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
+resource Target {
+    #[cm("example:ui/target#label")]
+    fn label(&self) -> String;
+}
+
+#[cm("example:ui/widget", linearity = "unrestricted", repr = "externref", classes = "1..=2")]
+resource Widget extends Target {
+    #[unavailable("a `Widget` answers with a number; use `widget_label`")]
+    fn label(&self);
+
+    #[cm("example:ui/widget#label")]
+    fn widget_label(&self) -> i32;
+}
+
+#[cm("example:ui/button", linearity = "unrestricted", repr = "externref", classes = "2..=2")]
+resource Button extends Widget {}
+
+fn through_the_parent(t: Target) -> String with Target {
+    return t.label();
+}
+
+fn through_the_child(w: Widget) -> i32 with Widget {
+    return w.widget_label();
+}
+
+test {
+    let b = Button::backed_by("ok");
+    let w: Widget = b;
+    let t: Target = w;
+    assert t == b && t matches { _: Button };
+}

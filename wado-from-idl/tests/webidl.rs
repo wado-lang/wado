@@ -1,7 +1,9 @@
 //! The `WebIDL` frontend, over a hand-written webidl2 snapshot.
 
 use wado_from_idl::WadoCodeGenerator;
-use wado_from_idl::webidl::{Snapshot, WebIdlOutput, generate, transform};
+use wado_from_idl::webidl::{
+    Cause, Lost, Skip, Snapshot, WebIdlOutput, generate, skip_table, transform,
+};
 
 /// The definitions of a snapshot, as the JSON text `snapshot.mjs` writes.
 #[derive(Default)]
@@ -9,7 +11,11 @@ struct Definitions {
     interfaces: Vec<String>,
     mixins: Vec<String>,
     includes: Vec<String>,
+    typedefs: Vec<String>,
     callbacks: Vec<String>,
+    dictionaries: Vec<String>,
+    enums: Vec<String>,
+    namespaces: Vec<String>,
 }
 
 impl Definitions {
@@ -24,23 +30,76 @@ impl Definitions {
   "mixins": [{}],
   "includes": [{}],
   "typedefs": [{}],
-  "callbacks": [{}]
+  "callbacks": [{}],
+  "dictionaries": [{}],
+  "enums": [{}],
+  "namespaces": [{}]
 }}"#,
             self.interfaces.join(", "),
             self.mixins.join(", "),
             self.includes.join(", "),
-            typedef("Timestamp", &plain("double")),
+            [typedef("Timestamp", &plain("double"))]
+                .iter()
+                .chain(&self.typedefs)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", "),
             self.callbacks.join(", "),
+            self.dictionaries.join(", "),
+            self.enums.join(", "),
+            self.namespaces.join(", "),
         );
         serde_json::from_str(&json).expect("the test snapshot should parse")
     }
 
-    fn generate(&self) -> (String, Vec<String>) {
+    fn transform(&self) -> (String, Vec<Skip>) {
         let WebIdlOutput {
             module, skipped, ..
         } = transform(&self.build()).expect("the slice should transform");
         (WadoCodeGenerator::new().generate(&module), skipped)
     }
+
+    fn generate(&self) -> (String, Vec<String>) {
+        let (code, skipped) = self.transform();
+        (code, skipped.iter().map(Skip::to_string).collect())
+    }
+}
+
+fn dictionary(name: &str, partial: bool) -> String {
+    definition("dictionary", name, "null", "", partial, &[])
+}
+
+fn field(name: &str, ty: &str, required: bool) -> String {
+    format!(
+        r#"{{"type": "field", "name": "{name}", "extAttrs": [], "idlType": {ty}, "default": null, "required": {required}}}"#
+    )
+}
+
+fn namespace(name: &str, members: &[String]) -> String {
+    definition("namespace", name, "null", "", false, members)
+}
+
+fn const_member(name: &str) -> String {
+    typed_const(
+        name,
+        "unsigned short",
+        r#"{"type": "number", "value": "1"}"#,
+    )
+}
+
+fn typed_const(name: &str, ty: &str, value: &str) -> String {
+    format!(
+        r#"{{"type": "const", "name": "{name}", "idlType": {}, "extAttrs": [], "value": {value}}}"#,
+        plain(ty)
+    )
+}
+
+/// An `iterable`, `maplike`, `setlike` or `async_iterable` declaration.
+fn iteration(kind: &str) -> String {
+    format!(
+        r#"{{"type": "{kind}", "idlType": [{}], "arguments": [], "extAttrs": [], "readonly": false, "async": false}}"#,
+        plain("DOMString")
+    )
 }
 
 fn named(name: &str, nullable: bool) -> String {
@@ -143,7 +202,6 @@ fn chain() -> Definitions {
                 )],
                 "",
             ),
-            r#"{"type": "const", "name": "ELEMENT_NODE", "idlType": {"type": "const-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "unsigned short"}, "extAttrs": [], "value": {"type": "number", "value": "1"}}"#.to_string(),
         ],
     );
     let element = interface(
@@ -285,8 +343,9 @@ fn an_optional_argument_takes_its_webidl_default_or_null() {
             )],
             "",
         ),
-        // A number is read by WebIDL's grammar, where a leading `0` is octal
-        // and a float may start or end at its `.`, and written in Wado's.
+        // A number keeps its WebIDL spelling where Wado reads it the same.
+        // It does not for a leading `0`, which is octal in WebIDL, nor for a
+        // float starting or ending at its `.`.
         operation(
             "setMode",
             &plain("undefined"),
@@ -359,7 +418,7 @@ fn an_optional_argument_takes_its_webidl_default_or_null() {
         ),
         "{code}"
     );
-    assert!(code.contains("fn step_up(&self, n: i32 = 255);"), "{code}");
+    assert!(code.contains("fn step_up(&self, n: i32 = 0xFF);"), "{code}");
     assert!(
         code.contains("fn set_mode(&self, mode: i32 = -493, ratio: f64 = 0.5, scale: f64 = 5.0);"),
         "{code}"
@@ -379,7 +438,7 @@ fn an_optional_argument_takes_its_webidl_default_or_null() {
 }
 
 #[test]
-fn a_keyword_is_escaped_a_typedef_resolves_and_a_const_is_not_a_member() {
+fn a_keyword_is_escaped_and_a_typedef_resolves() {
     let (code, _) = chain().generate();
     assert!(code.contains("fn self_(&self) -> Window;"), "{code}");
     // `type` is a keyword the parser takes as a name.
@@ -389,7 +448,6 @@ fn a_keyword_is_escaped_a_typedef_resolves_and_a_const_is_not_a_member() {
         "{code}"
     );
     assert!(code.contains("fn started(&self) -> f64;"), "{code}");
-    assert!(!code.contains("ELEMENT_NODE"), "{code}");
 }
 
 #[test]
@@ -405,13 +463,12 @@ fn the_global_yields_the_dom_effect_with_its_resource_typed_attributes() {
 
 #[test]
 fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
-    let union = r#"{"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": true, "idlType": [{"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "DOMString"}, {"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "Node"}]}"#;
     let members = [
         attribute("attributes", &plain("NamedNodeMap"), true),
         operation(
             "append",
             &plain("undefined"),
-            &[argument("nodes", union, false, "null")],
+            &[argument("nodes", &plain("any"), false, "null")],
             "",
         ),
         // A trailing optional the slice cannot express leaves the rest intact.
@@ -420,7 +477,7 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
             &plain("Element"),
             &[
                 argument("localName", &plain("DOMString"), false, "null"),
-                argument("options", union, true, r#"{"type": "dictionary"}"#),
+                argument("options", &plain("any"), true, r#"{"type": "dictionary"}"#),
             ],
             "",
         ),
@@ -429,14 +486,6 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
             "prepend",
             &plain("undefined"),
             &[variadic("nodes", &plain("NodeList"))],
-            "",
-        ),
-        // Two overloads that both lower are ambiguous, so neither is emitted.
-        operation("alert", &plain("undefined"), &[], ""),
-        operation(
-            "alert",
-            &plain("undefined"),
-            &[argument("message", &plain("DOMString"), false, "null")],
             "",
         ),
         // A special operation names no method.
@@ -455,17 +504,149 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
         "{code}"
     );
     assert!(!code.contains("attributes"), "{code}");
-    assert!(!code.contains("alert"), "{code}");
     assert_eq!(
         skipped,
         [
             "Element.attributes: `NamedNodeMap` is outside the slice",
-            "Element.append: `nodes`: union of 2 expressible types",
+            "Element.append: `nodes`: `any`",
+            "Element.create_element: optional `options` dropped: `any`",
             "Element.prepend: `nodes`: `NodeList` is outside the slice",
-            "Element.alert: 2 overloads",
             "Element.(getter): getter operation",
         ]
     );
+}
+
+/// Two specifications may each declare one member, as both of `@webref/idl`'s
+/// partials of `CaptureController` declare its `constructor()`.
+#[test]
+fn a_member_declared_twice_is_one_member() {
+    let alert = operation("alert", &plain("undefined"), &[], "");
+    let mut defs = chain();
+    defs.interfaces
+        .push(partial("Element", std::slice::from_ref(&alert)));
+    defs.interfaces.push(partial("Element", &[alert]));
+    let (code, skipped) = defs.generate();
+    assert_eq!(code.matches("fn alert(&self);").count(), 1, "{code}");
+    assert_eq!(skipped, Vec::<String>::new());
+}
+
+/// `WebIDL` keeps a static operation apart from a regular one of its name, as
+/// Fetch's `Response.json` is both; a resource has one namespace for the two.
+#[test]
+fn two_members_binding_one_name_stop_the_generator() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation("json", &plain("undefined"), &[], ""),
+            operation("json", &plain("undefined"), &[], "static"),
+        ],
+    ));
+    let err = transform(&defs.build()).expect_err("one name bound twice is an error");
+    assert!(
+        err.to_string().contains("`Element` declares `json` twice"),
+        "{err}"
+    );
+}
+
+/// The bare name static overloads reserve is the name of a regular operation
+/// too, which binds it.
+#[test]
+fn a_reserved_name_another_member_binds_stops_the_generator() {
+    let data = |ty: &str| argument("data", &plain(ty), false, "null");
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation("read", &plain("undefined"), &[], ""),
+            operation("read", &plain("undefined"), &[data("DOMString")], "static"),
+            operation("read", &plain("undefined"), &[data("Node")], "static"),
+        ],
+    ));
+    let err = transform(&defs.build()).expect_err("one name declared twice is an error");
+    assert!(
+        err.to_string().contains("`Element` declares `read` twice"),
+        "{err}"
+    );
+}
+
+/// Each overload is named by the arguments that tell it apart, after those
+/// every overload shares; the bare name is the overload taking none, and
+/// unavailable where there is none.
+#[test]
+fn an_overload_is_named_by_the_arguments_that_tell_it_apart() {
+    let op = |name: &str, args: &[String]| operation(name, &plain("undefined"), args, "");
+    let required = |name: &str, ty: &str| argument(name, &plain(ty), false, "null");
+    let constructor = |args: &[String]| {
+        format!(
+            r#"{{"type": "constructor", "arguments": [{}], "extAttrs": []}}"#,
+            args.join(", ")
+        )
+    };
+    let members = [
+        op("alert", &[]),
+        op("alert", &[required("message", "DOMString")]),
+        op(
+            "scroll",
+            &[argument("top", &plain("unsigned long"), true, "null")],
+        ),
+        op(
+            "scroll",
+            &[required("x", "double"), required("y", "double")],
+        ),
+        op(
+            "append",
+            &[
+                required("name", "DOMString"),
+                required("value", "DOMString"),
+            ],
+        ),
+        op(
+            "append",
+            &[
+                required("name", "DOMString"),
+                required("blobValue", "Node"),
+                argument("filename", &plain("DOMString"), true, "null"),
+            ],
+        ),
+        // Every overload names its argument `data`, so the types tell them
+        // apart, and one the slice cannot type takes only itself out.
+        op("send", &[required("data", "DOMString")]),
+        op("send", &[required("data", "Node")]),
+        op("send", &[required("data", "any")]),
+        constructor(&[required("node", "Node")]),
+        constructor(&[required("text", "DOMString")]),
+    ];
+    let mut defs = chain();
+    defs.interfaces.push(partial("Element", &members));
+    let (code, skipped) = defs.generate();
+    for expected in [
+        "    #[cm(\"wado-lang:web/element#alert\")]\n    #[cm_params(\"self\")]\n    fn alert(&self);",
+        "    #[cm(\"wado-lang:web/element#alert-with-message\")]\n    #[cm_params(\"self\", \"message\")]\n    fn alert_with_message(&self, message: String);",
+        "fn scroll_with_top(&self, top: Option<u32> = null);",
+        "fn scroll_with_x_y(&self, x: f64, y: f64);",
+        "#[unavailable(\"overloaded; use `scroll_with_top` or `scroll_with_x_y`\")]\n    fn scroll(&self);",
+        "fn append_with_value(&self, name: String, value: String);",
+        "fn append_with_blob_value_filename(&self, name: String, blob_value: Node, filename: Option<String> = null);",
+        "#[unavailable(\"overloaded; use `append_with_value` or `append_with_blob_value_filename`\")]\n    fn append(&self);",
+        "fn send_with_string(&self, data: String);",
+        "fn send_with_node(&self, data: Node);",
+        "#[unavailable(\"overloaded; use `send_with_string` or `send_with_node`\")]\n    fn send(&self);",
+        "    #[cm(\"wado-lang:web/element#new-with-node\")]\n    #[cm_params(\"node\")]\n    fn new_with_node(node: Node) -> Element;",
+        "fn new_with_text(text: String) -> Element;",
+        "#[unavailable(\"overloaded; use `new_with_node` or `new_with_text`\")]\n    fn new();",
+    ] {
+        assert!(code.contains(expected), "{expected}\n---\n{code}");
+    }
+    assert_eq!(skipped, ["Element.send_with_any: `data`: `any`"]);
+
+    // Each overload calls the one JavaScript member, which picks the overload
+    // by the arguments it is passed.
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(glue.contains("p0.alert();"), "{glue}");
+    assert!(glue.contains("p0.alert($string(p1, p2));"), "{glue}");
 }
 
 #[test]
@@ -601,6 +782,453 @@ fn a_sequence_is_a_list_either_way() {
         ),
         "{glue}"
     );
+}
+
+fn string_enum(name: &str, values: &[&str]) -> String {
+    let values: Vec<String> = values
+        .iter()
+        .map(|value| format!(r#"{{"type": "enum-value", "value": "{value}"}}"#))
+        .collect();
+    format!(
+        r#"{{"type": "enum", "name": "{name}", "values": [{}], "extAttrs": []}}"#,
+        values.join(", ")
+    )
+}
+
+#[test]
+fn an_enum_is_a_wado_enum_crossing_as_its_cases_index() {
+    let mut defs = chain();
+    defs.enums = vec![
+        string_enum("RequestMode", &["cors", "no-cors", "same_origin", "flipY"]),
+        // Only an enum a bound member names is declared.
+        string_enum("Unnamed", &["one"]),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("mode", &plain("RequestMode"), false),
+            attribute("fallback", &nullable("RequestMode"), true),
+            operation(
+                "modes",
+                &sequence("sequence", &plain("RequestMode")),
+                &[],
+                "",
+            ),
+            operation(
+                "request",
+                &plain("undefined"),
+                &[
+                    argument(
+                        "allowed",
+                        &sequence("sequence", &plain("RequestMode")),
+                        false,
+                        "null",
+                    ),
+                    argument(
+                        "mode",
+                        &plain("RequestMode"),
+                        true,
+                        r#"{"type": "string", "value": "no-cors"}"#,
+                    ),
+                    argument("other", &plain("RequestMode"), true, "null"),
+                ],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "#[cm(\"wado-lang:web/types#request-mode\")]\n\
+             pub enum RequestMode {\n    Cors,\n    NoCors,\n    SameOrigin,\n    FlipY,\n}\n"
+        ),
+        "{code}"
+    );
+    assert!(!code.contains("Unnamed"), "{code}");
+    assert!(code.contains("fn mode(&self) -> RequestMode;"), "{code}");
+    assert!(
+        code.contains("fn set_mode(&self, value: RequestMode);"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn fallback(&self) -> Option<RequestMode>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn modes(&self) -> List<RequestMode>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains(
+            "fn request(&self, allowed: List<RequestMode>, \
+             mode: RequestMode = RequestMode::NoCors, other: Option<RequestMode> = null);"
+        ),
+        "{code}"
+    );
+    assert_eq!(skipped, [] as [&str; 0]);
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(
+        glue.contains(
+            "const $ENUMS = {\n  \
+             RequestMode: [\"cors\", \"no-cors\", \"same_origin\", \"flipY\"],\n};\n"
+        ),
+        "{glue}"
+    );
+    // A case crosses as its index, and is one byte in memory.
+    assert!(
+        glue.contains("return $case($ENUMS.RequestMode, p0.mode);"),
+        "{glue}"
+    );
+    assert!(glue.contains("p0.mode = $ENUMS.RequestMode[p1];"), "{glue}");
+    assert!(
+        glue.contains("$view().setUint8($ret + 1, $case($ENUMS.RequestMode, $value));"),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "$putList($ret, $value, 1, 1, (at, item) => {\n          \
+             $view().setUint8(at, $case($ENUMS.RequestMode, item));\n        });"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "p0.request($list(p1, p2, 1, (at) => $ENUMS.RequestMode[$view().getUint8(at)]), \
+             $ENUMS.RequestMode[p3], (p4 === 0 ? undefined : $ENUMS.RequestMode[p5]));"
+        ),
+        "{glue}"
+    );
+}
+
+#[test]
+fn a_dictionary_is_a_struct_crossing_as_a_record() {
+    let mut defs = chain();
+    defs.enums = vec![string_enum("Mode", &["open", "closed"])];
+    defs.dictionaries = vec![
+        definition(
+            "dictionary",
+            "EventInit",
+            "null",
+            "",
+            false,
+            &[
+                field("bubbles", &plain("boolean"), false),
+                // A member the slice cannot express is left to the host's default.
+                field("detail", &plain("any"), false),
+            ],
+        ),
+        definition(
+            "dictionary",
+            "EventInit",
+            "null",
+            "",
+            true,
+            &[field("relatedTarget", &nullable("Node"), false)],
+        ),
+        // A dictionary holds its parent's members ahead of its own.
+        definition(
+            "dictionary",
+            "ShadowInit",
+            r#""EventInit""#,
+            "",
+            false,
+            &[
+                field("mode", &plain("Mode"), true),
+                field(
+                    "slotNames",
+                    &sequence("sequence", &plain("DOMString")),
+                    false,
+                ),
+            ],
+        ),
+        // A required member that does not lower takes the dictionary with it.
+        definition(
+            "dictionary",
+            "Opaque",
+            "null",
+            "",
+            false,
+            &[field("value", &plain("any"), true)],
+        ),
+        // Only a dictionary a bound member names is declared.
+        definition(
+            "dictionary",
+            "Unnamed",
+            "null",
+            "",
+            false,
+            &[field("x", &plain("long"), false)],
+        ),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "attach",
+                &plain("ShadowInit"),
+                &[argument("init", &plain("ShadowInit"), false, "null")],
+                "",
+            ),
+            operation(
+                "fire",
+                &plain("undefined"),
+                &[
+                    argument(
+                        "inits",
+                        &sequence("sequence", &plain("EventInit")),
+                        false,
+                        "null",
+                    ),
+                    argument(
+                        "init",
+                        &plain("EventInit"),
+                        true,
+                        r#"{"type": "dictionary"}"#,
+                    ),
+                ],
+                "",
+            ),
+            attribute("opaque", &plain("Opaque"), true),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "#[cm(\"wado-lang:web/types#event-init\")]\n\
+             pub struct EventInit {\n    \
+             #[cm(\"bubbles\")]\n    pub bubbles: Option<bool> = null,\n    \
+             #[cm(\"related-target\")]\n    pub related_target: Option<Node> = null,\n}\n"
+        ),
+        "{code}"
+    );
+    assert!(
+        code.contains(
+            "#[cm(\"wado-lang:web/types#shadow-init\")]\n\
+             pub struct ShadowInit {\n    \
+             #[cm(\"bubbles\")]\n    pub bubbles: Option<bool> = null,\n    \
+             #[cm(\"related-target\")]\n    pub related_target: Option<Node> = null,\n    \
+             #[cm(\"mode\")]\n    pub mode: Mode,\n    \
+             #[cm(\"slot-names\")]\n    pub slot_names: Option<List<String>> = null,\n}\n"
+        ),
+        "{code}"
+    );
+    assert!(code.contains("pub enum Mode {"), "{code}");
+    assert!(!code.contains("Unnamed"), "{code}");
+    assert!(
+        code.contains("fn attach(&self, init: ShadowInit) -> ShadowInit;"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn fire(&self, inits: List<EventInit>, init: Option<EventInit> = null);"),
+        "{code}"
+    );
+    assert_eq!(
+        skipped,
+        [
+            "EventInit.detail: `any`",
+            "Opaque: `value`: `any`",
+            "Element.opaque: `Opaque` is a dictionary without a binding",
+        ]
+    );
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    // A `None` is a member left out, which the host reads its default for.
+    // Inside a record a handle is the index of its slot, as it is in memory.
+    assert!(
+        glue.contains(
+            "const $value = p0.attach({ \
+             bubbles: (p1 === 0 ? undefined : (p2 !== 0)), \
+             relatedTarget: (p3 === 0 ? undefined : $core.exports[$SLOT_GET](p4)), \
+             mode: $ENUMS.Mode[p5], \
+             slotNames: (p6 === 0 ? undefined : $list(p7, p8, 8, (at) => \
+             $string($view().getUint32(at, true), $view().getUint32(at + 4, true)))) });"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains("$view().setUint8($ret + 12, $case($ENUMS.Mode, $value.mode));"),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "p0.fire($list(p1, p2, 12, (at) => ({ \
+             bubbles: ($view().getUint8(at) === 0 ? undefined : ($view().getUint8(at + 1) !== 0)), \
+             relatedTarget: ($view().getUint8(at + 4) === 0 ? undefined : \
+             $core.exports[$SLOT_GET]($view().getUint32(at + 8, true))) })), "
+        ),
+        "{glue}"
+    );
+}
+
+/// A parent none of whose members binds has no struct of its own, and gives
+/// its child nothing: the child holds its own members.
+#[test]
+fn a_dictionary_keeps_its_members_under_a_parent_that_binds_none() {
+    let mut defs = chain();
+    defs.dictionaries = vec![
+        definition(
+            "dictionary",
+            "BaseOptions",
+            "null",
+            "",
+            false,
+            &[field("detail", &plain("any"), false)],
+        ),
+        definition(
+            "dictionary",
+            "SendOptions",
+            r#""BaseOptions""#,
+            "",
+            false,
+            &[field("count", &plain("long"), true)],
+        ),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "send",
+                &plain("undefined"),
+                &[argument("options", &plain("SendOptions"), false, "null")],
+                "",
+            ),
+            operation(
+                "base",
+                &plain("undefined"),
+                &[argument("options", &plain("BaseOptions"), false, "null")],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains("pub struct SendOptions {\n    #[cm(\"count\")]\n    pub count: i32,\n}\n"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn send(&self, options: SendOptions);"),
+        "{code}"
+    );
+    assert_eq!(
+        skipped,
+        [
+            "BaseOptions.detail: `any`",
+            "BaseOptions: a dictionary without a member that binds",
+            "Element.base: `options`: `BaseOptions` is a dictionary without a binding",
+        ]
+    );
+}
+
+/// The host refuses a required member that is `undefined`, so a `None` there
+/// is `null`.
+#[test]
+fn a_required_nullable_member_left_none_is_null() {
+    let mut defs = chain();
+    defs.dictionaries = vec![definition(
+        "dictionary",
+        "EntryInit",
+        "null",
+        "",
+        false,
+        &[
+            field("root", &nullable("Node"), true),
+            field("target", &nullable("Node"), false),
+        ],
+    )];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "observe",
+                &plain("undefined"),
+                &[argument("init", &plain("EntryInit"), false, "null")],
+                "",
+            ),
+            operation(
+                "observeAll",
+                &plain("undefined"),
+                &[argument(
+                    "inits",
+                    &sequence("sequence", &plain("EntryInit")),
+                    false,
+                    "null",
+                )],
+                "",
+            ),
+        ],
+    ));
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(
+        glue.contains(
+            "p0.observe({ \
+             root: ((p1 === 0 ? undefined : $core.exports[$SLOT_GET](p2)) ?? null), \
+             target: (p3 === 0 ? undefined : $core.exports[$SLOT_GET](p4)) });"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "p0.observeAll($list(p1, p2, 16, (at) => ({ \
+             root: (($view().getUint8(at) === 0 ? undefined : \
+             $core.exports[$SLOT_GET]($view().getUint32(at + 4, true))) ?? null), "
+        ),
+        "{glue}"
+    );
+}
+
+/// A value Wado cannot spell as a case leaves its enum, and each member
+/// naming it, without a binding.
+#[test]
+fn an_enum_whose_values_name_no_cases_is_skipped() {
+    let mut defs = chain();
+    defs.enums = vec![
+        string_enum("Dimension", &["2d", "3d"]),
+        string_enum("Blocker", &["", "frame"]),
+        string_enum("Flip", &["flip-y", "flipY"]),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("dimension", &plain("Dimension"), true),
+            attribute("blocker", &plain("Blocker"), true),
+            attribute("flip", &plain("Flip"), true),
+        ],
+    ));
+    let (code, skipped) = defs.transform();
+    assert!(!code.contains("pub enum"), "{code}");
+    let reported: Vec<(String, Lost, Cause)> = skipped
+        .iter()
+        .map(|s| (s.to_string(), s.lost, s.reason.cause.clone()))
+        .collect();
+    let expected = [
+        ("Dimension: the value `2d` names no case", Lost::Definition),
+        ("Blocker: the value `` names no case", Lost::Definition),
+        (
+            "Flip: the values `flip-y` and `flipY` both name the case `FlipY`",
+            Lost::Definition,
+        ),
+        (
+            "Element.dimension: `Dimension` is an enum without a binding",
+            Lost::Member,
+        ),
+        (
+            "Element.blocker: `Blocker` is an enum without a binding",
+            Lost::Member,
+        ),
+        (
+            "Element.flip: `Flip` is an enum without a binding",
+            Lost::Member,
+        ),
+    ]
+    .map(|(line, lost)| (line.to_string(), lost, Cause::Enum));
+    assert_eq!(reported, expected);
 }
 
 #[test]
@@ -762,18 +1390,115 @@ fn a_callback_is_a_closure_the_host_calls_back_with_scalars_and_handles() {
     ];
     defs.interfaces.push(partial("Element", &members));
     let (code, skipped) = defs.generate();
-    assert!(code.contains("callback: fn mut(Node) with Dom);"), "{code}");
+    assert!(code.contains("callback: EventListener);"), "{code}");
+    assert!(
+        code.contains(
+            "\
+#[cm(\"wado-lang:web/types#event-listener\")]
+pub type EventListener = fn mut(Node) with Dom;
+"
+        ),
+        "{code}"
+    );
     assert!(
         code.contains("callback: fn mut(f64) with Dom) -> u32;"),
+        "{code}"
+    );
+    assert!(code.contains("fn filter(&self, filter: fn mut("), "{code}");
+    assert_eq!(
+        skipped,
+        [
+            "Element.on_text: `callback`: callback argument `text`: neither a scalar nor a handle",
+            "Element.on_maybe: `callback`: callback argument `count`: optional",
+            "Element.current_listener: a callback in a result",
+        ]
+    );
+}
+
+/// A callback interface has no object for a resource to stand for, so its
+/// constants sit on the function type its one operation is.
+#[test]
+fn a_callback_interface_is_a_named_function_type_holding_its_constants() {
+    let number = |value: &str| format!(r#"{{"type": "number", "value": "{value}"}}"#);
+    let interface = |name: &str, members: &[String]| {
+        definition("callback interface", name, "null", "", false, members)
+    };
+    let accept = operation(
+        "acceptNode",
+        &plain("unsigned short"),
+        &[argument("node", &plain("Node"), false, "null")],
+        "",
+    );
+    let mut defs = chain();
+    defs.callbacks = vec![
+        interface(
+            "NodeFilter",
+            &[
+                typed_const("FILTER_ACCEPT", "unsigned short", &number("1")),
+                typed_const("SHOW_ALL", "unsigned long", &number("0xFFFFFFFF")),
+                accept.clone(),
+            ],
+        ),
+        // Nothing names this one, and it holds no constant.
+        interface("Unused", std::slice::from_ref(&accept)),
+        interface(
+            "Uncallable",
+            &[
+                const_member("LEVEL"),
+                operation(
+                    "handle",
+                    &plain("undefined"),
+                    &[argument("text", &plain("DOMString"), false, "null")],
+                    "",
+                ),
+            ],
+        ),
+        interface(
+            "Undecidable",
+            &[
+                const_member("LEVEL"),
+                operation("decide", &plain("Decision"), &[], ""),
+            ],
+        ),
+    ];
+    defs.enums = vec![string_enum("Decision", &["accept", "skip"])];
+    defs.interfaces.push(partial(
+        "Element",
+        &[operation(
+            "walk",
+            &plain("undefined"),
+            &[argument("filter", &plain("NodeFilter"), false, "null")],
+            "",
+        )],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "\
+#[cm(\"wado-lang:web/types#node-filter\")]
+pub type NodeFilter = fn mut(Node) -> u16 with Dom;
+
+impl NodeFilter {
+    pub const FILTER_ACCEPT: u16 = 1;
+    pub const SHOW_ALL: u32 = 0xFFFFFFFF;
+}
+"
+        ),
+        "{code}"
+    );
+    assert!(!code.contains("Unused"), "{code}");
+    assert!(!code.contains("Uncallable"), "{code}");
+    assert!(!code.contains("Undecidable"), "{code}");
+    assert!(!code.contains("enum Decision"), "{code}");
+    assert!(
+        code.contains("fn walk(&self, filter: NodeFilter);"),
         "{code}"
     );
     assert_eq!(
         skipped,
         [
-            "Element.filter: `filter`: a callback returning a value",
-            "Element.on_text: `callback`: callback argument `text`: neither a scalar nor a handle",
-            "Element.on_maybe: `callback`: callback argument `count`: optional",
-            "Element.current_listener: a callback in a result",
+            "Uncallable.LEVEL: callback argument `text`: neither a scalar nor a handle",
+            "Undecidable.LEVEL: a result neither a scalar nor a handle",
         ]
     );
 }
@@ -828,9 +1553,145 @@ fn a_union_collapses_only_where_the_guest_supplies_the_value() {
         skipped,
         [
             "Element.inner_html: union narrowed in a result: `TrustedHTML` is outside the slice",
-            "Element.hidden: union of 2 expressible types",
+            "Element.hidden: union of 2 expressible types in a result",
             "Element.script: union: `HTMLScriptElement` is outside the slice; `SVGScriptElement` is outside the slice",
         ]
+    );
+}
+
+#[test]
+fn a_union_of_several_types_is_a_variant_the_guest_supplies() {
+    let mut defs = chain();
+    defs.typedefs = vec![typedef(
+        "Position",
+        &union(
+            &[plain("double"), plain("long long"), plain("USVString")],
+            false,
+        ),
+    )];
+    defs.dictionaries = vec![definition(
+        "dictionary",
+        "EventInit",
+        "null",
+        "",
+        false,
+        &[field("bubbles", &plain("boolean"), false)],
+    )];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "append",
+                &plain("undefined"),
+                &[variadic(
+                    "nodes",
+                    &union(&[plain("Node"), plain("DOMString")], false),
+                )],
+                "",
+            ),
+            // A nullable constituent makes the union nullable, and a string
+            // type named twice is one case.
+            operation(
+                "listen",
+                &plain("undefined"),
+                &[argument(
+                    "options",
+                    &union(
+                        &[
+                            plain("EventInit"),
+                            nullable("boolean"),
+                            plain("DOMString"),
+                            plain("USVString"),
+                        ],
+                        false,
+                    ),
+                    false,
+                    "null",
+                )],
+                "",
+            ),
+            // A union named by a typedef takes its name, and one inside
+            // another gives it its cases.
+            operation(
+                "seek",
+                &plain("undefined"),
+                &[
+                    argument("to", &plain("Position"), false, "null"),
+                    argument(
+                        "from",
+                        &union(&[plain("Position"), plain("boolean")], false),
+                        true,
+                        "null",
+                    ),
+                ],
+                "",
+            ),
+            attribute(
+                "hidden",
+                &union(&[plain("boolean"), plain("DOMString")], false),
+                false,
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "#[cm(\"wado-lang:web/types#node-or-string\")]\n\
+             pub variant NodeOrString {\n    AsNode(Node),\n    AsString(String),\n}\n"
+        ),
+        "{code}"
+    );
+    assert!(
+        code.contains(
+            "pub variant Position {\n    AsF64(f64),\n    AsI64(i64),\n    AsString(String),\n}\n"
+        ),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn append(&self, nodes: List<NodeOrString>);"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn listen(&self, options: Option<EventInitOrBoolOrString>);"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn seek(&self, to: Position, from: Option<F64OrI64OrStringOrBool> = null);"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn set_hidden(&self, value: BoolOrString);"),
+        "{code}"
+    );
+    assert_eq!(
+        skipped,
+        ["Element.hidden: union of 2 expressible types in a result"]
+    );
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    // In memory a case's payload follows its index, aligned as the widest is.
+    assert!(
+        glue.contains(
+            "p0.append(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? \
+             $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : \
+             $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));"
+        ),
+        "{glue}"
+    );
+    // As core values the cases share theirs: each is as wide as the widest
+    // there, and a case reads its own type back out of it.
+    assert!(
+        glue.contains(
+            "p0.seek((p1 === 0 ? $f64(p2) : p1 === 1 ? Number(p2) : \
+             $string(Number(BigInt.asIntN(32, p2)), p3)), "
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains("p0.hidden = (p1 === 0 ? (p2 !== 0) : $string(p2, p3));"),
+        "{glue}"
     );
 }
 
@@ -887,18 +1748,564 @@ fn a_second_global_is_rejected() {
     );
 }
 
+/// A resource may not override, so the parent's method serves the child: what
+/// `DOMPoint.x` asks for over `DOMPointReadOnly.x`, whose setter is its own.
 #[test]
-fn a_child_redeclaring_an_inherited_method_is_rejected() {
+fn a_child_redeclaring_an_inherited_method_keeps_the_parents() {
     let mut defs = chain();
     defs.interfaces.push(partial(
         "Element",
-        &[attribute("nodeType", &plain("unsigned short"), true)],
+        &[attribute("textContent", &nullable("DOMString"), false)],
     ));
-    let err = transform(&defs.build()).expect_err("an override is an error");
+    defs.interfaces.push(partial(
+        "Node",
+        &[attribute("id", &plain("DOMString"), true)],
+    ));
+    let (code, skipped) = defs.transform();
+    assert_eq!(code.matches("fn text_content(&self)").count(), 1, "{code}");
+    assert_eq!(code.matches("fn id(&self)").count(), 1, "{code}");
+    assert_eq!(code.matches("fn set_id(&self").count(), 1, "{code}");
+    let lines: Vec<String> = skipped.iter().map(Skip::to_string).collect();
+    assert_eq!(
+        lines,
+        [
+            "Element.id: redeclares a method inherited from `Node`",
+            "Element.text_content: redeclares a method inherited from `Node`",
+            "Element.set_text_content: redeclares a method inherited from `Node`",
+        ]
+    );
+    assert!(skipped.iter().all(|s| s.reason.cause == Cause::Override));
+    let glue = generate(&defs.build(), "idl/dom.webidl.json")
+        .expect("the slice should generate")
+        .glue;
+    assert!(glue.contains("web/node#id\""), "{glue}");
+    assert!(!glue.contains("web/element#id\""), "{glue}");
+}
+
+/// What `SVGElement.className` is, an `SVGAnimatedString` over the `DOMString`
+/// of `Element.className`: the parent's method would answer with the wrong
+/// type, so the child's binds under its interface's name.
+#[test]
+fn a_child_redeclaring_with_another_type_binds_under_its_interfaces_name() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            attribute("label", &plain("DOMString"), false),
+            operation("item", &plain("long"), &[], ""),
+        ],
+    ));
+    defs.interfaces.push(partial(
+        "Node",
+        &[attribute("label", &plain("DOMString"), true)],
+    ));
+    let index = argument("index", &plain("long"), false, "null");
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("label", &plain("long"), false),
+            operation("item", &plain("long"), &[index], ""),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert_eq!(
+        skipped,
+        ["Node.label: redeclares a method inherited from `EventTarget`"]
+    );
+    for declaration in [
+        "fn element_label(&self) -> i32;",
+        "fn set_element_label(&self, value: i32);",
+        "fn element_item(&self, index: i32) -> i32;",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_label`\")]\n    fn label(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `set_element_label`\")]\n    fn set_label(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_item`\")]\n    fn item(&self);",
+        "#[unavailable(\"`Node` redeclares `label` as read-only\")]\n    fn set_label(&self);",
+    ] {
+        assert!(code.contains(declaration), "{declaration}\n{code}");
+    }
+    let glue = generate(&defs.build(), "idl/dom.webidl.json")
+        .expect("the slice should generate")
+        .glue;
+    assert!(glue.contains("web/element#set-label\""), "{glue}");
+}
+
+/// A grandchild takes a member back from every binding above it, the one its
+/// parent bound under its own name included.
+#[test]
+fn a_redeclaration_hides_every_binding_above_it() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            attribute("label", &plain("DOMString"), false),
+            operation("item", &plain("long"), &[], ""),
+        ],
+    ));
+    let index = argument("index", &plain("long"), false, "null");
+    defs.interfaces.push(partial(
+        "Node",
+        &[
+            attribute("label", &plain("long"), false),
+            operation("item", &plain("long"), &[index], ""),
+        ],
+    ));
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("label", &plain("long"), true),
+            operation("item", &plain("DOMString"), &[], ""),
+        ],
+    ));
+    let (code, _) = defs.generate();
+    let element = code
+        .split("pub resource Element")
+        .nth(1)
+        .expect("Element is bound");
+    let element = &element[..element.find("\n}").expect("the resource closes")];
+    for declaration in [
+        "#[unavailable(\"`Element` redeclares `label` as read-only\")]\n    fn set_node_label(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_item`\")]\n    fn node_item(&self);",
+        "#[unavailable(\"`Element` redeclares it with another type; use `element_item`\")]\n    fn item(&self);",
+    ] {
+        assert!(element.contains(declaration), "{declaration}\n{code}");
+    }
+    assert!(!element.contains("fn node_label(&self);"), "{code}");
+}
+
+/// A child's operation replaces the parent's whole overload set in JavaScript,
+/// so each overload the child does not redeclare would call the child's. The
+/// parent reserves the bare name, which the child may not declare.
+#[test]
+fn a_redeclaration_hides_each_overload_it_does_not_redeclare() {
+    let mut defs = chain();
+    let value = argument("value", &plain("DOMString"), false, "null");
+    let node = argument("node", &plain("Node"), false, "null");
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            operation(
+                "pick",
+                &plain("undefined"),
+                std::slice::from_ref(&value),
+                "",
+            ),
+            operation("pick", &plain("undefined"), &[node], ""),
+        ],
+    ));
+    defs.interfaces.push(partial(
+        "Element",
+        &[operation("pick", &plain("undefined"), &[value], "")],
+    ));
+    let (code, _) = defs.generate();
+    let element = code
+        .split("pub resource Element")
+        .nth(1)
+        .expect("Element is bound");
+    let element = &element[..element.find("\n}").expect("the resource closes")];
+    for declaration in [
+        "fn element_pick(&self, value: String);",
+        "#[unavailable(\"`Element` redeclares it; use `element_pick`\")]\n    fn pick_with_value(&self);",
+        "#[unavailable(\"`Element` redeclares it; use `element_pick`\")]\n    fn pick_with_node(&self);",
+    ] {
+        assert!(element.contains(declaration), "{declaration}\n{code}");
+    }
+}
+
+/// What `HTMLSelectElement.remove` is beside `Element.remove`: the overload the
+/// child redeclares alike stays the parent's.
+#[test]
+fn an_overload_redeclared_alike_stays_available() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[operation("remove", &plain("undefined"), &[], "")],
+    ));
+    let index = argument("index", &plain("long"), false, "null");
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation("remove", &plain("undefined"), &[], ""),
+            operation("remove", &plain("undefined"), &[index], ""),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert_eq!(
+        skipped,
+        ["Element.remove: redeclares a method inherited from `EventTarget`"]
+    );
     assert!(
-        err.to_string()
-            .contains("`Element.node_type` redeclares a method inherited from `Node`"),
-        "{err}"
+        code.contains("fn remove_with_index(&self, index: i32);"),
+        "{code}"
+    );
+    assert!(!code.contains("unavailable"), "{code}");
+}
+
+/// A child may make writable again what its parent redeclared read-only. The
+/// parent's reservation stands between it and the setter above, so its own
+/// binds under its interface's name.
+#[test]
+fn a_setter_restored_below_a_read_only_redeclaration_binds_under_its_interfaces_name() {
+    let mut defs = chain();
+    for (interface, readonly) in [("EventTarget", false), ("Node", true), ("Element", false)] {
+        let label = attribute("label", &plain("DOMString"), readonly);
+        defs.interfaces.push(partial(interface, &[label]));
+    }
+    let (code, _) = defs.generate();
+    for declaration in [
+        "fn set_element_label(&self, value: String);",
+        "#[unavailable(\"`Element` restores the setter `Node` hides; use `set_element_label`\")]\n    fn set_label(&self);",
+    ] {
+        assert!(code.contains(declaration), "{declaration}\n{code}");
+    }
+}
+
+/// What `MediaStreamTrack.clone` is to its children: the parent's method hands
+/// back the child's object, which a type pattern narrows.
+#[test]
+fn a_child_narrowing_only_the_result_keeps_the_parents() {
+    let mut defs = chain();
+    for interface in ["EventTarget", "Node", "Element"] {
+        let twin = operation("twin", &nullable(interface), &[], "");
+        defs.interfaces.push(partial(interface, &[twin]));
+    }
+    let (code, skipped) = defs.generate();
+    assert_eq!(code.matches("fn twin(&self)").count(), 1, "{code}");
+    assert_eq!(
+        skipped,
+        [
+            "Node.twin: redeclares a method inherited from `EventTarget`",
+            "Element.twin: redeclares a method inherited from `Node`",
+        ]
+    );
+}
+
+/// What `SVGElement.className` does to `Element`'s setter. An attribute is one
+/// accessor, so only the attribute's own setter goes, and it goes from a
+/// resource left with nothing else to declare.
+#[test]
+fn a_read_only_redeclaration_hides_the_inherited_setter_alone() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "EventTarget",
+        &[
+            attribute("label", &plain("DOMString"), false),
+            operation("setPosition", &plain("undefined"), &[], ""),
+        ],
+    ));
+    assert!(defs.interfaces[1].contains(r#""name": "Node""#));
+    defs.interfaces[1] = interface(
+        "Node",
+        r#""EventTarget""#,
+        "",
+        &[attribute("label", &plain("DOMString"), true)],
+    );
+    defs.interfaces.push(partial(
+        "Element",
+        &[attribute("position", &plain("long"), true)],
+    ));
+    let (code, _) = defs.generate();
+    let node = "pub resource Node extends EventTarget {\n    #[unavailable(\"`Node` redeclares `label` as read-only\")]\n    fn set_label(&self);\n}";
+    assert!(code.contains(node), "{code}");
+    assert_eq!(code.matches("#[unavailable(").count(), 1, "{code}");
+}
+
+/// What `MouseEvent.initMouseEvent` asks for: more parameters than cross as
+/// core values, which cross as one address instead.
+#[test]
+fn parameters_past_sixteen_core_values_are_read_from_memory() {
+    let required = [
+        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o",
+    ]
+    .map(|name| argument(name, &plain("long"), false, "null"));
+    let optional = [
+        argument("p", &plain("DOMString"), true, "null"),
+        argument("q", &plain("Node"), true, "null"),
+    ];
+    let listener = callback(
+        "Listener",
+        &plain("undefined"),
+        &[argument("event", &plain("Node"), false, "null")],
+    );
+    let mut defs = chain();
+    defs.callbacks = vec![listener];
+    defs.interfaces.push(partial(
+        "Node",
+        &[
+            operation(
+                "draw",
+                &plain("undefined"),
+                &[&required[..], &optional[..]].concat(),
+                "",
+            ),
+            // A closure crosses only as a core value of its own.
+            operation(
+                "listen",
+                &plain("undefined"),
+                &[
+                    &required[..],
+                    &[
+                        argument("p", &plain("long"), false, "null"),
+                        argument("listener", &plain("Listener"), false, "null"),
+                    ],
+                ]
+                .concat(),
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.transform();
+    assert!(
+        code.contains("o: i32, p: Option<String> = null, q: Option<Node> = null);"),
+        "{code}"
+    );
+    let reported: Vec<(String, Lost, Cause)> = skipped
+        .iter()
+        .map(|s| (s.to_string(), s.lost, s.reason.cause.clone()))
+        .collect();
+    let expected = [(
+        "Node.listen: a callback among parameters passed through memory".to_string(),
+        Lost::Member,
+        Cause::ParamsInMemory,
+    )];
+    assert_eq!(reported, expected);
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(
+        glue.contains(
+            "\"$wado-lang:web/node#draw\": (p0) => {\n        \
+             $core.exports[$SLOT_GET]($view().getUint32(p0, true))\
+             .draw($view().getInt32(p0 + 4, true), "
+        ),
+        "{glue}"
+    );
+    // The receiver and fifteen numbers take 64 bytes; a string is its
+    // address and length, and a handle the index of its slot.
+    assert!(
+        glue.contains(
+            "($view().getUint8(p0 + 64) === 0 ? undefined : \
+             $string($view().getUint32(p0 + 68, true), $view().getUint32(p0 + 68 + 4, true))), \
+             ($view().getUint8(p0 + 76) === 0 ? undefined : \
+             $core.exports[$SLOT_GET]($view().getUint32(p0 + 80, true))));"
+        ),
+        "{glue}"
+    );
+}
+
+#[test]
+fn a_constant_is_an_associated_constant_of_its_resource() {
+    let number = |value: &str| format!(r#"{{"type": "number", "value": "{value}"}}"#);
+    let mut defs = chain();
+    defs.typedefs = vec![typedef("GLenum", &plain("unsigned long"))];
+    defs.interfaces.push(partial(
+        "Node",
+        &[
+            const_member("ELEMENT_NODE"),
+            typed_const("SHOW_ALL", "GLenum", &number("0xFFFFFFFF")),
+            typed_const("TIMEOUT_IGNORED", "long long", &number("-1")),
+            typed_const("STRICT", "boolean", r#"{"type": "boolean", "value": true}"#),
+            typed_const(
+                "LIMIT",
+                "double",
+                r#"{"type": "Infinity", "negative": false}"#,
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "\
+impl Node {
+    pub const ELEMENT_NODE: u16 = 1;
+    pub const SHOW_ALL: u32 = 0xFFFFFFFF;
+    pub const TIMEOUT_IGNORED: i64 = -1;
+    pub const STRICT: bool = true;
+}
+"
+        ),
+        "{code}"
+    );
+    assert!(!code.contains("impl Element"), "{code}");
+    assert_eq!(
+        skipped,
+        ["Node.LIMIT: a constant whose value `f64` cannot spell"]
+    );
+}
+
+#[test]
+fn every_member_kind_parses_and_one_without_a_binding_is_reported() {
+    let members = [
+        typed_const("LIMIT", "double", r#"{"type": "NaN"}"#),
+        iteration("iterable"),
+        iteration("maplike"),
+        iteration("setlike"),
+        iteration("async_iterable"),
+        // A bare `stringifier;` has no return type.
+        r#"{"type": "operation", "name": "", "arguments": [], "extAttrs": [], "special": "stringifier"}"#.to_string(),
+        attribute("origin", &plain("DOMString"), true)
+            .replace(r#""special": """#, r#""special": "static""#),
+    ];
+    let mut defs = chain();
+    defs.interfaces.push(partial("Node", &members));
+    let (code, skipped) = defs.transform();
+    assert!(!code.contains("LIMIT"), "{code}");
+    let reported: Vec<(String, Cause)> = skipped
+        .iter()
+        .map(|s| {
+            assert_eq!(s.lost, Lost::Member);
+            (s.to_string(), s.reason.cause.clone())
+        })
+        .collect();
+    let expected = [
+        (
+            "Node.LIMIT: a constant whose value `f64` cannot spell",
+            Cause::Constant,
+        ),
+        (
+            "Node.(iterable): an iteration declaration",
+            Cause::Iteration,
+        ),
+        ("Node.(maplike): an iteration declaration", Cause::Iteration),
+        ("Node.(setlike): an iteration declaration", Cause::Iteration),
+        (
+            "Node.(async_iterable): an iteration declaration",
+            Cause::Iteration,
+        ),
+        (
+            "Node.(stringifier): stringifier operation",
+            Cause::SpecialOperation,
+        ),
+        ("Node.origin: static attribute", Cause::StaticAttribute),
+    ]
+    .map(|(line, cause)| (line.to_string(), cause));
+    assert_eq!(reported, expected);
+}
+
+#[test]
+fn a_type_without_a_binding_names_what_it_is() {
+    let typed = |ty: &str| attribute(&ty.to_lowercase(), &plain(ty), true);
+    let members = [
+        typed("EventInit"),
+        typed("Mode"),
+        typed("any"),
+        typed("object"),
+        typed("Uint8Array"),
+        typed("bigint"),
+        typed("WorkerOnly"),
+        attribute("names", &sequence("record", &plain("DOMString")), true),
+    ];
+    let mut defs = chain();
+    defs.interfaces.push(partial("Element", &members));
+    defs.dictionaries = vec![
+        dictionary("EventInit", false),
+        dictionary("EventInit", true),
+    ];
+    defs.enums = vec![string_enum("Mode", &["2d"])];
+    defs.namespaces = vec![namespace(
+        "console",
+        &[
+            operation("log", &plain("undefined"), &[], ""),
+            const_member("LEVEL"),
+        ],
+    )];
+    let (_, skipped) = defs.transform();
+    let reported: Vec<(String, Lost, Cause)> = skipped
+        .iter()
+        .map(|s| (s.to_string(), s.lost, s.reason.cause.clone()))
+        .collect();
+    let expected = [
+        (
+            "EventInit: a dictionary without a member that binds",
+            Lost::Definition,
+            Cause::Dictionary,
+        ),
+        (
+            "Mode: the value `2d` names no case",
+            Lost::Definition,
+            Cause::Enum,
+        ),
+        (
+            "console.log: a namespace member",
+            Lost::Member,
+            Cause::Namespace,
+        ),
+        (
+            "console.LEVEL: a namespace member",
+            Lost::Member,
+            Cause::Namespace,
+        ),
+        (
+            "Element.eventinit: `EventInit` is a dictionary without a binding",
+            Lost::Member,
+            Cause::Dictionary,
+        ),
+        (
+            "Element.mode: `Mode` is an enum without a binding",
+            Lost::Member,
+            Cause::Enum,
+        ),
+        ("Element.any: `any`", Lost::Member, Cause::Any),
+        ("Element.object: `object`", Lost::Member, Cause::Object),
+        (
+            "Element.uint8array: `Uint8Array` is a buffer",
+            Lost::Member,
+            Cause::Buffer,
+        ),
+        ("Element.bigint: `bigint`", Lost::Member, Cause::BigInt),
+        (
+            "Element.workeronly: `WorkerOnly` is outside the slice",
+            Lost::Member,
+            Cause::OutsideSlice,
+        ),
+        (
+            "Element.names: `record<…>`",
+            Lost::Member,
+            Cause::Generic("record".to_string()),
+        ),
+    ]
+    .map(|(line, lost, cause)| (line.to_string(), lost, cause));
+    assert_eq!(reported, expected);
+}
+
+/// A wrapper rewords a reason and keeps its cause, so the table counts what
+/// would have to lower for the member to.
+#[test]
+fn the_skip_table_counts_each_cause_by_what_was_lost() {
+    let mut defs = chain();
+    defs.dictionaries = vec![dictionary("EventInit", false)];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "init",
+                &plain("undefined"),
+                &[argument(
+                    "a",
+                    &sequence("sequence", &plain("EventInit")),
+                    false,
+                    "null",
+                )],
+                "",
+            ),
+            operation(
+                "fire",
+                &plain("undefined"),
+                &[argument("init", &plain("EventInit"), true, "null")],
+                "",
+            ),
+            attribute("state", &plain("any"), true),
+        ],
+    ));
+    let (_, skipped) = defs.transform();
+    assert_eq!(
+        skip_table(&skipped),
+        "\
+Cause         Definitions  Members  Arguments
+a dictionary            1        1          1
+`any`                   0        1          0
+Total                   1        2          1
+"
     );
 }
 

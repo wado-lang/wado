@@ -151,6 +151,10 @@ impl Monomorphizer {
                                 type_table.name(e)
                             )
                         });
+                    assert!(
+                        !type_table.is_infer_var(pack_type),
+                        "finalize answers every pack variable before monomorphization"
+                    );
                     match mapped_elem {
                         // Mapped pack: substitute `elem` once per source
                         // element with the pack param bound to it —

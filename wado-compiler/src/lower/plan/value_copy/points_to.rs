@@ -252,11 +252,48 @@ impl PointsTo {
         out
     }
 
+    /// What [`Self::reaches_written`] walks from `local`, for asking it of
+    /// many writes.
+    #[must_use]
+    pub fn local_reach(&self, frame: Frame, local: u32) -> LocalReach {
+        let locations = match self.location(frame, local) {
+            Some(node) => self.reach_until(self.set(node).iter(), &IndexSet::default()),
+            None => IndexSet::default(),
+        };
+        let meets_globals = locations.iter().any(|l| self.global_reach.contains(l));
+        LocalReach {
+            locations,
+            meets_globals,
+        }
+    }
+
     /// What a call writing beyond what it is handed may write: the storage the
     /// globals reach, and what escaped to code the analysis cannot see.
     #[must_use]
     pub fn global_reach(&self) -> &IndexSet<u32> {
         &self.global_reach
+    }
+}
+
+/// The storage a local's value reaches, at any depth.
+pub struct LocalReach {
+    locations: IndexSet<u32>,
+    meets_globals: bool,
+}
+
+impl LocalReach {
+    /// [`PointsTo::reaches_written`]'s answer for this local.
+    #[must_use]
+    pub fn meets(&self, written: &IndexSet<u32>, beyond_handed: bool) -> bool {
+        if beyond_handed && self.meets_globals {
+            return true;
+        }
+        let (small, large) = if written.len() < self.locations.len() {
+            (written, &self.locations)
+        } else {
+            (&self.locations, written)
+        };
+        small.iter().any(|l| large.contains(l))
     }
 }
 
@@ -1159,6 +1196,8 @@ struct Builder<'a> {
     labels: Vec<(String, u32)>,
     /// Each closure functor's `$call`, by functor id.
     closure_calls: Vec<Frame>,
+    /// Each closure functor's `$call`, by the struct its captures fill.
+    functor_struct_calls: IndexMap<TypeId, Frame>,
     /// The value of a function the analysis has no body for: what a call
     /// through it hands escapes, and its result is what escapes.
     unseen_function: u32,
@@ -1208,6 +1247,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         return_to: 0,
         labels: Vec::new(),
         closure_calls: Vec::new(),
+        functor_struct_calls: IndexMap::default(),
         unseen_function: 0,
     };
     b.escape = b.g.node();
@@ -1269,6 +1309,11 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
                 .id(&call.module_source, &call.name)
                 .expect("closure planning adds each `$call` to the package")
         })
+        .collect();
+    b.functor_struct_calls = functors
+        .iter()
+        .zip(&b.closure_calls)
+        .map(|(functor, &call)| (functor.struct_type_id, call))
         .collect();
     for global in &flat.globals {
         let node = b.global(&global.module_source, &global.name);
@@ -1940,6 +1985,17 @@ impl Builder<'_> {
                         }
                     }
                 }
+                Some(self.function_value(call, true, held))
+            }
+            // A closure passed to a callee specialized on it: the struct its
+            // captures fill, handed over as the closure value it stands for.
+            TirExprKind::StructLiteral {
+                struct_type,
+                fields,
+                ..
+            } if self.type_table.is_reference(expr.type_id) => {
+                let call = self.functor_struct_calls[struct_type];
+                let held = fields.iter().filter_map(|f| self.eval(&f.value)).collect();
                 Some(self.function_value(call, true, held))
             }
             TirExprKind::Capture { .. } => {

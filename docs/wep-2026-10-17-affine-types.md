@@ -93,17 +93,17 @@ signatures.
 
 ### Approaches considered
 
-| Approach                                  | Why not                                                                                                            |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Hand-written `drop` (Go, C#, Java)        | A `?` path forgets its drop. For a stream that is a hang, exactly where the guarantee matters most.                |
-| Reference counting (Swift ARC, Nim, Koka) | Needs a release point. A closure, a `Box` cell or an iterator state is reclaimed by the collector, which has none. |
-| Arena or scope object                     | Drops at the scope, not at the point the stream needs.                                                             |
-| Finalizers                                | Wasm GC has none, and a finalizer's timing is undefined where one exists.                                          |
-| Linear types (Austral)                    | Removes cleanup synthesis, but leaves the generic problem in place.                                                |
-| Scoped use (`bracket`, `with`)            | A resource cannot be held in a structure past the scope: no pool, no body written later.                           |
-| Post-monomorphization check               | Errors point into the stdlib's body, with no span the editor shows.                                                |
-| Finish the signature inference            | Unsound by construction: see above.                                                                                |
-| A run-time check on every use             | Makes a use after drop a certain trap, but makes no drop happen, and costs a check on every use.                   |
+| Approach                                  | Why not                                                                                                                        |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Hand-written `drop` (Go, C#, Java)        | A `?` path forgets its drop. For a stream that is a hang, exactly where the guarantee matters most.                            |
+| Reference counting (Swift ARC, Nim, Koka) | Needs a release point, and a count cannot keep a handle unique. See [Why not reference counting](#why-not-reference-counting). |
+| Arena or scope object                     | Drops at the scope, not at the point the stream needs.                                                                         |
+| Finalizers                                | Wasm GC has none, and a finalizer's timing is undefined where one exists.                                                      |
+| Linear types (Austral)                    | Removes cleanup synthesis, but leaves the generic problem in place.                                                            |
+| Scoped use (`bracket`, `with`)            | A resource cannot be held in a structure past the scope: no pool, no body written later.                                       |
+| Post-monomorphization check               | Errors point into the stdlib's body, with no span the editor shows.                                                            |
+| Finish the signature inference            | Unsound by construction: see above.                                                                                            |
+| A run-time check on every use             | Makes a use after drop a certain trap, but makes no drop happen, and costs a check on every use.                               |
 
 For references alone, three more:
 
@@ -112,6 +112,39 @@ For references alone, three more:
 | Second-class references (Swift's `borrowing`) | A descriptor could only be written as a literal in argument position. No `let`, no `push`.                                    |
 | Non-escaping holders (Swift's `~Escapable`)   | A borrow check within each body, against the language's stated absence of one, and a second kind of parameter for `List<&R>`. |
 | Reference-counted handles (Swift's Metal API) | Swift makes a GPU object a class. Reference counting is ruled out above.                                                      |
+
+### Why not reference counting
+
+The alternative is to drop the `affine` kind altogether. A resource would sit in
+a counted box, a copy would add an owner, and the handle would drop when its
+last owner does. Every type would be copyable again, and neither the kind marks
+nor the move check would exist. It is refused for four reasons.
+
+Swift had reference counting first and still added noncopyable types. Its
+classes are counted, and a counted object can always be given a second owner,
+so a class holds a resource like a file descriptor uniquely only by convention.
+Swift's answer for that kind of value is the model below, so counting alone
+would stop where Swift stopped.
+
+A Component Model `own` has one owner. Lowering one to the host takes the
+handle out of the guest's table, so a second counted owner would name a dead
+index, or one the host has reused. No count can say otherwise at compile time.
+The lowering would have to check the count as it runs, and so would every
+operation that consumes its receiver, such as `wait(self)` or `finish(self)`.
+
+A drop is a signal. Under value semantics a copy is written without being
+meant: a `let`, a `push`, an argument. One copy left in a list keeps a stream
+open, and the other side waits. The mistake this WEP reports where it is
+written would become a hang.
+
+It does not remove the hard part. A count is decremented only where an owner's
+end is known, which is a local's scope, an assignment over it or a temporary's
+statement. That is the same drop placement this WEP specifies. A closure's
+environment, the target of a reference that left its scope and a global are the
+collector's, which runs nothing when it reclaims one. So what a reference
+reaches after its owner dropped is still a question to answer. Copy elision
+would also become part of what the program means, since an elided copy must
+drop its paired decrement, or a handle drops twice or never.
 
 ### The model: Swift's noncopyable types
 
@@ -264,6 +297,80 @@ replaces the one `base` carried, which is dropped. A type that implements
 `Drop` gives up no field this way, nor to a pattern binding an affine part of
 it, as SE-0429 holds for a type with a `deinit`: its `drop` relies on the
 fields it was built with.
+
+### A by-value `self` is a parameter like any other
+
+A by-value `self` is copied when its type is copyable and moved when it is
+affine, as every by-value parameter is. Four rules follow, and nothing else is
+special about a receiver.
+
+- Any type may declare one. A concrete type every value of which is copyable
+  used to be refused, which left the rule in three parts: allowed on an affine
+  type, on a generic type, and in a trait. The refusal steered a writer toward
+  `&self`, and steering is a lint's work: `self_by_value` warns at the
+  declaration.
+- A by-value `self` is not called on a `&mut`. For an affine value the call
+  would move it out of the reference, and a `&` is refused for the same
+  reason. For a copyable value it would act on a copy, where `&mut` says the
+  caller meant the value itself. A written `*` asks for the copy. The standard
+  library and seven packages held no such call when the rule was adopted. A
+  newtype over a reference (`type H = &mut T`) is that reference here
+  (`self_by_value_through_newtype_over_reference.wado`).
+- Through a `&`, a copyable receiver is copied as before. A shared reference
+  cannot write, so the copy and the referent are the same value to every
+  reader, and `r.unwrap()` on an `&Option<T>` is too common to ask a `*` of.
+- Where the reference itself implements the trait, the call is the
+  reference's, and its `self` is the reference: nothing is read out of it. A
+  blanket over a reference answers a by-value `self` this way. Its `&self` and
+  `&mut self` methods stay the referent's, which read the same value more
+  directly.
+
+The second rule holds through a bound as well. A reference satisfies a bound
+through its referent only where every method of the trait borrows it, so a
+trait with a by-value `self` is satisfied by the value or by a reference it is
+implemented for. Before that, `fn through<T: Finish>(t: T)` handed `&mut job`
+called `finish(self)` on the referent in place: an affine `job` dropped twice,
+and a copyable one was copied where the caller wrote `&mut`.
+
+An iterator adapter therefore takes a copy of a copyable iterator: after
+`it.take(2)`, `it` has not advanced. That is what value semantics says of any
+method that returns a new value, and it predates this WEP, whose only change
+was the receiver's spelling.
+
+A `&mut` to an iterator is the form that advances the iterator itself, and the
+prelude makes it one: `impl<affine I: Iterator> Iterator for &mut I`. A loop
+over `&mut it`, an adapter called on a `&mut I`, and a generic consumer handed
+`&mut it` each leave `it` where they stopped, and `by_ref` returns `&mut self`.
+Each of the three walked a copy before, silently, and the loop was the hole in
+the `&mut` rule above: its `into_iter` is no method call the check sees. A
+for-of loop walks an operand that is a reference and an iterator as it stands.
+`core:http_client` had written `IntoIterator for &mut` by hand for its two
+affine iterators, through a wrapper `IterRefMut`; both are gone.
+
+What was considered and refused:
+
+- A warning on using a value after a by-value `self` call on it. It fires on
+  legitimate code: a range looped over twice, or one iterator both counted and
+  collected. It would also make "a type that implements `Iterator`" a third
+  kind beside copyable and affine.
+- Making iterators affine. Swift's newest iteration protocol does this, and
+  [the survey](./research-swift-ownership.md) records why. Here it needs an
+  affine type that holds no resource, which widens `affine` from "holds a
+  resource" to "may not be copied". Ranges would have to stop being iterators,
+  and a generic body could not return an item it took from an affine iterator
+  it owns.
+- A second implementation for a copyable `T`, preferred over the shared one:
+  `impl<T> Option<T> { fn unwrap(&self) }` beside the `impl<affine T>`. It
+  brings a specialization rule into the language and two bodies that can
+  drift, and it cannot reach a trait method, whose signature is one. That is
+  where the only visible seam is: `Iterator::take`. Under value semantics a
+  by-value `self` and a `&self` that returns a copy are the same to a copyable
+  caller, so the shared `Option` and `Result` methods cost it nothing but the
+  `&mut` refusal above. A method that needs a copy stays in an `impl<T>` of
+  its own, as `List::sorted` is.
+- A rule for for-of alone, or `ForOf for &mut I` alone. Either leaves an
+  adapter on a `&mut I`, and a `&mut it` handed to a generic consumer, walking
+  a copy.
 
 ### A reference is read only while its local holds the value
 
@@ -943,6 +1050,28 @@ loop walk the value it began with, at the cost of a copy of each list read
 after the loop, since value-copy elision does not share a parameter stored into
 a returned value.
 
+### Whether `into_iter` borrows or takes
+
+`IntoIterator::into_iter` takes `&self`. That is why a reference satisfies the
+bound through its referent, and why a loop over a copyable list shares it, the
+gap above. It also decides what `&mut it` means there: a `&mut` to an iterator
+is an `Iterator` and not an `IntoIterator` of its own, so a function taking
+`C: IntoIterator` and handed `&mut it`, and `(&mut it).into_iter()` written
+out, walk a copy of `it`, where a function taking `I: Iterator` and a for-of
+loop advance it. As the trait stands this is its contract: `into_iter` reads
+the value and leaves it.
+
+The question is which the trait should say, and nobody has chosen.
+
+- `into_iter(self)` says the walk owns what it walks. The loop then walks the
+  value it began with, a reference needs its own impl, and `&mut it` would be
+  given one. Every list read after its loop is then a copy. Swift takes this
+  reading and pays for it with copy-on-write, which this WEP
+  [refused](#why-not-reference-counting).
+- `into_iter(&self)` says the value can be walked from its start without being
+  consumed, and then it is the name `Into` that misleads. The loop keeps
+  sharing a list the body writes to.
+
 ### Maps and sets of affine values
 
 `TreeMap<K, V>`, `HashMap<K, V>` and `TreeSet<T>` with an affine element are
@@ -993,6 +1122,7 @@ kept. Whether a list's index should keep it, as a field read does, is open.
 
 ## References
 
+- [Research: Swift's Ownership Decisions, and What Its Users Say About Them](./research-swift-ownership.md)
 - [SE-0390: Noncopyable structs and enums](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0390-noncopyable-structs-and-enums.md)
 - [SE-0427: Noncopyable generics](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0427-noncopyable-generics.md)
 - [SE-0429: Partial consumption of noncopyable values](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0429-partial-consumption.md)

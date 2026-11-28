@@ -71,6 +71,13 @@ test("the host answers identity, narrowing and a listener while `run` waits", as
       enterFullscreen = resolve;
     });
 
+  // Nor spatial navigation, and its `readyState` moves on its own.
+  Object.defineProperty(document, "readyState", { value: "interactive" });
+  let searched;
+  document.getElementById("div").spatialNavigationSearch = (dir) => {
+    searched = dir;
+  };
+
   const { run } = await import(probe);
   const found = document.body.dataset;
   const running = run.run();
@@ -86,6 +93,13 @@ test("the host answers identity, narrowing and a listener while `run` waits", as
   assert.equal(found.inspect, "HtmlInputElement HtmlElement");
   // The list the program set is the list it read back, object for object.
   assert.equal(found.labels, "2 true true");
+  assert.equal(found.walk, "true true");
+  assert.equal(found.overload, "Xbc");
+  assert.equal(found.enum, "DocumentReadyState::Interactive true");
+  assert.equal(searched, "down");
+  // Of two events, the one made with `bubbles` reached `<body>`, both were
+  // captured, and the listener added with `once` heard the first.
+  assert.equal(found.records, "1 2 1 true");
 
   const div = document.getElementById("div");
   assert.deepEqual(div.ariaLabelledByElements, [document.getElementById("input"), div]);
@@ -122,6 +136,15 @@ test("an object's class is its nearest declared ancestor's", async () => {
   assert.throws(() => imports["$class-of"]({}), TypeError);
 });
 
+test("a value the enum declares no case for is refused", async () => {
+  const { $glue } = await import(glue);
+  install("");
+  const { imports } = $glue();
+  // jsdom's own answer, which the specification has since dropped.
+  assert.equal(document.visibilityState, "prerender");
+  assert.throws(() => imports["$wado-lang:web/document#visibility-state"](document), TypeError);
+});
+
 test("two handles are the same when they are one object", async () => {
   const { $glue } = await import(glue);
   install('<div id="div"></div><p id="p"></p>');
@@ -146,6 +169,7 @@ test("the collector reclaims a handle, a listener and a cycle through both heaps
   document.hasStorageAccess = async () => true;
   document.exitFullscreen = async () => {};
   document.requestStorageAccess = async () => {};
+  document.getElementById("div").spatialNavigationSearch = () => {};
   const { run } = await import(`${probe}?collect`);
   const found = document.body.dataset;
   const running = run.run();

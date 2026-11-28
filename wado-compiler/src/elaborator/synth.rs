@@ -627,7 +627,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn synth_literal(&mut self, lit: &ast::Literal) -> ArgClass {
+    fn synth_literal(&self, lit: &ast::Literal) -> ArgClass {
         match lit {
             ast::Literal::Number(raw) => {
                 if defaults_to_float(raw) {
@@ -653,7 +653,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Locals, captures, globals and associated constants have a declared
     /// type. A function reference and a generic case do not: their type args
     /// come from the expected type.
-    fn synth_ident(&mut self, id: &ast::IdentExpr, scope: &SynthScope<'_>) -> ArgClass {
+    fn synth_ident(&self, id: &ast::IdentExpr, scope: &SynthScope<'_>) -> ArgClass {
         if scope.shadows(&id.name) {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
@@ -697,7 +697,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// A function reference's type, which `resolve_func_ref_ident` builds from
     /// the signature alone where nothing is left to the expected type.
-    fn synth_func_ref(&mut self, id: &ast::IdentExpr) -> ArgClass {
+    fn synth_func_ref(&self, id: &ast::IdentExpr) -> ArgClass {
         let Some((sig, _, _)) = self.tysys.lookup_func_sig_for_ref(id) else {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };
@@ -716,7 +716,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// The qualifier is a path segment the resolve walk answered for, so which
     /// `Color` it names comes off that site rather than off the spelling.
-    fn synth_qualified_case(&mut self, id: &ast::IdentExpr, name: &str) -> ArgClass {
+    fn synth_qualified_case(&self, id: &ast::IdentExpr, name: &str) -> ArgClass {
         // The last `::`, so the split names the same segment `owner` does:
         // in `ns::Color::Red` that is `Color`, not the `ns` prefix.
         let Some(pos) = name.rfind("::") else {
@@ -924,7 +924,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ArgClass::Exact(receiver) = self.synth(&call.receiver, scope) else {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
-        match self.method_return_type(receiver, &call.method, call.span) {
+        let classes: Vec<ArgClass> = call.args.iter().map(|arg| self.synth(arg, scope)).collect();
+        match self.method_return_type(receiver, &call.method, &classes, call.span) {
             Some(return_type) => self.class_of_type(return_type),
             None => ArgClass::Opaque(OpaqueReason::Unresolved),
         }
@@ -933,8 +934,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The declared return type of `receiver.method(…)`, read in the order the
     /// real dispatch uses — a concrete ref impl, the inherent method, the base
     /// type's trait impls. Another order would answer with a signature the call
-    /// never selects.
-    fn method_return_type(&mut self, receiver: TypeId, method: &str, span: Span) -> Option<TypeId> {
+    /// never selects. `classes` is what the call's own arguments select by,
+    /// among one trait's argument lists, as the real dispatch selects.
+    fn method_return_type(
+        &mut self,
+        receiver: TypeId,
+        method: &str,
+        classes: &[ArgClass],
+        span: Span,
+    ) -> Option<TypeId> {
+        let selecting = || {
+            Some(ArgSource::Classes {
+                classes: classes.to_vec(),
+                expected: None,
+            })
+        };
         let base = self.tysys.get_base_type(receiver);
         if !self.tysys.has_struct_head(base) {
             return None;
@@ -947,7 +961,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, args)| args.to_vec());
         let ref_kind =
             RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone());
+        let inherent = self.lookup_method_info(receiver, method);
+        // A reference blanket's `&self` method answers behind the referent.
+        let mut behind_referent = None;
         if let Some(ref_kind) = ref_kind
+            && inherent.as_ref().is_none_or(|info| {
+                let link = self.inherent_link(base, info.owner);
+                self.trait_answers_before(base, Some(ref_kind == RefKind::Mut), method, link)
+            })
             && let Some(found) = {
                 let lookup = self.find_trait_method_for_type(
                     &ImplTargetKey::Ref(ref_kind),
@@ -956,17 +977,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(base),
                     span,
                     None,
-                    None,
+                    selecting(),
                 );
                 self.decide_now(lookup, base, method, span).found()
             }
-            && !found.is_blanket_ref_impl
         {
+            let ref_depth = self.tysys.type_table.borrow().ref_depth(receiver);
             let owner = found.owner_for(base, &self.tysys.type_table.borrow());
-            let info = found.method_info;
-            return Some(self.return_type_for_receiver(info.return_type, owner, receiver));
+            let return_type = found.method_info.return_type;
+            if found.answers_reference_receiver(ref_depth) {
+                return Some(self.return_type_for_receiver(return_type, owner, receiver));
+            }
+            // A tie the call's arguments have yet to break names no one
+            // signature, so the class stays open.
+            if ref_depth == 1
+                && found.answers_behind_referent()
+                && found.tie_behind_referent.is_empty()
+            {
+                behind_referent = Some((return_type, owner));
+            }
         }
-        if let Some(info) = self.lookup_method_info(receiver, method) {
+        if let Some(info) = inherent {
             return Some(self.return_type_for_receiver(info.return_type, info.owner, receiver));
         }
         let target = self.impl_target_of(base);
@@ -977,18 +1008,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(base),
             span,
             None,
-            None,
+            selecting(),
         );
-        let found = self.decide_now(lookup, base, method, span).found()?;
-        let info = found.method_info;
-        Some(self.return_type_for_receiver(info.return_type, info.owner, receiver))
+        let (return_type, owner) = match self.decide_now(lookup, base, method, span).found() {
+            Some(found) => (found.method_info.return_type, found.method_info.owner),
+            None => behind_referent?,
+        };
+        Some(self.return_type_for_receiver(return_type, owner, receiver))
     }
 
     /// A method inherited through a newtype returns the newtype, not the base
     /// its `impl` was written against. Elaboration substitutes the same way, so
     /// reading the declaration alone would under-approximate the class.
     fn return_type_for_receiver(
-        &mut self,
+        &self,
         return_type: TypeId,
         owner: MethodOwner,
         receiver: TypeId,

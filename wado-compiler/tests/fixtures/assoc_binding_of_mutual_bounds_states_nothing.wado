@@ -1,0 +1,25 @@
+// Bounds that bind an associated type to each other's state nothing for it:
+// reading one leads to the other and back.
+// Regression: the solver followed the equalities without end and overflowed
+// its stack.
+
+trait Src with () {
+    type Item;
+    fn get(&self) -> Self::Item;
+}
+
+trait Need with () { fn need(&self) -> i32; }
+
+struct Wrap<A, F> { a: A, f: F }
+
+impl<A: Src, F: fn(A::Item) -> i32> Need for Wrap<A, F> {
+    fn need(&self) -> i32 { return 1; }
+}
+
+fn mutual<I: Src<Item = J::Item>, J: Src<Item = I::Item>>(i: I, _j: J) -> i32 {
+    let w = Wrap { a: i, f: |_x: i32| 1 };
+    return w.need();
+}
+
+__DATA__
+{"compile_error": ":21:12: analysis error: no method 'need' found on type 'Wrap<I, fn(i32) -> i32>'"}

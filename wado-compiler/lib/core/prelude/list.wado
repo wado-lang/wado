@@ -16,15 +16,13 @@ use {
     IndexValue,
     IndexAssign,
     IndexSwap,
-    IntoIterator,
-    ForOf,
-    FromIterator,
     From,
     Display,
     Inspect,
     AnyBits,
 } from "core:prelude/traits.wado";
-use { Option } from "core:prelude/types.wado";
+use { IntoIterator, ForOf, FromIterator } from "core:prelude/iter.wado";
+use { Option } from "core:prelude/option.wado";
 use { String, AsStrSlice } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { write_seq_inspect, seq_eq, seq_cmp } from "core:prelude/array.wado";
@@ -628,13 +626,12 @@ impl<affine T> IntoIterator for &List<T> {
     }
 }
 
-impl<T> IntoIterator for &mut List<T> {
+impl<T> ForOf for &mut List<T> {
     type Item = &mut T;
-    type Iter = SliceRefMutIter<T>;
+    type State = SliceRefMutIter<T>;
 
-    fn into_iter(&self) -> Self::Iter {
-        let list = *self;
-        return SliceRefMutIter::internal_new(&mut list.repr, 0, list.used);
+    fn start(self) -> SliceRefMutIter<T> {
+        return self.iter_ref_mut();
     }
 }
 

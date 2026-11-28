@@ -71,6 +71,10 @@ fn show(node: &Node) -> String {
             };
             `(${head} ${show(&g.body)})`;
         },
+        Lookaround(l) => {
+            let way = if l.ahead { "ahead" } else { "behind" };
+            `(${if l.negated { "not-" } else { "" }}${way}#${l.index} ${show(&l.body)})`;
+        },
         Modified(m) => `(?${flags(m.add)}-${flags(m.remove)} ${show(&m.body)})`,
         Repeat(r) => {
             let max = match r.max {
@@ -239,17 +243,32 @@ test "rex ignores whitespace and comments outside a class" {
     assert ext(#"\ \#"#) == "(cat U+0020 #)";
 }
 
-test "lookaround and backreferences name why they are refused" {
-    assert error(#"a(?=b)"#) == "lookahead `(?=` `(?!` cannot be matched in linear time (at byte 1)";
-    assert error(#"(?!b)"#) == "lookahead `(?=` `(?!` cannot be matched in linear time (at byte 0)";
-    assert error(#"(?<=b)"#) == "lookbehind `(?<=` `(?<!` cannot be matched in linear time (at byte 0)";
-    assert error(#"(?<!b)"#) == "lookbehind `(?<=` `(?<!` cannot be matched in linear time (at byte 0)";
+test "lookarounds count from 0 by where they open, and their groups with the rest" {
+    assert tree(#"a(?=b)"#) == "(cat a (ahead#0 b))";
+    assert tree(#"(?!b)"#) == "(not-ahead#0 b)";
+    assert tree(#"(?<=(a)|b)(c)"#) == "(cat (behind#0 (alt (1 a) b)) (2 c))";
+    assert tree(#"(?<!a(?=b))(?=c)"#) == "(cat (not-behind#0 (cat a (ahead#1 b))) (ahead#2 c))";
+}
+
+test "a lookaround in a hole is counted where the hole stands" {
+    let [inner, _] = parse(#"(?=a)"#.as_str_slice(), Syntax::Plain).unwrap();
+    let [node, _] = parse(
+        #"(?!b)"#.as_str_slice(),
+        Syntax::Plain,
+        [
+            Hole { offset: 0, node: inner },
+        ],
+    ).unwrap();
+    assert show(&node) == "(cat (ahead#0 a) (not-ahead#1 b))";
+}
+
+test "backreferences name why they are refused" {
     assert error(#"(a)\1"#) == "a backreference cannot be matched in linear time (at byte 3)";
     assert error(#"(?<n>a)\k<n>"#) == #"a backreference `\k<name>` cannot be matched in linear time (at byte 7)"#;
 }
 
 test "a syntax error comes before what Re refuses" {
-    assert error(#"(?=a"#) == "unclosed group (at byte 0)";
+    assert error(#"\1(?=a"#) == "unclosed group (at byte 2)";
     assert error(#"(a)\2"#) == "the pattern has no group 2 (at byte 3)";
 }
 
@@ -259,18 +278,36 @@ test "what ECMA-262 admits and Re does not support says so" {
     assert error(#"a{5000000000,6000000000}"#) == "a count may be at most 4294967295 (at byte 2)";
 }
 
+test "a pattern holds at most 256 lookarounds, a hole's included" {
+    let most = "(?=a)".repeat(256);
+    assert parse(most.as_str_slice(), Syntax::Plain) matches { Ok(_) };
+    let over = `${most}(?!b)`;
+    assert error(over) == "a pattern may hold at most 256 lookarounds (at byte 1280)";
+    assert validate_ecma262_syntax(over) matches { Ok(_) };
+
+    let [inner, _] = parse(#"(?<=c)"#.as_str_slice(), Syntax::Plain).unwrap();
+    let holed = parse(
+        most.as_str_slice(),
+        Syntax::Plain,
+        [
+            Hole { offset: 1280, node: inner },
+        ],
+    );
+    assert `${holed.unwrap_err()}` == "a pattern may hold at most 256 lookarounds (at byte 1280)";
+}
+
 fn syntax_error(pattern: String) -> String {
     return `${validate_ecma262_syntax(pattern).unwrap_err()}`;
 }
 
 test "validate_ecma262_syntax admits what Re cannot match" {
     let patterns: List<String> = [
-        #"a(?=b)"#, #"(?!b)"#, #"(?<=a+)b"#, #"(?<!(?<n>b))"#, #"(a)\1"#, #"\1(a)"#, #"((((((((((a))))))))))\10"#,
-        #"(?<n>a)\k<n>"#, #"\k<n>(?<n>a)"#, #"(?i:a)"#, #"(?<a>x)|(?<a>y)"#, #"(?:(?<a>x)|(?<a>y))|(?<a>z)"#,
-        #"a{4294967296}"#, #"a{1,99999999999999999999}"#,
+        #"(a)\1"#, #"\1(a)"#, #"((((((((((a))))))))))\10"#, #"(?<n>a)\k<n>"#, #"\k<n>(?<n>a)"#, #"(?<=(a))\1"#,
+        #"(?<a>x)|(?<a>y)"#, #"(?:(?<a>x)|(?<a>y))|(?<a>z)"#, #"a{4294967296}"#, #"a{1,99999999999999999999}"#,
     ];
     for let p of patterns {
         assert validate_ecma262_syntax(p) matches { Ok(_) };
+        assert parse(p.as_str_slice(), Syntax::Plain) matches { Err(_) };
     }
 }
 

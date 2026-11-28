@@ -38,3 +38,17 @@ test "clear empties the set" {
     assert set.is_empty();
     assert !set.contains(1);
 }
+
+test "shrink_to_fit keeps the elements" {
+    let mut set = HashSet::<i32>::new();
+    for let i of 0..<50 {
+        set.insert(i);
+    }
+    for let i of 0..<48 {
+        set.remove(i);
+    }
+    set.shrink_to_fit();
+    assert set.len() == 2;
+    assert set.contains(49);
+    assert set.insert(0);
+}

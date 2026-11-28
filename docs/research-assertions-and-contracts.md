@@ -87,9 +87,9 @@ The WEP lists three known gaps that bear on syntax:
 
 ### `_unchecked` functions
 
-[WEP: String API — checked / unchecked / internal Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
-sets the pattern. A checked method is `assert` on its inputs followed by a call
-to its `_unchecked` twin.
+The `String` API set the pattern, before
+[Contract Checks](./wep-2026-10-06-contract-checks.md) replaced it. A checked
+method was `assert` on its inputs followed by a call to its `_unchecked` twin.
 
 | Function                     | Contract                                                   | Class of a violation |
 | ---------------------------- | ---------------------------------------------------------- | -------------------- |

@@ -1,0 +1,15 @@
+// A by-value `self` read out past a `&mut` at any depth acts on a copy of what
+// the `&mut` points to, as one called on the `&mut` itself would.
+
+fn or_zero(o: &&mut Option<i32>) -> i32 {
+    return o.unwrap_or(0);
+}
+
+export fn run() {
+    let mut o = Option::Some(1);
+    let m = &mut o;
+    assert or_zero(&m) == 1;
+}
+
+__DATA__
+{"compile_error": ":5:12: analysis error: `unwrap_or` takes `self` by value, and the receiver is `&&mut Option<i32>`; write `*` to copy what it points to"}

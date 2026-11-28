@@ -107,6 +107,19 @@ pub fn bound_candidates(
         .collect()
 }
 
+/// The impls of `trait_` that could answer a bound on `ty` at any arguments,
+/// for [`rank`](super::rank) to order: more than one argument list among them
+/// is an overload set.
+#[must_use]
+pub fn bound_candidates_at_any_args(
+    program: &Program,
+    env: &Env,
+    ty: &SolverType,
+    trait_: TraitDeclId,
+) -> Vec<Candidate> {
+    collect(program, env, ty, &[trait_], &[], |t, _| t == trait_).in_scope
+}
+
 /// The impls of `trait_` that could answer on `ty` for an instance of a generic
 /// body, a call there naming `args`, for [`rank`](super::rank) to order. A
 /// parameter in `args` is a binder the call's own frame leaves open. An
@@ -872,6 +885,7 @@ mod tests {
         let p = program(Builder::default().bounded(TR, SolverType::Param(0), vec![LIMIT]));
         let env = Env {
             param_bounds: vec![vec![ParamBound::bare(LIMIT)]],
+            param_assoc: Vec::new(),
         };
         let found = candidates(&p, &env, &SolverType::Param(0), M, HERE, &[]);
         assert_eq!(found.in_scope.len(), 1);

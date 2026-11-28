@@ -1,10 +1,25 @@
 //! What only the host's own objects answer, which `glue/dom.test.mjs` reads
 //! back from the attributes of `<body>`: identity, narrowing through more than
 //! one level of `extends`, the name `Inspect` writes, a list of handles each
-//! way, a promise settled and rejected, a listener entered while `run` waits,
+//! way, a callback's result, an overload, an enum each way, a dictionary, a
+//! union, a promise settled and rejected, a listener entered while `run` waits,
 //! which waits itself, and what the collector reclaims.
 
-use { Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node } from "wado-lang:web";
+use {
+    AddEventListenerOptions,
+    AddEventListenerOptionsOrBool,
+    Dom,
+    Element,
+    Event,
+    EventInit,
+    EventTarget,
+    HtmlElement,
+    HtmlInputElement,
+    Node,
+    NodeFilter,
+    NodeOrString,
+    SpatialNavigationDirection,
+} from "wado-lang:web";
 use { MonotonicClock } from "wasi:clocks";
 
 global mut KEPT: Option<Element> = null;
@@ -25,6 +40,55 @@ export fn run() with (Dom, MonotonicClock) {
     div.set_aria_labelled_by_elements(Option::Some([input, div]));
     let labels = div.aria_labelled_by_elements().unwrap();
     report("labels", `${labels.len()} ${labels[0] == input} ${labels[1] == div}`);
+
+    // A callback's result crosses back: the filter rejects the `<input>`, so the
+    // walker reaches only the `<div>`.
+    let walker = doc.create_tree_walker(doc.body().unwrap(), NodeFilter::SHOW_ELEMENT, |n| {
+        return if n == input as Node { NodeFilter::FILTER_REJECT } else { NodeFilter::FILTER_ACCEPT };
+    });
+    report("walk", `${walker.next_node() == Option::Some(div as Node)} ${walker.next_node() == null}`);
+
+    // An overload calls the one member, which picks it by the arguments.
+    if let field: HtmlInputElement = input {
+        field.set_value("abc");
+        field.set_range_text_with_start_end_selection_mode("X", 0, 1);
+        report("overload", field.value());
+    }
+
+    // An enum is a string to the host, and its case's index on the way.
+    let found = div.spatial_navigation_search(SpatialNavigationDirection::Down);
+    report("enum", `${doc.ready_state():?} ${found matches { null }}`);
+
+    // A dictionary is an object to the host: the event bubbles to `<body>`.
+    let mut bubbled = 0;
+    doc.body().unwrap().add_event_listener("probe", |_event: Event| bubbled += 1);
+    // A union is whichever case the program holds. A capturing listener
+    // hears both events, and one added with `once` only the first.
+    let mut captured = 0;
+    let mut once = 0;
+    doc.add_event_listener(
+        "probe",
+        |_event: Event| captured += 1,
+        Option::Some(AddEventListenerOptionsOrBool::AsBool(true)),
+    );
+    doc.add_event_listener(
+        "probe",
+        |_event: Event| once += 1,
+        Option::Some(AddEventListenerOptionsOrBool::AsAddEventListenerOptions(AddEventListenerOptions {
+            capture: Option::Some(true),
+            once: Option::Some(true),
+        })),
+    );
+    div.dispatch_event(Event::new("probe", Option::Some(EventInit { bubbles: Option::Some(true) })));
+    div.dispatch_event(Event::new("probe"));
+    // In a list too: a string becomes a text node.
+    let child = doc.create_element("i");
+    div.append([
+        NodeOrString::AsString("text"),
+        NodeOrString::AsNode(child),
+    ]);
+    let appended = div.text_content() == Option::Some("text") && div.last_child() == Option::Some(child as Node);
+    report("records", `${bubbled} ${captured} ${once} ${appended}`);
 
     // A promise settles to its value, or to the reason it was rejected for.
     report("settled", `${doc.has_storage_access().wait() matches { Ok(true) }}`);

@@ -13,12 +13,12 @@ use crate::primitive::PrimitiveType;
 use crate::synthesis::traits::REFLECT_FIELD_INPUTS_ASSOC;
 use crate::tir::{EffectRef, InferVarId, ResolvedType, TypeId, TypeParamId};
 use crate::trait_solver::{
-    ArgDefault, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef, ImplId,
-    ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule,
-    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, Verdict, answering_link,
-    bound_candidates, candidates, cmp_giving_eq, comparison_row, derive, derive_alongside,
-    holds_with_args, instance_candidates, mark_rejected, owed, pair_comparisons, rank, rank_open,
-    sourced, written_comparison, written_over,
+    ArgDefault, AssocEquality, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef,
+    ImplId, ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program,
+    RefRule, Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, Verdict,
+    answering_link, bound_candidates, bound_candidates_at_any_args, candidates, cmp_giving_eq,
+    comparison_row, derive, derive_alongside, holds_with_args, instance_candidates, mark_rejected,
+    owed, pair_comparisons, rank, rank_open, sourced, written_comparison, written_over,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -840,6 +840,8 @@ impl Lowering {
                     literal: literal(id),
                 })),
             },
+            // A run of elements no answer has a length for yet.
+            ResolvedType::PackVar { .. } => Err(Unsaid::Open),
             ResolvedType::Unknown | ResolvedType::Error => Err(Unsaid::Failed),
         }
     }
@@ -2171,7 +2173,11 @@ impl SolverBridge {
                 .get(&binder.type_id)
                 .into_iter()
                 .flatten()
-                .map(|declared| self.lowering.bound_named(&table, declared, &named));
+                .map(|declared| {
+                    self.lowering
+                        .bound_named(&table, declared, &named)
+                        .map(|bound| (bound, Vec::new()))
+                });
             let scoped = binder.bounds.iter().map(|scoped| {
                 let self_type = scoped
                     .self_binding
@@ -2199,10 +2205,22 @@ impl SolverBridge {
                                 .iter()
                                 .map(|arg| self.lowering.ast_type(arg, &space)),
                         )?;
-                        Ok(ParamBound {
-                            trait_: self.lowering.known_trait(def).ok_or(Unsaid::Unsayable)?,
-                            args,
-                        })
+                        let trait_ = self.lowering.known_trait(def).ok_or(Unsaid::Unsayable)?;
+                        // A binding the solver cannot say states nothing to
+                        // it; the bound itself still holds.
+                        let equalities: Vec<AssocEquality> = scoped
+                            .bound
+                            .assoc_types
+                            .iter()
+                            .filter_map(|binding| {
+                                Some(AssocEquality {
+                                    trait_,
+                                    assoc: self.lowering.known_assoc(trait_, &binding.name)?,
+                                    ty: self.lowering.ast_type(&binding.ty, &space).ok()?,
+                                })
+                            })
+                            .collect();
+                        Ok((ParamBound { trait_, args }, equalities))
                     })
             });
             let mut ids = Vec::new();
@@ -2211,13 +2229,18 @@ impl SolverBridge {
             {
                 ids.push(ParamBound::bare(copyable));
             }
+            let mut equalities = Vec::new();
             for stated in declared.chain(scoped) {
                 match stated {
-                    Ok(bound) => ids.push(bound),
+                    Ok((bound, stated)) => {
+                        ids.push(bound);
+                        equalities.extend(stated);
+                    }
                     Err(unsaid) => unstated.push((position as u32, unsaid)),
                 }
             }
             env.param_bounds.push(ids);
+            env.param_assoc.push(equalities);
         }
         let ty = self
             .lowering
@@ -2526,6 +2549,37 @@ impl SolverBridge {
         .into_iter()
         .flatten()
         .collect()
+    }
+
+    /// The impls that answer a bound on `type_id` naming `trait_` at whatever
+    /// arguments.
+    pub(super) fn bound_impls_at_any_args(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        type_id: TypeId,
+        trait_: &FqTraitName,
+    ) -> BoundImpls {
+        let Ok(q) = self.question(tysys, ctx, type_id, &trait_.head_only(), Variables::Refused)
+        else {
+            return BoundImpls::Several;
+        };
+        let found = bound_candidates_at_any_args(&self.program, &q.env, &q.ty, q.trait_);
+        match rank(&found) {
+            Selection::None => BoundImpls::None,
+            // The order's loser still answers the bound at its own arguments.
+            Selection::One(index) => found
+                .iter()
+                .all(|other| other.trait_args == found[index].trait_args)
+                .then(|| self.impl_def_of(found[index].impl_))
+                .flatten()
+                .map_or(BoundImpls::Several, BoundImpls::One),
+            Selection::Duplicated(_)
+            | Selection::AmbiguousTraits(_)
+            | Selection::AmbiguousBlankets(_)
+            | Selection::Overloaded(_) => BoundImpls::Several,
+            Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
+        }
     }
 
     /// The blocks of the candidates `pick` keeps from the order's selection
@@ -3047,6 +3101,16 @@ pub(crate) enum InstanceOrder {
     Nothing,
     /// Impls the order cannot tell apart, by their blocks.
     Tied(Vec<Option<DefId>>),
+}
+
+/// How many impls answer a bound at whatever arguments
+/// ([`SolverBridge::bound_impls_at_any_args`]).
+pub(super) enum BoundImpls {
+    None,
+    /// One block answers, at one argument list.
+    One(DefId),
+    /// Several argument lists answer, or the one answer names no block.
+    Several,
 }
 
 /// What the order answers, naming each candidate by the impl block it came

@@ -71,13 +71,12 @@ The first rule is enforced: `permissions.deny` covers the Read tool, `.claude/ho
 
 ## Inlined Runtime
 
-The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex`, `diag`, `tree`, `tools` always; `follow` / `scan_memo` / `highlight` / `atn` / `atn_predict` / `atn_lr` / `latn` gated per-feature). Each fragment is also a real module for dev / test. A standard-library `use` in one is hoisted to the top of the generated file. A type only the generator needs lives outside `src/runtime/`, as the `.g4` lexer's `Token` does.
+The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex`, `diag`, `tree`, `tools` always; `follow` / `intern` / `lr_frame` / `scan_memo` / `highlight` / `atn` / `atn_predict` / `atn_lr` / `latn` gated per-feature). Each fragment is also a real module for dev / test. A standard-library `use` in one is hoisted to the top of the generated file. A type only the generator needs lives outside `src/runtime/`, as the `.g4` lexer's `Token` does.
 
 Every byte of these files lands in every generated parser, so:
 
 - No comments. They would be copied into hundreds of generated files. State intent through names, decomposition, and asserts.
 - Nothing test-only. String-level comparison helpers live in `tests/support/tree_compare.wado`; only a helper taking a generated type (`to_lexer_string`, over the generated `TokenStream`) has to stay.
-- A map hashes under a fixed `HashSeed` (`LATN_SEED` in `latn.wado`) rather than taking one from `new()`. A seed from the host would make every generated parser import `wasi:random/insecure-seed`.
 
 ## Tests
 

@@ -1,0 +1,21 @@
+// A `&mut T` read through a `&` is a `&T`, as `*` on a `&&mut T` is.
+
+struct S {
+    f: i32,
+}
+
+struct Holder {
+    r: &mut S,
+}
+
+fn target(h: &Holder) -> &mut S {
+    return h.r;   // Error: `h.r` is a `&S` here
+}
+
+export fn run() {
+    let mut s = S { f: 1 };
+    target(&Holder { r: &mut s }).f = 2;
+}
+
+__DATA__
+{"compile_error": ":12:5: analysis error: type mismatch: expected '&mut S', found '&S'"}

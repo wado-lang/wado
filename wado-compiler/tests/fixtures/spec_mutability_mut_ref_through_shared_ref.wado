@@ -1,0 +1,22 @@
+// A `&T` grants reading alone: a `&mut` of a place reached through it is
+// refused.
+
+struct Inner {
+    n: i32,
+}
+
+struct Pair {
+    inner: Inner,
+}
+
+fn inner(p: &Pair) -> &mut Inner {
+    return &mut p.inner;   // Error: `p.inner` is reached through `&Pair`
+}
+
+export fn run() {
+    let p = Pair { inner: Inner { n: 1 } };
+    inner(&p).n = 2;
+}
+
+__DATA__
+{"compile_error": ":13:12: analysis error: cannot take &mut through immutable reference"}

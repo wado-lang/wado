@@ -1,0 +1,89 @@
+// An associated type read off a reference is the binding of the impl dispatch
+// selects: one written for that reference outranks a blanket over references,
+// and a blanket answers at the trait arguments it was written for.
+// Regression: the blanket's binding answered first, and blankets of one trait
+// at different arguments overwrote each other.
+
+struct Cursor { n: i32 }
+
+impl Iterator for &mut Cursor {
+    type Item = String;
+
+    fn next(&mut self) -> Option<String> {
+        if self.n >= 2 {
+            return null;
+        }
+        self.n += 1;
+        return Option::Some(`#${self.n}`);
+    }
+}
+
+fn collect_all<I: Iterator>(mut it: I) -> List<I::Item> with _ {
+    return it.collect();
+}
+
+trait Tagged with () { fn tag(&self) -> i32; }
+
+trait Out with () {
+    type Of;
+    fn out(self) -> Self::Of;
+}
+
+struct Plain {}
+
+impl Tagged for Plain { fn tag(&self) -> i32 { return 0; } }
+
+impl<T: Tagged> Out for &T {
+    type Of = i32;
+    fn out(self) -> i32 { return (*self).tag(); }
+}
+
+impl Out for &Plain {
+    type Of = String;
+    fn out(self) -> String { return "plain"; }
+}
+
+fn out_of<X: Out>(x: X) -> X::Of {
+    return x.out();
+}
+
+trait Conv<T> with () {
+    type To;
+    fn conv(self, t: T) -> Self::To;
+}
+
+impl<T> Conv<i32> for &T {
+    type To = i32;
+    fn conv(self, t: i32) -> i32 { return t + 1; }
+}
+
+impl<T> Conv<String> for &T {
+    type To = String;
+    fn conv(self, t: String) -> String { return `${t}!`; }
+}
+
+fn conv_int<C: Conv<i32>>(c: C) -> C::To {
+    return c.conv(1);
+}
+
+fn conv_text<C: Conv<String>>(c: C) -> C::To {
+    return c.conv("hi");
+}
+
+test "an impl for the reference outranks the prelude's blanket" {
+    let mut c = Cursor { n: 0 };
+    assert collect_all(&mut c) == ["#1", "#2"];
+}
+
+test "and a blanket of the module's own" {
+    let p = Plain {};
+    assert out_of(&p) == "plain";
+}
+
+test "a blanket answers at its own trait arguments" {
+    let p = Plain {};
+    let n = conv_int(&p);
+    assert n == 2;
+    let s = conv_text(&p);
+    assert s == "hi!";
+}

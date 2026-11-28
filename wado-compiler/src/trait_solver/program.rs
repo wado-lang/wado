@@ -770,6 +770,18 @@ pub struct Env {
     /// Each parameter's bounds, whole: a bound carries the arguments it writes,
     /// which decide whether it answers a question at those arguments.
     pub param_bounds: Vec<Vec<ParamBound>>,
+    /// What each parameter's bounds bind an associated type to:
+    /// `I: Iterator<Item = i32>` says `<I as Iterator>::Item` is `i32`. A
+    /// parameter past the end binds none.
+    pub param_assoc: Vec<Vec<AssocEquality>>,
+}
+
+/// `Assoc = ty` written in a bound on `trait_`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct AssocEquality {
+    pub trait_: TraitDeclId,
+    pub assoc: AssocId,
+    pub ty: SolverType,
 }
 
 impl Program {

@@ -1,0 +1,34 @@
+// A static returning another instance of its own generic type is expected at
+// that instance, whose arguments are not the receiver's. They were once read
+// as the receiver's, so `T` took `Option<i32>` and the call miscompiled.
+struct Bx<T> {
+    v: T,
+}
+
+impl<T> Bx<T> {
+    fn opt(v: Option<T>) -> Bx<Option<T>> {
+        return Bx { v };
+    }
+
+    fn nest(v: T) -> Bx<Bx<T>> {
+        return Bx { v: Bx { v } };
+    }
+
+    fn own(v: T) -> Bx<T> {
+        return Bx { v };
+    }
+}
+
+test "the expected instance is not the receiver's" {
+    let none: Bx<Option<i32>> = Bx::opt(null);
+    assert none.v matches { null };
+    let text: Bx<Option<String>> = Bx::opt(null);
+    assert text.v matches { null };
+    let nested: Bx<Bx<i64>> = Bx::nest(1);
+    assert nested.v.v == 1;
+}
+
+test "a static returning its own block's type reads the receiver off it" {
+    let wide: Bx<i64> = Bx::own(1);
+    assert wide.v == 1;
+}

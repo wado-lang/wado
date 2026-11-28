@@ -1,8 +1,9 @@
 # Re — Linear-Time Regular Expressions for Wado
 
 `wado-lang:re` matches ECMA-262 patterns, read as the `u` flag reads them, in
-time linear in the input for every pattern. Backreferences and lookaround are
-refused, since no linear-time engine can run them.
+time linear in the input for every pattern. Lookahead and lookbehind match,
+with the groups inside them. Backreferences are refused, since no linear-time
+engine can run them.
 [WEP: Re](../docs/wep-2026-11-02-re.md) holds the design and the work ahead.
 
 ## Writing a Pattern

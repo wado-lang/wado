@@ -7,7 +7,7 @@ struct core:prelude/string.wado//String {  // TypeId(0)
     mut used: i32,
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
 array Array<u8> (mut u8);  // TypeId(2)
 
@@ -31,7 +31,7 @@ type "functype//serde_deserialize_trait.wado/$cm_export__run" = fn();  // TypeId
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(12)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(13)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(13)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(14)
 
@@ -72,26 +72,26 @@ global global:serde_deserialize_trait.wado::$const_obj_3: ref "core:prelude/stri
 fn "serde_deserialize_trait.wado/run"() with Stdout {
     let v_4: ref "core:prelude/string.wado//String";
     let out_108: ref "core:prelude/string.wado//String";
-    let $cm_pair_7_241: i64;
-    let $sroa_$pattern_temp_0_0_13_247: i32;
-    let $sroa_$pattern_temp_0_1_14_248: i32;
-    let new_repr_262: ref Array<u8>;
-    let start_731: i32;
-    $sroa_$pattern_temp_0_0_13_247 = builtin::i32_wrap_i64(local.tee $cm_pair_7_241("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_248 = builtin::i32_wrap_i64($cm_pair_7_241 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_247 = "serde_deserialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_247);
-    builtin::array_copy<u8>(local.tee new_repr_262(builtin::array_new<u8>(8)), 0, global:serde_deserialize_trait.wado::$const_obj_2, 0, 7);
-    builtin::array_set_u8(new_repr_262, 7, 10);
+    let $cm_pair_7_245: i64;
+    let $sroa_$pattern_temp_0_0_13_251: i32;
+    let $sroa_$pattern_temp_0_1_14_252: i32;
+    let new_repr_266: ref Array<u8>;
+    let start_751: i32;
+    $sroa_$pattern_temp_0_0_13_251 = builtin::i32_wrap_i64(local.tee $cm_pair_7_245("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_252 = builtin::i32_wrap_i64($cm_pair_7_245 >> 32_i64);
+    $sroa_$pattern_temp_0_0_13_251 = "serde_deserialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_251);
+    builtin::array_copy<u8>(local.tee new_repr_266(builtin::array_new<u8>(8)), 0, global:serde_deserialize_trait.wado::$const_obj_2, 0, 7);
+    builtin::array_set_u8(new_repr_266, 7, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
-    }; $sroa_$pattern_temp_0_1_14_248, new_repr_262);
+    }; $sroa_$pattern_temp_0_1_14_252, new_repr_266);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_248);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_252);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_247);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_251);
     }
     v_4 = global:serde_deserialize_trait.wado::$const_obj_3;
     local.tee out_108(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8;
@@ -99,14 +99,14 @@ fn "serde_deserialize_trait.wado/run"() with Stdout {
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__78: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $sroa_$pattern_temp_0_0_13_247(v_4.used) == 0;
-                if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_248(8 + $sroa_$pattern_temp_0_0_13_247) > 24) {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $sroa_$pattern_temp_0_0_13_251(v_4.used) == 0;
+                if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_252(8 + $sroa_$pattern_temp_0_0_13_251) > 24) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_108, $sroa_$pattern_temp_0_1_14_248);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_108, $sroa_$pattern_temp_0_1_14_252);
                 }
-                start_731 = out_108.used;
-                out_108.used = $sroa_$pattern_temp_0_1_14_248;
-                builtin::array_copy<u8>(out_108.repr, start_731, v_4.repr, 0, $sroa_$pattern_temp_0_0_13_247);
+                start_751 = out_108.used;
+                out_108.used = $sroa_$pattern_temp_0_1_14_252;
+                builtin::array_copy<u8>(out_108.repr, start_751, v_4.repr, 0, $sroa_$pattern_temp_0_0_13_251);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
         };
@@ -115,41 +115,41 @@ fn "serde_deserialize_trait.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_95: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_95;
     };
-    $sroa_$pattern_temp_0_0_13_247 = builtin::i32_wrap_i64(local.tee $cm_pair_7_241("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_248 = builtin::i32_wrap_i64($cm_pair_7_241 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_247 = "serde_deserialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_247);
-    builtin::array_copy<u8>(local.tee new_repr_262(builtin::array_new<u8>(local.tee start_731(out_108.used) + 1)), 0, out_108.repr, 0, start_731);
-    builtin::array_set_u8(new_repr_262, start_731, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    $sroa_$pattern_temp_0_0_13_251 = builtin::i32_wrap_i64(local.tee $cm_pair_7_245("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_252 = builtin::i32_wrap_i64($cm_pair_7_245 >> 32_i64);
+    $sroa_$pattern_temp_0_0_13_251 = "serde_deserialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_251);
+    builtin::array_copy<u8>(local.tee new_repr_266(builtin::array_new<u8>(local.tee start_751(out_108.used) + 1)), 0, out_108.repr, 0, start_751);
+    builtin::array_set_u8(new_repr_266, start_751, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_731 = start_731 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_248, new_repr_262, 0, start_731);
+        start_751 = start_751 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_252, new_repr_266, 0, start_751);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_248);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_252);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_247);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_251);
     }
-    $sroa_$pattern_temp_0_0_13_247 = builtin::i32_wrap_i64(local.tee $cm_pair_7_241("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_248 = builtin::i32_wrap_i64($cm_pair_7_241 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_247 = "serde_deserialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_247);
-    builtin::array_copy<u8>(local.tee new_repr_262(builtin::array_new<u8>(11)), 0, global:serde_deserialize_trait.wado::$const_obj_0, 0, 10);
-    builtin::array_set_u8(new_repr_262, 10, 10);
+    $sroa_$pattern_temp_0_0_13_251 = builtin::i32_wrap_i64(local.tee $cm_pair_7_245("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_252 = builtin::i32_wrap_i64($cm_pair_7_245 >> 32_i64);
+    $sroa_$pattern_temp_0_0_13_251 = "serde_deserialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_251);
+    builtin::array_copy<u8>(local.tee new_repr_266(builtin::array_new<u8>(11)), 0, global:serde_deserialize_trait.wado::$const_obj_0, 0, 10);
+    builtin::array_set_u8(new_repr_266, 10, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
-    }; $sroa_$pattern_temp_0_1_14_248, new_repr_262);
+    }; $sroa_$pattern_temp_0_1_14_252, new_repr_266);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_248);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_252);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_247);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_251);
     }
 }
 
@@ -240,11 +240,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_5: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
@@ -315,11 +315,11 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
                 "wasi/waitable-set-drop"(ptr_18);
                 break $inline_cm_await_blocked_5: status;
             }) >>u 4;
-            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if ptr_18 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_18 == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_18 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_18 == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
@@ -390,11 +390,11 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(handle
                 "wasi/waitable-set-drop"(ptr_18);
                 break $inline_cm_await_blocked_5: status;
             }) >>u 4;
-            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if ptr_18 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_18 == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_18 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_18 == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();

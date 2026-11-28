@@ -1,0 +1,10 @@
+// A flags type reached through a namespace import has its `none()` and
+// `all()`, as its members are reachable.
+
+use a from "./sub/cross_module_same_name_flags_a.wado";
+
+test "namespaced flags constants" {
+    assert a::Perms::none() as u32 == 0;
+    assert a::Perms::all() as u32 == 7;
+    assert a::Perms::all() == a::Perms::Read | a::Perms::Write | a::Perms::Execute;
+}

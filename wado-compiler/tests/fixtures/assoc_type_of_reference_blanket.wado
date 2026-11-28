@@ -1,0 +1,49 @@
+// A blanket over a reference binds its own associated types, which a
+// projection off the reference reads ahead of the referent's. Regression:
+// nothing registered them, and `M::Out` at `M = &S` stayed unresolved.
+
+trait Named with () {
+    type Tag;
+    fn tag(&self) -> Self::Tag;
+}
+
+struct S { n: i32 }
+
+impl Named for S {
+    type Tag = String;
+    fn tag(&self) -> String { return `s${self.n}`; }
+}
+
+trait Mark with () {
+    type Out;
+    fn mark(self) -> Self::Out;
+}
+
+impl<T: Named> Mark for &T {
+    type Out = i32;
+    fn mark(self) -> i32 { return 7; }
+}
+
+impl<T: Named> Named for &mut T {
+    type Tag = i32;
+    fn tag(&self) -> i32 { return 9; }
+}
+
+fn run_mark<M: Mark>(m: M) -> M::Out {
+    return m.mark();
+}
+
+fn tag_len<N: Named<Tag = String>>(n: N) -> i32 {
+    return n.tag().len();
+}
+
+test "the reference's own binding" {
+    let s = S { n: 1 };
+    assert run_mark(&s) == 7;
+}
+
+test "a reference of the other kind answers through its referent" {
+    let s = S { n: 12 };
+    assert tag_len(&s) == 3;
+    assert tag_len(s) == 3;
+}

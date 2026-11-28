@@ -2,7 +2,9 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::rarity::Rarity;
-use crate::wir::{WirExportDesc, WirInstr, WirLocals, WirPackage, WirType, WirTypeId};
+use crate::wir::{
+    PerDefinedFunc, WirExportDesc, WirInstr, WirLocals, WirPackage, WirType, WirTypeId,
+};
 
 use super::nullability::Nullability;
 
@@ -264,8 +266,7 @@ pub(super) fn arm_callees<'c>(
 /// included. A function reaching an import or an indirect call has none: what
 /// it writes is unknown.
 pub(super) struct CalleeWrites {
-    defined_func_base: u32,
-    fields: Vec<Option<IndexSet<String>>>,
+    fields: PerDefinedFunc<Option<IndexSet<String>>>,
 }
 
 impl CalleeWrites {
@@ -309,15 +310,13 @@ impl CalleeWrites {
             }
         }
         Self {
-            defined_func_base: module.defined_func_base,
-            fields,
+            fields: PerDefinedFunc::new(module, fields),
         }
     }
 
     /// The fields the function `index` names may write, or `None` if unknown.
     fn of(&self, index: u32) -> Option<&IndexSet<String>> {
-        let position = index.checked_sub(self.defined_func_base)? as usize;
-        self.fields.get(position)?.as_ref()
+        self.fields.get(index)?.as_ref()
     }
 }
 

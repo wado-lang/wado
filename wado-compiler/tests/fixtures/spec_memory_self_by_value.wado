@@ -1,4 +1,5 @@
-// A by-value `self` on a type that can never hold a resource is rejected.
+// A by-value `self` on a type that holds no resource copies the receiver at
+// every call, so the declaration warns and the caller keeps its value.
 
 struct Point { x: i32, y: i32 }
 
@@ -6,10 +7,11 @@ impl Point {
     fn consume(self) -> i32 { return self.x; }
 }
 
-test {
+export fn run() {
     let p = Point { x: 1, y: 2 };
     assert p.consume() == 1;
+    assert p.y == 2;
 }
 
 __DATA__
-{"compile_error":"`self` by value is only allowed on an affine type; `Point` is copyable — use `&self`"}
+{"warnings_contains":["`self` by value copies `Point` at every call; take `&self`, or mark it `#[allow(self_by_value)]` if the copy is meant"]}

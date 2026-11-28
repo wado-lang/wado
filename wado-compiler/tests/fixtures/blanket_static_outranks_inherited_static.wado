@@ -1,0 +1,32 @@
+// A blanket's static whose bound holds at the newtype itself outranks the
+// static the newtype inherits from its base, a link below: `N::mk()` takes
+// the blanket, as `lib::N::mk()` does through a namespace.
+
+struct Base { v: i32 }
+
+impl Base {
+    fn mk() -> i32 { return 1; }
+}
+
+type N = Base;
+
+trait Marked with () {
+    fn mark(&self) -> i32;
+}
+
+impl Marked for N {
+    fn mark(&self) -> i32 { return 2; }
+}
+
+trait Make with () {
+    fn mk() -> i32;
+}
+
+impl<T: Marked> Make for T {
+    fn mk() -> i32 { return 20; }
+}
+
+test "the blanket answers at the newtype" {
+    assert N::mk() == 20;
+    assert Base::mk() == 1;
+}

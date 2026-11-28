@@ -1,0 +1,48 @@
+// A caller that extends a result with a parameter's elements still borrows
+// the parts the result lends: the elements `extend` copies in come from the
+// parameter, and nothing the result holds goes back into it. `extend` keeps
+// its own copy of the parameter's elements, so the fixture expects the lending
+// clone rather than the absence of copies.
+struct Range { lo: i32, hi: i32 }
+struct Elem { name: String, ranges: List<Range> }
+
+fn width(e: &Elem) -> i32 {
+    let mut w = 0;
+    for let r of &e.ranges { w += r.hi - r.lo; }
+    return w;
+}
+
+#[inline("never")]
+fn suffix(src: &List<Elem>, from: i32) -> List<Elem> {
+    let mut out: List<Elem> = [];
+    for let mut j = from; j < src.len(); j += 1 {
+        out.push(src[j]);
+    }
+    return out;
+}
+
+#[inline("never")]
+fn extended_width(src: &List<Elem>, tail: &List<Elem>) -> i32 {
+    let mut rest = suffix(src, 1);
+    rest.extend(tail);
+    let mut t = 0;
+    for let e of &rest { t += width(e); }
+    return t;
+}
+
+test "the lent parts read as their sources beside the copied ones" {
+    let src: List<Elem> = [
+        Elem { name: "a", ranges: [Range { lo: 1, hi: 3 }] },
+        Elem { name: "b", ranges: [Range { lo: 1, hi: 4 }] },
+        Elem { name: "c", ranges: [Range { lo: 1, hi: 5 }] },
+    ];
+    assert extended_width(&src, &src) == 16;
+    assert src.len() == 3;
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["nir/copy_elision"]},
+    "test": {},
+    "wir_expect:O2": ["suffix$lend"]
+}

@@ -20,8 +20,8 @@ use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
 use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
 use crate::tir::{
-    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, LetStorage, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, LetStorage, TirExpr, TirExprKind,
+    TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -140,18 +140,25 @@ pub struct ReturnConventions {
     pub returns_projection: FuncKeyMap<Vec<usize>>,
 }
 
-/// Functions whose every value-return aliases the receiver / first parameter
-/// (a *shared* projection, through `array_get_value` and nested accessor calls).
-/// Because it admits shared projections it must NOT feed the move / owned
-/// decision; the read-only-share analysis and pattern lowering consume it.
+/// Functions whose every value-return either aliases the receiver / first
+/// parameter (a *shared* projection, through `array_get_value` and nested
+/// accessor calls) or is owned, and at least one aliases it. An owned result is
+/// storage no one else reaches, so what the result may share is the receiver's
+/// alone. Because it admits shared projections it must NOT feed the move /
+/// owned decision; the read-only-share analysis and pattern lowering consume it.
 pub fn compute_receiver_alias(
     project: &FlatPackage,
     call_graph: &CallGraph,
     return_paths: &ReturnPaths,
     type_table: &TypeTable,
     builtins: &BuiltinDeclarations,
+    oracle: &OwnedCalls,
+    confined: &ConfinedParams,
 ) -> FuncKeySet {
     let mut set = FuncKeySet::default();
+    // A body's fresh locals do not depend on `set`: one revisited until its
+    // cycle settles computes them once.
+    let mut fresh_of: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
         if set.contains(&func.module_source, &func.name) {
@@ -162,8 +169,27 @@ pub fn compute_receiver_alias(
             return false;
         }
         let Some(body) = &func.body else { return false };
-        let hands_out_payload = hands_out_payload(&func, return_paths);
-        if function_returns_receiver_alias(body, &set, builtins, type_table, hands_out_payload) {
+        let fresh = fresh_of.entry(id).or_insert_with(|| {
+            let bindings = BindingCollector::collect(&func, type_table);
+            compute_fresh_locals(
+                &bindings,
+                &confined.shared_locals(&func),
+                oracle,
+                type_table,
+            )
+        });
+        let mut returns = ReceiverReturns {
+            set: &set,
+            builtins,
+            type_table,
+            oracle,
+            fresh,
+            hands_out_payload: hands_out_payload(&func, return_paths),
+            every_alias_or_owned: true,
+            saw_alias: false,
+        };
+        returns.visit_block(body);
+        if returns.saw_alias && returns.every_alias_or_owned {
             set.insert(func.module_source.clone(), func.name.clone());
             true
         } else {
@@ -173,47 +199,35 @@ pub fn compute_receiver_alias(
     set
 }
 
-fn function_returns_receiver_alias(
-    body: &TirBlock,
-    set: &FuncKeySet,
-    builtins: &BuiltinDeclarations,
-    type_table: &TypeTable,
+/// Classifies a body's returns for [`compute_receiver_alias`].
+struct ReceiverReturns<'a> {
+    set: &'a FuncKeySet,
+    builtins: &'a BuiltinDeclarations,
+    type_table: &'a TypeTable,
+    oracle: &'a OwnedCalls<'a>,
+    fresh: &'a IndexSet<u32>,
     hands_out_payload: bool,
-) -> bool {
-    struct W<'a> {
-        set: &'a FuncKeySet,
-        builtins: &'a BuiltinDeclarations,
-        type_table: &'a TypeTable,
-        hands_out_payload: bool,
-        all_alias: bool,
-        saw_return: bool,
-    }
-    impl TirRefVisitor for W<'_> {
-        fn visit_stmt(&mut self, stmt: &TirStmt) {
-            if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
-                self.saw_return = true;
-                let v = returned_value(v, self.hands_out_payload, self.type_table);
-                if !is_receiver_projection(v, 0, self.set, self.builtins) {
-                    self.all_alias = false;
-                }
-            }
-            self.walk_stmt(stmt);
-        }
+    every_alias_or_owned: bool,
+    saw_alias: bool,
+}
 
-        fn visit_expr(&mut self, expr: &TirExpr) {
-            self.walk_expr_in_frame(expr);
+impl TirRefVisitor for ReceiverReturns<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
+            let v = returned_value(v, self.hands_out_payload, self.type_table);
+            if is_receiver_projection(v, 0, self.set, self.builtins) {
+                self.saw_alias = true;
+            } else if !is_owned_value(v, self.fresh, self.oracle, self.type_table) {
+                self.every_alias_or_owned = false;
+            }
         }
+        self.walk_stmt(stmt);
     }
-    let mut w = W {
-        set,
-        builtins,
-        type_table,
-        hands_out_payload,
-        all_alias: true,
-        saw_return: false,
-    };
-    w.visit_block(body);
-    w.saw_return && w.all_alias
+
+    /// A closure's `return`s deliver its own result, not this function's.
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        self.walk_expr_in_frame(expr);
+    }
 }
 
 /// Whether `expr` aliases the storage of parameter `param`: a projection chain,

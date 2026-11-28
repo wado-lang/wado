@@ -2583,8 +2583,9 @@ impl Monomorphizer {
     }
 
     /// A type-param receiver whose param resolves to a *reference*
-    /// (`..F::inspect()` on a `&List<i32>` struct field) dispatches through the
-    /// ref/mutref blanket (`impl<T: Inspect> Inspect for &T`), keyed by shape.
+    /// (`..F::inspect()` on a `&List<i32>` struct field), or to a newtype over
+    /// one, dispatches through the ref/mutref blanket
+    /// (`impl<T: Inspect> Inspect for &T`), named by shape.
     /// The general path peels every ref off the auto-`&self`'d receiver, which
     /// would collapse `&List<i32>^Inspect` to `List<i32>::inspect` and drop the
     /// leading `&`. Resolve the param's own value (ref intact) and, if the order
@@ -2603,23 +2604,24 @@ impl Monomorphizer {
         let Some(self_tid) = self.receiver_substitution_tid(info, substitution, type_table) else {
             return false;
         };
-        let (ref_kind, inner) = match type_table.get(self_tid) {
-            ResolvedType::Ref(inner) => (RefKind::Shared, *inner),
-            ResolvedType::MutRef(inner) => (RefKind::Mut, *inner),
-            _ => return false,
-        };
         let Some(trait_fq) = info.trait_name.as_ref() else {
             return false;
         };
-        let Some(blanket) =
+        let Some((blanket, reference)) =
             ranked_ref_blanket(&self.functions.trait_env, trait_fq, self_tid, type_table)
         else {
             return false;
+        };
+        let (ref_kind, inner) = match type_table.get(reference) {
+            ResolvedType::Ref(inner) => (RefKind::ImmutableReference, *inner),
+            ResolvedType::MutRef(inner) => (RefKind::Mut, *inner),
+            other => unreachable!("a blanket over a reference answers {other:?}"),
         };
         let method_type_args = recorded_method_type_args(method_func);
         let (ref_info, monomorph_info) = ref_blanket_instance(
             ref_blanket_generic(ref_kind, trait_fq, info),
             inner,
+            self.trait_args_at_instance(info, substitution, type_table),
             method_type_args,
             type_table,
         );
@@ -2634,20 +2636,21 @@ impl Monomorphizer {
     }
 
     /// A call through a universal `&T` blanket at this instance: the `&` head
-    /// stays, and the pointee it is keyed by is the one its recorded args name.
+    /// stays, and the pointee it is named by is the one its recorded args name.
     fn substitute_ref_blanket_pointee(
         &self,
         method_func: &mut FunctionRef,
         info: &LocalMethodName,
+        substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) {
         let [pointee] = method_func
             .monomorph_info
             .as_ref()
-            .expect("a `&T` blanket call is keyed by its pointee")
+            .expect("a `&T` blanket call records its pointee")
             .impl_type_args[..]
         else {
-            panic!("a `&T` blanket is keyed by one pointee");
+            panic!("a call written on a reference records one pointee");
         };
         let ref_kind = info
             .ref_receiver()
@@ -2660,6 +2663,7 @@ impl Monomorphizer {
         let (ref_info, monomorph_info) = ref_blanket_instance(
             ref_blanket_generic(ref_kind, trait_name, info),
             pointee,
+            self.trait_args_at_instance(info, substitution, type_table),
             method_type_args,
             type_table,
         );
@@ -2941,7 +2945,7 @@ impl Monomorphizer {
             return;
         }
         if self.is_universal_ref_blanket_call(method_func) {
-            self.substitute_ref_blanket_pointee(method_func, &info, type_table);
+            self.substitute_ref_blanket_pointee(method_func, &info, substitution, type_table);
             return;
         }
 

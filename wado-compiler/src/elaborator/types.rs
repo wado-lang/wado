@@ -259,8 +259,6 @@ pub(crate) struct VariantInfo {
     /// follow resources nested in variant case payloads.
     pub(crate) cases: Vec<VariantCaseData>,
     /// `TypeIds` of the variant's own type parameters in declaration order.
-    /// Used by `infer_variant_type_args` to fill type params from payload args
-    /// and expected type context.
     pub(super) type_param_type_ids: Vec<TypeId>,
 }
 
@@ -590,12 +588,6 @@ pub enum TypeError {
     FlagsTooManyMembers {
         name: String,
         count: usize,
-        span: Span,
-    },
-
-    /// A by-value `self` receiver on a copyable type, which takes `&self`.
-    SelfByValueOnCopyable {
-        type_name: String,
         span: Span,
     },
 
@@ -959,17 +951,6 @@ pub enum TypeError {
         /// How to spell the receiver, rendered (`value`, `&value`,
         /// `&mut value`).
         spelled: String,
-        span: Span,
-    },
-
-    /// A method's own type parameters that the arguments do not settle. Left
-    /// unspelled they reach codegen unsubstituted.
-    UninferredMethodTypeArgs {
-        receiver: String,
-        method: String,
-        /// The method's own parameters the call must spell, in declaration
-        /// order. Never empty.
-        params: Vec<String>,
         span: Span,
     },
 
@@ -1806,15 +1787,24 @@ impl TypeError {
     /// [`Self::cannot_infer`]'s sentence, for a variable to raise if it is
     /// never answered.
     pub(super) fn cannot_infer_message(names: &[String], owner: &str, turbofish: &str) -> String {
+        Self::cannot_infer_naming(names, &Self::cannot_infer_owner(owner, turbofish))
+    }
+
+    /// The sentence naming `names` before `owner`, a
+    /// [`Self::cannot_infer_owner`].
+    pub(super) fn cannot_infer_naming<S: AsRef<str>>(names: &[S], owner: &str) -> String {
         let named = names
             .iter()
-            .map(|n| format!("`{}`", written_param_name(n)))
+            .map(|n| format!("`{}`", written_param_name(n.as_ref())))
             .collect::<Vec<_>>()
             .join(", ");
-        format!(
-            "cannot infer type parameter {named} of {owner}; \
-             add a turbofish ({turbofish}) or a type annotation"
-        )
+        format!("cannot infer type parameter {named} {owner}")
+    }
+
+    /// [`Self::cannot_infer_message`] past the parameters it names, which a
+    /// variable left open carries until the end of its body says which.
+    pub(super) fn cannot_infer_owner(owner: &str, turbofish: &str) -> String {
+        format!("of {owner}; add a turbofish ({turbofish}) or a type annotation")
     }
 
     /// This error as its `(code, message, span)` triple, which is what
@@ -1926,13 +1916,6 @@ impl TypeError {
                 format!(
                     "flags `{name}` has {count} members; at most 32 are supported \
                      (a flags value is a single 32-bit word at the Component Model boundary)"
-                ),
-                *span,
-            ),
-            TypeError::SelfByValueOnCopyable { type_name, span } => (
-                Code::ReceiverMismatch,
-                format!(
-                    "`self` by value is only allowed on an affine type; `{type_name}` is copyable — use `&self`"
                 ),
                 *span,
             ),
@@ -2426,32 +2409,6 @@ impl TypeError {
                 format!(
                     "'{trait_name}::{method}' takes '{expected}'; the receiver spells its own mode: '{trait_name}::{method}({spelled}, …)'"
                 ),
-                *span,
-            ),
-            TypeError::UninferredMethodTypeArgs {
-                receiver,
-                method,
-                params,
-                span,
-            } => (
-                Code::NeedsTypeAnnotation,
-                {
-                    assert!(!params.is_empty(), "the emitter found an unspelled slot");
-                    let named = params
-                        .iter()
-                        .map(|p| format!("'{p}'"))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let (plural, verb, them) = if params.len() == 1 {
-                        ("", "is", "it")
-                    } else {
-                        ("s", "are", "them")
-                    };
-                    let spelled = params.join(", ");
-                    format!(
-                        "'{receiver}::{method}' declares the type parameter{plural} {named}, which {verb} not inferred from the arguments here; spell {them}: '{receiver}::{method}::<{spelled}>(…)'"
-                    )
-                },
                 *span,
             ),
             TypeError::AmbiguousStaticArgument {
@@ -3202,7 +3159,7 @@ impl TypeError {
             } => (
                 Code::CmBoundaryType,
                 format!(
-                    "callback parameter '{param}' of `{function}` cannot cross the Component Model boundary: a callback takes only scalars and unrestricted handles, and returns nothing"
+                    "callback parameter '{param}' of `{function}` cannot cross the Component Model boundary: a callback takes and returns only scalars and unrestricted handles"
                 ),
                 *span,
             ),
@@ -4539,9 +4496,35 @@ pub(super) struct TraitMethodMatch {
     /// `Inner`). A reference impl buckets by kind, so nothing else names the
     /// link a newtype inherits it through.
     pub(super) ref_impl_target: Option<TypeId>,
+    /// The reports of the tie this match stands for, among reference blankets
+    /// that answer only where the referent has no method of the name: the
+    /// call adopting the match makes them.
+    pub(super) tie_behind_referent: Vec<TypeError>,
 }
 
 impl TraitMethodMatch {
+    /// Whether this match, found among the impls for a reference, answers a
+    /// call on one ahead of the referent's own method. An impl for a named
+    /// referent does. A blanket one (`impl<T: Bound> Trait for &T`) does for a
+    /// by-value `self` alone, which takes the reference where the referent's
+    /// method would take the referent out of it; through `&self` both read
+    /// the same value, and the referent's is the direct one.
+    ///
+    /// The blanket answers a receiver holding one reference. Past that its
+    /// parameter would stand for a reference, which the lookup does not hand
+    /// over, so the referent's method is asked and the move check refuses it
+    /// where a `&mut` is among the layers.
+    pub(super) fn answers_reference_receiver(&self, receiver_ref_depth: usize) -> bool {
+        !self.is_blanket_ref_impl
+            || (self.method_info.self_kind == ast::SelfKind::Value && receiver_ref_depth == 1)
+    }
+
+    /// Whether this is a reference blanket's `&self` method, which answers
+    /// only where the referent has no method of the name.
+    pub(super) fn answers_behind_referent(&self) -> bool {
+        self.is_blanket_ref_impl && self.method_info.self_kind == ast::SelfKind::Ref
+    }
+
     /// The owner a call on `receiver_base` dispatches with: a newtype inherits
     /// a reference impl the way it inherits a value one, so its signature
     /// re-types to the receiver.

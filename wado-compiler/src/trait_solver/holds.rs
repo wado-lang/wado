@@ -119,6 +119,7 @@ pub fn holds_with_args(
         asking: Vec::new(),
         member_next: false,
         at_itself: None,
+        following: Vec::new(),
     }
     .holds(ty, trait_, args)
 }
@@ -224,6 +225,10 @@ struct Query<'a> {
     /// (`docs/wep-2026-09-01-trait-resolution.md`). The subject stays the same
     /// through a chained blanket's bounds, so the restriction travels with it.
     at_itself: Option<SolverType>,
+    /// The projections whose stated equality [`Self::normalized`] is reading.
+    /// An equality that leads back to one of them states nothing for it:
+    /// `I: Src<Item = I::Item>`, or two bounds naming each other's.
+    following: Vec<SolverType>,
 }
 
 impl Query<'_> {
@@ -414,7 +419,7 @@ impl Query<'_> {
             // A default reads `Self` as the type asked about, which a newtype
             // inheriting this impl is.
             let asked = program.args_at(trait_, args, subject.unwrap_or(ty));
-            answer = match self.impl_answers(id, def, ty, &asked) {
+            answer = match self.impl_answers(id, def, ty, &asked, OpenArguments::Unbound) {
                 // The bound's arguments are what the impl must answer at.
                 // Selection asks without this gate.
                 Verdict::Holds(answer) => {
@@ -467,6 +472,7 @@ impl Query<'_> {
         def: &ImplDef,
         ty: &SolverType,
         asked: &[Option<SolverType>],
+        open_arguments: OpenArguments,
     ) -> Verdict<Answer> {
         let program = self.program;
         let Some(implemented) = def.trait_ else {
@@ -610,12 +616,31 @@ impl Query<'_> {
                     // The bound writes its arguments in the impl's own
                     // parameter space, so `T: Eq<U>` under `U = String` asks
                     // about `Eq<String>` and not about `Eq<U>`.
+                    // One naming a parameter left to the call is asked at a
+                    // variable there: the call's inference settles it, and no
+                    // impl at any argument refutes the block now.
+                    let asks_call_var = std::cell::Cell::new(false);
                     let args: Vec<SolverType> = bound
                         .args
                         .iter()
                         .map(|arg| {
                             self.at_bindings(arg, &bindings, &unifier)
-                                .unwrap_or_else(|| arg.clone())
+                                .unwrap_or_else(|| {
+                                    arg.map_params(&|i| {
+                                        let own =
+                                            bindings[i as usize].as_ref().map(Binding::as_type);
+                                        own.or_else(|| {
+                                            let owed = open_arguments
+                                                == OpenArguments::OwedByTheCall
+                                                && left_to_the_call[i as usize];
+                                            owed.then(|| {
+                                                asks_call_var.set(true);
+                                                unifier.mint(i)
+                                            })
+                                        })
+                                    })
+                                    .map_or_else(|| arg.clone(), |ty| unifier.resolve(&ty))
+                                })
                         })
                         .collect();
                     self.member_next = through_member;
@@ -634,6 +659,10 @@ impl Query<'_> {
                             requests.extend(answer.requests);
                         }
                         Verdict::Fails => return refuted(refutation_assumes),
+                        // Which instance of the call's variable holds is the
+                        // call's to settle and owe: on a closed subject the
+                        // block applies, its trait arguments open.
+                        Verdict::Unknown if asks_call_var.get() && !element.is_open() => {}
                         Verdict::Unknown => {
                             after_unknown = true;
                             refutation_assumes |=
@@ -906,7 +935,10 @@ impl Query<'_> {
     /// `ty` with each projection an impl answers replaced by what that impl
     /// binds: `<Ints as Src>::Item` is `i32` under `impl Src for Ints`, and a
     /// family's member is its binding at the projection's arguments. A
-    /// projection off a parameter binds nothing here and stays as written.
+    /// projection off a parameter is what the parameter's bounds state for
+    /// it, and stays as written where they state nothing, or disagree: a
+    /// projection names no trait arguments, so it cannot pick between
+    /// `C: Conv<i32, Out = A> + Conv<String, Out = B>`.
     fn normalized(&mut self, ty: &SolverType) -> SolverType {
         match ty {
             SolverType::Projection {
@@ -916,6 +948,26 @@ impl Query<'_> {
                 args,
             } => {
                 let base = self.normalized(base);
+                if let SolverType::Param(index) = base {
+                    let mut stated = self
+                        .env
+                        .param_assoc
+                        .get(index as usize)
+                        .into_iter()
+                        .flatten()
+                        .filter(|eq| eq.trait_ == *trait_ && eq.assoc == *assoc)
+                        .map(|eq| &eq.ty);
+                    if let Some(first) = stated.next()
+                        && stated.all(|other| other == first)
+                        && !self.following.contains(ty)
+                    {
+                        let first = first.clone();
+                        self.following.push(ty.clone());
+                        let read = self.normalized(&first);
+                        self.following.pop();
+                        return read;
+                    }
+                }
                 let args: Vec<SolverType> = args.iter().map(|a| self.normalized(a)).collect();
                 let member = match self.holds(&base, *trait_, &[]) {
                     Verdict::Holds(held) => held.assoc_at(*assoc, &args),
@@ -1124,6 +1176,17 @@ fn comparison_row_at(program: &Program, ty: &SolverType) -> Verdict<(TraitDeclId
     }
 }
 
+/// How an impl's bound is asked where it reads a parameter that only a trait
+/// argument the question left open would bind.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OpenArguments {
+    /// At the parameter, which no impl answers: a bound has nobody to settle
+    /// the argument, and the impl's bounds may agree on none.
+    Unbound,
+    /// At a variable the call settles and owes, so the impl stays a candidate.
+    OwedByTheCall,
+}
+
 /// One impl applying to one type. `holds` reads the bound it answers; selection
 /// reads the arguments it answers at.
 struct Answer {
@@ -1154,8 +1217,9 @@ pub(super) fn impl_applies(
         asking: Vec::new(),
         member_next: false,
         at_itself: Some(ty.clone()),
+        following: Vec::new(),
     }
-    .impl_answers(id, def, ty, asked)
+    .impl_answers(id, def, ty, asked, OpenArguments::OwedByTheCall)
     .map(|answer| answer.trait_args)
 }
 
@@ -1206,6 +1270,7 @@ pub(super) fn admits(program: &Program, env: &Env, source: &Source, ty: &SolverT
         asking: Vec::new(),
         member_next: false,
         at_itself: None,
+        following: Vec::new(),
     };
     let mut bindings: Vec<Option<Binding>> = vec![None; source.params];
     let mut deferred = Vec::new();
@@ -1881,6 +1946,7 @@ mod tests {
                 .into_iter()
                 .map(|b| b.into_iter().map(ParamBound::bare).collect())
                 .collect(),
+            param_assoc: Vec::new(),
         }
     }
 
@@ -2098,6 +2164,7 @@ mod tests {
         p.traits.entry(EQ).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
         let env = Env {
             param_bounds: vec![vec![ParamBound::bare(EQ)]],
+            param_assoc: Vec::new(),
         };
         assert_eq!(
             holds_with_args(&p, &env, &SolverType::Param(0), EQ, &[]),
@@ -2139,6 +2206,7 @@ mod tests {
                 trait_: EQ,
                 args: vec![decl(I32)],
             }]],
+            param_assoc: Vec::new(),
         };
         assert_eq!(
             holds_with_args(&p, &env, &SolverType::Param(0), EQ, &[decl(I32)]),
@@ -2264,6 +2332,7 @@ mod tests {
                 trait_: ALPHA,
                 args: vec![decl(I32)],
             }]],
+            param_assoc: Vec::new(),
         };
         let ask = |trait_: TraitDeclId, args: &[SolverType]| {
             holds_with_args(&p, &bound, &SolverType::Param(0), trait_, args)
@@ -2317,6 +2386,7 @@ mod tests {
                 trait_: ALPHA,
                 args: vec![decl(I32), decl(POINT)],
             }]],
+            param_assoc: Vec::new(),
         };
         let ask =
             |args: &[SolverType]| holds_with_args(&p, &bound, &SolverType::Param(0), SUB, args);

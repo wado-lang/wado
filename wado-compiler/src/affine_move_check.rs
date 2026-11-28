@@ -15,10 +15,11 @@ use crate::divergence::{self, ExprTypes};
 use crate::elaborator::sem::types::{DestructuringFallback, FallbackSite};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::name::RefKind;
 use crate::ownership::{self, BodyFacts, Modes, OperandMode, PlacePath};
 use crate::semantics::{Destination, Operand, Semantics};
 use crate::symbol::SymbolKind;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::TypeId;
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 
@@ -38,6 +39,9 @@ enum MoveError {
     /// An affine value read by value through a reference, which leaves it with
     /// its owner: the read would be a second owner.
     MoveOutOfReference { type_name: String },
+    /// A by-value `self` called on a `&mut` to a copyable value: the call
+    /// would act on a copy, where `&mut` names the value itself.
+    SelfCopiedOutOfMutReference { method: String, receiver: String },
     /// A closure body moving a binding it captured, by reference.
     CapturedMove { name: String },
     /// A guard moving a binding of its arm, which it sees by reference.
@@ -96,6 +100,13 @@ impl From<AffineMoveError> for Diagnostic {
             MoveError::MoveOutOfReference { type_name } => (
                 Code::TypeMismatch,
                 format!("cannot move affine type `{type_name}` out of a reference"),
+            ),
+            MoveError::SelfCopiedOutOfMutReference { method, receiver } => (
+                Code::ReceiverMismatch,
+                format!(
+                    "`{method}` takes `self` by value, and the receiver is `{receiver}`; \
+                     write `*` to copy what it points to"
+                ),
             ),
             MoveError::CapturedMove { name } => (
                 Code::TypeMismatch,
@@ -396,7 +407,7 @@ impl<'a> Checker<'a> {
     fn is_mut_ref_local(&self, id: AstId) -> bool {
         self.sem
             .local_type(id)
-            .is_some_and(|ty| self.sem.types.is_mut_ref(ty))
+            .is_some_and(|ty| self.sem.types.represented_ref_kind(ty) == Some(RefKind::Mut))
     }
 
     /// `outside` holds the `&mut` parameters, which outlive the body.
@@ -1021,7 +1032,7 @@ impl MoveWalker<'_, '_> {
     fn is_reference(&self, expr: &Expr) -> bool {
         self.sem()
             .expression_type(expr.id())
-            .is_some_and(|ty| self.sem().types.is_reference(ty))
+            .is_some_and(|ty| self.sem().types.represented_ref_kind(ty).is_some())
     }
 
     /// Whether a field path passes through a reference or a dereference.
@@ -1539,6 +1550,9 @@ impl MoveWalker<'_, '_> {
                 }
             }
             Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
+                if let Expr::MethodCall(mc) = expr {
+                    self.refuse_self_out_of_reference(mc);
+                }
                 self.visit_operands(expr);
                 self.store_through_call(expr);
             }
@@ -1573,6 +1587,35 @@ impl MoveWalker<'_, '_> {
             | Expr::Ident(_)
             | Expr::Literal(_)
             | Expr::Error(_) => self.visit_operands(expr),
+        }
+    }
+
+    /// Refuse a by-value `self` that `call` reads out of the reference its
+    /// receiver is: a move of an affine referent, or a copy of any other out
+    /// past a `&mut` at any depth. A copy out of `&`s alone stands: nothing
+    /// can tell it from the referent.
+    fn refuse_self_out_of_reference(&mut self, call: &ast::MethodCallExpr) {
+        let types = &self.sem().types;
+        let refusal = self
+            .sem()
+            .references_self_is_read_out_of(call.id)
+            .find_map(|receiver| {
+                let (kinds, referent) = types.reference_path(receiver);
+                if self.is_affine(referent) {
+                    Some(MoveError::MoveOutOfReference {
+                        type_name: types.name(referent),
+                    })
+                } else if kinds.contains(&RefKind::Mut) {
+                    Some(MoveError::SelfCopiedOutOfMutReference {
+                        method: call.method.clone(),
+                        receiver: types.name(receiver),
+                    })
+                } else {
+                    None
+                }
+            });
+        if let Some(refusal) = refusal {
+            self.report(refusal, call.receiver.span());
         }
     }
 
@@ -1818,7 +1861,8 @@ impl MoveWalker<'_, '_> {
         let (method, args) = call_operands(call);
         let mut through: Vec<(Operand, &Expr)> = Vec::new();
         if let Some(mc) = method
-            && self.sem().method_call_takes_mut_receiver(mc.id)
+            && (self.sem().method_call_takes_mut_receiver(mc.id)
+                || self.sem().method_call_consumes_receiver(mc.id) && self.is_mut_ref(&mc.receiver))
         {
             through.push((Operand::Receiver, &mc.receiver));
         }
@@ -1853,7 +1897,7 @@ impl MoveWalker<'_, '_> {
     fn is_mut_ref(&self, expr: &Expr) -> bool {
         self.sem()
             .expression_type(expr.id())
-            .is_some_and(|ty| matches!(self.sem().types.get(ty), ResolvedType::MutRef(_)))
+            .is_some_and(|ty| self.sem().types.represented_ref_kind(ty) == Some(RefKind::Mut))
     }
 
     /// What the value of `expr` refers into.

@@ -1,0 +1,331 @@
+//! Where each lookaround of a pattern passes in a text: one bit for each
+//! position. A lookahead holds where a match of its body starts, which a pass
+//! back from the text's end tells for every position at once, and a
+//! lookbehind where one ends, which a pass from the start tells. So a search
+//! reads a lookaround as it reads `\b`, and stays linear in the text.
+
+use { Dfa, Scan, runs } from "./dfa.wado";
+use { holds } from "./pike.wado";
+use { Direction, LookaroundPrograms, Program } from "./program.wado";
+
+/// The table of one text. No lookaround passes off a character boundary: a
+/// DFA starts a thread at every byte, and one started inside a character
+/// must not match there.
+internal struct Oracle {
+    /// `stride` bytes for each position, a bit for each lookaround, set where
+    /// its body matches: the DFAs read a position's lookarounds as one byte.
+    internal bits: List<u8>,
+    stride: i32,
+    /// The bits of the negated lookarounds, which pass where theirs is unset.
+    negated: List<u8>,
+    /// A bit for each position, set where any of its `bits` may be, so that
+    /// a scan finds the next such position 32 at a time.
+    marked: List<i32>,
+}
+
+/// What fills one lookaround's bits: a DFA, built by the first search that
+/// asks, until it gives up.
+internal struct Marker {
+    dfa: Option<Dfa>,
+    /// Whether the scan below answers alone.
+    internal off: bool,
+    /// Whether `Markers::by_byte` fills them instead.
+    by_byte: bool,
+}
+
+/// What fills the oracles of one pattern, kept across its searches.
+internal struct Markers {
+    internal each: List<Marker>,
+    /// What each byte of a text says of the positions beside it, or empty
+    /// where no byte says anything: the lookaheads whose body it is, the
+    /// lookbehinds whose body it is `MAX_BYTE_MARKED` bits above those, and
+    /// `INSIDE` on a byte that continues a character.
+    by_byte: List<i32>,
+}
+
+/// How many lookarounds a pattern may hold for `by_byte` to mark any.
+global MAX_BYTE_MARKED: i32 = 8;
+
+global INSIDE: i32 = 1 << 2 * MAX_BYTE_MARKED;
+
+/// How far `next_marked` looks, in words of 32 positions, so that a search
+/// spends on it what it spends on the text it reads.
+global MARKED_AHEAD: i32 = 8;
+
+impl Markers {
+    internal fn new(lookarounds: &List<LookaroundPrograms>) -> Markers {
+        let mut each: List<Marker> = [];
+        let mut by_byte: List<i32> = List::filled(256, 0);
+        let mut any = false;
+        let marks = lookarounds.len() <= MAX_BYTE_MARKED;
+        let none: List<LookaroundPrograms> = [];
+        for let index of 0..<lookarounds.len() {
+            let body = &lookarounds[index].holds;
+            let mut marker = Marker { dfa: null, off: !runs(body, lookarounds.len()), by_byte: false };
+            // A body that matches one byte and nothing else asks about the
+            // byte beside the position: a lookahead's matches where its byte
+            // stands, and a lookbehind's at the position after.
+            if marks
+                && body.match_len == Some(1)
+                && asserts_nothing(body)
+                && let Some(matched) = Dfa::new(*body, Scan::Every, &none).matches_byte() {
+                let ahead = body.direction == Direction::Reverse;
+                let bit = 1 << if ahead { index } else { index + MAX_BYTE_MARKED };
+                for let b of 0..<256 {
+                    if matched[b] {
+                        by_byte[b] |= bit;
+                    }
+                }
+                marker.by_byte = true;
+                any = true;
+            }
+            // Inside a character a negated lookaround's bit is set, so that
+            // it does not pass there.
+            if marks && lookarounds[index].negated {
+                for let b of 0x80..<0xC0 {
+                    by_byte[b] |= INSIDE;
+                }
+                any = true;
+            }
+            each.push(marker);
+        }
+        return Markers { each, by_byte: if any { by_byte } else { [] } };
+    }
+}
+
+fn asserts_nothing(program: &Program) -> bool {
+    for let inst of &program.insts {
+        if *inst matches { Assert(_) | Lookaround(_) } {
+            return false;
+        }
+    }
+    return true;
+}
+
+impl Oracle {
+    /// The oracle of a pattern with no lookaround, or of no text yet.
+    internal fn new() -> Oracle {
+        return Oracle { bits: [], stride: 0, negated: [], marked: [] };
+    }
+
+    /// Where each of `lookarounds` passes in `text`; `markers` is theirs.
+    internal fn of(lookarounds: &List<LookaroundPrograms>, markers: &mut Markers, text: StrSlice) -> Oracle {
+        let stride = (lookarounds.len() + 7) / 8;
+        let mut negated: List<u8> = List::filled(stride, 0);
+        for let index of 0..<lookarounds.len() {
+            negated[index >> 3] |= (lookarounds[index].negated as i32 << (index & 7)) as u8;
+        }
+        let mut oracle = Oracle {
+            bits: List::filled((text.len() + 1) * stride, 0),
+            stride,
+            negated,
+            marked: List::filled((text.len() + 32) / 32, 0),
+        };
+        if !markers.by_byte.is_empty() {
+            oracle.mark_by_byte(&markers.by_byte, text);
+        }
+        // One inside another has the higher index, and is asked while the
+        // outer one's body is read.
+        for let back of 0..<lookarounds.len() {
+            let index = lookarounds.len() - 1 - back;
+            if markers.each[index].by_byte {
+                continue;
+            }
+            // An empty text is both of its ends at once, which a DFA's
+            // states do not tell apart.
+            if text.is_empty() || !oracle.mark(index, lookarounds, &mut markers.each[index], text) {
+                oracle.scan(index, &lookarounds[index], text);
+            }
+        }
+        return oracle;
+    }
+
+    internal fn is_empty(&self) -> bool {
+        return self.stride == 0;
+    }
+
+    /// Whether lookaround `index` passes at `pos`.
+    internal fn passes(&self, index: i32, pos: i32) -> bool {
+        let byte = index >> 3;
+        return (self.bits[pos * self.stride + byte] ^ self.negated[byte]) as i32 >> (index & 7) & 1 != 0;
+    }
+
+    /// Records that the body of lookaround `index` matches at `pos` of
+    /// `text`, unless that is inside a character: a DFA starts a thread at
+    /// every byte, and one that started there may match without reading any.
+    internal fn set(&mut self, text: StrSlice, index: i32, pos: i32) {
+        if text.is_char_boundary(pos) {
+            self.bits[pos * self.stride + (index >> 3)] |= (1 << (index & 7)) as u8;
+            self.marked[pos >> 5] |= 1 << (pos & 31);
+        }
+    }
+
+    /// Fills what `by_byte`, a `Markers`' own, says of each byte of `text`.
+    fn mark_by_byte(&mut self, by_byte: &List<i32>, text: StrSlice) {
+        assert self.stride == 1;
+        let low = (1 << MAX_BYTE_MARKED) - 1;
+        let len = text.len();
+        let mut pos = 0;
+        loop {
+            while pos < len && unchecked by_byte[unchecked text.byte_at(pos) as i32] == 0 {
+                pos += 1;
+            }
+            if pos == len {
+                return;
+            }
+            let says = by_byte[text.byte_at(pos) as i32];
+            if says & INSIDE != 0 {
+                self.set_all(pos, self.negated[0] as i32);
+            } else {
+                self.set_all(pos, says & low);
+                self.set_all(pos + 1, says >> MAX_BYTE_MARKED & low);
+            }
+            pos += 1;
+        }
+    }
+
+    /// Records that the bodies of the lookarounds in `set` match at `pos`.
+    fn set_all(&mut self, pos: i32, set: i32) {
+        if set != 0 {
+            self.bits[pos] |= set as u8;
+            self.marked[pos >> 5] |= 1 << (pos & 31);
+        }
+    }
+
+    /// The first position at or after `from` where a body may match, as far
+    /// as `MARKED_AHEAD` words tell: where none of them is marked, the first
+    /// position past them, and `i32::MAX` where the text ends before that.
+    internal fn next_marked(&self, from: i32) -> i32 {
+        let first = from >> 5;
+        let last = i32::min(first + MARKED_AHEAD, self.marked.len());
+        let mut mask = -1 << (from & 31);
+        for let at of first..<last {
+            let word = self.marked[at] & mask;
+            if word != 0 {
+                return (at << 5) + i32::ctz(word);
+            }
+            mask = -1;
+        }
+        return if last == self.marked.len() { i32::MAX } else { last << 5 };
+    }
+
+    /// Fills the bits of lookaround `index` by its DFA, `marker`'s, or
+    /// answers false and leaves them unset where it has none.
+    fn mark(&mut self, index: i32, lookarounds: &List<LookaroundPrograms>, marker: &mut Marker, text: StrSlice) -> bool {
+        if marker.off {
+            return false;
+        }
+        if marker.dfa matches { null } {
+            marker.dfa = Some(Dfa::new(lookarounds[index].holds, Scan::Every, lookarounds));
+        }
+        let Some(dfa) = &mut marker.dfa else {
+            unreachable();
+        };
+        dfa.mark(text, self, index);
+        if !dfa.gave_up {
+            return true;
+        }
+        marker.off = true;
+        marker.dfa = null;
+        // A DFA reads a pattern whose bits fit one byte. Inside a character
+        // it set none, and a negated lookaround's stays set.
+        assert self.stride == 1;
+        for let pos of 0..=text.len() {
+            if text.is_char_boundary(pos) {
+                self.bits[pos] &= ~(1 << index) as u8;
+            }
+        }
+        return false;
+    }
+
+    /// Fills the bits of lookaround `index`. Its body is read from every
+    /// position at once, and only for whether it matches: no thread holds a
+    /// slot, and one is dropped wherever another reached its instruction.
+    fn scan(&mut self, index: i32, lookaround: &LookaroundPrograms, text: StrSlice) {
+        let program = &lookaround.holds;
+        let forward = program.direction == Direction::Forward;
+        let [mut pos, limit, step] = if forward { [0, text.len(), 1] } else { [text.len(), 0, -1] };
+        let mut threads = Threads {
+            current: [],
+            next: [],
+            seen: List::filled(program.insts.len(), -1),
+            stamp: 0,
+            matched: false,
+        };
+        loop {
+            if text.is_char_boundary(pos) {
+                threads.add(program, self, text, 0, pos);
+            }
+            if threads.matched {
+                self.set(text, index, pos);
+            }
+            if pos == limit {
+                return;
+            }
+            let byte = program.direction.byte_at(text, pos);
+            pos += step;
+            threads.advance();
+            for let pc of &threads.current {
+                if let Byte([lo, hi]) = program.insts[*pc] && byte >= lo && byte <= hi {
+                    threads.add(program, self, text, *pc + 1, pos);
+                }
+            }
+        }
+    }
+}
+
+/// The threads of one scan: the `Byte`s reached at the position before, and
+/// those being reached at this one.
+struct Threads {
+    current: List<i32>,
+    next: List<i32>,
+    /// `seen[pc] == stamp` marks `pc` reached at this position.
+    seen: List<i32>,
+    stamp: i32,
+    /// Whether a thread reached `Match` at this position.
+    matched: bool,
+}
+
+impl Threads {
+    /// Moves on a position: the threads reached become those to step.
+    fn advance(&mut self) {
+        [self.current, self.next] = [self.next, self.current];
+        self.next.truncate(0);
+        self.stamp += 1;
+        self.matched = false;
+    }
+
+    /// Follows every instruction that consumes nothing from `pc`. Every
+    /// `Progress` passes: an empty iteration adds nothing to what matches.
+    fn add(&mut self, program: &Program, oracle: &Oracle, text: StrSlice, from: i32, pos: i32) {
+        let mut stack: List<i32> = [from];
+        while let Some(pc) = stack.pop() {
+            if self.seen[pc] == self.stamp {
+                continue;
+            }
+            self.seen[pc] = self.stamp;
+            match program.insts[pc] {
+                Jump(target) => stack.push(target),
+                Split([first, second]) => {
+                    stack.push(second);
+                    stack.push(first);
+                },
+                Save(_) | Clear(_) | Progress(_) => stack.push(pc + 1),
+                Assert(look) => {
+                    if holds(look, text, pos) {
+                        stack.push(pc + 1);
+                    }
+                },
+                Lookaround([inner, _]) => {
+                    if oracle.passes(inner, pos) {
+                        stack.push(pc + 1);
+                    }
+                },
+                _::Fail => {
+                },
+                Byte(_) => self.next.push(pc),
+                _::Match => self.matched = true,
+            }
+        }
+    }
+}

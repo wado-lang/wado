@@ -1,0 +1,36 @@
+// A closure passed to a callee specialized on it arrives as the struct its
+// captures fill, not a closure value. A write through a `&mut` it captured
+// still reaches the storage a binding shares.
+
+use { println, Stdout } from "core:cli";
+
+fn drain(rows: &mut List<i32>) -> List<i32> {
+    let leaving = *rows;
+    *rows = [];
+    return leaving;
+}
+
+fn call(body: fn mut() -> List<i32>) -> List<i32> {
+    let mut body = body;
+    return body();
+}
+
+fn drain_captured(rows: &mut List<i32>) -> List<i32> {
+    return call(|| drain(rows));
+}
+
+export fn run() with Stdout {
+    let mut rows: List<i32> = [1, 2];
+    let drained = drain_captured(&mut rows);
+    println(`${drained:?} ${rows:?}`);
+
+    // `&mut kept` makes the closure capture a proxy bound in a block around it.
+    let mut kept: List<i32> = [3];
+    let left = call(|| drain(&mut kept));
+    println(`${left:?} ${kept:?}`);
+}
+
+__DATA__
+{
+    "stdout": "[1, 2] []\n[3] []\n"
+}

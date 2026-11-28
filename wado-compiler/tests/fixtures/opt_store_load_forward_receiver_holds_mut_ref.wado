@@ -1,0 +1,35 @@
+// A call whose receiver holds a `&mut` writes what that reference names,
+// whatever its `self` mode: the literal stored before the call is not
+// forwarded past it.
+
+struct S {
+    f: i32,
+}
+
+struct Holder {
+    r: &mut S,
+}
+
+impl Holder {
+    #[inline(never)]
+    fn poke(self) {
+        self.r.f = 9;
+    }
+
+    #[inline(never)]
+    fn poke_shared(&self) {
+        let copy = *self;
+        copy.r.f = 7;
+    }
+}
+
+test {
+    let mut s = S { f: 1 };
+    let h = Holder { r: &mut s };
+    s.f = 2;
+    h.poke();
+    assert s.f == 9;
+    s.f = 3;
+    h.poke_shared();
+    assert s.f == 7;
+}

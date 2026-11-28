@@ -198,6 +198,8 @@ A call's candidates come from two places:
   (`impl<T> Tag for Pair<T, i32>`), or for its head (`impl<T> Tag for Box<T>`).
 - Every value blanket (`impl<T: Bound> Tr for T`) whose bounds the receiver
   satisfies.
+- Every reference blanket (`impl<T: Bound> Tr for &T`) whose bounds the pointee
+  of a reference receiver satisfies.
 
 A target reaches a receiver when every position it pins holds the receiver's
 argument there. A type parameter stands for one type wherever the target writes
@@ -244,6 +246,13 @@ sit at the base's level.
 A reference does not interrupt the chain. A call on `&W`, where `W` is a newtype
 over `Inner`, visits `&W`, then `W`, then `&Inner`, then `Inner`. Within one
 level the reference precedes its pointee.
+
+A reference blanket's method taking `&self` or `&mut self` is the exception. The
+pointee's own method of that name answers first, and the blanket's where the
+pointee has none. Both would read the same value, and the pointee's reads it
+directly. So a reference blanket forwards to its pointee with
+`(*self).method()`. Its method taking `self` by value keeps the order: it takes
+the reference, where the pointee's would take the value out of it.
 
 A newtype over a reference continues to the pointee. A call on `H`, where
 `type H = &mut T`, visits `H`, then `&mut T`, then `T`, so `T`'s impls answer it
@@ -322,7 +331,9 @@ second blanket of your own reports at every type satisfying both bounds. Write
 
 Arguments filter candidates before the ranks run: one trait at several argument
 lists is an overload set the call's arguments choose from (see
-[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)).
+[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)). Blankets
+of one trait at several argument lists are an overload set too, where no impl
+for the type itself answers.
 
 #### Eligibility
 
@@ -409,10 +420,12 @@ type's arguments to say. Where several impls are left and the call must be
 resolved before inference settles them, it asks for a turbofish or an
 annotation; where none is, the method does not exist at any instance.
 
-The impl a call resolves to settles none of its variables. A variable nothing
-else settles is reported as one that cannot be inferred, even where only one
-impl could apply: inferring it from that impl would let an impl written
-elsewhere later make the call fail.
+The impl a call resolves to settles none of the variables its receiver's type
+holds. A variable nothing else settles is reported as one that cannot be
+inferred, even where only one impl could apply: inferring it from that impl
+would let an impl written for another type later make the call fail. A bound on
+a settled subject is another question, which only that subject's own impls
+answer ([Bounds on Generic Traits](#bounds-on-generic-traits)).
 
 A numeric literal's variable is the exception. Where one impl alone could
 answer a method on a receiver holding it, that impl settles it:
@@ -753,6 +766,28 @@ test {
 
 The bound's subject is not itself determined this way: `A: Eq` says what `A` must satisfy, not what `A` is.
 
+A call that names no trait arguments leaves a parameter only the trait reference names to inference, as it leaves a generic function's. A bound that reads it settles it where it can ([Bounds on Generic Traits](#bounds-on-generic-traits)), and the expected type or a later use does otherwise. The bound is checked at the type the parameter settles to, and a parameter nothing settles is an error.
+
+<!-- {"fixture":"spec_traits_impl_param_by_call.wado"} -->
+
+```wado
+impl<A, T: Source<A>> Tag<A> for T {
+    fn tag(&self) -> A { return self.first(); }
+}
+
+test {
+    let two = Two { n: 7 };
+    let n: i32 = two.tag();          // `A` is `i32`, so `Two: Source<i32>`
+    let s: String = Tag::tag(&two);  // `A` is `String`
+    assert n == 7 && s == "7";
+    assert Tag::<i32>::tag(&two) == 7;
+
+    let one = One { n: 7 };
+    let v = one.tag();               // `One` has `Source<i32>` alone
+    assert `${v}` == "7";
+}
+```
+
 ### Trait Arguments Meet the Trait's Parameter Bounds
 
 A trait reference's arguments must meet the bounds the trait puts on its parameters, with `Self` standing for the implementing or bounded type. This holds of an `impl` header and of a bound alike. As in Rust, nothing implies those bounds onto the arguments: an impl parameter has only the bounds the impl writes, so it restates what the trait needs.
@@ -829,6 +864,47 @@ test {
 }
 ```
 
+### A Reference as a Type Argument
+
+A reference satisfies a bound in one of two ways. A trait implemented for the
+reference is satisfied by that impl. Otherwise the reference stands in for what
+it points to: `&T` satisfies a bound `T` satisfies, and a method called through
+the bound is the referent's, called through the reference. An associated type
+read through the bound is the answering impl's, as the method is.
+
+It stands in only where every method borrows it. A reference does not satisfy
+through its referent:
+
+- a trait with a method taking `self` by value, which would read the referent
+  out of the reference;
+- a trait with a method that has no receiver and names `Self`, which has
+  nothing to read through;
+- `Ord`.
+
+Such a trait is satisfied by the value, or by a reference it is implemented
+for, as [`Iterator` is for `&mut I`](./spec-standard-traits.md#iterator---core-iteration-trait).
+
+<!-- {"fixture":"reference_denied_by_value_self_bound.wado"} -->
+
+```wado
+fn size_of<T: Size>(t: T) -> i32 {
+    return t.size();
+}
+
+fn bump<T: Bump>(t: T) -> i32 {
+    return t.bumped();
+}
+
+export fn run() {
+    let mut c = Counter { n: 1 };
+    assert size_of(&c) == 1;
+    assert bump(c) == 2;
+    assert bump(&mut c) == 2;
+}
+```
+
+The last call is a compile error: `&mut Counter` does not implement `Bump`.
+
 ### Bounds on Generic Traits
 
 A bound that writes no argument names the declared default. `T: Add` is
@@ -896,6 +972,34 @@ name is settled at each instantiation. `T: Make<U>` reaches
 projection nested inside an argument is answered the same way:
 `Make<List<T::Base>>` reaches `impl Make<List<String>>`. A call through the
 bound reaches the impl that satisfied the bound.
+
+A bound settles what its arguments leave open where its subject is settled and
+one impl of the trait applies to it: the arguments are that impl's, as a call of
+the trait's method on the subject would read them. A blanket that applies
+counts as the subject's own impl does. A subject that is a type parameter has
+the one bound in force on it instead. Where several apply at different
+arguments, the bound settles nothing and the expected type or a later use
+chooses, as among the members of an overload set.
+
+A numeric literal's type is a default that settles last, so the one impl
+chooses it first: `put(&one, 1)` under `fn put<A, T: Sink<A>>(t: &T, a: A)`
+takes `1` as `i64` where `One` has `Sink<i64>` alone. Where several impls
+apply, or the literal cannot take the one impl's type, the literal takes its
+default and the bound is asked there.
+
+<!-- {"fixture":"spec_traits_bound_settles_argument.wado"} -->
+
+```wado
+fn first_of<A, T: Source<A>>(t: &T) -> A {
+    return t.first();
+}
+
+test {
+    let v = first_of(&One { n: 7 });           // `One` has `Source<i32>` alone
+    let s: String = first_of(&Two { n: 7 });   // `Two` has two: the annotation chooses
+    assert `${v}` == "7" && s == "7";
+}
+```
 
 A bound may pin an associated type (`T: Mul<Output = T>`). The impl that answers
 it must bind that type as the pin says.

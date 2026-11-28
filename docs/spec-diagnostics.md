@@ -26,6 +26,7 @@ The lints are:
 | Lint                                                       | Reports                                                                         |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | [`shadowed_name`](#the-shadowed_name-lint)                 | a binder that takes a name already reaching a known symbol                      |
+| [`self_by_value`](#the-self_by_value-lint)                 | a by-value `self` on a type every value of which is copyable                    |
 | [`self_comparison`](#the-self_comparison-lint)             | a comparison of an expression with itself                                       |
 | [`float_literal_pattern`](#the-float_literal_pattern-lint) | a pattern naming one float other than a zero, an infinity or a NaN              |
 | [`arithmetic_overflow`](#the-arithmetic_overflow-lint)     | constant integer arithmetic that wraps, or a constant shift amount out of range |
@@ -104,6 +105,39 @@ A binder shadows only what is in scope where it is written. A name binds after
 the expression it binds from, and reaches only what the construct carries it to.
 So an `if let` binding is not in scope in the `else`, and the alternatives of an
 or-pattern bind one set of names rather than shadowing each other.
+
+## The `self_by_value` Lint
+
+The `self_by_value` lint warns about a method that takes `self` by value on a
+type every value of which is copyable, whatever its kind: a struct, a variant,
+an enum, a flags type, a newtype, a primitive, or a generic type under
+parameters that admit no affine argument (`impl Pair<i32>`, `impl<T> Pair<T>`).
+A
+[by-value `self`](./spec-memory.md#method-receiver-self-by-value) is copied
+when its type is copyable, so each call of such a method copies its receiver,
+and `&self` reads the same value without the copy.
+
+An `impl` with an `affine` parameter is exempt, since an instance with an affine
+argument moves through the same declaration, and so is a trait's method, whose receiver the
+trait decides. `#[allow(self_by_value)]` on the method or on its `impl` waives
+the lint where the copy is meant.
+
+<!-- {"fixture":"self_by_value_allowed.wado"} -->
+
+```wado
+impl Point {
+    #[allow(self_by_value)]
+    fn first(self) -> i32 { return self.x; }
+}
+
+export fn run() {
+    let p = Point { x: 1, y: 2 };
+    assert p.first() == 1;
+    assert p.second() == 2;
+    assert p.total() == 3;
+    assert Cell { value: 7 }.into_value() == 7;
+}
+```
 
 ## The `self_comparison` Lint
 

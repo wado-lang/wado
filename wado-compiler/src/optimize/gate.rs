@@ -21,18 +21,24 @@ use crate::nir_package::NirPackage;
 use crate::nir_visitor::reachable_exprs;
 use crate::parallel::Executor;
 
-/// The gated passes. Each owns a column of per-function watermarks. Add a
-/// variant when a pass becomes gate-aware; `COUNT` sizes the watermark table.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum GatedPass {
-    /// Pre-inline peephole run (hosts `MatchToSwitchRule`, `string_push`, …).
-    /// Kept on a separate watermark column from the post-inline run: the two
-    /// invocations apply different rule sets, so a function quiescent for the
-    /// pre-inline run must still be revisited by the post-inline run (which
-    /// hosts `RefElimRule` / `ElideBoxLocalRule` / `LabeledBlockFusionRule` /
-    /// `array_literal`), and vice versa.
+macro_rules! gated_passes {
+    ($($(#[$doc:meta])* $variant:ident,)*) => {
+        /// The gated passes. Each owns a column of per-function watermarks.
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        pub enum GatedPass {
+            $($(#[$doc])* $variant,)*
+        }
+
+        impl GatedPass {
+            const COUNT: usize = [$(Self::$variant),*].len();
+        }
+    };
+}
+
+gated_passes! {
+    /// The peephole runs on either side of `nir/inline`
+    /// ([`super::peephole::InlineSide`]).
     PeepholePre,
-    /// Post-inline peephole run.
     PeepholePost,
     CopyProp,
     ConstFold,
@@ -45,6 +51,7 @@ pub enum GatedPass {
     SroaParam,
     SroaVariantReturn,
     ValueCopyDemote,
+    CopyElision,
     ScalarForward,
     LetBlockFlatten,
     /// Whole-program only: the column says whether any function changed since
@@ -55,10 +62,6 @@ pub enum GatedPass {
     StoreLoadForward,
     BranchPrune,
     CondImplPostPromote,
-}
-
-impl GatedPass {
-    const COUNT: usize = 19;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call
@@ -300,60 +303,6 @@ impl FunctionGate {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// `GatedPass::COUNT` is hand-maintained and sizes the watermark table
-    /// (`[Vec<u64>; COUNT]` indexed by `pass as usize`), so a variant added
-    /// without bumping COUNT would panic at runtime. The exhaustive `match`
-    /// forces this test to be updated when a variant is added (compile error),
-    /// and the assert then catches a stale COUNT.
-    #[test]
-    fn gated_pass_count_matches_variants() {
-        let all = [
-            GatedPass::PeepholePre,
-            GatedPass::PeepholePost,
-            GatedPass::CopyProp,
-            GatedPass::ConstFold,
-            GatedPass::Sroa,
-            GatedPass::Licm,
-            GatedPass::ContainerSroa,
-            GatedPass::Inline,
-            GatedPass::Dae,
-            GatedPass::Drve,
-            GatedPass::SroaParam,
-            GatedPass::SroaVariantReturn,
-            GatedPass::ValueCopyDemote,
-            GatedPass::ScalarForward,
-            GatedPass::LetBlockFlatten,
-            GatedPass::ParamSpec,
-            GatedPass::StoreLoadForward,
-            GatedPass::BranchPrune,
-            GatedPass::CondImplPostPromote,
-        ];
-        for p in all {
-            match p {
-                GatedPass::PeepholePre
-                | GatedPass::PeepholePost
-                | GatedPass::CopyProp
-                | GatedPass::ConstFold
-                | GatedPass::Sroa
-                | GatedPass::Licm
-                | GatedPass::ContainerSroa
-                | GatedPass::Inline
-                | GatedPass::Dae
-                | GatedPass::Drve
-                | GatedPass::SroaParam
-                | GatedPass::SroaVariantReturn
-                | GatedPass::ValueCopyDemote
-                | GatedPass::ScalarForward
-                | GatedPass::LetBlockFlatten
-                | GatedPass::ParamSpec
-                | GatedPass::StoreLoadForward
-                | GatedPass::BranchPrune
-                | GatedPass::CondImplPostPromote => {}
-            }
-        }
-        assert_eq!(all.len(), GatedPass::COUNT);
-    }
 
     /// Build a gate with `n` functions and an explicit call graph, bypassing
     /// `NirPackage` so the propagation algebra can be tested in isolation.

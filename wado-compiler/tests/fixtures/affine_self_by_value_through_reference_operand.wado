@@ -1,0 +1,29 @@
+// A by-value `self` called on a borrow written in place would move the
+// borrowed value out through it. A trait method is refused as an inherent one
+// is.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+affine trait Eat with () {
+    fn eat(self) -> i32;
+}
+
+impl Eat for Tok {
+    fn eat(self) -> i32 {
+        return self.id;
+    }
+}
+
+export fn run() {
+    let mut t = Tok { id: 1 };
+    let _ = (&mut t).eat();
+}
+
+__DATA__
+{"compile_error": ":25:13: analysis error: cannot move affine type `Tok` out of a reference"}

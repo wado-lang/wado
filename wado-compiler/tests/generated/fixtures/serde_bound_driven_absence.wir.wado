@@ -11,17 +11,17 @@ struct core:serde//SerializeError {}  // TypeId(1)
 
 array Array<u8> (mut u8);  // TypeId(2)
 
-variant core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError> {  // TypeId(3)
+variant core:prelude/option.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError> {  // TypeId(3)
     Ok(ref "core:prelude/string.wado//String"),
     Err(ref "core:serde//SerializeError"),
 }
 
-struct core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok {  // TypeId(4)
+struct core:prelude/option.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok {  // TypeId(4)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err {  // TypeId(5)
+struct core:prelude/option.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err {  // TypeId(5)
     discriminant: i32,
     payload_0: ref "core:serde//SerializeError",
 }
@@ -52,15 +52,15 @@ fn "serde_bound_driven_absence.wado/$cm_export__run"() {
     let buf: ref "core:prelude/string.wado//String";
     let $qm_e: ref "core:serde//SerializeError";
     let $local_7: ref null "core:serde//SerializeError";
-    drop($inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__sroa_value_x__3: block -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>" {
+    drop($inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__sroa_value_x__3: block -> ref "core:prelude/option.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>" {
         buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
         if @likely(ref.is_null(local.tee $local_7("core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.x,s.buf]"(1, buf)))) {
         } else {
             $qm_e = ref.as_non_null($local_7);
             cold_path;
-            break $inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__sroa_value_x__3: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err" { discriminant: 1, payload_0: $qm_e };
+            break $inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__sroa_value_x__3: struct.new "core:prelude/option.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err" { discriminant: 1, payload_0: $qm_e };
         }
-        break $inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__sroa_value_x__3: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; $load_1 = buf.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 } };
+        break $inline_core_json_to_string_serde_bound_driven_absence_wado_UsedForSerialize__sroa_value_x__3: struct.new "core:prelude/option.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; $load_1 = buf.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 } };
     });
     "wasi/task-return"(0);
 }

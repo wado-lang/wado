@@ -3,6 +3,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{EXTERN_IMPORT_MODULE, ExternHostQuery, MangledName};
@@ -363,8 +364,7 @@ impl<'a> WirContext<'a> {
             return existing.clone();
         }
         let index = u32::try_from(self.types.len()).expect("too many types");
-        let fq_rc: Rc<str> = Rc::from(fq.as_str());
-        let type_id = WirTypeId::new(index, fq_rc);
+        let type_id = WirTypeId::new(index, Arc::from(fq.as_str()));
         self.type_map.insert(fq, type_id.clone());
         self.types.push(typedef);
         type_id
@@ -443,8 +443,7 @@ impl<'a> WirContext<'a> {
         let func_idx = self.import_func_count;
         self.import_func_count += 1;
         let fq = name.fq.clone();
-        let fq_rc: Rc<str> = Rc::from(fq.as_str());
-        let func_id = WirFuncId::new(func_idx, fq_rc);
+        let func_id = WirFuncId::new(func_idx, Arc::from(fq.as_str()));
 
         self.imports.push(WirImport {
             module,
@@ -464,8 +463,7 @@ impl<'a> WirContext<'a> {
         let func_idx =
             DEFINED_FUNC_BASE + u32::try_from(self.functions.len()).expect("too many funcs");
         let fq = func.name.fq.clone();
-        let fq_rc: Rc<str> = Rc::from(fq.as_str());
-        let func_id = WirFuncId::new(func_idx, fq_rc);
+        let func_id = WirFuncId::new(func_idx, Arc::from(fq.as_str()));
         self.func_map.insert(MangledName::new(fq), func_id.clone());
         if let Some(nir_id) = nir_id {
             self.funcid_map.insert(nir_id, func_id.clone());
@@ -918,7 +916,7 @@ impl<'a> WirContext<'a> {
             ResolvedType::PackElement { pack, .. } => {
                 panic!("an element of pack {pack:?} reached codegen, which unrolling substitutes")
             }
-            ResolvedType::InferVar(var) => {
+            ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
                 panic!("unsolved inference variable `{var}` reached codegen")
             }
             ResolvedType::AssocTypeProjection { assoc_name, .. } => {

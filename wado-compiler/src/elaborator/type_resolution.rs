@@ -503,6 +503,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     owner,
                 });
             }
+            // `Self` implements the trait its frame stands in, whatever its
+            // shape: `&mut P` is no declaration to register a definition
+            // under, and carries no bound of its own.
+            if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
+                && let Some(owner) = declared
+                && self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_param(self_type)
+            {
+                return Some(AssocTarget::Projection {
+                    base: self_type,
+                    owner,
+                });
+            }
             let _ = self.unknown_namespaced_type("Self", &namespaced.name, namespaced.span);
             return None;
         }
@@ -545,7 +561,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// What a concrete `base` itself binds `assoc` to, and the trait declaring
     /// it. A base still carrying a type parameter binds nothing yet, so the
     /// frame's bounds answer instead.
-    fn assoc_bound_by_type(&mut self, base: TypeId, assoc: &str) -> Option<(DefId, TypeId)> {
+    fn assoc_bound_by_type(&self, base: TypeId, assoc: &str) -> Option<(DefId, TypeId)> {
         if self.tysys.type_table.borrow().contains_type_param(base) {
             return None;
         }
@@ -650,7 +666,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report a type position naming an `interface` or a `trait`, and say
     /// whether it did.
-    pub(super) fn reject_non_type_decl(&mut self, site: AstId, name: &str, span: Span) -> bool {
+    pub(super) fn reject_non_type_decl(&self, site: AstId, name: &str, span: Span) -> bool {
         let Some(kind) = self.non_type_decl_kind(site, name) else {
             return false;
         };
@@ -756,7 +772,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// and say whether it did. Fewer is [`Self::type_args_of_application`]'s: a
     /// turbofish may stop short, and the slots it does not name are inferred.
     fn reject_surplus_type_args(
-        &mut self,
+        &self,
         name: &str,
         params: &[ast::GenericParam],
         args: &[Type],
@@ -806,7 +822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report each default naming its own or a later parameter, which no
     /// argument has settled when the default is read.
-    pub(super) fn report_forward_type_param_defaults(&mut self, params: &[ast::GenericParam]) {
+    pub(super) fn report_forward_type_param_defaults(&self, params: &[ast::GenericParam]) {
         for (slot, referenced) in forward_type_param_defaults(params) {
             let _ = self.emit(TypeError::ForwardTypeParamDefault {
                 param: params[slot].name.clone(),
@@ -1317,7 +1333,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report `base::member` as a name that denotes no type.
-    fn unknown_namespaced_type(&mut self, base: &str, member: &str, span: Span) -> TypeId {
+    fn unknown_namespaced_type(&self, base: &str, member: &str, span: Span) -> TypeId {
         let _ = self.emit(TypeError::UnknownType {
             name: format!("{base}::{member}"),
             span,
@@ -2132,12 +2148,13 @@ impl TypeLookup<'_> {
                     .map(|p| self.resolve_in(p, type_table, frame))
                     .collect();
                 let return_type = self.resolve_in(&func_type.return_type, type_table, frame);
-                type_table.intern(ResolvedType::Function {
-                    is_mut: func_type.is_mut,
-                    params,
-                    return_type,
-                    effects: vec![],
-                })
+                // A name that is no effect is the module walk's to report.
+                let effects = func_type
+                    .effects
+                    .iter()
+                    .filter_map(|effect| self.resolutions.effect_at(effect.id, &effect.name))
+                    .collect();
+                type_table.make_function_with_mut(func_type.is_mut, params, return_type, effects)
             }
             // A variadic type-pack spread `..T` resolves to a `TypePack`
             // keyed by the param's positional index, mirroring the instance

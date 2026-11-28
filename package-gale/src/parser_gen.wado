@@ -156,11 +156,11 @@ use {
     label_value_type,
     mark_gated_predicates,
     result_type_carries_vals,
+    set_rule_result_type,
     rule_call_ctx_field,
     rule_call_span_field,
     rule_has_attr_inits,
     rule_has_emittable_actions,
-    rule_result_type,
     rule_result_type_for,
     unbound_label_value,
     warn_unhandled_actions,
@@ -168,8 +168,6 @@ use {
 } from "./action_gen.wado";
 use {
     compute_fragment_entries,
-    emit_atn_claim_return,
-    emit_atn_enter,
     gen_parse_entry,
     gen_parser_struct,
     gen_recover_helpers,
@@ -341,7 +339,7 @@ fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &EmitContext) {
         };
         index.push(`${id}`);
     }
-    GlobalSpec::new("CALL_FOLLOW_SETS", "List<List<i32>>", `[${sets.join(", ")}]`).emit(w);
+    GlobalSpec::new("CALL_FOLLOW_SETS", "List<KindSet>", `[${sets.join(", ")}]`).emit(w);
     GlobalSpec::new("CALL_FOLLOW", "List<i32>", `[${index.join(", ")}]`).emit(w);
     let mut ends: List<String> = [];
     for let e of &ctx.plan.recovery_sets().call_follow_ends {
@@ -3033,7 +3031,6 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         rule_takes_min_prec(lowered_rule),
         ctx.current_rule_reads_follow(),
         ctx.settings.trace,
-        ctx.plan.needs_atn,
         &rule_result_type_for(rule, ctx),
         ctx,
         lr_mid_operand_gated(lowered_rule),
@@ -3063,7 +3060,6 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     takes_min_prec: bool,
     emit_follow: bool,
     trace: bool,
-    needs_atn: bool,
     result_type: S2,
     ctx: &EmitContext,
     mid_operand_gated: bool = false,
@@ -3090,20 +3086,17 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     // callers omit them. Only single-alt rules thread args, so `takes_min_prec`
     // is always false here for an arg-bearing rule.
     add_arg_params(&mut f, rule, ctx);
-    f.set_return_type(result_type);
+    set_rule_result_type(&mut f, result_type);
     f.emit(w, |w| {
         let lit = wado`"${*rule_display}"`;
-        if needs_atn {
-            emit_atn_claim_return(w);
-        }
-        // Already unwinding from a deeper failure: no-op so the descent collapses
-        // to the entry without opening spurious nodes (the infallible analogue of a
-        // `?` that would have skipped this call entirely).
-        if returns_vals {
-            w.line(`if p.recovering { return ${result_type} {}; }`);
-        } else {
-            w.line("if p.recovering { return; }");
-        }
+        let rk = rule_kind_const(rule_display);
+        // LR rules manage their own nodes (precedence climbing wraps each
+        // level via `start_node_at`), so the wrapper must NOT open an outer
+        // node — it would nest one extra same-rule level. A non-LR rule's
+        // node opens here and closes after the body, so the body's appended
+        // terminals / subtrees become its children.
+        let enter = if takes_min_prec { "p.enter_rule()" } else { `p.open_rule(${rk})` };
+        w.line(`if !${enter} { return${if returns_vals { ` ${result_type} {}` } else { "" }}; }`);
         // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
         // the caller's continuation.
         let mut args: List<String> = ["p"];
@@ -3122,41 +3115,20 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             callee: inner_name.to_string(),
             args,
         };
-        // open this rule's `CstNode` before the body and close it after, so the
-        // body's appended terminals / subtrees become its children. The body may
-        // set `p.recovering`; `finish_node` still runs, folding the open node closed
-        // as the descent unwinds.
-        let rk = rule_kind_const(rule_display);
         if trace {
             w.line(`trace_enter(p, ${lit});`);
             w.line("p.trace_depth += 1;");
         }
-        if needs_atn {
-            emit_atn_enter(w, ctx.atn_stack_place());
-        }
-        w.line("p.sites.push(p.site);");
-        // LR rules manage their own nodes (precedence climbing wraps each
-        // level via `start_node_at`), so the wrapper must NOT open an outer
-        // node — it would nest one extra same-rule level. Non-LR rules get the
-        // single `start_node` / `finish_node` pair here.
-        if !takes_min_prec {
-            w.line(`let _start = p.peek_start();`);
-            w.line(`p.b.start_node(${rk}, _start);`);
-        } else {
+        if takes_min_prec {
             // Where the outermost level opens, which recovery reopens.
             w.line("let _row = p.b.checkpoint();");
         }
         w.call(call);
-        if !takes_min_prec {
-            w.line(`if p.recovering { let _ = p.recover_rule(${rk}, ${lit}, -1); }`);
-            w.line("p.b.finish_node(p.last_end());");
+        if takes_min_prec {
+            w.line(`p.close_lr_rule(${rk}, ${lit}, _row);`);
         } else {
-            w.line(`if p.recovering && p.recover_rule(${rk}, ${lit}, _row) { p.b.finish_node(p.last_end()); }`);
+            w.line(`p.close_rule(${rk}, ${lit});`);
         }
-        if needs_atn {
-            w.line(`${ctx.atn_stack_place()}.pop();`);
-        }
-        w.line("p.sites.pop();");
         if trace {
             w.line("p.trace_depth -= 1;");
             w.begin("if p.recovering");
@@ -3205,7 +3177,7 @@ fn emit_rule_inner_fn<S: AsStrSlice>(
 ) {
     let mut f = parse_fn_spec(fn_name, ctx);
     add_arg_params(&mut f, rule, ctx);
-    f.set_return_type(&rule_result_type_for(rule, ctx));
+    set_rule_result_type(&mut f, rule_result_type_for(rule, ctx));
     f.set_prunable();
     emit_fn(w, ctx, &f, |w| {
         if ctx.rule_emits_vals(rule) {
@@ -3238,7 +3210,7 @@ fn emit_seeded_alt_fn(
     if ctx.cursor.lr_cont_in_atom() {
         add_lr_cont_param(f);
     }
-    f.set_return_type(&rule_result_type_for(rule, ctx));
+    set_rule_result_type(f, rule_result_type_for(rule, ctx));
     emit_fn(w, ctx, f, |w| {
         if ctx.rule_emits_vals(rule) {
             w.line("let mut vals = vals;");
@@ -3256,7 +3228,6 @@ fn emit_seeded_alt_fn(
 fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut EmitContext, fn_name: S) {
     gen_visibility_comment(w, &rule.visibility);
     let mut f = parse_fn_spec(fn_name, ctx);
-    f.set_return_type(&rule_result_type());
     f.set_prunable();
     emit_fn(w, ctx, &f, |w| {
         gen_rule_entry_sync(w, ctx, rule);
@@ -4002,9 +3973,9 @@ fn gen_decision_sync<S: AsStrSlice>(
     let open = ctx.analysis.holds_every_kind(&ids);
     let set = ctx.sync_set(ids);
     let bits = ctx.sync_bits_ref(set);
-    let mut syncs = syncs_on(ctx.settings.emit_fragment_recovery(), "p", `&${bits}`, "p.kinds[p.pos]");
+    let mut syncs = syncs_on(ctx.settings.emit_fragment_recovery(), "p", bits, PEEK_KIND);
     if open {
-        syncs = `(${syncs} || p.kinds[p.pos] >= ${ctx.analysis.token_kind_count()})`;
+        syncs = `(${syncs} || ${PEEK_KIND} >= ${ctx.analysis.token_kind_count()})`;
     }
     w.line(
         `if !${syncs} { builtin::cold_path(); p.${method}(&${bits}, &${ctx.sync_list_ref(
@@ -4485,7 +4456,7 @@ fn gen_lr_fn<S: AsStrSlice>(
     if mid_operand_gated {
         add_lr_cont_param(&mut f);
     }
-    f.set_return_type(&rule_result_type_for(rule, ctx));
+    set_rule_result_type(&mut f, rule_result_type_for(rule, ctx));
     emit_fn(
         w,
         ctx,
@@ -5863,7 +5834,7 @@ fn gen_repeat_gate_break<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element, ctx
         return;
     }
     w.begin(`if ${negate_cond(&cond)}`);
-    w.line(`if ${plus_flag} { p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); }`);
+    w.line(`if ${plus_flag} { p.no_viable("failed semantic predicate", p.peek_span(), &NO_EXPECTED); }`);
     w.line("break;");
     w.end();
 }
@@ -8781,7 +8752,7 @@ fn alt_scan_call<S: AsStrSlice, S1: AsStrSlice>(
 }
 
 /// The report of a decision that picked no alternative at the parse's position.
-global NO_VIABLE_HERE: String = "p.no_viable(\"no viable alternative\", p.peek_span(), &EMPTY_SYNC);";
+global NO_VIABLE_HERE: String = "p.no_viable(\"no viable alternative\", p.peek_span(), &NO_EXPECTED);";
 
 /// What a rule does when its choice finds no viable alternative.
 fn emit_no_viable_pick(w: &mut CodeWriter, side: PickSide, ctx: &EmitContext) {

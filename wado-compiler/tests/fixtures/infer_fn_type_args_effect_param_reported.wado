@@ -4,8 +4,8 @@
 // the lengths differed, nothing was reported, and the unanswered slot reached
 // codegen as a type of unknown elements.
 //
-// `joined_of` reads its parameters only through `S::Held`, which no argument
-// type can be unfolded through, so a turbofish must name them.
+// `joined_of` names `M` in no parameter and no return, so a turbofish must
+// name it.
 
 use { println, Stdout } from "core:cli";
 
@@ -17,11 +17,11 @@ trait Store with _ {
     type Held<Axes>;
     fn made<Axes>(&self) -> Self::Held<Axes>;
     fn joined<M, N>(&self, b: &Self::Held<[M, N]>) -> Self::Held<[N]> {
-        return joined_of(self, b);
+        return joined_of(self);
     }
 }
 
-fn joined_of<S: Store, M, N>(s: &S, b: &S::Held<[M, N]>) -> S::Held<[N]> with _ {
+fn joined_of<S: Store, M, N>(s: &S) -> S::Held<[N]> with _ {
     return s.made::<[N]>();
 }
 
@@ -43,5 +43,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "compile_error": ":20:16: analysis error: cannot infer type parameter `M`, `N` of function `joined_of`; add a turbofish (`joined_of::<...>()`) or a type annotation"
+    "compile_error": ":20:16: analysis error: cannot infer type parameter `M` of function `joined_of`; add a turbofish (`joined_of::<...>()`) or a type annotation"
 }

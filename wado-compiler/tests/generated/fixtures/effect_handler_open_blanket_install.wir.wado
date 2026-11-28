@@ -35,7 +35,7 @@ struct effect_handler_open_blanket_install.wado//$Closure_4 {  // TypeId(8)
 
 struct effect_handler_open_blanket_install.wado//$Closure_5 {}  // TypeId(9)
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(10)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(10)
 
 array Array<u8> (mut u8);  // TypeId(11)
 
@@ -79,11 +79,11 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(27)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(28)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(29)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(29)
 
 type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(30)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]" = fn(i32, ref Array<u8>) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(31)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]" = fn(i32, ref Array<u8>) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(31)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
 
@@ -138,7 +138,9 @@ global global:effect_handler_open_blanket_install.wado::$const_obj_6: ref Array<
 fn "effect_handler_open_blanket_install.wado/run"() with Stdout {
     let sink_0: ref "effect_handler_open_blanket_install.wado//Loud";
     let $cm_pair_7_14: i64;
+    let $sroa_$pattern_temp_0_0_13_20: i32;
     let $sroa_$pattern_temp_0_1_14_21: i32;
+    let new_repr_26: ref Array<u8>;
     let self_36: i32;
     let sink_67: ref "effect_handler_open_blanket_install.wado//Quiet";
     let $local_2_69: ref null "effect_handler_open_blanket_install.wado//$Dispatch_effect_handler_open_blanket_install.wado/Sink";
@@ -146,23 +148,22 @@ fn "effect_handler_open_blanket_install.wado/run"() with Stdout {
     let message_72: ref "core:prelude/string.wado//String";
     let $local_1_73: ref null "effect_handler_open_blanket_install.wado//$Dispatch_effect_handler_open_blanket_install.wado/Sink";
     let $local_2_74: ref "effect_handler_open_blanket_install.wado//$Dispatch_effect_handler_open_blanket_install.wado/Sink";
-    let $av_88: i32;
-    message_72 = $inline_quiet_0: block -> ref "core:prelude/string.wado//String" {
+    message_72 = $inline_quiet_lend_0: block -> ref "core:prelude/string.wado//String" {
         sink_67 = struct.new "effect_handler_open_blanket_install.wado//Quiet" {};
         global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = struct.new "effect_handler_open_blanket_install.wado//$Dispatch_effect_handler_open_blanket_install.wado/Sink" { outer: local.tee $local_2_69(global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink), op_event: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_open_blanket_install.wado//$Closure_0" { $capture_0: sink_67 }, func: ref.func "closure/effect_handler_open_blanket_install.wado/$closure_wrapper_0" }, op_tag: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_open_blanket_install.wado//$Closure_1" {}, func: ref.func "closure/effect_handler_open_blanket_install.wado/$closure_wrapper_1" } };
-        $inline_quiet_0__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__event_0: block {
+        $inline_quiet_lend_0__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__event_0: block {
             message_72 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
             if @likely(ref.is_null(local.tee $local_1_73(global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink)) == 0) {
                 global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = local.tee $local_2_74(ref.as_non_null($local_1_73)).outer;
                 let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_74.op_event).env, message_72);
-                break $inline_quiet_0__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__event_0: global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = $local_1_73;
+                break $inline_quiet_lend_0__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__event_0: global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = $local_1_73;
             } else {
                 "core:rt/panic"(local.tee message_72(global:effect_handler_open_blanket_install.wado::$const_obj_0).repr, message_72.used);
                 unreachable;
             }
         };
-        $av_88 = local.tee message_72($inline_quiet_0__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__tag_2: block -> ref "core:prelude/string.wado//String" {
+        $local_4_71 = $inline_quiet_lend_0__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__tag_1: block -> ref "core:prelude/string.wado//String" {
             if @likely(ref.is_null(local.tee $local_1_73(global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink)) == 0) {
                 global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = local.tee $local_2_74(ref.as_non_null($local_1_73)).outer;
                 message_72 = block -> ref "core:prelude/string.wado//String" {
@@ -170,31 +171,30 @@ fn "effect_handler_open_blanket_install.wado/run"() with Stdout {
                     call_ref "functype/$canonical_closure_fn_1"($indirect_call_4.func, local.tee $indirect_call_4($local_2_74.op_tag).env);
                 };
                 global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = $local_1_73;
-                break $inline_quiet_0__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__tag_2: message_72;
+                break $inline_quiet_lend_0__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__tag_1: message_72;
             } else {
                 "core:rt/panic"(local.tee message_72(global:effect_handler_open_blanket_install.wado::$const_obj_1).repr, message_72.used);
                 unreachable;
             }
             unreachable;
-        }).used;
-        $local_4_71 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_5: ref Array<u8>; $array_clone_src_5 = message_72.repr; let $array_clone_dst_6: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_6(builtin::array_new<u8>($av_88)), 0, $array_clone_src_5, 0, $av_88); $array_clone_dst_6, used: $av_88 };
+        };
         global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = $local_2_69;
         if ref.is_null($local_4_71) == 0 {
-            break $inline_quiet_0: ref.as_non_null($local_4_71);
+            break $inline_quiet_lend_0: ref.as_non_null($local_4_71);
         }
         unreachable;
     };
-    $av_88 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
-    $av_88 = "effect_handler_open_blanket_install.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_88);
-    builtin::array_copy<u8>(local.tee $array_clone_src_5(builtin::array_new<u8>(local.tee self_36(message_72.used) + 1)), 0, message_72.repr, 0, self_36);
-    builtin::array_set_u8($array_clone_src_5, self_36, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    $sroa_$pattern_temp_0_0_13_20 = "effect_handler_open_blanket_install.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_20);
+    builtin::array_copy<u8>(local.tee new_repr_26(builtin::array_new<u8>(local.tee self_36(message_72.used) + 1)), 0, message_72.repr, 0, self_36);
+    builtin::array_set_u8(new_repr_26, self_36, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
         self_36 = self_36 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_21, $array_clone_src_5, 0, self_36);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_21, new_repr_26, 0, self_36);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -202,43 +202,42 @@ fn "effect_handler_open_blanket_install.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_88);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20);
     }
-    message_72 = $inline_bundled_1: block -> ref "core:prelude/string.wado//String" {
+    message_72 = $inline_bundled_lend_1: block -> ref "core:prelude/string.wado//String" {
         sink_67 = struct.new "effect_handler_open_blanket_install.wado//Quiet" {};
         global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = struct.new "effect_handler_open_blanket_install.wado//$Dispatch_effect_handler_open_blanket_install.wado/Sink" { outer: local.tee $local_2_69(global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink), op_event: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_open_blanket_install.wado//$Closure_2" { $capture_0: sink_67 }, func: ref.func "closure/effect_handler_open_blanket_install.wado/$closure_wrapper_2" }, op_tag: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_open_blanket_install.wado//$Closure_3" {}, func: ref.func "closure/effect_handler_open_blanket_install.wado/$closure_wrapper_3" } };
-        $av_88 = local.tee message_72($inline_bundled_1__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__tag_1: block -> ref "core:prelude/string.wado//String" {
+        $local_4_71 = $inline_bundled_lend_1__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__tag_0: block -> ref "core:prelude/string.wado//String" {
             if @likely(ref.is_null(local.tee $local_1_73(global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink)) == 0) {
                 global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = local.tee $local_2_74(ref.as_non_null($local_1_73)).outer;
                 message_72 = block -> ref "core:prelude/string.wado//String" {
                     call_ref "functype/$canonical_closure_fn_1"($indirect_call_4.func, local.tee $indirect_call_4($local_2_74.op_tag).env);
                 };
                 global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = $local_1_73;
-                break $inline_bundled_1__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__tag_1: message_72;
+                break $inline_bundled_lend_1__$inline__effect_dispatch__effect_handler_open_blanket_install_wado_Sink__tag_0: message_72;
             } else {
                 "core:rt/panic"(local.tee message_72(global:effect_handler_open_blanket_install.wado::$const_obj_1).repr, message_72.used);
                 unreachable;
             }
             unreachable;
-        }).used;
-        $local_4_71 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_5 = message_72.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_6(builtin::array_new<u8>($av_88)), 0, $array_clone_src_5, 0, $av_88); $array_clone_dst_6, used: $av_88 };
+        };
         global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = $local_2_69;
         if ref.is_null($local_4_71) == 0 {
-            break $inline_bundled_1: ref.as_non_null($local_4_71);
+            break $inline_bundled_lend_1: ref.as_non_null($local_4_71);
         }
         unreachable;
     };
-    $av_88 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
-    $av_88 = "effect_handler_open_blanket_install.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_88);
-    builtin::array_copy<u8>(local.tee $array_clone_src_5(builtin::array_new<u8>(local.tee self_36(message_72.used) + 1)), 0, message_72.repr, 0, self_36);
-    builtin::array_set_u8($array_clone_src_5, self_36, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    $sroa_$pattern_temp_0_0_13_20 = "effect_handler_open_blanket_install.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_20);
+    builtin::array_copy<u8>(local.tee new_repr_26(builtin::array_new<u8>(local.tee self_36(message_72.used) + 1)), 0, message_72.repr, 0, self_36);
+    builtin::array_set_u8(new_repr_26, self_36, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
         self_36 = self_36 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_21, $array_clone_src_5, 0, self_36);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_21, new_repr_26, 0, self_36);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -246,7 +245,7 @@ fn "effect_handler_open_blanket_install.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_88);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20);
     }
     sink_0 = struct.new "effect_handler_open_blanket_install.wado//Loud" {};
     global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink = struct.new "effect_handler_open_blanket_install.wado//$Dispatch_effect_handler_open_blanket_install.wado/Sink" { outer: local.tee $local_2_69(global:effect_handler_open_blanket_install.wado::$effect_effect_handler_open_blanket_install.wado/Sink), op_event: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_open_blanket_install.wado//$Closure_4" { $capture_0: sink_0 }, func: ref.func "closure/effect_handler_open_blanket_install.wado/$closure_wrapper_4" }, op_tag: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_open_blanket_install.wado//$Closure_5" {}, func: ref.func "closure/effect_handler_open_blanket_install.wado/$closure_wrapper_5" } };
@@ -279,7 +278,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -390,11 +389,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_5: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
@@ -470,11 +469,11 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(handle, data) {
                 "wasi/waitable-set-drop"(ptr_18);
                 break $inline_cm_await_blocked_5: status;
             }) >>u 4;
-            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if ptr_18 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_18 == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_18 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_18 == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
@@ -570,27 +569,27 @@ fn "effect_handler_open_blanket_install.wado/effect_handler_open_blanket_install
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_open_blanket_install.wado/$tmpl$60f2adf5184ddec7,[core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$dae[return]$spec0"($mv$t$h0, $mv$t$h1) {
-    let n_308: i32;
-    let new_used_752: i32;
-    let $sroa_out_repr_1211: ref Array<u8>;
-    let $sroa_out_used_1212: i32;
-    let $sroa_write_back_1220: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_1211 = builtin::array_new<u8>(32);
-    $sroa_out_used_1212 = 0;
+    let n_312: i32;
+    let new_used_756: i32;
+    let $sroa_out_repr_1215: ref Array<u8>;
+    let $sroa_out_used_1216: i32;
+    let $sroa_write_back_1224: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_1215 = builtin::array_new<u8>(32);
+    $sroa_out_used_1216 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_13: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_13;
     };
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__21: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_308($mv$t$h0.used) == 0;
-                if @unlikely(n_308 > 32) {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_312($mv$t$h0.used) == 0;
+                if @unlikely(n_312 > 32) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1220(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1211, used: 0 }), n_308);
-                    $sroa_out_repr_1211 = $sroa_write_back_1220.repr;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1224(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1215, used: 0 }), n_312);
+                    $sroa_out_repr_1215 = $sroa_write_back_1224.repr;
                 }
-                $sroa_out_used_1212 = n_308;
-                builtin::array_copy<u8>($sroa_out_repr_1211, 0, $mv$t$h0.repr, 0, n_308);
+                $sroa_out_used_1216 = n_312;
+                builtin::array_copy<u8>($sroa_out_repr_1215, 0, $mv$t$h0.repr, 0, n_312);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
         };
@@ -602,13 +601,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_hand
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__65: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_308($mv$t$h1.used) == 0;
-                if @unlikely(local.tee new_used_752($sroa_out_used_1212 + n_308) > builtin::array_len($sroa_out_repr_1211)) {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_312($mv$t$h1.used) == 0;
+                if @unlikely(local.tee new_used_756($sroa_out_used_1216 + n_312) > builtin::array_len($sroa_out_repr_1215)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $mv$t$h0(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1211, used: $sroa_out_used_1212 }), new_used_752);
-                    $sroa_out_repr_1211 = $mv$t$h0.repr;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $mv$t$h0(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1215, used: $sroa_out_used_1216 }), new_used_756);
+                    $sroa_out_repr_1215 = $mv$t$h0.repr;
                 }
-                builtin::array_copy<u8>($sroa_out_repr_1211, $sroa_out_used_1212, $mv$t$h1.repr, 0, n_308);
+                builtin::array_copy<u8>($sroa_out_repr_1215, $sroa_out_used_1216, $mv$t$h1.repr, 0, n_312);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2;
         };

@@ -19,7 +19,7 @@ use { MonotonicClock } from "wasi:clocks";
 use { to_bytes_pretty, from_string } from "core:json";
 use { HashMap } from "core:collections";
 use { changed_paths, source_diff, merge_title, Census, FixResult, Judged, Pair, Verdict } from "./eval.wado";
-use { ask_json, json_object, Credential, Usage } from "../src/anthropic.wado";
+use { ask_json, Credential, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
 
 #[param(from_env = "CLAUDE_MODEL")]
@@ -138,13 +138,4 @@ fn earlier_verdicts(path: &String) -> HashMap<String, Verdict> with Preopens {
 
 fn pair_key(fix: i32, culprit: i32) -> String {
     return `${fix}<-${culprit}`;
-}
-
-test "the verdict is the object in the reply" {
-    let v = json_object::<Verdict>(
-        &"Sure.\n{\"is_defect_fix\": true, \"introduced_by_culprit\": false, \"visible_in_diff\": false, \"defect\": \"d\", \"reason\": \"r\"}\n",
-    ).unwrap();
-    assert v.is_defect_fix && !v.introduced_by_culprit;
-    assert json_object::<Verdict>(&"no json").is_err();
-    assert json_object::<Verdict>(&"a } before { the object").is_err();
 }

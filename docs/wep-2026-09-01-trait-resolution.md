@@ -530,8 +530,10 @@ The remaining ways are read off a type, and each goes where it belongs:
 - A trait that holds for everything is a flag on its declaration, since the
   unbounded blanket that would say so is rejected.
 - How a reference answers is a flag on the trait: `Eq` of itself, `Ord` never,
-  and the rest by auto-deref to the pointee unless a receiverless method names
-  `Self`.
+  and the rest by auto-deref to the pointee unless a method takes `self` by
+  value or a receiverless method names `Self`. A by-value `self` reached that
+  way read the referent out of the reference: a generic body handed `&mut x`
+  consumed an affine `x` in place, and it dropped twice.
 - A reflection kind is a fact stated of a declaration. It depends on no member's
   trait and on no module, so it answers for every instance from everywhere. It
   states the kind's member channel and, for a struct, `FieldInputs`, which a
@@ -720,14 +722,138 @@ there, so that parameter stays as the impl restates it
 (`trait_method_bound_projects_trait_param.wado`). A default the trait gave it
 does not reach a call through the impl.
 
-### A ref blanket never dispatches
+### A ref blanket's `&self` method yields to the referent's
 
 The order ranks `impl<T: Bound> Tr for &T` as the third candidate list, and
-`candidates` names one for a reference receiver. The compiler's collection still
-refuses it: the reference step adopts only concrete `&T` impls
-(`method_call.rs`, `is_blanket_ref_impl`), so the order's verdict is discarded
-and the call reports no method (`trait_ref_blanket_dispatch.wado`). The
-prelude's `Inspect for &T` works because the compiler answers that bound itself.
+`candidates` names one for a reference receiver. The compiler's collection
+adopts it ahead of the referent for a method taking `self` by value
+(`TraitMethodMatch::answers_reference_receiver`,
+`iterator_through_mut_reference.wado`), which is what
+[WEP: Affine Types](./wep-2026-10-17-affine-types.md#a-by-value-self-is-a-parameter-like-any-other)
+decided. For a `&self` method it asks the referent first and adopts the blanket
+where the referent has no method of the name
+(`trait_ref_blanket_dispatch.wado`), as
+[The Order](./spec-traits.md#the-order) says. A `&mut self` method is not
+adopted, so no call reaches it: the call hands an impl for a reference a copy
+of the reference, and a write to `*self` would land in the copy. The prelude's
+`impl<T: AsStrSlice> AsStrSlice for &T` is why: its methods forward with
+`(*self).len()`, a call on a `&T`, which the blanket ranked first would send
+back to itself. `candidates` still ranks the blanket first, so the elaborator
+sets the solver's verdict aside for these methods. A tie among such blankets
+is set aside with it, and reported only where the referent has no method of
+the name: a tie between two traits
+(`trait_ref_blankets_tied_behind_referent.wado`), one between two blankets of
+one trait (`trait_ref_blankets_of_one_trait_tied_behind_referent.wado`), and
+one between two of one trait at different arguments
+(`trait_ref_blankets_at_arguments_tied_behind_referent.wado`).
+
+It adopts one for a receiver holding one reference only. On `&mut &mut I` the
+blanket's parameter would stand for `&mut I`, which the lookup does not hand
+over: it hands over the pointee under every reference. The referent's method
+is asked instead, and the call is refused as a by-value `self` read out past a
+`&mut` (`self_by_value_through_double_mut_reference.wado`); `(*rr).take(2)`
+names the reference that iterates.
+
+What such a blanket binds an associated type to is kept by the type table
+under the trait and the reference kind
+(`register_ref_blanket_assoc_type_def`), since no declaration keys it. A
+projection off a reference reads it before the referent settles, so
+`<&mut I as Iterator>::Item` is `I::Item` inside a generic body. An impl
+written for the reference itself is asked first, and a blanket answers at the
+trait arguments it wrote, defaults filled
+(`assoc_type_of_reference_own_impl_outranks_blanket.wado`).
+
+The type table checks no bound, so blankets that differ only in their bounds
+answer nothing there. The elaborator registers the binding for each reference
+it meets, from the blanket whose bounds the referent keeps
+(`register_assoc_types_for_concrete_type_and_trait`), and the type table reads
+that registration first (`assoc_type_of_reference_blanket_by_bound.wado`).
+
+A call through a reference blanket is named by its pointee
+(`ref_blanket_instance`), and its instance is keyed by every parameter, as a
+value blanket's is (`blanket_impl_args`). A bound projects a parameter the
+pointee does not carry, `A` in `impl<A, T: Source<Item = A>> Tag<A> for &T`
+(`reference_blanket_parameter_projected_by_bound.wado`). The trait arguments
+the call names settle one only the trait reference holds, `A` in
+`impl<A, T: Source<A>> Tag<A> for &T`
+(`reference_blanket_parameter_set_by_trait_argument.wado`).
+
+- [x] Key a reference blanket's instance by every parameter, as
+  `blanket_impl_args` does for a value blanket.
+
+A call that names no trait arguments leaves such a parameter to its own
+inference. The solver asks a bound that reads the parameter at a variable, so
+the block stays a candidate, and the call owes the bound once the parameter
+settles (`method_call_settles_blanket_parameter.wado`). The bound itself
+settles it where one impl of the trait applies to its subject, or one bound is
+in force (`Elaborator::settle_bound_args_by_sole_impl`,
+`bound_one_impl_settles_its_arguments.wado`), and the expected type or a later
+use does where several apply. A blanket beside the subject's own impl, or
+beside a bound in force, is a second answer, whatever the order makes of the
+two (`bound_blanket_beside_impl_settles_nothing.wado`). A blanket leaving its
+own trait arguments open settles nothing through a bound, though a call of its
+method does. A generic function's bound
+and a method's own are owed and settled the same way, and a method call whose
+receiver still holds a variable runs what is owed first, since a bound may be
+what settles it.
+
+A bound a call owes on the caller's own parameter is not asked in the caller's
+body. `first_of(t)` under `T: Source<i32> + Source<bool>`, its result used as a
+`String`, is accepted there, and refused where the caller is instantiated at a
+type lacking `Source<String>`, at the callee's line.
+
+Two blankets of one trait at different arguments are an overload set where no
+concrete impl answers (`method_call_blankets_form_overload_set.wado`), so the
+expected type selects between them, and one writing its trait arguments wins
+over one leaving them to the call.
+
+A type-qualified static call does not reach such a blanket: `One::make()`
+through `impl<A: Default, T: Source<A>> Tag<A> for T` reports an unknown
+function, where `Tag::make` selects it.
+
+A blanket whose own trait arguments name its parameter reads a newtype subject
+two ways. Under `impl<T: Marker> Source<List<T>> for T` and `type W = One`,
+`w.first()` is a `List<W>`, a bound settles `Source<List<W>>` the same, and the
+instance of a generic body asks `One` for `Source<List<W>>`, which it lacks.
+
+A numeric literal argument takes the one impl's type before its default, as in
+Rust: `put(&one, 1)` under `fn put<A, T: Sink<A>>(t: &T, a: A)` takes `1` as
+`i64` where `One` has `Sink<i64>` alone. A call settles its literals after its
+other arguments, and asks the bounds of its slots just before the default
+(`Elaborator::settle_slot_bounds_by_sole_impl`). Several impls leave the
+default (`bound_several_impls_leave_literal_default.wado`), and so does a
+literal the type cannot take
+(`bound_one_impl_leaves_unfit_literal_default.wado`). The cost is Rust's: a
+second impl changes what an existing call's literal is.
+
+A bare bound is not met through such a blanket. Under
+`impl<A, T: Source<A>> Tag<A> for T`, `T: Tag` refuses a type with one
+`Source` impl, though some `Tag<A>` holds for it: the solver asks the blanket's
+bound at a variable only for selection (`OpenArguments::OwedByTheCall`), where
+the call settles the variable and owes the bound. A bound has nobody to settle
+it, and bounds sharing the parameter may agree on no argument
+(`bound_bare_through_open_blanket.wado`).
+
+A bound's argument holding a pack (`T: Source<[..P]>`) is settled from the one
+impl only where the impl's tuple has one element. A longer one leaves the pack
+empty, and the bound is then refused at `Source<[]>`.
+
+- [x] Settle a parameter only the trait reference names, at a method call and a
+  static one alike.
+- [x] Settle a bound's open arguments from its subject's one impl.
+
+A bound's associated-type binding reaches the solver as an equality on the
+parameter (`Env::param_assoc`). A solver projection names no trait arguments,
+so two bounds on one trait that bind the name differently state nothing
+(`assoc_binding_of_two_bounds_states_nothing.wado`), and an impl bound that
+needs one of them is not met. Equalities that lead back to the projection being
+read state nothing either
+(`assoc_binding_of_mutual_bounds_states_nothing.wado`).
+
+A value blanket does not answer a reference either (`blanket_trait_impl_applies`
+mints no instance for one), so `&mut I` is an `Iterator` and not an
+`IntoIterator`. A for-of loop walks such an operand as it stands, and a method
+call spelling `into_iter` on it reads the referent.
 
 - [ ] Collect a reference blanket as a match, or materialize the match from the
   winning `ImplId` (above), which makes the collection moot.

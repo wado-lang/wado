@@ -4,6 +4,12 @@
 //! `TreeSet<T>` by ordering it, for a key that is `Ord` but not `Hash`.
 //! `map[key] = value` overwrites; `try_insert` / `get_or_insert` insert only
 //! when the key is absent.
+//!
+//! `HashIndex` is the table alone, for an interner whose keys already sit in
+//! rows of its own: it holds a row number per key, and the caller supplies
+//! each key's hash and says which row equals it. It gives up `HashMap`'s
+//! protections for speed. Nothing seeds the hash, and a hash whose top bits
+//! do not differ between keys turns every lookup into a walk of the table.
 
 pub use {
     MapKeysRefIter,
@@ -15,6 +21,7 @@ pub use {
 } from "core:collections/entries.wado";
 pub use { TreeMap, TreeSet } from "core:collections/treemap.wado";
 pub use { HashSeed, HashMap, HashSet } from "core:collections/hashmap.wado";
+pub use { HashIndex } from "core:collections/hash_index.wado";
 
 #[synopsis]
 test {

@@ -54,6 +54,18 @@ research points. The evidence behind them is in
   learning never saw tells improvement from fitting.
 - [x] Eddy points at problems and proposes no fixes.
 - [x] Every model call uses prompt caching.
+- [x] The API holds every reply to the JSON Schema of the type it is read into
+  (`output_config.format`), which Jade derives from the type. A reply is never
+  searched for JSON: a model asked in the prompt alone writes prose around its
+  answer, and that prose can hold braces of its own. Three things measured on
+  the API shape how it is used:
+  - A reviewer's conversation carries the format on every turn. The format is
+    part of what the cache keys a conversation by, so adding it on the last
+    turn alone bills the whole conversation again at the cache-write price.
+  - The format does not slow generation, on the reviewer's model or the
+    reporter's.
+  - The reporter's model thinks more often under a format, and a reply takes
+    longer by what it thought.
 - [x] The thresholds (the outcome window, the expiry, the weights) start as
   guesses and are tuned in operation, on outcomes outside the held-out set.
 - [x] The reproduction agent reads `AGENTS.md` from the base revision, inside

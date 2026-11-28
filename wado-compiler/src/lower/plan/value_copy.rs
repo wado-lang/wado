@@ -25,6 +25,7 @@ use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::parallel::Executor;
 use crate::tir;
 use crate::tir::{
     BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,
@@ -185,6 +186,7 @@ pub fn plan(
     functors: &[tir::ClosureFunctor],
     specialized: &callgraph::SpecializedCalls,
     profiler: &dyn SpanEmitter,
+    exec: &Executor,
 ) -> ValueCopyPlan {
     // Again: closure lifting has added its environment structs since `plan`
     // registered the rest.
@@ -245,6 +247,7 @@ pub fn plan(
             &tir::struct_fields(&flat.structs),
             functors,
             &|func| hands_out_payload(func, &return_paths),
+            exec,
         )
     });
     conventions
@@ -293,6 +296,13 @@ pub fn plan(
             &return_paths,
             &flat.type_table.borrow(),
             &builtins,
+            &ownership::OwnedCalls::new(
+                &conventions.returns_owned,
+                &conventions.returns_projection,
+                &builtins,
+                &retained.calls,
+            ),
+            &confined_params,
         )
     });
     let indirect_owned_returns =

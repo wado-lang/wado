@@ -14,11 +14,12 @@ use { to_string } from "core:json";
 use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
-use { ask_json, json_object, Credential, Usage } from "./anthropic.wado";
+use { ask_json, shaped, Credential, Format, Usage } from "./anthropic.wado";
 use { run_agent, Call, Request } from "./agent.wado";
 use { empty_index } from "./symbols.wado";
 use { Runner, Workspace } from "./tools.wado";
 
+<<<<<<< HEAD
 global ROLE: String = "You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
 Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.";
 
@@ -33,8 +34,19 @@ global SEARCH: String = "Several reviewers search this change, each for what one
 
 global CONFIRM: String = "Reviewers searched this change, each for one focus, and reported the CANDIDATES after the diff. They read without running anything, so two may name the same defect and some are wrong.
 Merge the candidates that name one defect into one finding. Check each against the code, and drop one the code refutes. Work through every candidate, the most severe first, and report the ones that survive.";
+||||||| dd1f42f69
+global REVIEW: String = #"You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
+Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.
+Answer with one JSON object and nothing else:
+{"findings": [{"file": "<path>", "summary": "<one sentence>", "detail": "<why it is wrong, and when it goes wrong>"}]}
+Report at most 10 findings, the most severe first. An empty list is a valid answer."#;
+=======
+global REVIEW: String = #"You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
+Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.
+Report at most 10 findings, the most severe first. An empty list is a valid answer."#;
+>>>>>>> origin/main
 
-global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your final reply is the JSON object.";
+global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your reply is the findings: write none until you have finished with the tools.";
 
 global SYMBOL_READING: String = "FindSymbol and FindReferences answer from the compiler's index of the Rust and Wado code: use them to find a definition and the uses of a function, type or field, and Grep for other text.";
 
@@ -138,8 +150,27 @@ impl Reviewed {
     }
 }
 
+/// What a reviewer says of one defect.
+internal struct Told {
+    /// The path of the file the defect is in.
+    internal file: String,
+    /// The defect, in one sentence.
+    internal summary: String,
+    /// Why it is wrong, and when it goes wrong.
+    internal detail: String,
+}
+
 struct Answer {
-    findings: List<Finding>,
+    findings: List<Told>,
+}
+
+impl Answer {
+    fn findings(&self) -> List<Finding> {
+        return self.findings
+            .into_iter()
+            .map(|t| Finding { file: t.file, summary: t.summary, detail: t.detail })
+            .collect();
+    }
 }
 
 /// The change a reviewer is asked about: what it is, in `heading`, and its
@@ -269,15 +300,42 @@ fn ask(
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
         let mut usage = Usage {};
+<<<<<<< HEAD
         return match ask_json::<Answer>(credential, model, system, task, 32_000, &mut usage) {
             Ok(a) => Reviewed { findings: a.findings, usage: Some(usage) },
+||||||| dd1f42f69
+        return match ask_json::<Answer>(credential, model, REVIEW, change.task(), 32_000, &mut usage) {
+            Ok(a) => Reviewed { findings: a.findings, usage: Some(usage) },
+=======
+        return match ask_json::<Answer>(credential, model, REVIEW, change.task(), 32_000, &mut usage) {
+            Ok(a) => Reviewed {
+                findings: a.findings(),
+                usage: Some(usage),
+            },
+>>>>>>> origin/main
             Err(e) => Reviewed {
                 error: Some(e),
                 usage: Some(usage),
             },
         };
     };
+<<<<<<< HEAD
     let agent = run_agent(credential, model, system, task, w, max_turns, 32_000, effort);
+||||||| dd1f42f69
+    let agent = run_agent(credential, model, instructions(w), change.task(), w, max_turns, 32_000, effort);
+=======
+    let agent = run_agent(
+        credential,
+        model,
+        instructions(w),
+        change.task(),
+        w,
+        max_turns,
+        32_000,
+        effort,
+        Format::of::<Answer>(),
+    );
+>>>>>>> origin/main
     let mut reviewed = Reviewed {
         turns: agent.turns,
         calls: agent.calls,
@@ -285,13 +343,21 @@ fn ask(
         requests: agent.requests,
     };
     match agent.answer {
-        Ok(answer) => match json_object::<Answer>(&answer) {
-            Ok(a) => reviewed.findings = a.findings,
+        Ok(answer) => match shaped::<Answer>(&answer) {
+            Ok(a) => reviewed.findings = a.findings(),
             Err(e) => reviewed.error = Some(e),
         },
         Err(e) => reviewed.error = Some(e),
     }
     return reviewed;
+}
+
+test "an answer is read whole, and a brace in its text is text" {
+    let answer = shaped::<Answer>(
+        &#"{"findings": [{"file": "a.wado", "summary": "s", "detail": "`a{13}` gives up"}]}"#,
+    ).unwrap();
+    assert answer.findings()[0].detail == "`a{13}` gives up";
+    assert shaped::<Answer>(&"No defects. {\"findings\": []}").unwrap_err().starts_with("unparsed: ");
 }
 
 test "a reviewer is told of the tools its workspace offers, and no others" {
@@ -311,6 +377,7 @@ test "a reviewer is told of the tools its workspace offers, and no others" {
 
 test "a reviewer is asked for a finding's words and nothing a report adds" {
     let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
+<<<<<<< HEAD
     let ws: Option<Workspace> = Some(Workspace { root: "src", runner: Some(runner) });
     for let told of [
         confirming(&ws),
@@ -351,6 +418,16 @@ test "the review's cost and turns add its searches'" {
         ],
     };
     assert r.total_turns() == 6 && r.spent().input_tokens == 15;
+||||||| dd1f42f69
+    let told = instructions(&Workspace { root: "src", runner: Some(runner) });
+    assert !told.contains(#""line""#) && !told.contains(#""repro""#) && !told.contains(#""paths""#);
+=======
+    let told = instructions(&Workspace { root: "src", runner: Some(runner) });
+    assert !told.contains(#""line""#) && !told.contains(#""repro""#) && !told.contains(#""paths""#);
+    let format = to_string(&Format::of::<Answer>()).unwrap();
+    assert format.contains(#""description":"Why it is wrong, and when it goes wrong.""#);
+    assert !format.contains(#""line""#) && !format.contains(#""repro""#) && !format.contains(#""paths""#);
+>>>>>>> origin/main
 }
 
 test "a change is its heading and then its diff" {

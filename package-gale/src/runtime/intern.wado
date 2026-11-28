@@ -1,0 +1,28 @@
+#![allow(dead_code)]
+
+use { HashMap } from "core:collections";
+
+internal struct Interner<K> {
+    items: List<K>,
+    ids: HashMap<K, i32>,
+}
+
+impl<K: Hash> Interner<K> {
+    internal fn new() -> Interner<K> {
+        return Interner { items: [], ids: HashMap::new() };
+    }
+
+    internal fn intern(&mut self, item: K) -> i32 {
+        if let Some(id) = self.ids.get(item) {
+            return id;
+        }
+        let id = self.items.len();
+        self.items.push(item);
+        self.ids[item] = id;
+        return id;
+    }
+
+    internal fn at(&self, id: i32) -> K {
+        return self.items[id];
+    }
+}

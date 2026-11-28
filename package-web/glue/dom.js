@@ -12,7 +12,22 @@ const $CLASSES = [
   ["HTMLInputElement", 6],
   ["Document", 7],
   ["Window", 8],
+  ["NodeIterator", 10],
+  ["TreeWalker", 11],
 ];
+const $ENUMS = {
+  AriaNotifyPriority: ["normal", "high"],
+  DocumentReadyState: ["loading", "interactive", "complete"],
+  DocumentVisibilityState: ["visible", "hidden"],
+  FocusableAreaSearchMode: ["visible", "all"],
+  FullscreenKeyboardLock: ["browser", "none"],
+  FullscreenNavigationUi: ["auto", "show", "hide"],
+  ScrollBehavior: ["auto", "instant", "smooth"],
+  ScrollIntoViewContainer: ["all", "nearest"],
+  ScrollLogicalPosition: ["start", "center", "end", "nearest"],
+  SelectionMode: ["select", "start", "end", "preserve"],
+  SpatialNavigationDirection: ["up", "down", "left", "right"],
+};
 const $SLOT_GET = "$cm_extern_slot_get";
 const $SLOT_PUT = "$cm_extern_slot_put";
 
@@ -45,6 +60,27 @@ export function $glue() {
     const view = $view();
     view.setUint32(at, ptr, true);
     view.setUint32(at + 4, list.length, true);
+  };
+
+  // The float whose bits a core integer holds, where a variant's cases share
+  // one core value.
+  const $bits = new DataView(new ArrayBuffer(8));
+  const $f32 = (bits) => {
+    $bits.setInt32(0, bits, true);
+    return $bits.getFloat32(0, true);
+  };
+  const $f64 = (bits) => {
+    $bits.setBigInt64(0, bits, true);
+    return $bits.getFloat64(0, true);
+  };
+
+  // The index of the host's `value` among an enum's `values`.
+  const $case = (values, value) => {
+    const index = values.indexOf(value);
+    if (index < 0) {
+      throw new TypeError(`"${value}" is a value this package declares no case for`);
+    }
+    return index;
   };
 
   // Each declared interface's prototype, to its class.
@@ -120,17 +156,17 @@ export function $glue() {
       "$wado-lang:web/event-target#new": () => {
         return new globalThis.EventTarget();
       },
-      "$wado-lang:web/event-target#add-event-listener": (p0, p1, p2, p3, p4, p5) => {
-        p0.addEventListener($string(p1, p2), $callback(p3, (closure, a0) => $enter("$cm_callback__call-handle")(closure, a0)), (p4 === 0 ? undefined : (p5 !== 0)));
+      "$wado-lang:web/event-target#add-event-listener": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11) => {
+        p0.addEventListener($string(p1, p2), $callback(p3, (closure, a0) => $enter("$cm_callback__call-handle")(closure, a0)), (p4 === 0 ? undefined : (p5 === 0 ? { capture: (p6 === 0 ? undefined : (p7 !== 0)), passive: (p8 === 0 ? undefined : (p9 !== 0)), once: (p10 === 0 ? undefined : (p11 !== 0)) } : (p6 !== 0))));
       },
-      "$wado-lang:web/event-target#remove-event-listener": (p0, p1, p2, p3, p4, p5) => {
-        p0.removeEventListener($string(p1, p2), $callback(p3, (closure, a0) => $enter("$cm_callback__call-handle")(closure, a0)), (p4 === 0 ? undefined : (p5 !== 0)));
+      "$wado-lang:web/event-target#remove-event-listener": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        p0.removeEventListener($string(p1, p2), $callback(p3, (closure, a0) => $enter("$cm_callback__call-handle")(closure, a0)), (p4 === 0 ? undefined : (p5 === 0 ? { capture: (p6 === 0 ? undefined : (p7 !== 0)) } : (p6 !== 0))));
       },
       "$wado-lang:web/event-target#dispatch-event": (p0, p1) => {
         return (p0.dispatchEvent(p1) ? 1 : 0);
       },
-      "$wado-lang:web/event#new": (p0, p1) => {
-        return new globalThis.Event($string(p0, p1));
+      "$wado-lang:web/event#new": (p0, p1, p2, p3, p4, p5, p6, p7, p8) => {
+        return new globalThis.Event($string(p0, p1), (p2 === 0 ? undefined : { bubbles: (p3 === 0 ? undefined : (p4 !== 0)), cancelable: (p5 === 0 ? undefined : (p6 !== 0)), composed: (p7 === 0 ? undefined : (p8 !== 0)) }));
       },
       "$wado-lang:web/event#type": (p0, $ret) => {
         const $value = p0.type;
@@ -213,8 +249,8 @@ export function $glue() {
       "$wado-lang:web/node#owner-document": (p0) => {
         return (p0.ownerDocument ?? null);
       },
-      "$wado-lang:web/node#get-root-node": (p0) => {
-        return p0.getRootNode();
+      "$wado-lang:web/node#get-root-node": (p0, p1, p2, p3) => {
+        return p0.getRootNode((p1 === 0 ? undefined : { composed: (p2 === 0 ? undefined : (p3 !== 0)) }));
       },
       "$wado-lang:web/node#parent-node": (p0) => {
         return (p0.parentNode ?? null);
@@ -344,6 +380,15 @@ export function $glue() {
       "$wado-lang:web/character-data#next-element-sibling": (p0) => {
         return (p0.nextElementSibling ?? null);
       },
+      "$wado-lang:web/character-data#before": (p0, p1, p2) => {
+        p0.before(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/character-data#after": (p0, p1, p2) => {
+        p0.after(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/character-data#replace-with": (p0, p1, p2) => {
+        p0.replaceWith(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
       "$wado-lang:web/character-data#remove": (p0) => {
         p0.remove();
       },
@@ -360,17 +405,44 @@ export function $glue() {
       "$wado-lang:web/element#get-spatial-navigation-container": (p0) => {
         return p0.getSpatialNavigationContainer();
       },
-      "$wado-lang:web/element#focusable-areas": (p0, $ret) => {
-        const $value = p0.focusableAreas();
+      "$wado-lang:web/element#focusable-areas": (p0, p1, p2, p3, $ret) => {
+        const $value = p0.focusableAreas((p1 === 0 ? undefined : { mode: (p2 === 0 ? undefined : $ENUMS.FocusableAreaSearchMode[p3]) }));
         $putList($ret, $value, 4, 4, (at, item) => {
           $view().setUint32(at, $core.exports[$SLOT_PUT](item), true);
         });
       },
-      "$wado-lang:web/element#check-visibility": (p0) => {
-        return (p0.checkVisibility() ? 1 : 0);
+      "$wado-lang:web/element#spatial-navigation-search": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return (p0.spatialNavigationSearch($ENUMS.SpatialNavigationDirection[p1], (p2 === 0 ? undefined : { candidates: (p3 === 0 ? undefined : $list(p4, p5, 4, (at) => $core.exports[$SLOT_GET]($view().getUint32(at, true)))), container: (p6 === 0 ? undefined : $core.exports[$SLOT_GET](p7)) })) ?? null);
       },
-      "$wado-lang:web/element#scroll-into-view": (p0, p1, p2) => {
-        return $settle(p0.scrollIntoView((p1 === 0 ? undefined : (p2 !== 0))), 4, ($ret, $value) => {
+      "$wado-lang:web/element#check-visibility": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11) => {
+        return (p0.checkVisibility((p1 === 0 ? undefined : { checkOpacity: (p2 === 0 ? undefined : (p3 !== 0)), checkVisibilityCSS: (p4 === 0 ? undefined : (p5 !== 0)), contentVisibilityAuto: (p6 === 0 ? undefined : (p7 !== 0)), opacityProperty: (p8 === 0 ? undefined : (p9 !== 0)), visibilityProperty: (p10 === 0 ? undefined : (p11 !== 0)) })) ? 1 : 0);
+      },
+      "$wado-lang:web/element#scroll-into-view": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10) => {
+        return $settle(p0.scrollIntoView((p1 === 0 ? undefined : (p2 === 0 ? (p3 !== 0) : { behavior: (p3 === 0 ? undefined : $ENUMS.ScrollBehavior[p4]), block: (p5 === 0 ? undefined : $ENUMS.ScrollLogicalPosition[p6]), inline: (p7 === 0 ? undefined : $ENUMS.ScrollLogicalPosition[p8]), container: (p9 === 0 ? undefined : $ENUMS.ScrollIntoViewContainer[p10]) }))), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scroll((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scroll(p1, p2), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-to-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scrollTo((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-to-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scrollTo(p1, p2), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-by-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scrollBy((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/element#scroll-by-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scrollBy(p1, p2), 4, ($ret, $value) => {
         });
       },
       "$wado-lang:web/element#scroll-top": (p0) => {
@@ -523,18 +595,18 @@ export function $glue() {
       "$wado-lang:web/element#set-element-timing": (p0, p1, p2) => {
         p0.elementTiming = $string(p1, p2);
       },
-      "$wado-lang:web/element#request-fullscreen": (p0) => {
-        return $settle(p0.requestFullscreen(), 4, ($ret, $value) => {
+      "$wado-lang:web/element#request-fullscreen": (p0, p1, p2, p3, p4, p5) => {
+        return $settle(p0.requestFullscreen((p1 === 0 ? undefined : { keyboardLock: (p2 === 0 ? undefined : $ENUMS.FullscreenKeyboardLock[p3]), navigationUI: (p4 === 0 ? undefined : $ENUMS.FullscreenNavigationUi[p5]) })), 4, ($ret, $value) => {
         });
       },
       "$wado-lang:web/element#set-html": (p0, p1, p2) => {
         p0.setHTML($string(p1, p2));
       },
-      "$wado-lang:web/element#set-html-unsafe": (p0, p1, p2) => {
-        p0.setHTMLUnsafe($string(p1, p2));
+      "$wado-lang:web/element#set-html-unsafe": (p0, p1, p2, p3, p4, p5) => {
+        p0.setHTMLUnsafe($string(p1, p2), (p3 === 0 ? undefined : { runScripts: (p4 === 0 ? undefined : (p5 !== 0)) }));
       },
-      "$wado-lang:web/element#get-html": (p0, $ret) => {
-        const $value = p0.getHTML();
+      "$wado-lang:web/element#get-html": (p0, p1, p2, p3, $ret) => {
+        const $value = p0.getHTML((p1 === 0 ? undefined : { serializableShadowRoots: (p2 === 0 ? undefined : (p3 !== 0)) }));
         $putString($ret, $value);
       },
       "$wado-lang:web/element#set-inner-html": (p0, p1, p2) => {
@@ -555,8 +627,8 @@ export function $glue() {
       "$wado-lang:web/element#has-pointer-capture": (p0, p1) => {
         return (p0.hasPointerCapture(p1) ? 1 : 0);
       },
-      "$wado-lang:web/element#request-pointer-lock": (p0) => {
-        return $settle(p0.requestPointerLock(), 4, ($ret, $value) => {
+      "$wado-lang:web/element#request-pointer-lock": (p0, p1, p2, p3) => {
+        return $settle(p0.requestPointerLock((p1 === 0 ? undefined : { unadjustedMovement: (p2 === 0 ? undefined : (p3 !== 0)) })), 4, ($ret, $value) => {
         });
       },
       "$wado-lang:web/element#first-element-child": (p0) => {
@@ -567,6 +639,15 @@ export function $glue() {
       },
       "$wado-lang:web/element#child-element-count": (p0) => {
         return p0.childElementCount;
+      },
+      "$wado-lang:web/element#prepend": (p0, p1, p2) => {
+        p0.prepend(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/element#append": (p0, p1, p2) => {
+        p0.append(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/element#replace-children": (p0, p1, p2) => {
+        p0.replaceChildren(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
       },
       "$wado-lang:web/element#move-before": (p0, p1, p2) => {
         p0.moveBefore(p1, (p2 ?? undefined));
@@ -579,6 +660,15 @@ export function $glue() {
       },
       "$wado-lang:web/element#next-element-sibling": (p0) => {
         return (p0.nextElementSibling ?? null);
+      },
+      "$wado-lang:web/element#before": (p0, p1, p2) => {
+        p0.before(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/element#after": (p0, p1, p2) => {
+        p0.after(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/element#replace-with": (p0, p1, p2) => {
+        p0.replaceWith(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
       },
       "$wado-lang:web/element#remove": (p0) => {
         p0.remove();
@@ -1215,8 +1305,8 @@ export function $glue() {
       "$wado-lang:web/element#set-aria-value-text": (p0, p1, p2, p3) => {
         p0.ariaValueText = (p1 === 0 ? undefined : $string(p2, p3));
       },
-      "$wado-lang:web/element#aria-notify": (p0, p1, p2) => {
-        p0.ariaNotify($string(p1, p2));
+      "$wado-lang:web/element#aria-notify": (p0, p1, p2, p3, p4, p5) => {
+        p0.ariaNotify($string(p1, p2), (p3 === 0 ? undefined : { priority: (p4 === 0 ? undefined : $ENUMS.AriaNotifyPriority[p5]) }));
       },
       "$wado-lang:web/html-element#container-timing": (p0, $ret) => {
         const $value = p0.containerTiming;
@@ -1275,6 +1365,9 @@ export function $glue() {
       },
       "$wado-lang:web/html-element#set-dir": (p0, p1, p2) => {
         p0.dir = $string(p1, p2);
+      },
+      "$wado-lang:web/html-element#set-hidden": (p0, p1, p2, p3, p4) => {
+        p0.hidden = (p1 === 0 ? undefined : (p2 === 0 ? (Number(BigInt.asIntN(32, p3)) !== 0) : p2 === 1 ? $f64(p3) : $string(Number(BigInt.asIntN(32, p3)), p4)));
       },
       "$wado-lang:web/html-element#inert": (p0) => {
         return (p0.inert ? 1 : 0);
@@ -1342,14 +1435,14 @@ export function $glue() {
       "$wado-lang:web/html-element#set-outer-text": (p0, p1, p2) => {
         p0.outerText = $string(p1, p2);
       },
-      "$wado-lang:web/html-element#show-popover": (p0) => {
-        p0.showPopover();
+      "$wado-lang:web/html-element#show-popover": (p0, p1, p2, p3) => {
+        p0.showPopover((p1 === 0 ? undefined : { source: (p2 === 0 ? undefined : $core.exports[$SLOT_GET](p3)) }));
       },
       "$wado-lang:web/html-element#hide-popover": (p0) => {
         p0.hidePopover();
       },
-      "$wado-lang:web/html-element#toggle-popover": (p0, p1, p2) => {
-        return (p0.togglePopover((p1 === 0 ? undefined : (p2 !== 0))) ? 1 : 0);
+      "$wado-lang:web/html-element#toggle-popover": (p0, p1, p2, p3, p4, p5, p6) => {
+        return (p0.togglePopover((p1 === 0 ? undefined : (p2 === 0 ? { source: (p3 === 0 ? undefined : $core.exports[$SLOT_GET](p4)), force: (p5 === 0 ? undefined : (p6 !== 0)) } : (p3 !== 0)))) ? 1 : 0);
       },
       "$wado-lang:web/html-element#popover": (p0, $ret) => {
         const $value = p0.popover;
@@ -1425,8 +1518,8 @@ export function $glue() {
       "$wado-lang:web/html-element#set-tab-index": (p0, p1) => {
         p0.tabIndex = p1;
       },
-      "$wado-lang:web/html-element#focus": (p0) => {
-        p0.focus();
+      "$wado-lang:web/html-element#focus": (p0, p1, p2, p3, p4, p5) => {
+        p0.focus((p1 === 0 ? undefined : { preventScroll: (p2 === 0 ? undefined : (p3 !== 0)), focusVisible: (p4 === 0 ? undefined : (p5 !== 0)) }));
       },
       "$wado-lang:web/html-element#blur": (p0) => {
         p0.blur();
@@ -1721,6 +1814,12 @@ export function $glue() {
       "$wado-lang:web/html-input-element#set-selection-direction": (p0, p1, p2, p3) => {
         p0.selectionDirection = (p1 === 0 ? undefined : $string(p2, p3));
       },
+      "$wado-lang:web/html-input-element#set-range-text": (p0, p1, p2) => {
+        p0.setRangeText($string(p1, p2));
+      },
+      "$wado-lang:web/html-input-element#set-range-text-with-start-end-selection-mode": (p0, p1, p2, p3, p4, p5) => {
+        p0.setRangeText($string(p1, p2), (p3 >>> 0), (p4 >>> 0), $ENUMS.SelectionMode[p5]);
+      },
       "$wado-lang:web/html-input-element#set-selection-range": (p0, p1, p2, p3, p4, p5) => {
         p0.setSelectionRange((p1 >>> 0), (p2 >>> 0), (p3 === 0 ? undefined : $string(p4, p5)));
       },
@@ -1807,23 +1906,29 @@ export function $glue() {
       "$wado-lang:web/document#document-element": (p0) => {
         return (p0.documentElement ?? null);
       },
-      "$wado-lang:web/document#create-element": (p0, p1, p2, p3, p4, p5) => {
-        return p0.createElement($string(p1, p2), (p3 === 0 ? undefined : $string(p4, p5)));
+      "$wado-lang:web/document#create-element": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return p0.createElement($string(p1, p2), (p3 === 0 ? undefined : (p4 === 0 ? $string(p5, p6) : { is: (p5 === 0 ? undefined : $string(p6, p7)) })));
       },
-      "$wado-lang:web/document#create-element-ns": (p0, p1, p2, p3, p4, p5, p6, p7, p8) => {
-        return p0.createElementNS((p1 === 0 ? undefined : $string(p2, p3)), $string(p4, p5), (p6 === 0 ? undefined : $string(p7, p8)));
+      "$wado-lang:web/document#create-element-ns": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10) => {
+        return p0.createElementNS((p1 === 0 ? undefined : $string(p2, p3)), $string(p4, p5), (p6 === 0 ? undefined : (p7 === 0 ? $string(p8, p9) : { is: (p8 === 0 ? undefined : $string(p9, p10)) })));
       },
       "$wado-lang:web/document#create-text-node": (p0, p1, p2) => {
         return p0.createTextNode($string(p1, p2));
       },
-      "$wado-lang:web/document#import-node": (p0, p1, p2) => {
-        return p0.importNode(p1, (p2 !== 0));
+      "$wado-lang:web/document#import-node": (p0, p1, p2, p3, p4, p5) => {
+        return p0.importNode(p1, (p2 === 0 ? undefined : (p3 === 0 ? (p4 !== 0) : { selfOnly: (p4 === 0 ? undefined : (p5 !== 0)) })));
       },
       "$wado-lang:web/document#adopt-node": (p0, p1) => {
         return p0.adoptNode(p1);
       },
       "$wado-lang:web/document#create-event": (p0, p1, p2) => {
         return p0.createEvent($string(p1, p2));
+      },
+      "$wado-lang:web/document#create-node-iterator": (p0, p1, p2, p3) => {
+        return p0.createNodeIterator(p1, (p2 >>> 0), $callback(p3, (closure, a0) => $core.exports["$cm_callback__call-handle-to-u16"](closure, a0)));
+      },
+      "$wado-lang:web/document#create-tree-walker": (p0, p1, p2, p3) => {
+        return p0.createTreeWalker(p1, (p2 >>> 0), $callback(p3, (closure, a0) => $core.exports["$cm_callback__call-handle-to-u16"](closure, a0)));
       },
       "$wado-lang:web/document#fullscreen-enabled": (p0) => {
         return (p0.fullscreenEnabled ? 1 : 0);
@@ -1863,6 +1968,9 @@ export function $glue() {
         const $value = p0.lastModified;
         $putString($ret, $value);
       },
+      "$wado-lang:web/document#ready-state": (p0) => {
+        return $case($ENUMS.DocumentReadyState, p0.readyState);
+      },
       "$wado-lang:web/document#title": (p0, $ret) => {
         const $value = p0.title;
         $putString($ret, $value);
@@ -1883,7 +1991,7 @@ export function $glue() {
       "$wado-lang:web/document#set-body": (p0, p1) => {
         p0.body = (p1 ?? undefined);
       },
-      "$wado-lang:web/document#open": (p0, p1, p2, p3, p4, p5, p6) => {
+      "$wado-lang:web/document#open-with-unused1-unused2": (p0, p1, p2, p3, p4, p5, p6) => {
         return p0.open((p1 === 0 ? undefined : $string(p2, p3)), (p4 === 0 ? undefined : $string(p5, p6)));
       },
       "$wado-lang:web/document#close": (p0) => {
@@ -1926,6 +2034,9 @@ export function $glue() {
       },
       "$wado-lang:web/document#hidden": (p0) => {
         return (p0.hidden ? 1 : 0);
+      },
+      "$wado-lang:web/document#visibility-state": (p0) => {
+        return $case($ENUMS.DocumentVisibilityState, p0.visibilityState);
       },
       "$wado-lang:web/document#fg-color": (p0, $ret) => {
         const $value = p0.fgColor;
@@ -2035,6 +2146,15 @@ export function $glue() {
       "$wado-lang:web/document#child-element-count": (p0) => {
         return p0.childElementCount;
       },
+      "$wado-lang:web/document#prepend": (p0, p1, p2) => {
+        p0.prepend(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/document#append": (p0, p1, p2) => {
+        p0.append(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/document#replace-children": (p0, p1, p2) => {
+        p0.replaceChildren(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
       "$wado-lang:web/document#move-before": (p0, p1, p2) => {
         p0.moveBefore(p1, (p2 ?? undefined));
       },
@@ -2044,14 +2164,17 @@ export function $glue() {
       "$wado-lang:web/document#create-ns-resolver": (p0, p1) => {
         return p0.createNSResolver(p1);
       },
-      "$wado-lang:web/document#aria-notify": (p0, p1, p2) => {
-        p0.ariaNotify($string(p1, p2));
+      "$wado-lang:web/document#aria-notify": (p0, p1, p2, p3, p4, p5) => {
+        p0.ariaNotify($string(p1, p2), (p3 === 0 ? undefined : { priority: (p4 === 0 ? undefined : $ENUMS.AriaNotifyPriority[p5]) }));
       },
       "$wado-lang:web/window#credentialless": (p0) => {
         return (p0.credentialless ? 1 : 0);
       },
       "$wado-lang:web/window#orientation": (p0) => {
         return p0.orientation;
+      },
+      "$wado-lang:web/window#navigate": (p0, p1) => {
+        p0.navigate($ENUMS.SpatialNavigationDirection[p1]);
       },
       "$wado-lang:web/window#request-resize": (p0) => {
         p0.requestResize();
@@ -2085,6 +2208,30 @@ export function $glue() {
       },
       "$wado-lang:web/window#page-y-offset": (p0) => {
         return p0.pageYOffset;
+      },
+      "$wado-lang:web/window#scroll-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scroll((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#scroll-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scroll(p1, p2), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#scroll-to-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scrollTo((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#scroll-to-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scrollTo(p1, p2), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#scroll-by-with-options": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return $settle(p0.scrollBy((p1 === 0 ? undefined : { behavior: (p2 === 0 ? undefined : $ENUMS.ScrollBehavior[p3]), left: (p4 === 0 ? undefined : p5), top: (p6 === 0 ? undefined : p7) })), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#scroll-by-with-x-y": (p0, p1, p2) => {
+        return $settle(p0.scrollBy(p1, p2), 4, ($ret, $value) => {
+        });
       },
       "$wado-lang:web/window#screen-x": (p0) => {
         return p0.screenX;
@@ -2150,6 +2297,12 @@ export function $glue() {
       },
       "$wado-lang:web/window#origin-agent-cluster": (p0) => {
         return (p0.originAgentCluster ? 1 : 0);
+      },
+      "$wado-lang:web/window#alert": (p0) => {
+        p0.alert();
+      },
+      "$wado-lang:web/window#alert-with-message": (p0, p1, p2) => {
+        p0.alert($string(p1, p2));
       },
       "$wado-lang:web/window#confirm": (p0, p1, p2) => {
         return (p0.confirm($string(p1, p2)) ? 1 : 0);
@@ -2223,6 +2376,60 @@ export function $glue() {
       },
       "$wado-lang:web/window#cancel-animation-frame": (p0, p1) => {
         p0.cancelAnimationFrame((p1 >>> 0));
+      },
+      "$wado-lang:web/node-iterator#root": (p0) => {
+        return p0.root;
+      },
+      "$wado-lang:web/node-iterator#reference-node": (p0) => {
+        return p0.referenceNode;
+      },
+      "$wado-lang:web/node-iterator#pointer-before-reference-node": (p0) => {
+        return (p0.pointerBeforeReferenceNode ? 1 : 0);
+      },
+      "$wado-lang:web/node-iterator#what-to-show": (p0) => {
+        return p0.whatToShow;
+      },
+      "$wado-lang:web/node-iterator#next-node": (p0) => {
+        return (p0.nextNode() ?? null);
+      },
+      "$wado-lang:web/node-iterator#previous-node": (p0) => {
+        return (p0.previousNode() ?? null);
+      },
+      "$wado-lang:web/node-iterator#detach": (p0) => {
+        p0.detach();
+      },
+      "$wado-lang:web/tree-walker#root": (p0) => {
+        return p0.root;
+      },
+      "$wado-lang:web/tree-walker#what-to-show": (p0) => {
+        return p0.whatToShow;
+      },
+      "$wado-lang:web/tree-walker#current-node": (p0) => {
+        return p0.currentNode;
+      },
+      "$wado-lang:web/tree-walker#set-current-node": (p0, p1) => {
+        p0.currentNode = p1;
+      },
+      "$wado-lang:web/tree-walker#parent-node": (p0) => {
+        return (p0.parentNode() ?? null);
+      },
+      "$wado-lang:web/tree-walker#first-child": (p0) => {
+        return (p0.firstChild() ?? null);
+      },
+      "$wado-lang:web/tree-walker#last-child": (p0) => {
+        return (p0.lastChild() ?? null);
+      },
+      "$wado-lang:web/tree-walker#previous-sibling": (p0) => {
+        return (p0.previousSibling() ?? null);
+      },
+      "$wado-lang:web/tree-walker#next-sibling": (p0) => {
+        return (p0.nextSibling() ?? null);
+      },
+      "$wado-lang:web/tree-walker#previous-node": (p0) => {
+        return (p0.previousNode() ?? null);
+      },
+      "$wado-lang:web/tree-walker#next-node": (p0) => {
+        return (p0.nextNode() ?? null);
       },
       "$wado-lang:web/rejection#name": (p0, $ret) => {
         const $value = String(p0.name ?? "Error");

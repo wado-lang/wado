@@ -85,6 +85,100 @@ xs[0] = 9;       // Error: the store roots at an immutable binding
 A write through a `&mut T` is what that reference grants, so the binding
 holding one needs no `mut` of its own.
 
+A `&T` grants reading alone, to every place reached through it. A store, a
+`&mut`, or a `&mut self` call on a place reached through a `&` is an error, even
+where the path goes on through a `&mut` stored behind the `&`:
+
+<!-- {"fixture":"spec_mutability_store_through_shared_ref.wado"} -->
+
+```wado
+fn touch(h: &Holder) {
+    h.r.f = 2;   // Error: `h.r` is reached through `&Holder`
+}
+```
+
+<!-- {"fixture":"spec_mutability_mut_ref_through_shared_ref.wado"} -->
+
+```wado
+fn inner(p: &Pair) -> &mut Inner {
+    return &mut p.inner;   // Error: `p.inner` is reached through `&Pair`
+}
+```
+
+For the same reason, a `&mut T` read through a `&` is a `&T`, as `*` on a
+`&&mut T` is:
+
+<!-- {"fixture":"spec_mutability_mut_read_through_shared_ref.wado"} -->
+
+```wado
+fn target(h: &Holder) -> &mut S {
+    return h.r;   // Error: `h.r` is a `&S` here
+}
+```
+
+A newtype over a `&mut T` reads as the `&T` it wraps:
+
+<!-- {"fixture":"error_newtype_mut_read_through_shared_ref.wado"} -->
+
+```wado
+fn poke(holder: &Holder) {
+    let x = holder.h;
+    x.f = 2;   // Error: `holder.h` is a `&S` here
+}
+```
+
+A generic body is checked before its type parameter is known, so it cannot read
+a `T` as a `&`. A call is an error where a type argument that is a `&mut` sits
+behind a `&` the caller holds, and a slot of the callee's signature that names a
+type parameter can hand it back writable: the return, a `&mut` parameter or a
+function parameter. The instantiated types decide, so a `T` reaching the `&`
+through another parameter's bound alone counts too:
+
+<!-- {"fixture":"error_generic_call_hands_back_mut_through_shared.wado"} -->
+
+```wado
+fn first<T>(xs: &List<T>) -> T {
+    return xs[0];
+}
+
+fn poke(xs: &List<&mut S>) {
+    first(xs).f = 2;   // Error: `T = &mut S` behind a `&`
+}
+```
+
+A container that indexes by `IndexRef` and has no `IndexAssign`, such as a
+`Slice<T>`, is a read-only view: `&mut` on an element is an error, since nothing
+stores the element back.
+
+<!-- {"fixture":"error_mut_subscript_of_read_only_view.wado"} -->
+
+```wado
+fn poke(xs: &List<Element>) {
+    let mut s = xs.slice(0, 1);
+    rename(&mut s[0]);   // Error: `Slice<Element>` is read-only
+}
+```
+
+What a `&` refuses is the path. A value copied out from behind it is a value of
+its own, and a `&mut` it holds writes as any other does:
+
+<!-- {"fixture":"spec_mutability_copy_out_of_shared_ref_writes.wado"} -->
+
+```wado
+fn poke(h: &Holder) {
+    let copy = *h;
+    copy.r.f = 9;   // OK: `copy` is the body's own `Holder`
+}
+
+test {
+    let mut s = S { f: 1 };
+    let h = Holder { r: &mut s };
+    s.f = 2;
+    poke(&h);
+    assert s.f == 9;
+}
+```
+
 ## Deferred Initialization
 
 `let x: T;` declares one name without an initializer, and the type is required.

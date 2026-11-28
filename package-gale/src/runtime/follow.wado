@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use { HashMap, HashSeed } from "core:collections";
+use { Interner } from "./intern.wado";
 
 internal global FOLLOW_MAX_DEPTH: i32 = 4;
 
@@ -24,22 +24,15 @@ internal fn follow_push(site: i64, cont: i64) -> i64 {
     return site | follow_behind(cont, FOLLOW_SLOT_BITS) << FOLLOW_SLOT_BITS;
 }
 
-internal struct FollowLinks {
-    conts: List<i64>,
-    ids: HashMap<i64, i32>,
-}
+global mut FOLLOW_LINKS: Interner<i64> = Interner::<i64>::new();
 
-global FOLLOW_SEED: HashSeed = HashSeed::fixed(0x5BD1E9955BD1E995, 0x27D4EB2F165667C5);
-
-global mut FOLLOW_LINKS: FollowLinks = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
-
-internal fn follow_links_enter() -> FollowLinks {
+internal fn follow_links_enter() -> Interner<i64> {
     let outer = FOLLOW_LINKS;
-    FOLLOW_LINKS = FollowLinks { conts: [], ids: HashMap::with_seed(FOLLOW_SEED) };
+    FOLLOW_LINKS = Interner::<i64>::new();
     return outer;
 }
 
-internal fn follow_links_leave(outer: FollowLinks) {
+internal fn follow_links_leave(outer: Interner<i64>) {
     FOLLOW_LINKS = outer;
 }
 
@@ -49,19 +42,9 @@ fn follow_behind(cont: i64, prefix_bits: i64) -> i64 {
         return cont;
     }
     assert !follow_is_link(cont), "a continuation starts with a site, never a link";
-    let link = FOLLOW_LINK_ID | follow_link_id(cont) as i64 << FOLLOW_SLOT_BITS;
+    let link = FOLLOW_LINK_ID | FOLLOW_LINKS.intern(cont) as i64 << FOLLOW_SLOT_BITS;
     assert link >> room == 0, "a link must fit behind the prefix";
     return link;
-}
-
-fn follow_link_id(cont: i64) -> i32 {
-    if let Some(id) = FOLLOW_LINKS.ids.get(cont) {
-        return id;
-    }
-    let id = FOLLOW_LINKS.conts.len();
-    FOLLOW_LINKS.conts.push(cont);
-    FOLLOW_LINKS.ids[cont] = id;
-    return id;
 }
 
 fn follow_is_link(c: i64) -> bool {
@@ -71,7 +54,7 @@ fn follow_is_link(c: i64) -> bool {
 fn follow_linked(c: i64) -> i64
     contract follow_is_link(c)
 {
-    return FOLLOW_LINKS.conts[(c >> FOLLOW_SLOT_BITS) as i32];
+    return FOLLOW_LINKS.at((c >> FOLLOW_SLOT_BITS) as i32);
 }
 
 internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, tables: &FollowTables, eof_kind: i32) -> bool {

@@ -207,7 +207,29 @@ Each step keeps every fixture passing and deletes what it replaces.
 - [x] A `_` in a `let` annotation and after `as` is a variable. A cast's is
   settled by the expected type and the operand at the cast, and reported
   there where they leave it open, since the cast judges its conversion then.
-- [ ] The context is per body rather than per module.
+- [x] A call's type arguments are solved in the context, not apart from it.
+  The call instantiates the callee's slots once, as the context's variables.
+  The turbofish is equated with them where it is read. The expected type
+  reaches the declared return before the arguments are typed, and each
+  argument is typed against its parameter and coerced into it. A numeric
+  literal waits for the call as it does now, and a `!` argument is coerced, so
+  it binds nothing. `InferCtx`, its tiers and every second solve of the same
+  call are deleted. Free functions, builtins, static calls, methods, struct
+  literals and variant cases all take this one path. A written turbofish
+  still keeps its own list: `merge_turbofish_type_args` fills the slots it
+  left unwritten from the call's answers, and equates each `_` with its
+  answer.
+- [x] A pack slot is instantiated as a pack variable, answered by a list of
+  types, so nothing patches a pack the instantiation left rigid.
+- [x] A variable carries its origin: the slot it stands for, the declaration
+  that owns it, or the `_` the source wrote, and where. Its report is read
+  from the origin, not from a side table. A report equates every variable it
+  covers with the error type, which settles them without a word. A report
+  covers a variable whose origin it spans, and one minted in the innermost
+  statement the report points into. What
+  separately closes or blames a variable after a report goes.
+- [x] The context is per body rather than per module, and so are the facts it
+  writes back. A variable cannot outlive its body.
 
 ## Known gaps
 
@@ -216,8 +238,23 @@ Each step keeps every fixture passing and deletes what it replaces.
   `Mk::<_>::mk(&s)` stay unsettled where the unqualified `s.mk()` selects by
   the annotation.
 
-- `InferCtx` in `infer.rs` infers a single call's type arguments with
-  parameters as holes, apart from the context's variables.
+- An anonymous struct literal's fields must be settled by the literal itself:
+  one field may answer another's slot, in either order. What settles only
+  after the literal is reported all the same:
+  - the rest of the statement, as in `same({ a: none() }.a, x)`;
+  - a numeric literal's default, as in `{ b: x.unwrap_or(0) }` where `x` is
+    an open `Option<T>`;
+  - a field of an enclosing literal written after a nested one, as in
+    `{ a: { b: x }, c: takes_i32(x) }`.
+
+- A comparison on a derived impl does not wait for its operand. With `x` an
+  open `Option<T>`, `let b = x == x;` is refused as not implementing `Eq`,
+  though a later statement settles `T` to a type that does.
+
+- One bad argument can be reported twice. In `let e: Bx<String> = Bx::new(5)`
+  the argument is reported against the parameter, and the call's result
+  against the annotation.
+
 - A mismatch at a later statement does not name the literal whose default
   caused it. In `let b = put(none(), 5)` followed by `take64(b)`, the report
   reads `expected 'Bx<i64>', found 'Bx<i32>'` at `take64(b)`. By then `b`'s

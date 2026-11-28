@@ -172,10 +172,10 @@ types this is the usual value-semantics copy — elided to a move at last use �
 `.unwrap()` stays ergonomic and no rejection is needed. Inspectors (`is_ok`, …)
 keep `&self`.
 
-By-value `self` on a value type is otherwise a diagnostic
-(`SelfByValueOnNonResource`); the generic `Result<T, E>` / `Option<T>` impls are
-permitted because a generic self-type resolves to a `GenericInstance`, not a
-concrete value type.
+By-value `self` on a value type was otherwise an error. It is now a warning,
+`self_by_value`:
+[WEP: Affine Types](./wep-2026-10-17-affine-types.md#a-by-value-self-is-a-parameter-like-any-other)
+says why.
 
 ### No move out of a reference
 
@@ -475,9 +475,10 @@ reuses the same move-check machinery, resources being its first client.
   checker" and "every `resource` method takes `&self`" claims are narrowed to
   host-object resources; affine resources additionally have by-value consuming
   methods. Applied there.
-- WEP 2026-03-01 (CM Canonical Attributes): the resource `drop` method is
-  amended from `fn drop(&self)` (unsound under move-only) to `fn drop(self)`; the
-  call syntax is unchanged. Applied there.
+- The canonical resources' `drop` method is amended from `fn drop(&self)`
+  (unsound under move-only) to `fn drop(self)`; the call syntax is unchanged.
+  [CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md#canonical-operations-are-declared-on-the-resource)
+  states it so.
 
 ## Consequences
 
@@ -525,9 +526,10 @@ Verified against the tree.
 
 - [x] `SelfKind::Value`; parser accepts bare `self`, `consumes_self` is
   `self_kind == Value`, and `self` on a free function is a parse error.
-- [x] A `Value` receiver is a diagnostic (`SelfByValueOnNonResource`) only on a
-  value type that provably carries no resource; a resource-carrying aggregate
-  (and any generic self-type) may consume with `self`.
+- [x] A `Value` receiver is a diagnostic only on a value type that provably
+  carries no resource; a resource-carrying aggregate (and any generic
+  self-type) may consume with `self`. The diagnostic has since become the
+  `self_by_value` warning.
 - [x] stdlib `self: &R` → `&self` (via `wado-from-idl`); every `self:`
   annotation rejected, fixtures migrated, formatter normalization dropped.
 - [ ] `syntax.rs` grammar + VS Code grammar for the new receiver forms.
@@ -884,7 +886,7 @@ handle nothing minted, which the program then owns and drops.
 - [CM Explainer — Handle types](../vendor/component-model/design/mvp/Explainer.md)
 - [CM Canonical ABI — `lift_own` / `lift_borrow`](../vendor/component-model/design/mvp/CanonicalABI.md)
 - [Resource Lifecycle Management (RAII)](./wep-2026-01-12-resource-lifecycle.md)
-- [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
+- [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md#canonical-operations-are-declared-on-the-resource)
 - [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)

@@ -41,7 +41,7 @@ struct effect_interface_default_body.wado//$Closure_4 {}  // TypeId(8)
 
 struct effect_interface_default_body.wado//$Closure_5 {}  // TypeId(9)
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(10)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(10)
 
 array Array<u8> (mut u8);  // TypeId(11)
 
@@ -100,7 +100,7 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(33)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(34)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(35)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(35)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(36)
 
@@ -108,7 +108,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude/list.wado//List<core:prelude/string.wado/String>");  // TypeId(38)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from" = fn(ref "Array<core:prelude/string.wado/String>") -> [ref "Array<core:prelude/string.wado/String>", i32];  // TypeId(39)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2509>>::from" = fn(ref "Array<core:prelude/string.wado/String>") -> [ref "Array<core:prelude/string.wado/String>", i32];  // TypeId(39)
 
 type "functype//effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_0::$call" = fn(ref "effect_interface_default_body.wado//$Closure_0") -> ref "core:prelude/string.wado//String";  // TypeId(40)
 
@@ -159,23 +159,23 @@ global global:effect_interface_default_body.wado::$const_obj_3: ref Array<u8> = 
 fn "effect_interface_default_body.wado/$effect_default$Log$emit"(message) {
     let self_1: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let out_7: ref "core:prelude/string.wado//String";
-    let n_159: i32;
-    let new_used_163: i32;
-    let start_164: i32;
+    let n_169: i32;
+    let new_used_173: i32;
+    let start_174: i32;
     self_1 = global:effect_interface_default_body.wado::LINES;
     local.tee out_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8;
     builtin::array_copy<u8>(out_7.repr, 0, global:effect_interface_default_body.wado::$const_obj_0, 0, 8);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__30: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_159(message.used) == 0;
-                if @unlikely(local.tee new_used_163(8 + n_159) > 24) {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_169(message.used) == 0;
+                if @unlikely(local.tee new_used_173(8 + n_169) > 24) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, new_used_163);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, new_used_173);
                 }
-                start_164 = out_7.used;
-                out_7.used = new_used_163;
-                builtin::array_copy<u8>(out_7.repr, start_164, message.repr, 0, n_159);
+                start_174 = out_7.used;
+                out_7.used = new_used_173;
+                builtin::array_copy<u8>(out_7.repr, start_174, message.repr, 0, n_169);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
         };
@@ -184,311 +184,307 @@ fn "effect_interface_default_body.wado/$effect_default$Log$emit"(message) {
     $inline_core_prelude_string_wado_String__internal_push_view_47: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_47;
     };
-    if @unlikely(local.tee n_159(self_1.used) >= builtin::array_len(self_1.repr)) {
+    if @unlikely(local.tee n_169(self_1.used) >= builtin::array_len(self_1.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_1);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self_1.repr, n_159, out_7);
-    self_1.used = n_159 + 1;
+    builtin::array_set<ref "core:prelude/string.wado//String">(self_1.repr, n_169, out_7);
+    self_1.used = n_169 + 1;
 }
 
 fn "effect_interface_default_body.wado/run"() with Stdout, Log {
     let $h_effect_interface_default_body.wado/Log: ref "effect_interface_default_body.wado//Collect";
-    let self_122: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
-    let message_132: ref "core:prelude/string.wado//String";
-    let $local_1_133: ref null "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
-    let $local_2_134: ref "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
-    let $cm_pair_7_142: i64;
-    let $sroa_$pattern_temp_0_0_13_148: i32;
-    let $sroa_$pattern_temp_0_1_14_149: i32;
-    let $local_1_166: ref null "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
-    let $sroa_$pattern_temp_0_0_13_307: i32;
-    let $sroa_$pattern_temp_0_1_14_308: i32;
-    let $sroa_$iter_1_repr_343: ref "Array<core:prelude/string.wado/String>";
-    let $sroa_slot_588: ref null Array<u8>;
-    let $av_593: i32;
+    let self_114: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
+    let message_125: ref "core:prelude/string.wado//String";
+    let $local_1_126: ref null "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
+    let $local_2_127: ref "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
+    let $cm_pair_7_135: i64;
+    let $sroa_$pattern_temp_0_1_14_142: i32;
+    let self_157: i32;
+    let $local_1_159: ref null "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log";
+    let $sroa_$pattern_temp_0_0_13_300: i32;
+    let $sroa_$pattern_temp_0_1_14_301: i32;
+    let $sroa_$iter_1_repr_328: ref "Array<core:prelude/string.wado/String>";
+    let $sroa_slot_575: ref null Array<u8>;
+    let $av_587: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:effect_interface_default_body.wado::$modules_initialized);
         cold_path;
         "effect_interface_default_body.wado/$initialize_modules$cold0"();
     };
     $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_0: block {
-        message_132 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 };
-        if ref.is_null(local.tee $local_1_133(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_134(ref.as_non_null($local_1_133)).outer;
+        message_125 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 };
+        if ref.is_null(local.tee $local_1_126(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_127(ref.as_non_null($local_1_126)).outer;
             let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_134.op_emit).env, message_132);
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_0: global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_133;
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_127.op_emit).env, message_125);
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_0: global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_126;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_0: "effect_interface_default_body.wado/$effect_default$Log$emit"(message_132);
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_0: "effect_interface_default_body.wado/$effect_default$Log$emit"(message_125);
         }
     };
-    $array_clone_src_3 = local.tee message_132($inline__effect_dispatch__effect_interface_default_body_wado_Log__label_2: block -> ref "core:prelude/string.wado//String" {
-        if ref.is_null(local.tee $local_1_133(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_134(ref.as_non_null($local_1_133)).outer;
-            $av_593 = local.tee message_132(block -> ref "core:prelude/string.wado//String" {
+    message_125 = $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_1: block -> ref "core:prelude/string.wado//String" {
+        if ref.is_null(local.tee $local_1_126(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_127(ref.as_non_null($local_1_126)).outer;
+            $av_587 = local.tee message_125(block -> ref "core:prelude/string.wado//String" {
                 let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_134.op_label).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_127.op_label).env);
             }).used;
-            message_132 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = message_132.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_593)), 0, $array_clone_src_3, 0, $av_593); $array_clone_dst_4, used: $av_593 };
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_133;
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_2: message_132;
+            message_125 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = message_125.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_587)), 0, $array_clone_src_3, 0, $av_587); $array_clone_dst_4, used: $av_587 };
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_126;
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_1: message_125;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default"), used: 7 };
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default"), used: 7 };
         }
         unreachable;
-    }).repr;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(local.tee $av_593(message_132.used))), 0, $array_clone_src_3, 0, $av_593);
-    $sroa_$pattern_temp_0_0_13_148 = builtin::i32_wrap_i64(local.tee $cm_pair_7_142("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_149 = builtin::i32_wrap_i64($cm_pair_7_142 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_148 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_148);
-    builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>($av_593 + 1)), 0, $array_clone_dst_4, 0, $av_593);
-    builtin::array_set_u8($array_clone_src_3, $av_593, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    };
+    $av_587 = builtin::i32_wrap_i64(local.tee $cm_pair_7_135("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_142 = builtin::i32_wrap_i64($cm_pair_7_135 >> 32_i64);
+    $av_587 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_587);
+    builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>(local.tee self_157(message_125.used) + 1)), 0, message_125.repr, 0, self_157);
+    builtin::array_set_u8($array_clone_src_3, self_157, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $av_593 = $av_593 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_149, $array_clone_src_3, 0, $av_593);
+        self_157 = self_157 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_142, $array_clone_src_3, 0, self_157);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_149);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_142);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_148);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_587);
     }
     $h_effect_interface_default_body.wado/Log = global:effect_interface_default_body.wado::$const_obj_2;
-    global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = struct.new "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log" { outer: local.tee $local_1_133(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log), op_label: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_body.wado//$Closure_0" { $capture_0: $h_effect_interface_default_body.wado/Log }, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_0" }, op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_interface_default_body.wado//$Closure_1" { $capture_0: $h_effect_interface_default_body.wado/Log }, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_1" }, op_required: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_interface_default_body.wado//$Closure_2" { $capture_0: $h_effect_interface_default_body.wado/Log }, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_2" } };
+    global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = struct.new "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log" { outer: local.tee $local_1_126(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log), op_label: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_body.wado//$Closure_0" { $capture_0: $h_effect_interface_default_body.wado/Log }, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_0" }, op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_interface_default_body.wado//$Closure_1" { $capture_0: $h_effect_interface_default_body.wado/Log }, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_1" }, op_required: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_interface_default_body.wado//$Closure_2" { $capture_0: $h_effect_interface_default_body.wado/Log }, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_2" } };
     $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_4: block {
-        message_132 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 119, 111), used: 3 };
-        if ref.is_null(local.tee $local_1_166(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_134(ref.as_non_null($local_1_166)).outer;
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_134.op_emit).env, message_132);
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_4: global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_166;
+        message_125 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 119, 111), used: 3 };
+        if ref.is_null(local.tee $local_1_159(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_127(ref.as_non_null($local_1_159)).outer;
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_127.op_emit).env, message_125);
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_4: global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_159;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_4: "effect_interface_default_body.wado/$effect_default$Log$emit"(message_132);
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_4: "effect_interface_default_body.wado/$effect_default$Log$emit"(message_125);
         }
     };
-    $array_clone_src_3 = local.tee message_132($inline__effect_dispatch__effect_interface_default_body_wado_Log__label_6: block -> ref "core:prelude/string.wado//String" {
-        if ref.is_null(local.tee $local_1_166(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_134(ref.as_non_null($local_1_166)).outer;
-            $av_593 = local.tee message_132(block -> ref "core:prelude/string.wado//String" {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_134.op_label).env);
+    message_125 = $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_3: block -> ref "core:prelude/string.wado//String" {
+        if ref.is_null(local.tee $local_1_159(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_127(ref.as_non_null($local_1_159)).outer;
+            $av_587 = local.tee message_125(block -> ref "core:prelude/string.wado//String" {
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_127.op_label).env);
             }).used;
-            message_132 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = message_132.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_593)), 0, $array_clone_src_3, 0, $av_593); $array_clone_dst_4, used: $av_593 };
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_166;
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_6: message_132;
+            message_125 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = message_125.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_587)), 0, $array_clone_src_3, 0, $av_587); $array_clone_dst_4, used: $av_587 };
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_159;
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_3: message_125;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_6: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default"), used: 7 };
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default"), used: 7 };
         }
         unreachable;
-    }).repr;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(local.tee $av_593(message_132.used))), 0, $array_clone_src_3, 0, $av_593);
-    $sroa_$pattern_temp_0_0_13_148 = builtin::i32_wrap_i64(local.tee $cm_pair_7_142("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_149 = builtin::i32_wrap_i64($cm_pair_7_142 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_148 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_148);
-    builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>($av_593 + 1)), 0, $array_clone_dst_4, 0, $av_593);
-    builtin::array_set_u8($array_clone_src_3, $av_593, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    };
+    $av_587 = builtin::i32_wrap_i64(local.tee $cm_pair_7_135("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_142 = builtin::i32_wrap_i64($cm_pair_7_135 >> 32_i64);
+    $av_587 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_587);
+    builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>(local.tee self_157(message_125.used) + 1)), 0, message_125.repr, 0, self_157);
+    builtin::array_set_u8($array_clone_src_3, self_157, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $av_593 = $av_593 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_149, $array_clone_src_3, 0, $av_593);
+        self_157 = self_157 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_142, $array_clone_src_3, 0, self_157);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_149);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_142);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_148);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_587);
     }
-    $av_593 = $inline__effect_dispatch__effect_interface_default_body_wado_Log__required_10: block -> bool {
-        if @likely(ref.is_null(local.tee $local_1_166(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0) {
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_134(ref.as_non_null($local_1_166)).outer;
-            $av_593 = block -> bool {
-                let $indirect_call_34: ref null "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_34.func, local.tee $indirect_call_34($local_2_134.op_required).env, 1);
+    $av_587 = $inline__effect_dispatch__effect_interface_default_body_wado_Log__required_6: block -> bool {
+        if @likely(ref.is_null(local.tee $local_1_159(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0) {
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_127(ref.as_non_null($local_1_159)).outer;
+            $av_587 = block -> bool {
+                let $indirect_call_28: ref null "canonical//CanonicalClosure_2";
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_28.func, local.tee $indirect_call_28($local_2_127.op_required).env, 1);
             };
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_166;
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__required_10: $av_593;
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_159;
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__required_6: $av_587;
         } else {
-            "core:rt/panic"(local.tee message_132(global:effect_interface_default_body.wado::$const_obj_1).repr, message_132.used);
+            "core:rt/panic"(local.tee message_125(global:effect_interface_default_body.wado::$const_obj_1).repr, message_125.used);
             unreachable;
         }
         unreachable;
     };
     $array_clone_src_3 = builtin::array_new<u8>(16);
-    $sroa_$pattern_temp_0_0_13_148 = 0;
-    $inline_core_prelude_string_wado_String__internal_push_view_31: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_31;
+    $sroa_$pattern_temp_0_1_14_142 = 0;
+    $inline_core_prelude_string_wado_String__internal_push_view_27: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_27;
     };
-    if $av_593 {
-        $sroa_slot_588 = array.new_fixed<u8>(116, 114, 117, 101);
-        $av_593 = 4;
+    if $av_587 {
+        $sroa_slot_575 = array.new_fixed<u8>(116, 114, 117, 101);
+        $av_587 = 4;
     } else {
-        $sroa_slot_588 = array.new_data<u8>("false");
-        $av_593 = 5;
+        $sroa_slot_575 = array.new_data<u8>("false");
+        $av_587 = 5;
     }
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 $av_593 == 0;
-            if @unlikely(local.tee $sroa_$pattern_temp_0_0_13_148($av_593) > 16) {
+            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 $av_587 == 0;
+            if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_142($av_587) > 16) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee message_132(struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3, used: 0 }), $sroa_$pattern_temp_0_0_13_148);
-                $array_clone_src_3 = message_132.repr;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee message_125(struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3, used: 0 }), $sroa_$pattern_temp_0_1_14_142);
+                $array_clone_src_3 = message_125.repr;
             }
-            builtin::array_copy<u8>($array_clone_src_3, 0, $sroa_slot_588, 0, $av_593);
+            builtin::array_copy<u8>($array_clone_src_3, 0, $sroa_slot_575, 0, $av_587);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
-    $inline_core_prelude_string_wado_String__internal_push_view_47: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_47;
+    $inline_core_prelude_string_wado_String__internal_push_view_43: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_43;
     };
-    $av_593 = builtin::i32_wrap_i64(local.tee $cm_pair_7_142("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_149 = builtin::i32_wrap_i64($cm_pair_7_142 >> 32_i64);
-    $av_593 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_593);
-    builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($sroa_$pattern_temp_0_0_13_148 + 1)), 0, $array_clone_src_3, 0, $sroa_$pattern_temp_0_0_13_148);
-    builtin::array_set_u8($array_clone_dst_4, $sroa_$pattern_temp_0_0_13_148, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    $av_587 = builtin::i32_wrap_i64(local.tee $cm_pair_7_135("wasi/stream-new"()));
+    self_157 = builtin::i32_wrap_i64($cm_pair_7_135 >> 32_i64);
+    $av_587 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_587);
+    builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($sroa_$pattern_temp_0_1_14_142 + 1)), 0, $array_clone_src_3, 0, $sroa_$pattern_temp_0_1_14_142);
+    builtin::array_set_u8($array_clone_dst_4, $sroa_$pattern_temp_0_1_14_142, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $sroa_$pattern_temp_0_0_13_148 = $sroa_$pattern_temp_0_0_13_148 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_149, $array_clone_dst_4, 0, $sroa_$pattern_temp_0_0_13_148);
+        $sroa_$pattern_temp_0_1_14_142 = $sroa_$pattern_temp_0_1_14_142 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(self_157, $array_clone_dst_4, 0, $sroa_$pattern_temp_0_1_14_142);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_149);
+        "wasi/stream-drop-writable"(self_157);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_593);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_587);
     }
-    global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_133;
+    global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_126;
     $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_11: block {
-        message_132 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 };
-        if ref.is_null(local.tee $local_1_133(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_134(ref.as_non_null($local_1_133)).outer;
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_134.op_emit).env, message_132);
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_11: global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_133;
+        message_125 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 };
+        if ref.is_null(local.tee $local_1_126(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_127(ref.as_non_null($local_1_126)).outer;
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_127.op_emit).env, message_125);
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_11: global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_126;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_11: "effect_interface_default_body.wado/$effect_default$Log$emit"(message_132);
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_11: "effect_interface_default_body.wado/$effect_default$Log$emit"(message_125);
         }
     };
-    $array_clone_src_3 = local.tee message_132($inline__effect_dispatch__effect_interface_default_body_wado_Log__label_52: block -> ref "core:prelude/string.wado//String" {
-        if ref.is_null(local.tee $local_1_133(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_134(ref.as_non_null($local_1_133)).outer;
-            $av_593 = local.tee message_132(block -> ref "core:prelude/string.wado//String" {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_134.op_label).env);
+    message_125 = $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_47: block -> ref "core:prelude/string.wado//String" {
+        if ref.is_null(local.tee $local_1_126(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_127(ref.as_non_null($local_1_126)).outer;
+            $av_587 = local.tee message_125(block -> ref "core:prelude/string.wado//String" {
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_127.op_label).env);
             }).used;
-            message_132 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = message_132.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_593)), 0, $array_clone_src_3, 0, $av_593); $array_clone_dst_4, used: $av_593 };
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_133;
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_52: message_132;
+            message_125 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = message_125.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_587)), 0, $array_clone_src_3, 0, $av_587); $array_clone_dst_4, used: $av_587 };
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_126;
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_47: message_125;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_52: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default"), used: 7 };
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_47: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default"), used: 7 };
         }
         unreachable;
-    }).repr;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(local.tee $av_593(message_132.used))), 0, $array_clone_src_3, 0, $av_593);
-    $sroa_$pattern_temp_0_0_13_148 = builtin::i32_wrap_i64(local.tee $cm_pair_7_142("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_149 = builtin::i32_wrap_i64($cm_pair_7_142 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_148 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_148);
-    builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>($av_593 + 1)), 0, $array_clone_dst_4, 0, $av_593);
-    builtin::array_set_u8($array_clone_src_3, $av_593, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    };
+    $av_587 = builtin::i32_wrap_i64(local.tee $cm_pair_7_135("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_142 = builtin::i32_wrap_i64($cm_pair_7_135 >> 32_i64);
+    $av_587 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_587);
+    builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>(local.tee self_157(message_125.used) + 1)), 0, message_125.repr, 0, self_157);
+    builtin::array_set_u8($array_clone_src_3, self_157, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $av_593 = $av_593 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_149, $array_clone_src_3, 0, $av_593);
+        self_157 = self_157 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_142, $array_clone_src_3, 0, self_157);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_149);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_142);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_148);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_587);
     }
-    global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = struct.new "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log" { outer: local.tee $local_1_133(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log), op_label: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_body.wado//$Closure_3" {}, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_3" }, op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_interface_default_body.wado//$Closure_4" {}, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_4" }, op_required: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_interface_default_body.wado//$Closure_5" {}, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_5" } };
+    global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = struct.new "effect_interface_default_body.wado//$Dispatch_effect_interface_default_body.wado/Log" { outer: local.tee $local_1_126(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log), op_label: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_body.wado//$Closure_3" {}, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_3" }, op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_interface_default_body.wado//$Closure_4" {}, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_4" }, op_required: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_interface_default_body.wado//$Closure_5" {}, func: ref.func "closure/effect_interface_default_body.wado/$closure_wrapper_5" } };
     $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_15: block {
-        message_132 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 111, 117, 114), used: 4 };
-        if ref.is_null(local.tee $local_1_166(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_134(ref.as_non_null($local_1_166)).outer;
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_134.op_emit).env, message_132);
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_15: global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_166;
+        message_125 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 111, 117, 114), used: 4 };
+        if ref.is_null(local.tee $local_1_159(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_127(ref.as_non_null($local_1_159)).outer;
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_127.op_emit).env, message_125);
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_15: global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_159;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_15: "effect_interface_default_body.wado/$effect_default$Log$emit"(message_132);
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__emit_15: "effect_interface_default_body.wado/$effect_default$Log$emit"(message_125);
         }
     };
-    $array_clone_src_3 = local.tee message_132($inline__effect_dispatch__effect_interface_default_body_wado_Log__label_56: block -> ref "core:prelude/string.wado//String" {
-        if ref.is_null(local.tee $local_1_166(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_134(ref.as_non_null($local_1_166)).outer;
-            $av_593 = local.tee message_132(block -> ref "core:prelude/string.wado//String" {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_134.op_label).env);
+    message_125 = $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_49: block -> ref "core:prelude/string.wado//String" {
+        if ref.is_null(local.tee $local_1_159(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0 {
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_127(ref.as_non_null($local_1_159)).outer;
+            $av_587 = local.tee message_125(block -> ref "core:prelude/string.wado//String" {
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_127.op_label).env);
             }).used;
-            message_132 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = message_132.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_593)), 0, $array_clone_src_3, 0, $av_593); $array_clone_dst_4, used: $av_593 };
-            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_166;
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_56: message_132;
+            message_125 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = message_125.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_587)), 0, $array_clone_src_3, 0, $av_587); $array_clone_dst_4, used: $av_587 };
+            global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_159;
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_49: message_125;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_56: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default"), used: 7 };
+            break $inline__effect_dispatch__effect_interface_default_body_wado_Log__label_49: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default"), used: 7 };
         }
         unreachable;
-    }).repr;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(local.tee $av_593(message_132.used))), 0, $array_clone_src_3, 0, $av_593);
-    $sroa_$pattern_temp_0_0_13_148 = builtin::i32_wrap_i64(local.tee $cm_pair_7_142("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_149 = builtin::i32_wrap_i64($cm_pair_7_142 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_148 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_148);
-    builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>($av_593 + 1)), 0, $array_clone_dst_4, 0, $av_593);
-    builtin::array_set_u8($array_clone_src_3, $av_593, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    };
+    $av_587 = builtin::i32_wrap_i64(local.tee $cm_pair_7_135("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_142 = builtin::i32_wrap_i64($cm_pair_7_135 >> 32_i64);
+    $av_587 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_587);
+    builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>(local.tee self_157(message_125.used) + 1)), 0, message_125.repr, 0, self_157);
+    builtin::array_set_u8($array_clone_src_3, self_157, 10);
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $av_593 = $av_593 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_149, $array_clone_src_3, 0, $av_593);
+        self_157 = self_157 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_142, $array_clone_src_3, 0, self_157);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_149);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_142);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_148);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($av_587);
     }
-    global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_133;
-    $av_593 = local.tee self_122(global:effect_interface_default_body.wado::LINES).used;
-    $sroa_$iter_1_repr_343 = self_122.repr;
-    $sroa_$pattern_temp_0_0_13_148 = 0;
+    global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_126;
+    $av_587 = local.tee self_114(global:effect_interface_default_body.wado::LINES).used;
+    $sroa_$iter_1_repr_328 = self_114.repr;
+    $sroa_$pattern_temp_0_1_14_142 = 0;
     b38: block {
         l39: loop {
-            break_if b38 $sroa_$pattern_temp_0_0_13_148 >= $av_593;
-            $array_clone_src_3 = local.tee message_132(builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_1_repr_343, $sroa_$pattern_temp_0_0_13_148)).repr;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(local.tee $sroa_$pattern_temp_0_1_14_149(message_132.used))), 0, $array_clone_src_3, 0, $sroa_$pattern_temp_0_1_14_149);
-            $sroa_$pattern_temp_0_0_13_148 = $sroa_$pattern_temp_0_0_13_148 + 1;
-            $sroa_$pattern_temp_0_0_13_307 = builtin::i32_wrap_i64(local.tee $cm_pair_7_142("wasi/stream-new"()));
-            $sroa_$pattern_temp_0_1_14_308 = builtin::i32_wrap_i64($cm_pair_7_142 >> 32_i64);
-            $sroa_$pattern_temp_0_0_13_307 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_307);
-            builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>($sroa_$pattern_temp_0_1_14_149 + 1)), 0, $array_clone_dst_4, 0, $sroa_$pattern_temp_0_1_14_149);
-            builtin::array_set_u8($array_clone_src_3, $sroa_$pattern_temp_0_1_14_149, 10);
-            drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+            break_if b38 $sroa_$pattern_temp_0_1_14_142 >= $av_587;
+            $array_clone_src_3 = local.tee message_125(builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_1_repr_328, $sroa_$pattern_temp_0_1_14_142)).repr;
+            builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(local.tee self_157(message_125.used))), 0, $array_clone_src_3, 0, self_157);
+            $sroa_$pattern_temp_0_1_14_142 = $sroa_$pattern_temp_0_1_14_142 + 1;
+            $sroa_$pattern_temp_0_0_13_300 = builtin::i32_wrap_i64(local.tee $cm_pair_7_135("wasi/stream-new"()));
+            $sroa_$pattern_temp_0_1_14_301 = builtin::i32_wrap_i64($cm_pair_7_135 >> 32_i64);
+            $sroa_$pattern_temp_0_0_13_300 = "effect_interface_default_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_300);
+            builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>(self_157 + 1)), 0, $array_clone_dst_4, 0, self_157);
+            builtin::array_set_u8($array_clone_src_3, self_157, 10);
+            drop(block -> "core:prelude/async.wado//enum:CopyResult" {
                 if @unlikely(ref.is_null(ref.null eq) == 0) {
                     unreachable;
                 }
-                $sroa_$pattern_temp_0_1_14_149 = $sroa_$pattern_temp_0_1_14_149 + 1;
-                "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_308, $array_clone_src_3, 0, $sroa_$pattern_temp_0_1_14_149);
+                self_157 = self_157 + 1;
+                "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_301, $array_clone_src_3, 0, self_157);
             });
             if ref.is_null(ref.null eq) == 0 {
             } else {
-                "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_308);
+                "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_301);
             }
             if ref.is_null(ref.null eq) == 0 {
             } else {
-                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_307);
+                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_300);
             }
             continue l39;
         };
@@ -514,7 +510,7 @@ fn "effect_interface_default_body.wado/$cm_export__run"() {
 fn "effect_interface_default_body.wado/$initialize_module"() {
     let $mv_repr_1: ref "Array<core:prelude/string.wado/String>";
     let $mv_used_2: i32;
-    multivalue_bind [$mv_repr_1, $mv_used_2] = "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(array.new_fixed<ref "core:prelude/string.wado//String">());
+    multivalue_bind [$mv_repr_1, $mv_used_2] = "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2509>>::from"(array.new_fixed<ref "core:prelude/string.wado//String">());
     global:effect_interface_default_body.wado::LINES = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: $mv_repr_1, used: $mv_used_2 };
 }
 
@@ -527,7 +523,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -639,11 +635,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_5: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
@@ -682,7 +678,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     self.repr = new_repr;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(elements) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2509>>::from"(elements) {
     let used: i32;
     used = builtin::array_len(elements);
     return elements, used;
@@ -697,13 +693,13 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
     let self_2: ref "effect_interface_default_body.wado//Collect";
     let self_4: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let out_14: ref "core:prelude/string.wado//String";
-    let n_319: i32;
-    let new_used_323: i32;
-    let start_324: i32;
-    let $sroa_t_h0_1218: ref "core:prelude/string.wado//String";
+    let n_323: i32;
+    let new_used_327: i32;
+    let start_328: i32;
+    let $sroa_t_h0_1222: ref "core:prelude/string.wado//String";
     self_2 = self.$capture_0;
     self_4 = global:effect_interface_default_body.wado::LINES;
-    $sroa_t_h0_1218 = self_2.tag;
+    $sroa_t_h0_1222 = self_2.tag;
     out_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_13: block {
         break $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_13;
@@ -711,37 +707,37 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
     $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__21: block {
         $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
             $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_319($sroa_t_h0_1218.used) == 0;
-                if @unlikely(local.tee new_used_323(0 + n_319) > builtin::array_len(out_14.repr)) {
+                break_if $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_323($sroa_t_h0_1222.used) == 0;
+                if @unlikely(local.tee new_used_327(0 + n_323) > builtin::array_len(out_14.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, new_used_323);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, new_used_327);
                 }
-                start_324 = out_14.used;
-                out_14.used = new_used_323;
-                builtin::array_copy<u8>(out_14.repr, start_324, $sroa_t_h0_1218.repr, 0, n_319);
+                start_328 = out_14.used;
+                out_14.used = new_used_327;
+                builtin::array_copy<u8>(out_14.repr, start_328, $sroa_t_h0_1222.repr, 0, n_323);
             };
             break $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
         };
         break $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__21;
     };
-    if @unlikely(local.tee n_319(out_14.used + 1) > builtin::array_len(out_14.repr)) {
+    if @unlikely(local.tee n_323(out_14.used + 1) > builtin::array_len(out_14.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, n_319);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, n_323);
     }
-    new_used_323 = out_14.used;
-    out_14.used = n_319;
-    builtin::array_copy<u8>(local.tee $load_12(out_14.repr), new_used_323, global:effect_interface_default_body.wado::$const_obj_3, 0, 1);
+    new_used_327 = out_14.used;
+    out_14.used = n_323;
+    builtin::array_copy<u8>(local.tee $load_12(out_14.repr), new_used_327, global:effect_interface_default_body.wado::$const_obj_3, 0, 1);
     $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__65: block {
         $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2: block {
             $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee new_used_323(message.used) == 0;
-                if @unlikely(local.tee n_319(n_319 + new_used_323) > builtin::array_len($load_12)) {
+                break_if $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee new_used_327(message.used) == 0;
+                if @unlikely(local.tee n_323(n_323 + new_used_327) > builtin::array_len($load_12)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, n_319);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, n_323);
                 }
-                start_324 = out_14.used;
-                out_14.used = n_319;
-                builtin::array_copy<u8>(out_14.repr, start_324, message.repr, 0, new_used_323);
+                start_328 = out_14.used;
+                out_14.used = n_323;
+                builtin::array_copy<u8>(out_14.repr, start_328, message.repr, 0, new_used_327);
             };
             break $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2;
         };
@@ -750,12 +746,12 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
     $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_82: block {
         break $inline_core_prelude_string_wado_String__format_effect_interface_default_body_wado__tmpl_60f2adf5184ddec7__core_prelude_string_wado_String_core_prelude_string_wado_String___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_82;
     };
-    if @unlikely(local.tee n_319(self_4.used) >= builtin::array_len(self_4.repr)) {
+    if @unlikely(local.tee n_323(self_4.used) >= builtin::array_len(self_4.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_4);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self_4.repr, n_319, out_14);
-    self_4.used = n_319 + 1;
+    builtin::array_set<ref "core:prelude/string.wado//String">(self_4.repr, n_323, out_14);
+    self_4.used = n_323 + 1;
 }
 
 fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_2::$call$dae[self]"(level) {
