@@ -363,6 +363,7 @@ pub trait Serializer with () {
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>;
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>;
     fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>;
+
     /// Whether the output is meant to be read by people. Binary formats
     /// override it to false so a value can pick a compact representation.
     fn is_human_readable(&self) -> bool {
@@ -524,6 +525,7 @@ pub trait Visitor with () {
     fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>;
     fn visit_bool(&mut self, v: bool) -> Result<Self::Value, DeserializeError>;
     fn visit_f64(&mut self, v: f64) -> Result<Self::Value, DeserializeError>;
+
     /// Integer visits. Self-describing binary formats (CBOR) call these to
     /// preserve full integer precision; the defaults widen to `f64` so a
     /// visitor that only cares about JSON-style numbers keeps working.
@@ -544,6 +546,7 @@ pub trait Visitor with () {
     }
 
     fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Self::Value, DeserializeError>;
+
     /// Byte-string visit (CBOR major type 2; JSON base64). Defaults to an
     /// `UnexpectedType` error so text-only visitors are unaffected.
     fn visit_bytes(&mut self, _v: ByteList) -> Result<Self::Value, DeserializeError> {
@@ -552,6 +555,7 @@ pub trait Visitor with () {
 
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Self::Value, DeserializeError>;
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Self::Value, DeserializeError>;
+
     /// Opaque passthrough for a format item the value model cannot represent
     /// (e.g. an unassigned CBOR simple value or an uninterpreted tag). Only
     /// self-describing binary formats call this; defaults to an error.
@@ -591,6 +595,7 @@ pub trait Deserializer with () {
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>;
     fn deserialize_char(&mut self) -> Result<char, DeserializeError>;
     fn deserialize_string(&mut self) -> Result<String, DeserializeError>;
+
     /// Deserialize a byte string. Self-describing binary formats read a native
     /// byte string; JSON reads base64. The default reads a sequence of `u8`.
     fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
