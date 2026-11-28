@@ -31,11 +31,14 @@ use {
     reading_then,
 } from "./readings.wado";
 use { alt_is_left_recursive } from "./lr_util.wado";
+use { RuleAttrs, rule_attrs_table } from "./rule_attrs.wado";
 
 /// The structural queries over a grammar's parser rules, with their memo
 /// caches and the token-kind table their answers are spelled in.
 pub struct GrammarAnalysis {
     parser_rules: List<ParserRule>,
+    /// Parallel to `parser_rules`.
+    rule_attrs: List<RuleAttrs>,
     /// Per-rule flag (parallel to `parser_rules`): true when the rule's scan can
     /// re-enter itself at the same input position (`compute_scan_cyclic`). Its
     /// mandatory groups are emitted strict to break that zero-consumption cycle.
@@ -142,6 +145,7 @@ impl GrammarAnalysis {
         let [owner_of, owners] = predicate_fn_owners(parser_rules);
         let mut analysis = GrammarAnalysis {
             parser_rules: *parser_rules,
+            rule_attrs: rule_attrs_table(parser_rules),
             scan_cyclic: compute_scan_cyclic(parser_rules),
             rule_index,
             snake_index,
@@ -179,10 +183,18 @@ impl GrammarAnalysis {
         return kinds;
     }
 
-    /// The parser-rule table (for action attribute resolution, which validates
-    /// cross-rule members against a referenced rule's `returns`).
     pub fn parser_rules(&self) -> &List<ParserRule> {
         return &self.parser_rules;
+    }
+
+    /// Each parser rule as its action bodies see it, by rule index. Attribute
+    /// resolution validates a cross-rule member against the referenced rule's.
+    pub fn rule_attrs(&self) -> &List<RuleAttrs> {
+        return &self.rule_attrs;
+    }
+
+    pub fn find_rule_attrs<S: AsStrSlice>(&self, name: S) -> Option<&RuleAttrs> {
+        return self.rule_index.get_str(name).map(|i| &self.rule_attrs[i]);
     }
 
     pub fn left_edges(&self) -> &Option<RuleLeftEdges> {

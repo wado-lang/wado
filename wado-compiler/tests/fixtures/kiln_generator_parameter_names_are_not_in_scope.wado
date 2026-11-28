@@ -1,0 +1,15 @@
+// The request adapter's parameters are not in the author's scope: `module`
+// names nothing the generator declared, so it is an error rather than the
+// request's module read behind the author's back.
+
+use { total } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/unbound_param_name_generator.wado" },
+    };
+
+test {
+    assert total() > 0;
+}
+
+__DATA__
+{"test": {}, "compile_error": "unbound_param_name_generator.wado:9:80: error: unknown identifier 'module'"}
