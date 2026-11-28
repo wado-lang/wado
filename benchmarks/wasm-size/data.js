@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795871081609,
+  "lastUpdate": 1795872176844,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -83437,6 +83437,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dac02742d0347a41fb61ea8f66e31850b18776f4"
         },
         "date": 1795871080605,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334842,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "874d7500e6fae91dcbee9d84eca68a751dcb2bc6",
+          "message": "Merge pull request #2798 from wado-lang/ccr-5747e13a-3rvu0f\n\nfix(sandbox): hold no host file open while a child confines itself",
+          "timestamp": "2026-11-28T21:59:06+09:00",
+          "tree_id": "9c35f16a1f08eb16a8fbda84ea22135d6aad6ac6",
+          "url": "https://github.com/wado-lang/wado/commit/874d7500e6fae91dcbee9d84eca68a751dcb2bc6"
+        },
+        "date": 1795872176284,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
