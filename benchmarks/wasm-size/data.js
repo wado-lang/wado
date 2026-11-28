@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795855108445,
+  "lastUpdate": 1795856779695,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -83349,6 +83349,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/45ad382fe44916fbdf66fc54abcbb49fb4789f16"
         },
         "date": 1795855107087,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334842,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e9bace24ce334bbfc66404ed85cd0b5a6c8b4f74",
+          "message": "Merge pull request #2793 from wado-lang/ccr-39aa2faf-baabs2\n\nfeat(format): one blank line between declarations, and only doc comments that document something",
+          "timestamp": "2026-11-28T17:45:37+09:00",
+          "tree_id": "ad7b4673117120e0a88fba827066c45585680408",
+          "url": "https://github.com/wado-lang/wado/commit/e9bace24ce334bbfc66404ed85cd0b5a6c8b4f74"
+        },
+        "date": 1795856779272,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
