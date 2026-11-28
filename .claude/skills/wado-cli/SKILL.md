@@ -352,9 +352,11 @@ wado workspace add pkgs/geo           # a package already there joins `members`
 
 The name is the directory's unless `--name` gives one. Under a workspace, the
 package leaves out what `[workspace.package]` sets, and a directory `members`
-misses joins it, one entry per line. A directory git ignores below the
-workspace root stays out, so `scratchpad/` makes a package of its own, which
-needs `--namespace`. One `members` already covers stays a member.
+misses joins it, one entry per line. A directory git ignores stays out, so
+`scratchpad/` makes a package of its own, which needs `--namespace`. Git is
+asked only about the path below the workspace root, so a workspace that itself
+sits in ignored space still takes members, and one `members` already covers
+stays a member.
 
 In this repository a package's directory is `package-<name>`, so pass the name:
 `wado new package-foo --name foo` adds `package-foo` to the root workspace.
