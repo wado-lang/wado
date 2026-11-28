@@ -86,6 +86,13 @@ pub struct Finding {
     pub repro: Option<Repro> = null,
 }
 
+impl Finding {
+    /// The finding in its reviewer's words alone.
+    internal fn told(&self) -> Told {
+        return Told { file: self.file, summary: self.summary, detail: self.detail };
+    }
+}
+
 /// What shows a finding: `git apply` the patch to the reviewed commit and run
 /// the command `run`, a program Run runs and its arguments, and it fails
 /// printing `expect`.
@@ -178,10 +185,7 @@ ${self.diff}
     /// The task with the candidates to confirm after the diff, in the words
     /// their reviewers answered with.
     fn confirming(&self, candidates: &List<Finding>) -> String {
-        let told: List<Told> = candidates
-            .into_iter()
-            .map(|f| Told { file: f.file, summary: f.summary, detail: f.detail })
-            .collect();
+        let told: List<Told> = candidates.into_iter().map(|f| f.told()).collect();
         return `${self.task()}
 
 <candidates>

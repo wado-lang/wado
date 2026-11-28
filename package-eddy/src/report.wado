@@ -116,7 +116,7 @@ fn request(change: &Submission, reviewed: &Reviewed) -> String {
     let mut told: List<Told> = [];
     let mut files: List<String> = [];
     for let f of &reviewed.findings {
-        told.push(Told { file: f.file, summary: f.summary, detail: f.detail });
+        told.push(f.told());
         files.push(f.file);
     }
     let shown = numbered(&change.diff, &files);
