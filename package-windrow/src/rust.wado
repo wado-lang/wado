@@ -1,7 +1,31 @@
 //! Rust, read through Gale's Rust grammar.
 
-use { parse_rust, token_kind_name, RK_OUTER_ATTRIBUTE } from "wado-lang:gale/src/rust.wado";
+use {
+    parse_rust,
+    token_kind_name,
+    RK_OUTER_ATTRIBUTE,
+    RK_STATEMENTS,
+    TK_DOT,
+    TK_PATHSEP,
+    TK_LPAREN,
+    TK_NOT,
+} from "wado-lang:gale/src/rust.wado";
 use { Tree, TokenClass } from "./tree.wado";
+
+/// Whether a name is one a reader resolves outside the code around it, read
+/// off its neighbours since nothing here resolves names: a type or a variant
+/// (capitalized), a field or a method (after `.`), a path segment (beside
+/// `::`), or a function or macro called (before `(` or `!`). What is left is
+/// mostly a local, which a copy is free to rename.
+fn names_outside(source: &String, start: i32, previous: i32, next: i32) -> bool {
+    let first = unchecked source.byte_at(start);
+    return first >= b'A' && first <= b'Z'
+        || previous == TK_DOT
+        || previous == TK_PATHSEP
+        || next == TK_PATHSEP
+        || next == TK_LPAREN
+        || next == TK_NOT;
+}
 
 /// Whether an attribute's text marks test code: `#[test]`, or a `cfg` that
 /// names `test`. A copied test is a fixture's shape, not a defect.
@@ -81,6 +105,9 @@ pub fn read_rust(path: String, source: String) -> Result<Tree, String> {
             _::Open => {
                 let span = cst.span(i);
                 tree.open(cst.kind(i) as i32, span.start, span.end);
+                if cst.kind(i) == RK_STATEMENTS {
+                    tree.mark_sequence();
+                }
             },
             _::Close => tree.close(),
             _::Tok => {
@@ -90,7 +117,15 @@ pub fn read_rust(path: String, source: String) -> Result<Tree, String> {
                     classes.push(class_of(classes.len()));
                 }
                 let span = toks.span_at(t);
-                tree.token(kind, classes[kind], span.start, span.end);
+                let mut class = classes[kind];
+                if class matches { _::Name } {
+                    let previous = if t > 0 { toks.kind_at(t - 1) } else { -1 };
+                    let next = if t + 1 < toks.len() { toks.kind_at(t + 1) } else { -1 };
+                    if names_outside(&tree.source, span.start, previous, next) {
+                        class = TokenClass::Spelled;
+                    }
+                }
+                tree.token(kind, class, span.start, span.end);
             },
             _::Miss => {
             },

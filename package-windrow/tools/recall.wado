@@ -5,13 +5,12 @@
 //! another node: the copy it folded away and the one it kept, or two copies it
 //! folded into a helper. Run it from the repository root.
 
-use { read_rust, find_similar, Tree, Group } from "../src/lib.wado";
+use { read_rust, find_similar, Tree, Group, Site } from "../src/lib.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { cmd, Command, Process } from "core:process";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 
-global MIN_TOKENS: i32 = 40;
 /// A hunk shorter than this deletes a line or two around a fold, not a copy.
 global MIN_DELETED_LINES: i32 = 3;
 
@@ -47,12 +46,12 @@ struct Lines {
     last: i32,
 }
 
-fn lines_of(trees: &List<Tree>, tree: i32, row: i32) -> Lines {
-    let t = &trees[tree];
+fn lines_of(trees: &List<Tree>, site: &Site) -> Lines {
+    let t = &trees[site.tree];
     return Lines {
-        tree,
-        first: t.line_of(t.start[row]),
-        last: t.line_of(t.end[row]),
+        tree: site.tree,
+        first: t.line_of(site.start(trees)),
+        last: t.line_of(site.end(trees)),
     };
 }
 
@@ -73,7 +72,7 @@ fn first_hit(trees: &List<Tree>, groups: &List<Group>, deleted: &List<List<[i32,
     for let g of groups {
         let mut members: List<Lines> = [];
         for let s of &g.sites {
-            members.push(lines_of(trees, s.tree, s.row));
+            members.push(lines_of(trees, s));
         }
         for let a of &members {
             let at = deleted_at(a, deleted);
@@ -97,8 +96,9 @@ fn first_hit(trees: &List<Tree>, groups: &List<Group>, deleted: &List<List<[i32,
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
     let argv = args();
-    assert argv.len() == 2 && argv[0] == "--commits", "usage: recall --commits <file>";
+    assert argv.len() == 4 && argv[0] == "--commits" && argv[2] == "--min-tokens", "usage: recall --commits <file> --min-tokens <n>";
     let list = fs::read_to_string(&argv[1]).expect("the commit list must be readable");
+    let min_tokens = i32::from_str(&argv[3]).expect("--min-tokens takes a number");
     let sims: List<f64> = [0.7, 0.8, 0.9];
     let mut hits: List<i32> = [0, 0, 0];
     let mut evaluated = 0;
@@ -131,7 +131,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
         evaluated += 1;
         let mut line = sha;
         for let k of 0..<3 {
-            match first_hit(&trees, &find_similar(&trees, MIN_TOKENS, sims[k]), &deleted) {
+            match first_hit(&trees, &find_similar(&trees, min_tokens, sims[k]), &deleted) {
                 Some(text) => {
                     hits[k] += 1;
                     line.push_str(`\thit@${sims[k]} ${text}`);

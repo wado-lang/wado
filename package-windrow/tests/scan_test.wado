@@ -17,14 +17,14 @@ global COPY_A: String = "fn total(items: &[Item]) -> i64 {
     sum
 }";
 
-global COPY_B: String = "fn weighed(rows: &[Row]) -> i64 {
+global COPY_B: String = "fn weighed(rows: &[Item]) -> i64 {
     let mut acc = 0;
     for row in rows {
-        if row.enabled && row.mass > 7 {
-            acc += row.mass * row.n;
+        if row.active && row.weight > 7 {
+            acc += row.weight * row.count;
         }
-        if row.marked {
-            acc -= row.fine;
+        if row.flagged {
+            acc -= row.penalty;
         }
     }
     acc
@@ -64,7 +64,7 @@ test "a group is reported at the largest node that is alike" {
 }
 
 test "a changed operator lowers the similarity below one" {
-    let changed = COPY_B.replace("row.mass * row.n", "row.mass + row.n");
+    let changed = COPY_B.replace("row.weight * row.count", "row.weight + row.count");
     let trees: List<Tree> = [
         tree("a.rs", COPY_A),
         tree("b.rs", changed),
@@ -80,11 +80,11 @@ test "a group's inner nodes join no other group together" {
     log.start(\"other\", 1, 2, 3);
     let mut acc = 0;
     for x in xs {
-        if x.on && x.w > 1 {
-            acc += x.w * x.c;
+        if x.active && x.weight > 1 {
+            acc += x.weight * x.count;
         }
-        if x.bad {
-            acc -= x.p;
+        if x.flagged {
+            acc -= x.penalty;
         }
     }
     log.finish(acc, \"done\");
@@ -116,6 +116,40 @@ test "a node repeating one small shape is not compared" {
         tree("b.rs", b),
     ];
     assert find_similar(&trees, 30, 0.5).is_empty();
+}
+
+test "a run of statements in a longer block is compared" {
+    let a = "fn f(p: &P, c: &C) -> G {
+    let n = p.width() * 2;
+    log(n);
+    let mut gen = TypeGen::with_hint(&p.path);
+    register_outer_codes(&mut gen, p, c);
+    gen.finish(n)
+}";
+    let b = "fn g(q: &P, d: &C, e: &E) -> G {
+    if e.ready { return G::empty(); }
+    let mut tg = TypeGen::with_hint(&q.path);
+    register_outer_codes(&mut tg, q, d);
+    tg.finish(e.size)
+}";
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    let groups = find_similar(&trees, 20, 0.6);
+    assert groups.len() >= 1;
+    let site = groups[0].sites[0];
+    assert trees[0].line_of(site.start(&trees)) >= 4;
+}
+
+test "names that resolve elsewhere keep their spelling" {
+    let a = "fn f(xs: &[X]) -> i64 { let mut s = 0; for x in xs { s += x.weight.total() * compute_rank(x.id); } s }";
+    let b = "fn g(ys: &[Y]) -> i64 { let mut t = 0; for y in ys { t += y.height.mean() * derive_order(y.key); } t }";
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    assert find_similar(&trees, 20, 0.9).is_empty();
 }
 
 test "test code is not compared" {

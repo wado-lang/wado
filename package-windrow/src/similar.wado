@@ -26,10 +26,23 @@ global MIN_DISTINCT: f64 = 0.5;
 /// whose `&` and `&mut` twins drift apart when one is edited, holds about 180.
 global RICH_RUNS: f64 = 128.0;
 
-/// A node: the tree it is in, by index into the scanned list, and its row.
+/// What is compared: a node, or a run of the children of a sequence node. It
+/// is in the tree at `tree`, an index into the scanned list, and spans the
+/// rows from `row` to `last`'s close; `last == row` for a node.
 pub struct Site {
     pub tree: i32,
     pub row: i32,
+    pub last: i32,
+}
+
+impl Site {
+    pub fn start(&self, trees: &List<Tree>) -> i32 {
+        return trees[self.tree].start[self.row];
+    }
+
+    pub fn end(&self, trees: &List<Tree>) -> i32 {
+        return trees[self.tree].end[self.last];
+    }
 }
 
 /// Nodes alike: the largest spans `tokens` tokens, and every pair the group
@@ -53,6 +66,17 @@ fn run_hash(word: &List<u64>, at: i32) -> u64 {
         h = (h ^ word[i]) * 1099511628211;
     }
     return splitmix(h);
+}
+
+/// Takes the run at token `at` into a signature.
+fn take_run(signature: &mut List<u64>, seeds: &List<u64>, word: &List<u64>, at: i32) {
+    let h = run_hash(word, at);
+    for let mut j = 0; j < H; j += 1 {
+        let v = (h ^ seeds[j]) * 0xD6E8_FEB8_6659_FD93;
+        if v < signature[j] {
+            signature[j] = v;
+        }
+    }
 }
 
 /// The nodes compared, across every tree: each one at least `min_tokens`
@@ -100,18 +124,12 @@ fn gather(units: &mut Units, seeds: &List<u64>, t: i32, tree: &Tree, s: &Shapes,
                 next_inner += 1;
                 continue;
             }
-            let h = run_hash(&s.word, at);
-            for let mut j = 0; j < H; j += 1 {
-                let v = (h ^ seeds[j]) * 0xD6E8_FEB8_6659_FD93;
-                if v < frame.signature[j] {
-                    frame.signature[j] = v;
-                }
-            }
+            take_run(&mut frame.signature, seeds, &s.word, at);
             at += 1;
         }
         let spans_more = frames.is_empty() || s.tokens[frames[frames.len() - 1].row] > s.tokens[frame.row];
         if spans_more {
-            units.site.push(Site { tree: t, row: frame.row });
+            units.site.push(Site { tree: t, row: frame.row, last: frame.row });
             units.tokens.push(s.tokens[frame.row]);
             units.parent.push(-1);
             for let v of &frame.signature {
@@ -136,6 +154,57 @@ fn gather(units: &mut Units, seeds: &List<u64>, t: i32, tree: &Tree, s: &Shapes,
                 }
             }
             frames[top].inner.push([start, end]);
+        }
+    }
+}
+
+/// Each shortest run of a sequence's children, two or more, spanning at
+/// least `min_tokens`: a copy is often a few statements of a longer block,
+/// which no single node holds. Each run is enclosed by the nearest unit
+/// enclosing its sequence. `first_unit` is the first unit `gather` made for
+/// this tree.
+fn gather_runs(units: &mut Units, seeds: &List<u64>, t: i32, tree: &Tree, s: &Shapes, min_tokens: i32, first_unit: i32) {
+    let mut unit_of_row: List<i32> = List::filled(tree.len(), -1);
+    for let mut u = first_unit; u < units.tokens.len(); u += 1 {
+        unit_of_row[units.site[u].row] = u;
+    }
+    let mut children: List<List<i32>> = List::filled(tree.len(), []);
+    for let mut i = 0; i < tree.len(); i += 1 {
+        let p = s.parent[i];
+        if tree.row[i] matches { _::Open } && p >= 0 && tree.sequence[p] {
+            children[p].push(i);
+        }
+    }
+    for let mut p = 0; p < tree.len(); p += 1 {
+        if !tree.sequence[p] {
+            continue;
+        }
+        let mut enclosing = p;
+        while enclosing >= 0 && unit_of_row[enclosing] < 0 {
+            enclosing = s.parent[enclosing];
+        }
+        let parent = if enclosing >= 0 { unit_of_row[enclosing] } else { -1 };
+        let kids = &children[p];
+        for let mut i = 0; i < kids.len(); i += 1 {
+            let start = s.first[kids[i]];
+            let mut j = i;
+            while j + 1 < kids.len() && s.first[kids[j]] + s.tokens[kids[j]] - start < min_tokens {
+                j += 1;
+            }
+            let end = s.first[kids[j]] + s.tokens[kids[j]];
+            if j == i || end - start < min_tokens {
+                continue;
+            }
+            let mut signature: List<u64> = List::filled(H, EMPTY);
+            for let mut at = start; at + K <= end; at += 1 {
+                take_run(&mut signature, seeds, &s.word, at);
+            }
+            units.site.push(Site { tree: t, row: kids[i], last: kids[j] });
+            units.tokens.push(end - start);
+            units.parent.push(parent);
+            for let v of &signature {
+                units.signature.push(*v);
+            }
         }
     }
 }
@@ -165,13 +234,11 @@ fn estimate(units: &Units, a: i32, b: i32) -> f64 {
 }
 
 fn overlaps(trees: &List<Tree>, units: &Units, a: i32, b: i32) -> bool {
-    let x = units.site[a];
-    let y = units.site[b];
-    if x.tree != y.tree {
-        return false;
-    }
-    let tree = &trees[x.tree];
-    return tree.start[x.row] < tree.end[y.row] && tree.start[y.row] < tree.end[x.row];
+    return sites_overlap(trees, &units.site[a], &units.site[b]);
+}
+
+fn sites_overlap(trees: &List<Tree>, x: &Site, y: &Site) -> bool {
+    return x.tree == y.tree && x.start(trees) < y.end(trees) && y.start(trees) < x.end(trees);
 }
 
 /// The unit and every unit enclosing it.
@@ -192,7 +259,9 @@ pub fn find_similar(trees: &List<Tree>, min_tokens: i32, similarity: f64) -> Lis
     let mut units = Units { site: [], tokens: [], parent: [], signature: [] };
     for let mut t = 0; t < trees.len(); t += 1 {
         let s = shapes(&trees[t]);
+        let first_unit = units.tokens.len();
         gather(&mut units, &seeds, t, &trees[t], &s, min_tokens);
+        gather_runs(&mut units, &seeds, t, &trees[t], &s, min_tokens, first_unit);
     }
 
     let mut buckets = HashMap::<u64, List<i32>>::new();
@@ -330,7 +399,24 @@ fn join(
         groups.push(group);
     }
     groups.sort_by(|a, b| weight(b).cmp(&weight(a)));
-    return groups;
+    // Runs of one sequence overlap, so one copy is found as several groups of
+    // runs. A group whose every member overlaps a heavier group's says nothing
+    // that group does not.
+    let mut kept: List<Group> = [];
+    for let group of &groups {
+        let mut new_somewhere = false;
+        for let x of &group.sites {
+            let mut covered = false;
+            for let k of &kept {
+                covered = covered || k.sites.iter_ref().any(|y| sites_overlap(trees, x, y));
+            }
+            new_somewhere = new_somewhere || !covered;
+        }
+        if new_somewhere {
+            kept.push(*group);
+        }
+    }
+    return kept;
 }
 
 /// The tokens a group's copies repeat.

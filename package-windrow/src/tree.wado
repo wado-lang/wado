@@ -2,11 +2,13 @@
 //! sorted into what its shape keeps of it. A language adapter builds one from
 //! its parser's result; nothing after that knows which grammar it came from.
 
-/// What a token's shape keeps of it. A name and a literal stand for any other
-/// of their class, so two copies that renamed a variable or changed a constant
-/// keep one shape.
+/// What a token's shape keeps of it. A local name and a literal stand for any
+/// other of their class, so two copies that renamed a variable or changed a
+/// constant keep one shape. A `Spelled` name is kept as written: what it names
+/// (a function, a field, a type) is what two copies of one logic share.
 pub enum TokenClass {
     Name,
+    Spelled,
     Literal,
     Fixed,
 }
@@ -19,7 +21,9 @@ pub enum Row {
 
 /// One file's tree, as parallel columns over its rows. `kind` is the node kind
 /// of an `Open` row and the token kind of a `Token` row; `start` is a byte
-/// offset into the file.
+/// offset into the file. `sequence` marks a node whose children are a
+/// sequence, such as a block's statements, where a run of them is compared
+/// as well as each one.
 pub struct Tree {
     pub path: String,
     pub source: String,
@@ -28,11 +32,19 @@ pub struct Tree {
     pub class: List<TokenClass> = [],
     pub start: List<i32> = [],
     pub end: List<i32> = [],
+    pub sequence: List<bool> = [],
 }
 
 impl Tree {
     pub fn open(&mut self, kind: i32, start: i32, end: i32) {
         self.push(Row::Open, kind, TokenClass::Fixed, start, end);
+    }
+
+    /// Marks the node opened last as a sequence.
+    pub fn mark_sequence(&mut self) {
+        let last = self.row.len() - 1;
+        assert self.row[last] matches { _::Open }, "only a node opened last is marked";
+        self.sequence[last] = true;
     }
 
     pub fn close(&mut self) {
@@ -49,6 +61,7 @@ impl Tree {
         self.class.push(class);
         self.start.push(start);
         self.end.push(end);
+        self.sequence.push(false);
     }
 
     pub fn len(&self) -> i32 {
