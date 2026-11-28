@@ -191,9 +191,9 @@ impl Document {
     /// nothing of its own, and taken back once answered. A use the file already
     /// makes would not do: a block's own `use` outranks the top level.
     ///
-    /// Where a name is a type, a value and a macro is no guide to which one
-    /// the server answers with: a name the item namespaces lack resolves to a
-    /// macro of that name. The hover's signature says what each answer is.
+    /// A probe's position does not pick the namespace of its answer: where no
+    /// item has the name, the server resolves it to a macro of that name. The
+    /// hover's signature says what each answer is.
     fn top_level_meaning(&self, client: &mut Client, name: &str) -> Result<Namespaces, String> {
         let separator = if self.text.ends_with('\n') { "" } else { "\n" };
         let probe = format!("fn rust_move_probe() {{ let _: {name}; {name}; {name}!(); }}\n");
@@ -209,27 +209,25 @@ impl Document {
                 },
             }),
         );
-        let mut meaning = Namespaces::default();
-        let mut answer = Ok(());
-        for (column, _) in identifiers(&probe).into_iter().filter(|(_, w)| *w == name) {
-            let at = Position { line, column };
-            let found = self.definitions(client, at).and_then(|found| {
+        let mut ask = || {
+            let mut meaning = Namespaces::default();
+            for (column, _) in identifiers(&probe).into_iter().filter(|(_, w)| *w == name) {
+                let at = Position { line, column };
+                let found = self.definitions(client, at)?;
                 let hover = client.request(
                     "textDocument/hover",
                     json!({ "textDocument": { "uri": self.uri }, "position": at.to_lsp() }),
                 )?;
-                Ok((found, declares_macro(&hover)))
-            });
-            match found {
-                Ok((found, is_macro)) => meaning[usize::from(is_macro)].extend(found),
-                Err(e) => answer = Err(e),
+                meaning[usize::from(declares_macro(&hover))].extend(found);
             }
-        }
+            Ok(meaning)
+        };
+        let meaning = ask();
         client.notify(
             "textDocument/didClose",
             &json!({ "textDocument": { "uri": self.uri } }),
         );
-        answer.map(|()| meaning)
+        meaning
     }
 
     /// What `binding` of one of its `use` items imports.
@@ -250,11 +248,14 @@ type Meaning = BTreeSet<(String, usize, usize)>;
 /// What a name means as an item (a type or a value), and as a macro.
 type Namespaces = [Meaning; 2];
 
-/// Whether a hover the server answered names a macro: its signature, the
-/// paragraph after the path, is a `macro_rules!` or a `macro`.
+/// Whether a hover names a macro: its signature, the paragraph after the
+/// path, is a `macro_rules!` or a `macro`. A name that resolves to nothing
+/// has no hover.
 fn declares_macro(hover: &Value) -> bool {
-    let text = hover["contents"]["value"].as_str().unwrap_or_default();
-    text.split("\n\n").nth(1).is_some_and(|signature| {
+    let signature = hover["contents"]["value"]
+        .as_str()
+        .and_then(|text| text.split("\n\n").nth(1));
+    signature.is_some_and(|signature| {
         signature
             .split_whitespace()
             .any(|word| word == "macro" || word == "macro_rules!")
