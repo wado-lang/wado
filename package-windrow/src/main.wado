@@ -1,13 +1,18 @@
-//! `windrow [--min-tokens N] [--similarity S] <path>…`: every `.rs` file under
-//! the paths, and the groups of nodes alike among them, largest first.
+//! `windrow [--min-tokens N] [--similarity S] <path>…`: every `.rs` and `.wado`
+//! file under the paths, and the groups of nodes alike among them, largest
+//! first.
 
-use { read_rust, find_similar, Tree } from "./lib.wado";
+use { read_source, find_similar, Tree } from "./lib.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 
-fn rust_files(root: &String) -> List<String> with (Stderr, Preopens) {
-    if root.ends_with(".rs") {
+fn is_source(path: &String) -> bool {
+    return path.ends_with(".rs") || path.ends_with(".wado");
+}
+
+fn source_files(root: &String) -> List<String> with (Stderr, Preopens) {
+    if is_source(root) {
         return [*root];
     }
     let mut out: List<String> = [];
@@ -21,7 +26,7 @@ fn rust_files(root: &String) -> List<String> with (Stderr, Preopens) {
     for let found of walk {
         match found {
             Ok(entry) => {
-                if entry.path.ends_with(".rs") {
+                if is_source(&entry.path) {
                     out.push(entry.path);
                 }
             },
@@ -51,7 +56,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
     assert !roots.is_empty(), "name the paths to scan";
     let mut trees: List<Tree> = [];
     for let root of &roots {
-        for let path of rust_files(root) {
+        for let path of source_files(root) {
             let source = match fs::read_to_string(&path) {
                 Ok(s) => s,
                 Err(e) => {
@@ -59,7 +64,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
                     continue;
                 },
             };
-            match read_rust(path, source) {
+            match read_source(path, source) {
                 Ok(tree) => trees.push(tree),
                 Err(message) => eprintln(`skipped ${path}: ${message}`),
             }

@@ -15,14 +15,21 @@ pub struct Shapes {
     pub word: List<u64>,
 }
 
+global SPELLED: u64 = 1 << 63;
+
 fn word_of(tree: &Tree, row: i32) -> u64 {
     let kind = tree.kind[row] as u32 as u64;
     return match tree.class[row] {
         _::Name => 1 << 32,
         _::Literal => 2 << 32 | kind,
         _::Fixed => 3 << 32 | kind,
-        _::Spelled => spelling_hash(&tree.source, tree.start[row], tree.end[row]) | 1 << 63,
+        _::Spelled => spelling_hash(&tree.source, tree.start[row], tree.end[row]) | SPELLED,
     };
+}
+
+/// Whether a word keeps its token's spelling.
+pub fn is_spelled(word: u64) -> bool {
+    return word & SPELLED != 0;
 }
 
 fn spelling_hash(source: &String, start: i32, end: i32) -> u64 {

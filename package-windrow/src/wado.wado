@@ -1,0 +1,76 @@
+//! Wado, read through `wado-lang:wado`'s grammar.
+
+use {
+    parse,
+    token_kind_name,
+    RK_BLOCK,
+    RK_TEST_DECL,
+    TK_LIT_DOT,
+    TK_LIT_COLONCOLON,
+    TK_LPAREN,
+    TK_LIT_fn,
+} from "wado-lang:wado";
+use { Tree, TokenClass } from "./tree.wado";
+use { Language, TestMark, classify } from "./language.wado";
+
+fn class_of(kind: i32) -> TokenClass {
+    let name = token_kind_name(kind);
+    if name == "IDENTIFIER" {
+        return TokenClass::Name;
+    }
+    let literal = name.ends_with("_LITERAL")
+        || name.ends_with("_TEXT")
+        || name == "INTEGER"
+        || name == "FLOAT"
+        || name == "FLOAT_EXP";
+    if literal {
+        return TokenClass::Literal;
+    }
+    return TokenClass::Fixed;
+}
+
+fn marks_test(kind: i32, _text: String) -> TestMark {
+    if kind == RK_TEST_DECL as i32 {
+        return TestMark::Itself;
+    }
+    return TestMark::None;
+}
+
+/// The tree of a Wado file, or the first syntax error.
+pub fn read_wado(path: String, source: String) -> Result<Tree, String> {
+    let result = parse(&source);
+    if result.diagnostics.len() > 0 {
+        return Result::Err(`${result.diagnostics[0].message}`);
+    }
+    let cst = &result.cst;
+    let toks = &result.tokens;
+    let mut raw = Tree { path, source };
+    for let mut i = 0; i < cst.row_count(); i += 1 {
+        match cst.tag[i] {
+            _::Open => {
+                let span = cst.span(i);
+                raw.open(cst.kind(i) as i32, span.start, span.end);
+            },
+            _::Close => raw.close(),
+            _::Tok => {
+                let t = cst.token_index(i);
+                let span = toks.span_at(t);
+                raw.token(toks.kind_at(t), TokenClass::Fixed, span.start, span.end);
+            },
+            _::Miss => {
+            },
+            _::Skip => {
+            },
+        }
+    }
+    let wado = Language {
+        class_of,
+        marks_test,
+        sequence: RK_BLOCK as i32,
+        declares: TK_LIT_fn,
+        member: TK_LIT_DOT,
+        path: TK_LIT_COLONCOLON,
+        calls: [TK_LPAREN],
+    };
+    return Result::Ok(classify(&raw, &wado));
+}

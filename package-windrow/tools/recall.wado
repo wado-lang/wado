@@ -1,11 +1,12 @@
 //! How many past deduplications Windrow would have found. For each commit in
 //! the list (`--commits <file>`, one sha first on each line), it reads the
-//! parent's version of every `.rs` file the commit changed and reports, at
+//! parent's version of every `.rs` and `.wado` file the commit changed and
+//! reports, at
 //! each similarity, whether a group joins a node the commit deleted lines of to
 //! another node: the copy it folded away and the one it kept, or two copies it
 //! folded into a helper. Run it from the repository root.
 
-use { read_rust, find_similar, Tree, Group, Site } from "../src/lib.wado";
+use { read_source, find_similar, Tree, Group, Site, Measure } from "../src/lib.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { cmd, Command, Process } from "core:process";
 use fs from "core:fs";
@@ -96,9 +97,29 @@ fn first_hit(trees: &List<Tree>, groups: &List<Group>, deleted: &List<List<[i32,
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
     let argv = args();
-    assert argv.len() == 4 && argv[0] == "--commits" && argv[2] == "--min-tokens", "usage: recall --commits <file> --min-tokens <n>";
-    let list = fs::read_to_string(&argv[1]).expect("the commit list must be readable");
-    let min_tokens = i32::from_str(&argv[3]).expect("--min-tokens takes a number");
+    let mut commits = "";
+    let mut min_tokens = 40;
+    let mut measure = Measure::ShapeOrNames;
+    let mut files: List<String> = ["*.rs", "*.wado"];
+    for let mut i = 0; i < argv.len(); i += 1 {
+        if argv[i] == "--commits" {
+            i += 1;
+            commits = argv[i];
+        } else if argv[i] == "--min-tokens" {
+            i += 1;
+            min_tokens = i32::from_str(&argv[i]).expect("--min-tokens takes a number");
+        } else if argv[i] == "--shape-only" {
+            measure = Measure::Shape;
+        } else if argv[i] == "--files" {
+            i += 1;
+            files = argv[i].split(",").map(|f| f.to_string()).collect();
+        } else {
+            panic(
+                `usage: recall --commits <file> [--min-tokens <n>] [--shape-only] [--files <glob,…>]; not ${argv[i]}`,
+            );
+        }
+    }
+    let list = fs::read_to_string(&commits).expect("the commit list must be readable");
     let sims: List<f64> = [0.7, 0.8, 0.9];
     let mut hits: List<i32> = [0, 0, 0];
     let mut evaluated = 0;
@@ -113,10 +134,10 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
         let parent = git_text(cmd`git rev-parse ${sha}^`).trim().to_string();
         let mut trees: List<Tree> = [];
         let mut deleted: List<List<[i32, i32]>> = [];
-        for let file of git_text(cmd`git diff --name-only --diff-filter=M ${parent} ${sha} -- ${"*.rs"}`).lines() {
+        for let file of git_text(cmd`git diff --name-only --diff-filter=M ${parent} ${sha} -- ${files}`).lines() {
             let file = file.to_string();
             let source = git_text(cmd`git show ${parent}:${file}`);
-            match read_rust(file, source) {
+            match read_source(file, source) {
                 Ok(tree) => {
                     trees.push(tree);
                     deleted.push(deleted_ranges(&parent, &sha, &file));
@@ -131,7 +152,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
         evaluated += 1;
         let mut line = sha;
         for let k of 0..<3 {
-            match first_hit(&trees, &find_similar(&trees, min_tokens, sims[k]), &deleted) {
+            match first_hit(&trees, &find_similar(&trees, min_tokens, sims[k], measure), &deleted) {
                 Some(text) => {
                     hits[k] += 1;
                     line.push_str(`\thit@${sims[k]} ${text}`);

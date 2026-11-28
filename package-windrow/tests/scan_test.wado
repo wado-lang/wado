@@ -1,4 +1,4 @@
-use { read_rust, find_similar, Tree } from "../src/lib.wado";
+use { read_rust, read_wado, find_similar, Tree, Measure } from "../src/lib.wado";
 
 fn tree(path: String, source: String) -> Tree {
     return read_rust(path, source).unwrap();
@@ -69,8 +69,8 @@ test "a changed operator lowers the similarity below one" {
         tree("a.rs", COPY_A),
         tree("b.rs", changed),
     ];
-    assert find_similar(&trees, 40, 1.0).is_empty();
-    let groups = find_similar(&trees, 40, 0.6);
+    assert find_similar(&trees, 40, 1.0, Measure::Shape).is_empty();
+    let groups = find_similar(&trees, 40, 0.6, Measure::Shape);
     assert groups.len() == 1;
     assert groups[0].similarity < 1.0;
 }
@@ -150,6 +150,66 @@ test "names that resolve elsewhere keep their spelling" {
         tree("b.rs", b),
     ];
     assert find_similar(&trees, 20, 0.9).is_empty();
+}
+
+test "one logic in two syntaxes is alike by the names it calls" {
+    let a = "fn f(xs: &[Entry], table: &mut Table) {
+    for x in xs {
+        if x.is_visible() && x.has_owner() {
+            table.insert_row(x.key_name(), x.render_cell(), Style::plain());
+        }
+    }
+}";
+    let b = "fn g(ys: &[Entry], t: &mut Table) {
+    ys.iter().filter(|y| y.is_visible() && y.has_owner()).for_each(|y| t.insert_row(y.key_name(), y.render_cell(), Style::plain()));
+}";
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    let groups = find_similar(&trees, 20, 0.65);
+    assert groups.len() == 1;
+    assert groups[0].sites.iter_ref().all(|s| s.start(&trees) == 0);
+    assert find_similar(&trees, 20, 0.65, Measure::Shape).iter_ref().all(|g| g.sites[0].start(&trees) > 0);
+}
+
+test "wado code is compared, its test blocks left out" {
+    let a = "fn total(items: &List<Item>) -> i64 {
+    let mut sum = 0;
+    for let item of items {
+        if item.active && item.weight > 3 {
+            sum += item.weight * item.count;
+        }
+    }
+    return sum;
+}";
+    let b = "fn weighed(rows: &List<Item>) -> i64 {
+    let mut acc = 0;
+    for let row of rows {
+        if row.active && row.weight > 7 {
+            acc += row.weight * row.count;
+        }
+    }
+    return acc;
+}";
+    let trees: List<Tree> = [
+        read_wado("a.wado", a).unwrap(),
+        read_wado("b.wado", b).unwrap(),
+        read_wado("c.wado", "test {
+    let mut acc = 0;
+    for let row of rows {
+        if row.active && row.weight > 7 {
+            acc += row.weight * row.count;
+        }
+    }
+    assert acc == 0;
+}").unwrap(),
+    ];
+    let groups = find_similar(&trees, 20, 1.0);
+    assert groups.len() == 1;
+    assert groups[0].sites.iter_ref().all(|s| s.tree < 2);
+    let without_b: List<Tree> = [trees[0], trees[2]];
+    assert find_similar(&without_b, 20, 0.8).is_empty();
 }
 
 test "test code is not compared" {

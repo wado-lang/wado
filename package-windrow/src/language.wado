@@ -1,0 +1,124 @@
+//! What a language adapter tells the rest about its grammar, and the sorting
+//! of a tree's tokens that follows from it.
+
+use { Tree, TokenClass } from "./tree.wado";
+
+/// Which node an attribute or a declaration marks as test code.
+pub enum TestMark {
+    None,
+    Itself,
+    Parent,
+}
+
+/// A grammar's kinds, as the sorting reads them. `class_of` gives a token
+/// kind's class, `Spelled` aside. `marks_test` says, for a node's kind and
+/// text, which node it marks as test code: a fixture repeats its shape on
+/// purpose. `sequence` is the node kind whose children are statements.
+/// `declares` is the keyword before a function's name, `member` and `path` the
+/// tokens beside a name that resolves elsewhere, and `calls` those after a
+/// name called.
+pub struct Language {
+    pub class_of: fn(i32) -> TokenClass,
+    pub marks_test: fn(i32, String) -> TestMark,
+    pub sequence: i32,
+    pub declares: i32,
+    pub member: i32,
+    pub path: i32,
+    pub calls: List<i32>,
+}
+
+impl Language {
+    /// Whether a name is one a reader resolves outside the code around it,
+    /// read off its neighbours since nothing here resolves names: a type or a
+    /// variant (capitalized), a field or a method (after `member`), a path
+    /// segment (beside `path`), or a function called (before one of `calls`).
+    /// What is left is mostly a local, which a copy is free to rename, and so
+    /// is the name a function declares: a copy takes a new one.
+    fn spells(&self, source: &String, start: i32, previous: i32, next: i32) -> bool {
+        let first = unchecked source.byte_at(start);
+        return previous != self.declares
+            && (first >= b'A' && first <= b'Z'
+                || previous == self.member
+                || previous == self.path
+                || next == self.path
+                || self.calls.contains(&next));
+    }
+}
+
+/// `raw`, a parser's tree copied with every token `Fixed`, with each token
+/// sorted into its class, each sequence node marked, and test code left out.
+pub fn classify(raw: &Tree, lang: &Language) -> Tree {
+    let n = raw.len();
+    let mut test_code: List<bool> = List::filled(n, false);
+    let mut token_kinds: List<i32> = [];
+    let mut open: List<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        match raw.row[i] {
+            _::Open => {
+                let text = raw.source.slice(raw.start[i], raw.end[i]).to_string();
+                match (lang.marks_test)(raw.kind[i], text) {
+                    _::None => {
+                    },
+                    _::Itself => test_code[i] = true,
+                    _::Parent => test_code[open[open.len() - 1]] = true,
+                }
+                open.push(i);
+            },
+            _::Close => {
+                open.pop();
+            },
+            _::Token => token_kinds.push(raw.kind[i]),
+        }
+    }
+    let mut tree = Tree { path: raw.path, source: raw.source };
+    let mut depth = 0;
+    let mut skip_until = -1;
+    let mut token = -1;
+    let mut classes: List<TokenClass> = [];
+    for let mut i = 0; i < n; i += 1 {
+        let row = raw.row[i];
+        if row matches { _::Open } {
+            depth += 1;
+            if skip_until < 0 && test_code[i] {
+                skip_until = depth;
+            }
+        }
+        if row matches { _::Token } {
+            token += 1;
+        }
+        let skipping = skip_until >= 0;
+        if row matches { _::Close } {
+            if skip_until == depth {
+                skip_until = -1;
+            }
+            depth -= 1;
+        }
+        if skipping {
+            continue;
+        }
+        match row {
+            _::Open => {
+                tree.open(raw.kind[i], raw.start[i], raw.end[i]);
+                if raw.kind[i] == lang.sequence {
+                    tree.mark_sequence();
+                }
+            },
+            _::Close => tree.close(),
+            _::Token => {
+                while classes.len() <= raw.kind[i] {
+                    classes.push((lang.class_of)(classes.len()));
+                }
+                let mut class = classes[raw.kind[i]];
+                if class matches { _::Name } {
+                    let previous = if token > 0 { token_kinds[token - 1] } else { -1 };
+                    let next = if token + 1 < token_kinds.len() { token_kinds[token + 1] } else { -1 };
+                    if lang.spells(&tree.source, raw.start[i], previous, next) {
+                        class = TokenClass::Spelled;
+                    }
+                }
+                tree.token(raw.kind[i], class, raw.start[i], raw.end[i]);
+            },
+        }
+    }
+    return tree;
+}
