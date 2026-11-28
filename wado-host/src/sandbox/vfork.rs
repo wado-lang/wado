@@ -22,13 +22,29 @@ const SHELL: &CStr = c"/bin/sh";
 /// its own, and return its pid once it has called `exec` or exited. What
 /// `child` returns is the status the process exits with.
 ///
+/// The process starts with a copy of every descriptor the host holds, and
+/// closes all but the standard streams and `keep` before anything else. A file
+/// another thread of the host has open for writing is then held open only for
+/// that instant, rather than while `child` confines itself, which narrows the
+/// window in which that thread's `exec` of the file fails with `ETXTBSY`.
+///
 /// # Safety
 ///
 /// `child` runs beside the host's other threads in their memory, so it must
 /// make only system calls on memory built before the call: it takes no lock,
 /// allocates nothing and does not panic.
-pub(super) unsafe fn spawn(mut child: impl FnMut() -> libc::c_int) -> io::Result<libc::pid_t> {
-    let mut child: &mut dyn FnMut() -> libc::c_int = &mut child;
+pub(super) unsafe fn spawn(
+    keep: &[RawFd],
+    mut child: impl FnMut() -> libc::c_int,
+) -> io::Result<libc::pid_t> {
+    assert!(
+        keep.is_sorted_by(|a, b| a < b) && keep.first().is_none_or(|&fd| fd > libc::STDERR_FILENO),
+        "kept descriptors must ascend past the standard streams: {keep:?}"
+    );
+    let mut entry = Entry {
+        keep,
+        child: &mut child,
+    };
     let stack = Stack::new()?;
     // SAFETY: plain calls on signal sets that live on this stack.
     let old = unsafe {
@@ -40,14 +56,14 @@ pub(super) unsafe fn spawn(mut child: impl FnMut() -> libc::c_int) -> io::Result
         libc::pthread_sigmask(libc::SIG_SETMASK, &raw const all, &raw mut old);
         old
     };
-    // SAFETY: `enter` reads `child` through the pointer while this frame
+    // SAFETY: `enter` reads `entry` through the pointer while this frame
     // waits, `CLONE_VFORK` holding it until the child is done with the memory.
     let pid = unsafe {
         libc::clone(
             enter,
             stack.top(),
             libc::CLONE_VM | libc::CLONE_VFORK | libc::SIGCHLD,
-            (&raw mut child).cast::<c_void>(),
+            (&raw mut entry).cast::<c_void>(),
         )
     };
     let cloned = if pid == -1 {
@@ -60,12 +76,39 @@ pub(super) unsafe fn spawn(mut child: impl FnMut() -> libc::c_int) -> io::Result
     cloned
 }
 
-extern "C" fn enter(child: *mut c_void) -> libc::c_int {
-    // SAFETY: `spawn` passes a pointer to its `&mut dyn FnMut`, which it keeps
-    // alive and does not touch until this process is done with it.
-    let child = unsafe { &mut *child.cast::<&mut dyn FnMut() -> libc::c_int>() };
+/// What [`spawn`] hands the new process.
+struct Entry<'a> {
+    keep: &'a [RawFd],
+    child: &'a mut dyn FnMut() -> libc::c_int,
+}
+
+extern "C" fn enter(entry: *mut c_void) -> libc::c_int {
+    // SAFETY: `spawn` passes a pointer to its `Entry`, which it keeps alive
+    // and does not touch until this process is done with it.
+    let entry = unsafe { &mut *entry.cast::<Entry<'_>>() };
+    close_all_but(entry.keep);
     default_caught_signals();
-    child()
+    (entry.child)()
+}
+
+/// Close every descriptor past the standard streams that `keep`, ascending,
+/// does not list.
+fn close_all_but(keep: &[RawFd]) {
+    let close = |first: u32, last: u32| {
+        // SAFETY: a plain system call. A child that kept the host's files open
+        // must not go on, and `abort` is safe here.
+        if first <= last && unsafe { libc::syscall(libc::SYS_close_range, first, last, 0u32) } == -1
+        {
+            unsafe { libc::abort() };
+        }
+    };
+    let mut first = libc::STDERR_FILENO.cast_unsigned() + 1;
+    for &fd in keep {
+        let fd = fd.cast_unsigned();
+        close(first, fd - 1);
+        first = fd + 1;
+    }
+    close(first, u32::MAX);
 }
 
 /// Every signal the host catches is back at its default, so the child may

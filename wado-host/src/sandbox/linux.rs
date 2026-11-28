@@ -140,7 +140,7 @@ fn probe_listener() -> io::Result<bool> {
     let filter = asm.finish();
     // SAFETY: the closure makes only system calls, on memory built above.
     let pid = unsafe {
-        vfork::spawn(|| {
+        vfork::spawn(&[], || {
             let listens = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0
                 && install_filter(&filter, libc::SECCOMP_FILTER_FLAG_NEW_LISTENER).is_ok();
             i32::from(!listens)
@@ -209,10 +209,20 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Resul
     }
     let streams =
         [&stdin, &stdout, &stderr].map(|stream| stream.child.as_ref().map(AsRawFd::as_raw_fd));
+    let mut keep: Vec<RawFd> = streams
+        .into_iter()
+        .flatten()
+        .chain([ruleset.as_raw_fd()])
+        .chain(listener_tx.as_ref().map(AsRawFd::as_raw_fd))
+        .chain(command.cwd.map(AsRawFd::as_raw_fd))
+        .filter(|&fd| fd > libc::STDERR_FILENO)
+        .collect();
+    keep.sort_unstable();
+    keep.dedup();
     let mut failure = None;
     // SAFETY: the closure makes only system calls, on memory built above.
     let pid = unsafe {
-        vfork::spawn(|| {
+        vfork::spawn(&keep, || {
             let confined = confine_self(
                 &ruleset,
                 &filter,
