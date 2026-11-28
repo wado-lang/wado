@@ -299,6 +299,18 @@ fn estimate(units: &Units, a: i32, b: i32) -> f64 {
     return f64::max(by_shape, agreement(&units.names, a, b));
 }
 
+/// How alike two units are, where they may pair at all: apart, of sizes within
+/// `similarity` of each other, and at least that alike.
+fn pair_similarity(trees: &List<Tree>, units: &Units, a: i32, b: i32, similarity: f64) -> Option<f64> {
+    let small = i32::min(units.tokens[a], units.tokens[b]);
+    let large = i32::max(units.tokens[a], units.tokens[b]);
+    if (small as f64) < similarity * large as f64 || overlaps(trees, units, a, b) {
+        return null;
+    }
+    let estimated = estimate(units, a, b);
+    return if estimated >= similarity { Some(estimated) } else { null };
+}
+
 fn agreement(signatures: &List<u64>, a: i32, b: i32) -> f64 {
     let mut equal = 0;
     for let mut j = 0; j < H; j += 1 {
@@ -386,16 +398,10 @@ pub fn find_similar(
                 let a = members[i];
                 let b = members[k];
                 let key = pair_key(a, b);
-                if alike.contains_key(key) || overlaps(trees, &units, a, b) {
+                if alike.contains_key(key) {
                     continue;
                 }
-                let small = i32::min(units.tokens[a], units.tokens[b]);
-                let large = i32::max(units.tokens[a], units.tokens[b]);
-                if (small as f64) < similarity * large as f64 {
-                    continue;
-                }
-                let estimated = estimate(&units, a, b);
-                if estimated >= similarity {
+                if let Some(estimated) = pair_similarity(trees, &units, a, b, similarity) {
                     alike[key] = estimated;
                 }
             }
@@ -466,12 +472,10 @@ fn join(
         let mut all_alike = true;
         for let x of &side_a {
             for let y of &side_b {
-                let e = estimate(units, *x, *y);
-                all_alike = all_alike
-                    && e >= similarity
-                    && !overlaps(trees, units, *x, *y)
-                    && !inside_alike(units, alike, *x, *y);
-                low = f64::min(low, e);
+                match pair_similarity(trees, units, *x, *y, similarity) {
+                    Some(e) && !inside_alike(units, alike, *x, *y) => low = f64::min(low, e),
+                    _ => all_alike = false,
+                }
             }
         }
         if !all_alike {

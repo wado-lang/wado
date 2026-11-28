@@ -3,6 +3,7 @@
 use {
     parse_rust,
     token_kind_name,
+    RK_INNER_ATTRIBUTE,
     RK_OUTER_ATTRIBUTE,
     RK_STATEMENTS,
     TK_DOT,
@@ -25,16 +26,58 @@ fn class_of(kind: i32) -> TokenClass {
     return TokenClass::Fixed;
 }
 
-/// `#[test]`, or a `cfg` that names `test`, marks the item it is attached to.
+/// `#[test]`, or a `cfg` that holds only under test, marks the item it is
+/// attached to; an inner `#![cfg(…)]` marks the whole file.
 fn marks_test(kind: i32, text: StrSlice) -> TestMark {
-    if kind != RK_OUTER_ATTRIBUTE as i32 {
+    if kind != RK_OUTER_ATTRIBUTE as i32 && kind != RK_INNER_ATTRIBUTE as i32 {
         return TestMark::None;
     }
-    let compact = text.to_string().replace(" ", "").replace("\n", "");
-    if compact == "#[test]" || compact.starts_with("#[cfg(test") {
+    let mut compact = "";
+    for let c of text.chars() {
+        if !c.is_whitespace() {
+            compact.push(c);
+        }
+    }
+    let predicate = compact.trim_prefix("#!").trim_prefix("#");
+    if predicate == "[test]" {
+        return TestMark::Parent;
+    }
+    if let Some(inner) = predicate.strip_prefix("[cfg(")
+        && let Some(cfg) = inner.strip_suffix(")]")
+        && holds_only_under_test(cfg) {
         return TestMark::Parent;
     }
     return TestMark::None;
+}
+
+/// Whether a `cfg` predicate implies `test`: `test` itself, or an `all` one of
+/// whose terms does. `any` and `not` hold outside tests too.
+fn holds_only_under_test(predicate: StrSlice) -> bool {
+    if predicate == "test" {
+        return true;
+    }
+    let Some(inner) = predicate.strip_prefix("all(") else {
+        return false;
+    };
+    let Some(terms) = inner.strip_suffix(")") else {
+        return false;
+    };
+    let mut depth = 0;
+    let mut start = 0;
+    for let mut i = 0; i <= terms.len(); i += 1 {
+        let b = if i < terms.len() { unchecked terms.byte_at(i) } else { b',' };
+        if b == b'(' {
+            depth += 1;
+        } else if b == b')' {
+            depth -= 1;
+        } else if b == b',' && depth == 0 {
+            if holds_only_under_test(terms.slice(start, i)) {
+                return true;
+            }
+            start = i + 1;
+        }
+    }
+    return false;
 }
 
 /// The tree of a Rust file, or the first syntax error: recovery drops tokens,

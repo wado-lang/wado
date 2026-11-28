@@ -24,7 +24,7 @@ A grammar comes from the package that exports it, with the one Kiln clause that
 generates it: a second clause on the same file is an error. Rust's is
 `wado-lang:gale-rust`, Wado's `wado-lang:wado`.
 
-`tools/recall.wado` measures a change against past commits; README.md holds the
+The recall tool measures a change against past commits; README.md holds the
 latest numbers.
 
 ## Running tests

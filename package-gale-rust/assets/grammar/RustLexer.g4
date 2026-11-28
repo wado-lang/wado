@@ -157,7 +157,10 @@ BLOCK_COMMENT_OR_DOC: ( BLOCK_COMMENT | INNER_BLOCK_DOC | OUTER_BLOCK_DOC) -> ch
 SHEBANG: {this.SOF()}? '\ufeff'? '#!' ~[[\r\n] ~[\r\n]* -> channel(HIDDEN);
 
 // whitespace https://doc.rust-lang.org/reference/whitespace.html
-WHITESPACE : [\p{Zs}]          -> channel(HIDDEN);
+// LOCAL: the Reference's `Pattern_White_Space` set, not `[\p{Zs}]`. Upstream
+// lexed a tab, a vertical tab or a form feed as an error, and admitted the
+// no-break space and the other `Zs` spaces that `rustc` rejects.
+WHITESPACE : [\t\u000B\u000C \u0085‎‏  ] -> channel(HIDDEN);
 NEWLINE    : ('\r\n' | [\r\n]) -> channel(HIDDEN);
 
 // tokens char and string

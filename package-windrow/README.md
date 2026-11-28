@@ -15,7 +15,8 @@ works for any language Gale has a grammar for. It reads Rust and Wado.
 wado run package-windrow/src/main.wado -- [--min-tokens N] [--similarity S] [--names] <path>…
 ```
 
-A path is a `.rs` or `.wado` file, or a directory walked for them.
+A path is a `.rs` or `.wado` file, or a directory walked for them. The walk
+skips a directory named `target` or `build`, or one whose name starts with `.`.
 `--min-tokens` is the smallest node compared, in tokens; the default is 40.
 `--similarity` is the least similarity reported, in (0, 1]; the default is 0.8.
 `--names` also counts two nodes alike by the names they call, types, methods
@@ -31,12 +32,15 @@ every member's lines, the groups that repeat the most tokens first:
   wado-compiler/src/tir.rs:4295-4404
 ```
 
-Every two members of a group are alike, and a group is reported at the largest
+Every two members of a group are alike and of sizes within the similarity of
+each other, and a group is reported at the largest
 nodes that are, so a member's inner nodes are not listed again. A node that
 repeats one small shape, such as a long or-pattern of enum cases, is not
 compared: its few distinct runs make any two such nodes look alike. Nor is test
 code, a Rust item under `#[test]` or `#[cfg(test)]` or a Wado `test` block: a
-fixture repeats its shape on purpose.
+fixture repeats its shape on purpose. A test module in a file of its own
+(`#[cfg(test)] mod tests;`) is compared, since nothing reads which file a module
+declaration names.
 
 ## Recall
 

@@ -1098,10 +1098,15 @@ pub fn merge_across_packages(
     invocations: Vec<Invocation>,
     manifest_root: &Path,
 ) -> Result<Vec<Invocation>, Vec<Diagnostic>> {
+    // A URL's path belongs to its server, so it is compared as written.
     let primary_file = |invocation: &Invocation| {
-        let read = std::path::absolute(manifest_root.join(invocation.read_path(&invocation.from)))
-            .expect("a joined path is not empty");
-        normalize(&read.to_string_lossy())
+        let read = invocation.read_path(&invocation.from);
+        if is_remote(read) {
+            return read.to_string();
+        }
+        let local =
+            std::path::absolute(manifest_root.join(read)).expect("a joined path is not empty");
+        normalize(&local.to_string_lossy())
     };
     let mut merged: Vec<Invocation> = Vec::new();
     let mut diagnostics = Vec::new();
@@ -1762,6 +1767,17 @@ mod tests {
             let errs = merge_across_packages(vec![by_path, by_reference], Path::new("/r/app"))
                 .unwrap_err();
             assert!(errs[0].message.contains("disagree"), "{}", errs[0].message);
+        }
+
+        #[test]
+        fn two_urls_are_two_files_however_alike_their_paths() {
+            let mut a = sample_invocation();
+            a.from = InvocationPath::normalize("https://h/m/model.onnx");
+            let mut b = sample_invocation();
+            b.module = GeneratorModule::LocalPath(InvocationPath::normalize("../b/gen.wado"));
+            b.from = InvocationPath::normalize("https://h/m//model.onnx");
+            let merged = merge_across_packages(vec![a, b], Path::new("/r")).unwrap();
+            assert_eq!(merged.len(), 2);
         }
 
         fn runtime() -> tokio::runtime::Runtime {

@@ -102,6 +102,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
     let mut measure = Measure::Shape;
     let mut files: List<String> = ["*.rs", "*.wado"];
     for let mut i = 0; i < argv.len(); i += 1 {
+        let takes_value = argv[i] == "--commits" || argv[i] == "--min-tokens" || argv[i] == "--files";
+        assert !takes_value || i + 1 < argv.len(), `${argv[i]} takes a value`;
         if argv[i] == "--commits" {
             i += 1;
             commits = argv[i];

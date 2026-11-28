@@ -43,5 +43,5 @@ or `options: { trace: true }` in a Kiln `with { generator: ... }` block.
 
 Repository-wide, the Rust corpus check is the one number that says whether a
 prediction change helped, and `--tree-hash` checks that a change moved no tree.
-[`package-gale-rust/AGENTS.md`](../../package-gale-rust/AGENTS.md#the-corpus-check)
+[`package-gale-rust/docs/corpus-check.md`](../../package-gale-rust/docs/corpus-check.md)
 says how to run it.

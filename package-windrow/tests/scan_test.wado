@@ -1,4 +1,4 @@
-use { read_rust, read_wado, find_similar, Tree, Measure } from "../src/lib.wado";
+use { read_rust, read_wado, find_similar, Site, Tree, Measure } from "../src/lib.wado";
 
 fn tree(path: String, source: String) -> Tree {
     return read_rust(path, source).unwrap();
@@ -106,6 +106,39 @@ test "a group's inner nodes join no other group together" {
     }
     assert joining_a_and_b == 1;
     assert groups.iter_ref().any(|g| g.sites.iter_ref().any(|s| s.tree == 2));
+}
+
+test "a group holds no two members too different in size to pair" {
+    // Repeating a statement its block already repeats adds no run, so the
+    // three functions are all alike, and only their sizes tell them apart.
+    let with_drops = |name: String, drops: i32| {
+        let mut body = "";
+        for let _ of 0..<drops {
+            body.push_str("        acc -= row.penalty;\n");
+        }
+        return `fn ${name}(rows: &[Item]) -> i64 {
+    let mut acc = 0;
+    for row in rows {
+        if row.active && row.weight > 7 {
+            acc += row.weight * row.count;
+        }
+${body}    }
+    acc
+}`;
+    };
+    let trees: List<Tree> = [
+        tree("a.rs", with_drops("a", 2)),
+        tree("b.rs", with_drops("b", 4)),
+        tree("c.rs", with_drops("c", 6)),
+    ];
+    let groups = find_similar(&trees, 20, 0.8);
+    let whole = |s: &Site| s.start(&trees) == 0;
+    for let g of &groups {
+        let in_a = g.sites.iter_ref().any(|s| s.tree == 0 && whole(s));
+        let in_c = g.sites.iter_ref().any(|s| s.tree == 2 && whole(s));
+        assert !(in_a && in_c);
+    }
+    assert groups.iter_ref().any(|g| g.sites.iter_ref().any(|s| s.tree == 1 && whole(s)));
 }
 
 test "a node repeating one small shape is not compared" {
@@ -220,6 +253,29 @@ test "test code is not compared" {
         tree("c.rs", `#[test]\n${COPY_B}`),
     ];
     assert find_similar(&trees, 20, 0.9).is_empty();
+}
+
+test "a cfg marks test code only by the test predicate" {
+    let skipped: List<String> = [
+        `#[cfg(all(test, unix))]\n${COPY_B}`, `#![cfg(test)]\n${COPY_B}`, `#[cfg(\ttest\r\n)]\n${COPY_B}`,
+    ];
+    for let source of skipped {
+        let trees: List<Tree> = [
+            tree("a.rs", COPY_A),
+            tree("b.rs", source),
+        ];
+        assert find_similar(&trees, 20, 0.9).is_empty(), source;
+    }
+    let compared: List<String> = [
+        `#[cfg(test_utils)]\n${COPY_B}`, `#[cfg(not(test))]\n${COPY_B}`, `#[cfg(any(test, feature = "x"))]\n${COPY_B}`,
+    ];
+    for let source of compared {
+        let trees: List<Tree> = [
+            tree("a.rs", COPY_A),
+            tree("b.rs", source),
+        ];
+        assert find_similar(&trees, 20, 0.9).len() == 1, source;
+    }
 }
 
 test "unrelated code is not alike" {

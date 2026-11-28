@@ -5,14 +5,22 @@
 use { is_source, read_source, find_similar, Tree, Measure } from "./lib.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
-use { Preopens } from "core:fs";
+use { Preopens, WalkEntry } from "core:fs";
+
+/// Whether a walk descends into a directory: not a hidden one (`.git`), nor
+/// one a build writes (Cargo's `target/`, Kiln's `build/`), whose generated
+/// sources repeat themselves by construction.
+fn walks_into(entry: &WalkEntry) -> bool {
+    let name = fs::file_name(&entry.path).unwrap();
+    return !name.starts_with(".") && name != "target" && name != "build";
+}
 
 fn source_files(root: &String) -> List<String> with (Stderr, Preopens) {
     if is_source(root) {
         return [*root];
     }
     let mut out: List<String> = [];
-    let walk = match fs::walk_dir(root) {
+    let walk = match fs::walk_dir(root, walks_into) {
         Ok(w) => w,
         Err(e) => {
             eprintln(`error: ${e}`);
@@ -41,11 +49,13 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
     for let mut i = 0; i < argv.len(); i += 1 {
         if argv[i] == "--min-tokens" {
             i += 1;
+            assert i < argv.len(), "--min-tokens takes a number";
             min_tokens = i32::from_str(&argv[i]).expect("--min-tokens takes a number");
         } else if argv[i] == "--names" {
             measure = Measure::ShapeOrNames;
         } else if argv[i] == "--similarity" {
             i += 1;
+            assert i < argv.len(), "--similarity takes a number";
             similarity = f64::from_str(&argv[i]).expect("--similarity takes a number");
             assert 0.0 < similarity && similarity <= 1.0, "--similarity must be in (0, 1]";
         } else {

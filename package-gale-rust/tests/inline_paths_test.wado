@@ -1,0 +1,60 @@
+use { find_inline_paths } from "../src/inline_paths.wado";
+
+test "a path outside a use item is reported with its position" {
+    let hits = find_inline_paths("fn f() -> super::T { crate::g() }\n").unwrap();
+    assert hits.len() == 2;
+    assert hits[0].line == 1 && hits[0].column == 11 && hits[0].text == "super::";
+    assert hits[1].line == 1 && hits[1].column == 22 && hits[1].text == "crate::";
+}
+
+test "a use item may name any path" {
+    let hits = find_inline_paths("use crate::a::B;\nuse super::c::D;\nuse crate::{e, f::G};\n").unwrap();
+    assert hits.len() == 0;
+}
+
+test "a use item inside a function body is not at the top of the module" {
+    let hits = find_inline_paths("fn f() {\n    use crate::a::B;\n    B::new();\n}\n").unwrap();
+    assert hits.len() == 1;
+    assert hits[0].line == 2 && hits[0].column == 9 && hits[0].text == "crate::";
+}
+
+test "a use item in an inline module is at the top of that module" {
+    let source = "mod tests {\n    use super::*;\n    use crate::a::B;\n}\n";
+    assert find_inline_paths(&source).unwrap().len() == 0;
+}
+
+test "comments and strings hold no paths" {
+    let source = "// crate::a\n/* super::b */\nfn f() -> String { \"crate::c\".to_string() }\n";
+    assert find_inline_paths(&source).unwrap().len() == 0;
+}
+
+test "a raw string holds no paths" {
+    let source = "fn f() -> &'static str { r#\"crate::a and super::b\"# }\n";
+    assert find_inline_paths(&source).unwrap().len() == 0;
+}
+
+test "macro hygiene is not an import" {
+    let source = "macro_rules! m {\n    () => { $crate::a::B };\n}\n";
+    assert find_inline_paths(&source).unwrap().len() == 0;
+}
+
+test "a precise capture list is not a use item" {
+    let source = "fn f<T>(t: T) -> impl Sized + use<T> { crate::wrap(t) }\n";
+    let hits = find_inline_paths(&source).unwrap();
+    assert hits.len() == 1;
+    assert hits[0].text == "crate::";
+}
+
+test "a visibility names a scope, which no import can stand in for" {
+    let source = "pub(crate) fn f() {}\npub(super) fn g() {}\npub(in crate::a) fn h() {}\n";
+    assert find_inline_paths(&source).unwrap().len() == 0;
+}
+
+test "every path root in a chain counts" {
+    let hits = find_inline_paths("fn f() -> super::super::T { crate::a::crate_b() }\n").unwrap();
+    assert hits.len() == 3;
+}
+
+test "a file that does not parse is an error, not a clean count" {
+    assert find_inline_paths("fn f( {\n").is_err();
+}

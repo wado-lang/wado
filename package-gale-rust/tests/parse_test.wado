@@ -29,6 +29,11 @@ test "tokenize fn declaration" {
     assert first == "KW_FN", "expected KW_FN";
 }
 
+test "a tab and a form feed are whitespace" {
+    let result = rlex_prs("fn\tmain()\u{0C}{\n\tlet x = 1;\u{0B}\n}\n");
+    assert result.diagnostics.is_empty();
+}
+
 test "tokenize struct" {
     let tokens = rlex_tok("struct Point { x: i32, y: i32 }");
     assert tokens.len() >= 8, "expected at least 8 tokens";
