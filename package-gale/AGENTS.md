@@ -9,7 +9,7 @@ below hold for every change; the rest lives in companion docs:
 - [`docs/import.md`](./docs/import.md) — grammar composition: how `import S;` resolves and what a delegate contributes.
 - [`docs/testing.md`](./docs/testing.md) — the test layers and the oracle procedures.
 - [`docs/debugging.md`](./docs/debugging.md) — `gale dump`, the `trace` option, and the Rust corpus check.
-- [`package-gale-rust`](../package-gale-rust/AGENTS.md) — the Rust grammar, Gale's largest real-world test: a Gale change runs `wado test package-gale-rust` too.
+- [`package-gale-rust`](../package-gale-rust/AGENTS.md) — the Rust grammar, Gale's largest real-world test.
 - [`docs/perf.md`](./docs/perf.md) — performance notes: budget, levers, and measured perf dead-ends.
 - [`docs/dead-ends.md`](./docs/dead-ends.md) — prediction, predicate and lexer approaches that failed. The static path always has edges; the complete answer is the runtime ATN simulator. Read the area's section before retrying anything in it.
 - [`docs/design.md`](./docs/design.md) — the design.
@@ -86,8 +86,8 @@ wado test package-gale                           # the whole package
 wado test package-gale/tests/codegen_test.wado   # one file
 ```
 
-`wado test package-gale` is the whole check for Gale work; `mise run test-wado`
-leaves this package out. CI runs it as `test-gale-o2`, which also catches the
+`wado test package-gale` and `wado test package-gale-rust` are the whole check
+for Gale work; `mise run test-wado` leaves the first out. CI runs it as `test-gale-o2`, which also catches the
 miscompiles a compiler change slips past the e2e fixtures.
 
 - Pass the package directory, never a hand-written glob. The descriptor corpus sits one directory deeper (`tests/antlr4-compat/drivers/<Category>/`), so a flat glob passes on about a third of the suite, and the fixtures it never reaches drift behind the generator.

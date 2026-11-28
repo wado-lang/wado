@@ -2,9 +2,10 @@
 
 Windrow finds code that repeats one shape. It reads each file with a Gale
 grammar, and reports the nodes of the tree that are alike up to renamed names
-and changed literals, to a similarity you set. Two nodes' similarity is the
-Jaccard index of their sets of six-token runs: 1 for a copy, less as the
-operators, calls and structure part.
+and changed literals, to a similarity you set. Two nodes' similarity estimates
+the Jaccard index of their sets of six-token runs: 1 for a copy, less as the
+operators, calls and structure part. The estimate is the share of 64 MinHash
+values the two sets agree on, so two sets that differ can still score 1.
 
 It reads only the tree, never types or name resolution, so it runs fast and
 works for any language Gale has a grammar for. It reads Rust and Wado.
@@ -17,7 +18,8 @@ wado run package-windrow/src/main.wado -- [--min-tokens N] [--similarity S] [--n
 
 A path is a `.rs` or `.wado` file, or a directory walked for them. The walk
 skips a directory named `target` or `build`, or one whose name starts with `.`.
-`--min-tokens` is the smallest node compared, in tokens; the default is 40.
+`--min-tokens` is the smallest node compared, in tokens, at least 6; the
+default is 40.
 `--similarity` is the least similarity reported, in (0, 1]; the default is 0.8.
 `--names` also counts two nodes alike by the names they call, types, methods
 and paths, when both call at least eight and are somewhat alike in shape: one
@@ -34,8 +36,8 @@ tokens first:
 
 Every two members of a group are alike, and of sizes within the similarity of
 each other. A group is reported at the largest nodes that are, so a member's
-inner nodes are not listed again. A node that
-repeats one small shape, such as a long or-pattern of enum cases, is not
+inner nodes are not listed again. A node that repeats one small shape, such as
+a long or-pattern of enum cases, is not
 compared: its few distinct runs make any two such nodes look alike. Nor is test
 code, a Rust item under `#[test]` or `#[cfg(test)]` or a Wado `test` block: a
 fixture repeats its shape on purpose. A test module in a file of its own

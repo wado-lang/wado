@@ -23,6 +23,13 @@ test "a use item in an inline module is at the top of that module" {
     assert find_inline_paths(&source).unwrap().len() == 0;
 }
 
+test "a use item in a module inside a function is at the top of that module" {
+    let source = "fn f() {\n    mod m {\n        use crate::a::B;\n        fn g() {\n            use crate::c::D;\n        }\n    }\n}\n";
+    let hits = find_inline_paths(&source).unwrap();
+    assert hits.len() == 1;
+    assert hits[0].line == 5;
+}
+
 test "comments and strings hold no paths" {
     let source = "// crate::a\n/* super::b */\nfn f() -> String { \"crate::c\".to_string() }\n";
     assert find_inline_paths(&source).unwrap().len() == 0;

@@ -50,18 +50,34 @@ fn marks_test(kind: i32, text: StrSlice) -> TestMark {
     return TestMark::None;
 }
 
-/// Whether a `cfg` predicate implies `test`: `test` itself, or an `all` one of
-/// whose terms does. `any` and `not` hold outside tests too.
+/// Whether a `cfg` predicate implies `test`: `test` itself, an `all` one of
+/// whose terms does, or an `any` every term of which does. `not` holds outside
+/// tests too.
 fn holds_only_under_test(predicate: StrSlice) -> bool {
     if predicate == "test" {
         return true;
     }
-    let Some(inner) = predicate.strip_prefix("all(") else {
-        return false;
+    if let Some(terms) = arguments_of(predicate, "all") {
+        return terms.iter_ref().any(|t| holds_only_under_test(*t));
+    }
+    if let Some(terms) = arguments_of(predicate, "any") {
+        return !terms.is_empty() && terms.iter_ref().all(|t| holds_only_under_test(*t));
+    }
+    return false;
+}
+
+/// The comma-separated terms of `name(...)`, or `None` for any other predicate.
+fn arguments_of(predicate: StrSlice, name: String) -> Option<List<StrSlice>> {
+    let Some(inner) = predicate.strip_prefix(name) else {
+        return null;
     };
-    let Some(terms) = inner.strip_suffix(")") else {
-        return false;
+    let Some(open) = inner.strip_prefix("(") else {
+        return null;
     };
+    let Some(terms) = open.strip_suffix(")") else {
+        return null;
+    };
+    let mut out: List<StrSlice> = [];
     let mut depth = 0;
     let mut start = 0;
     for let mut i = 0; i <= terms.len(); i += 1 {
@@ -71,13 +87,13 @@ fn holds_only_under_test(predicate: StrSlice) -> bool {
         } else if b == b')' {
             depth -= 1;
         } else if b == b',' && depth == 0 {
-            if holds_only_under_test(terms.slice(start, i)) {
-                return true;
+            if i > start {
+                out.push(terms.slice(start, i));
             }
             start = i + 1;
         }
     }
-    return false;
+    return Some(out);
 }
 
 /// The tree of a Rust file, or the first syntax error: recovery drops tokens,

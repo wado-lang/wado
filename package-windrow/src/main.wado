@@ -6,6 +6,7 @@ use { is_source, read_source, find_similar, Tree, Measure } from "./lib.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens, WalkEntry } from "core:fs";
+use { HashSet } from "core:collections";
 
 /// Whether a walk descends into a directory: not a hidden one (`.git`), nor
 /// one a build writes (Cargo's `target/`, Kiln's `build/`), whose generated
@@ -16,10 +17,20 @@ fn walks_into(entry: &WalkEntry) -> bool {
 }
 
 fn source_files(root: &String) -> List<String> with (Stderr, Preopens) {
-    if is_source(root) {
-        return [*root];
-    }
     let mut out: List<String> = [];
+    let root_type = match fs::metadata(root) {
+        Ok(meta) => meta.type,
+        Err(e) => {
+            eprintln(`error: ${e}`);
+            return out;
+        },
+    };
+    if !root_type matches { _::Directory } {
+        if is_source(root) {
+            out.push(*root);
+        }
+        return out;
+    }
     let walk = match fs::walk_dir(root, walks_into) {
         Ok(w) => w,
         Err(e) => {
@@ -30,7 +41,7 @@ fn source_files(root: &String) -> List<String> with (Stderr, Preopens) {
     for let found of walk {
         match found {
             Ok(entry) => {
-                if is_source(&entry.path) {
+                if entry.type matches { _::File } && is_source(&entry.path) {
                     out.push(entry.path);
                 }
             },
@@ -64,8 +75,13 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
     }
     assert !roots.is_empty(), "name the paths to scan";
     let mut trees: List<Tree> = [];
+    // Roots may overlap, and a file read twice would be its own copy.
+    let mut seen = HashSet::<String>::new();
     for let root of &roots {
         for let path of source_files(root) {
+            if !seen.insert(fs::normalize(&path).expect("a walked path stays in the preopen")) {
+                continue;
+            }
             let source = match fs::read_to_string(&path) {
                 Ok(s) => s,
                 Err(e) => {

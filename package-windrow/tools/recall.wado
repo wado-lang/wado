@@ -23,7 +23,7 @@ fn git_text(command: Command) -> String with Process {
 /// parent's numbering: the `-a,b` side of each `-U0` hunk header.
 fn deleted_ranges(parent: &String, sha: &String, file: &String) -> List<[i32, i32]> with Process {
     let mut out: List<[i32, i32]> = [];
-    for let line of git_text(cmd`git diff -U0 ${parent} ${sha} -- ${file}`).lines() {
+    for let line of git_text(cmd`git diff -U0 --inter-hunk-context=0 ${parent} ${sha} -- ${file}`).lines() {
         if !line.starts_with("@@ -") {
             continue;
         }
@@ -56,40 +56,26 @@ fn lines_of(trees: &List<Tree>, site: &Site) -> Lines {
     };
 }
 
-/// The deleted range a member overlaps, by index, or -1.
-fn deleted_at(member: &Lines, deleted: &List<List<[i32, i32]>>) -> i32 {
-    let ranges = &deleted[member.tree];
-    for let mut k = 0; k < ranges.len(); k += 1 {
-        if member.first <= ranges[k].1 && ranges[k].0 <= member.last {
-            return k;
-        }
-    }
-    return -1;
+fn is_deleted(member: &Lines, deleted: &List<List<[i32, i32]>>) -> bool {
+    return deleted[member.tree].iter_ref().any(|r| member.first <= r.1 && r.0 <= member.last);
 }
 
 /// The first group, largest first, that joins a deleted node to another
-/// node, described for the report.
+/// node, described for the report. Two members of a group never overlap, so
+/// any member deleted is joined to another node, even one deleted in the same
+/// hunk: folding two adjacent copies into a helper deletes both in one.
 fn first_hit(trees: &List<Tree>, groups: &List<Group>, deleted: &List<List<[i32, i32]>>) -> Option<String> {
     for let g of groups {
         let mut members: List<Lines> = [];
         for let s of &g.sites {
             members.push(lines_of(trees, s));
         }
-        for let a of &members {
-            let at = deleted_at(a, deleted);
-            if at < 0 {
-                continue;
+        if members.iter_ref().any(|m| is_deleted(m, deleted)) {
+            let mut text = `${g.similarity:.2} ${g.tokens}t`;
+            for let m of &members {
+                text.push_str(` ${trees[m.tree].path}:${m.first}-${m.last}`);
             }
-            for let b of &members {
-                let same_hunk = b.tree == a.tree && deleted_at(b, deleted) == at;
-                if !same_hunk {
-                    let mut text = `${g.similarity:.2} ${g.tokens}t`;
-                    for let m of &members {
-                        text.push_str(` ${trees[m.tree].path}:${m.first}-${m.last}`);
-                    }
-                    return Option::Some(text);
-                }
-            }
+            return Option::Some(text);
         }
     }
     return null;
@@ -136,7 +122,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
         let parent = git_text(cmd`git rev-parse ${sha}^`).trim().to_string();
         let mut trees: List<Tree> = [];
         let mut deleted: List<List<[i32, i32]>> = [];
-        for let file of git_text(cmd`git diff --name-only --diff-filter=M ${parent} ${sha} -- ${files}`).lines() {
+        // A file the commit deleted may hold the copy it folded away.
+        for let file of git_text(cmd`git diff --name-only --diff-filter=MD ${parent} ${sha} -- ${files}`).lines() {
             let file = file.to_string();
             let source = git_text(cmd`git show ${parent}:${file}`);
             match read_source(file, source) {

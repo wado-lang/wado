@@ -15,6 +15,7 @@ global ROWS: i32 = 4;
 /// and pairing all of them would cost the square of their count.
 global BUCKET_CAP: i32 = 32;
 global EMPTY: u64 = 0xFFFF_FFFF_FFFF_FFFF;
+global SLOT_MIX: u64 = 0xD6E8_FEB8_6659_FD93;
 /// Below this many distinct runs per run, a node repeats one small shape, such
 /// as a long or-pattern of enum cases. Its few runs make any two such nodes
 /// look alike, so it is not compared. A list measures 0.24 to 0.36, ordinary
@@ -78,6 +79,8 @@ fn run_hash(word: &List<u64>, at: i32) -> u64 {
 /// all: a measure that ignores them leaves their signatures empty.
 struct Hasher {
     seeds: List<u64>,
+    /// The inverse of `SLOT_MIX`, which undoes it.
+    unmix: u64,
     names: bool,
 }
 
@@ -87,7 +90,14 @@ impl Hasher {
         for let mut j = 0; j < H; j += 1 {
             seeds.push(splitmix(j as u64 + 1));
         }
-        return Hasher { seeds, names: measure matches { _::ShapeOrNames } };
+        // `SLOT_MIX` is odd, so it has an inverse modulo 2^64: each Newton
+        // step doubles the low bits it is right in, from 3 to past 64.
+        let mut unmix = SLOT_MIX;
+        for let _ of 0..<5 {
+            unmix *= 2 - SLOT_MIX * unmix;
+        }
+        assert SLOT_MIX * unmix == 1;
+        return Hasher { seeds, unmix, names: measure matches { _::ShapeOrNames } };
     }
 
     /// Takes the run at token `at` into a signature.
@@ -104,11 +114,16 @@ impl Hasher {
 
     fn take(&self, signature: &mut List<u64>, h: u64) {
         for let mut j = 0; j < H; j += 1 {
-            let v = (h ^ self.seeds[j]) * 0xD6E8_FEB8_6659_FD93;
+            let v = (h ^ self.seeds[j]) * SLOT_MIX;
             if v < signature[j] {
                 signature[j] = v;
             }
         }
+    }
+
+    /// The hash that `take` put in slot `j` as `v`.
+    fn taken(&self, v: u64, j: i32) -> u64 {
+        return v * self.unmix ^ self.seeds[j];
     }
 }
 
@@ -251,15 +266,19 @@ fn gather_runs(units: &mut Units, hasher: &Hasher, t: i32, tree: &Tree, s: &Shap
         }
         let parent = if enclosing >= 0 { unit_of_row[enclosing] } else { -1 };
         let kids = &children[p];
-        for let mut i = 0; i < kids.len(); i += 1 {
+        let end_of = |k: i32| s.first[kids[k]] + s.tokens[kids[k]];
+        // The shortest run from each start ends no earlier than the one from
+        // the start before it, so `j` only moves forward.
+        let mut j = 0;
+        for let mut i = 0; i + 1 < kids.len(); i += 1 {
             let start = s.first[kids[i]];
-            let mut j = i;
-            while j + 1 < kids.len() && s.first[kids[j]] + s.tokens[kids[j]] - start < min_tokens {
+            j = i32::max(j, i + 1);
+            while j + 1 < kids.len() && end_of(j) - start < min_tokens {
                 j += 1;
             }
-            let end = s.first[kids[j]] + s.tokens[kids[j]];
-            if j == i || end - start < min_tokens {
-                continue;
+            let end = end_of(j);
+            if end - start < min_tokens {
+                break;
             }
             let mut signature: List<u64> = List::filled(H, EMPTY);
             let mut names: List<u64> = List::filled(H, EMPTY);
@@ -322,13 +341,18 @@ fn agreement(signatures: &List<u64>, a: i32, b: i32) -> f64 {
 }
 
 /// Whether a unit spells `MIN_NAMES` distinct names. Each of a few names is the
-/// least in some of the `H` slots, so its signature holds every one.
-fn has_names(units: &Units, u: i32) -> bool {
+/// least in some of the `H` slots, so its signature holds every one, though
+/// in each slot as a different value.
+fn has_names(units: &Units, hasher: &Hasher, u: i32) -> bool {
     let mut seen: List<u64> = [];
     for let mut j = 0; j < H && seen.len() < MIN_NAMES; j += 1 {
         let v = units.names[u * H + j];
-        if v != EMPTY && !seen.contains(&v) {
-            seen.push(v);
+        if v == EMPTY {
+            continue;
+        }
+        let name = hasher.taken(v, j);
+        if !seen.contains(&name) {
+            seen.push(name);
         }
     }
     return seen.len() >= MIN_NAMES;
@@ -373,7 +397,7 @@ pub fn find_similar(
         gather_runs(&mut units, &hasher, t, &trees[t], &s, min_tokens, first_unit);
     }
     for let mut u = 0; u < units.tokens.len(); u += 1 {
-        units.named.push(has_names(&units, u));
+        units.named.push(has_names(&units, &hasher, u));
     }
 
     let mut buckets = HashMap::<u64, List<i32>>::new();
@@ -513,19 +537,14 @@ fn join(
     }
     groups.sort_by(|a, b| weight(b).cmp(&weight(a)));
     // Runs of one sequence overlap, so one copy is found as several groups of
-    // runs. A group whose every member overlaps a heavier group's says nothing
-    // that group does not.
+    // runs. A group whose every member overlaps one heavier group's says
+    // nothing that group does not; one whose members fall in two links them.
     let mut kept: List<Group> = [];
     for let group of &groups {
-        let mut new_somewhere = false;
-        for let x of &group.sites {
-            let mut covered = false;
-            for let k of &kept {
-                covered = covered || k.sites.iter_ref().any(|y| sites_overlap(trees, x, y));
-            }
-            new_somewhere = new_somewhere || !covered;
-        }
-        if new_somewhere {
+        let covered_by = |k: &Group| {
+            return group.sites.iter_ref().all(|x| k.sites.iter_ref().any(|y| sites_overlap(trees, x, y)));
+        };
+        if !kept.iter_ref().any(covered_by) {
             kept.push(*group);
         }
     }

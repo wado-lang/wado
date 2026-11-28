@@ -1,4 +1,4 @@
-use { read_rust, read_wado, find_similar, Site, Tree, Measure } from "../src/lib.wado";
+use { read_rust, read_wado, find_similar, Group, Site, Tree, Measure } from "../src/lib.wado";
 
 fn tree(path: String, source: String) -> Tree {
     return read_rust(path, source).unwrap();
@@ -59,8 +59,10 @@ test "a group is reported at the largest node that is alike" {
     ];
     let groups = find_similar(&trees, 10, 0.9);
     assert groups.len() == 1;
-    let site = groups[0].sites[0];
-    assert trees[0].line_of(trees[0].start[site.row]) == 1;
+    for let site of &groups[0].sites {
+        assert site.start(&trees) == 0;
+        assert site.end(&trees) == trees[site.tree].source.len();
+    }
 }
 
 test "a changed operator lowers the similarity below one" {
@@ -141,6 +143,37 @@ ${body}    }
     assert groups.iter_ref().any(|g| g.sites.iter_ref().any(|s| s.tree == 1 && whole(s)));
 }
 
+test "a copy shared by two larger copies is reported" {
+    let shared = "    for item in items {
+        if item.active && item.weight > 3 {
+            sum += item.weight * item.count;
+        }
+        if item.flagged {
+            sum -= item.penalty;
+        }
+    }
+";
+    let with_head = `fn f(items: &[Item], log: &mut Log) -> i64 {
+    let mut sum = log.start(\"f\", 1, 2, 3);
+    log.note(sum, \"begin\", items.len());
+${shared}    sum
+}`;
+    let with_tail = `fn g(items: &[Item]) -> Report {
+    let mut sum = 0;
+${shared}    let r = Report::new(sum, items.first(), 0, 1);
+    r.finish(\"done\", true)
+}`;
+    let trees: List<Tree> = [
+        tree("a.rs", with_head),
+        tree("b.rs", with_head),
+        tree("c.rs", with_tail),
+        tree("d.rs", with_tail),
+    ];
+    let groups = find_similar(&trees, 20, 0.9);
+    let in_tree = |g: &Group, t: i32| g.sites.iter_ref().any(|s| s.tree == t);
+    assert groups.iter_ref().any(|g| (in_tree(g, 0) || in_tree(g, 1)) && (in_tree(g, 2) || in_tree(g, 3)));
+}
+
 test "a node repeating one small shape is not compared" {
     let a = "fn f(t: &T) { match t { A::B { .. } | A::C(_) | A::D | A::E { .. } | A::F(_) | A::G | A::H { .. } | A::I(_) | A::J => {} } }";
     let b = "fn g(u: &U) { match u { X::Y(_) | X::Z { .. } | X::W | X::V(_) | X::Q { .. } | X::R | X::S(_) | X::P { .. } | X::O => 1 } }";
@@ -175,6 +208,28 @@ test "a run of statements in a longer block is compared" {
     assert trees[0].line_of(site.start(&trees)) >= 4;
 }
 
+test "a run may start at a statement long enough alone" {
+    let shared = "    let total = rows.iter().map(|r| r.weight * r.count + r.bonus - r.penalty + r.extra * 2).sum::<i64>();
+    report(total, \"sum\", rows.len());
+";
+    let a = `fn f(rows: &[Row]) {
+    let a = 1;
+    prepare(a);
+${shared}}`;
+    let b = `fn g(rows: &[Row], z: &mut Z) {
+    z.reset(0, 1);
+    if z.done { return; }
+${shared}    z.close();
+}`;
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    let reaches_report = |s: &Site| trees[s.tree].line_of(s.end(&trees)) == 5;
+    let groups = find_similar(&trees, 40, 0.9);
+    assert groups.iter_ref().any(|g| g.sites.len() == 2 && g.sites.iter_ref().all(reaches_report));
+}
+
 test "names that resolve elsewhere keep their spelling" {
     let a = "fn f(xs: &[X]) -> i64 { let mut s = 0; for x in xs { s += x.weight.total() * compute_rank(x.id); } s }";
     let b = "fn g(ys: &[Y]) -> i64 { let mut t = 0; for y in ys { t += y.height.mean() * derive_order(y.key); } t }";
@@ -204,6 +259,33 @@ test "one logic in two syntaxes is alike by the names it calls" {
     assert groups.len() == 1;
     assert groups[0].sites.iter_ref().all(|s| s.start(&trees) == 0);
     assert find_similar(&trees, 20, 0.65).iter_ref().all(|g| g.sites[0].start(&trees) > 0);
+}
+
+test "one name called many times is too few names to compare by" {
+    let a = "fn f(a: i64, b: i64) {
+    log(a + b);
+    log(a * b);
+    log(a - b);
+    log(a / b);
+    log(a % b);
+}";
+    let b = "fn g(c: i64, d: i64) {
+    log(c + d);
+    log(c * d);
+    log(c - d);
+    if c > d { log(c); } else { log(d); }
+}";
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    let by_shape = find_similar(&trees, 20, 0.6);
+    let by_names = find_similar(&trees, 20, 0.6, Measure::ShapeOrNames);
+    assert by_names.len() == by_shape.len();
+    for let mut i = 0; i < by_shape.len(); i += 1 {
+        assert by_names[i].similarity == by_shape[i].similarity;
+        assert by_names[i].sites[0].row == by_shape[i].sites[0].row;
+    }
 }
 
 test "wado code is compared, its test blocks left out" {
@@ -258,6 +340,7 @@ test "test code is not compared" {
 test "a cfg marks test code only by the test predicate" {
     let skipped: List<String> = [
         `#[cfg(all(test, unix))]\n${COPY_B}`, `#![cfg(test)]\n${COPY_B}`, `#[cfg(\ttest\r\n)]\n${COPY_B}`,
+        `#[cfg(any(test))]\nmod helpers {\n${COPY_B}\n}`, `#[cfg(any(test, all(unix, test)))]\n${COPY_B}`,
     ];
     for let source of skipped {
         let trees: List<Tree> = [
