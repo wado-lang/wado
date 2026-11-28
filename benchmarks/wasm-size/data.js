@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795846944962,
+  "lastUpdate": 1795850562588,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -83281,6 +83281,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 334355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6a06481b7887a6b154157c8e3239147414666176",
+          "message": "Merge pull request #2791 from wado-lang/ccr-20bd15ab-9i3f8w\n\nrefactor(gale): one emit walker that decides from the GIR alone",
+          "timestamp": "2026-11-28T16:08:18+09:00",
+          "tree_id": "41f384d58b2d7a121b09cb2297bd9b8d185e8696",
+          "url": "https://github.com/wado-lang/wado/commit/6a06481b7887a6b154157c8e3239147414666176"
+        },
+        "date": 1795850561755,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334842,
             "unit": "bytes"
           }
         ]
