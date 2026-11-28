@@ -301,9 +301,7 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction, cl
                 "return $settle({value}, {payload}, ($ret, $value) => {{"
             )];
             if let Some(ok) = ok {
-                let mut written = Vec::new();
-                store(ok, "$ret", 0, "$value", classes, &mut written);
-                lines.extend(written.into_iter().map(|line| format!("  {line}")));
+                store_nested(ok, "$ret", 0, "$value", classes, &mut lines);
             }
             lines.push("});".to_string());
             lines
@@ -809,11 +807,6 @@ fn store(
     lines: &mut Vec<String>,
 ) {
     let at = place(base, offset);
-    let nested = |ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<String>| {
-        let mut inner = Vec::new();
-        store(ty, base, offset, value, classes, &mut inner);
-        lines.extend(inner.into_iter().map(|line| format!("  {line}")));
-    };
     match Shape::of(ty) {
         Shape::String => lines.push(format!("$putString({at}, {value});")),
         Shape::Option(inner) => {
@@ -822,7 +815,14 @@ fn store(
             lines.push(format!("  $view().setUint8({at}, 0);"));
             lines.push("} else {".to_string());
             lines.push(format!("  $view().setUint8({at}, 1);"));
-            nested(inner, base, offset + align_to(1, align), value, lines);
+            store_nested(
+                inner,
+                base,
+                offset + align_to(1, align),
+                value,
+                classes,
+                lines,
+            );
             lines.push("}".to_string());
         }
         Shape::Scalar(scalar) => lines.push(scalar.to_memory(&at, value)),
@@ -846,7 +846,7 @@ fn store(
             lines.push(format!(
                 "$putList({at}, {value}, {size}, {align}, (at, item) => {{"
             ));
-            nested(elem, "at", 0, "item", lines);
+            store_nested(elem, "at", 0, "item", classes, lines);
             lines.push("});".to_string());
         }
         Shape::Variant(cases) => {
@@ -856,7 +856,7 @@ fn store(
                     "  {}",
                     Scalar::U8.to_memory(&at, &index.to_string())
                 ));
-                nested(&case.ty, base, offset + payload, value, lines);
+                store_nested(&case.ty, base, offset + payload, value, classes, lines);
             };
             // WebIDL requires a union's constituents to be distinguishable, so
             // at most one test takes the host's value. A dictionary has none:
@@ -887,6 +887,20 @@ fn store(
         }
         Shape::Callback(..) => unreachable!("the WebIDL frontend returns no {ty:?}"),
     }
+}
+
+/// [`store`], one level further in.
+fn store_nested(
+    ty: &WadoType,
+    base: &str,
+    offset: u32,
+    value: &str,
+    classes: &Classes,
+    lines: &mut Vec<String>,
+) {
+    let mut inner = Vec::new();
+    store(ty, base, offset, value, classes, &mut inner);
+    lines.extend(inner.into_iter().map(|line| format!("  {line}")));
 }
 
 /// The test that the host's `value` is of the union case `ty`, or `None` for
