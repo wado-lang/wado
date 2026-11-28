@@ -529,14 +529,10 @@ the arm, and a write through it reaches the scrutinee when the arm ends. An
 affine `variant` bound as a payload, a field or an element is a place of its
 own, so a replacement through the binding lands at once.
 
-> Not yet implemented: a payload of a primitive, `enum`, `flags`, `fn` or
-> reference type cannot bind under a `&mut` scrutinee, even to be read:
-> matching `&mut Option<i32>` with `Some(x)` is an error. Match `*r` to bind
-> the payload by value, or a `&` to the value to bind a `&i32`. A copyable
-> `variant` does bind, as a payload, a field, an element or the scrutinee
-> whole, and a mutation of what it holds lands. Replacing it whole through the
-> binding is an error, and so is replacing an affine `variant` bound as the
-> scrutinee whole.
+> Not yet implemented: in a generic body, a binding of a type parameter is not
+> held for the arm. A mutation of what it holds lands, and replacing it whole
+> through the binding is an error. So is replacing an affine `variant` bound as
+> the scrutinee whole.
 
 A destructuring `let` or `for` binding takes references the same way, and so does a reference met below the top of a pattern. For a `for`, one turn of the loop is the arm, and a `let` has none, so it binds no scoped `&mut`: `for let [a, b] of &pairs` gives `a: &A`, and `[n, { x, .. }]` against `[i32, &Point]` gives `x: &i32`.
 

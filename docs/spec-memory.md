@@ -308,9 +308,10 @@ under `stale_reference`.
 > Not yet implemented: a `&mut` of a local of such a type is an ordinary
 > reference, which a variable holds and a function returns. A `&mut` of a
 > field, or of a `variant` element, that a variable holds or a callee keeps is
-> an error only where something replaces the value through it. A pattern
-> binding of such a type is an error, a `variant`'s whole binding where it is
-> replaced. None of the errors in the list above is reported.
+> an error only where something replaces the value through it. A generic
+> body's pattern binding of a `&mut T` is not held for its arm, and is an error
+> only where something replaces the value through it. None of the errors in
+> the list above is reported.
 
 Rationale: [WEP: Writable References](./wep-2026-11-27-writable-references.md).
 

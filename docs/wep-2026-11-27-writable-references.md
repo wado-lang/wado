@@ -351,7 +351,7 @@ spare a call site. Each step leaves the tree building and its tests passing.
   type replaced on assignment that a variable, a value or a `return` holds.
 - [x] A cell is a reference: an index and a `for` loop dereference it, `==`
   compares what cells hold, and every `Eq` that means identity calls `ref_eq`.
-- [ ] The scoped forms store back from every place: a call argument and a
+- [x] The scoped forms store back from every place: a call argument and a
   receiver on an element, a pattern binding of a type replaced on
   assignment, and `for let v of &mut xs`.
 - [ ] A `&mut` to a type replaced on assignment is refused outside the scoped

@@ -93,8 +93,9 @@ use crate::pgo::MarkMap;
 use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    assign, bare_cast, binary, bool_lit, builtin_call, class_in, cold_path_stmt, handle_class,
-    handle_eq, i32_const, marker_stmt_mark, mut_ref_expr, not_expr, ord_bool_from_cmp, rt_call,
+    assign, bare_cast, binary, bool_lit, builtin_call, class_in, cold_path_stmt, deref_expr,
+    field_access, handle_class, handle_eq, i32_const, local_ref, marker_stmt_mark, mut_ref_expr, not_expr,
+    ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, ExitScope, SourceStmt, StructDef, TemplateId, TirEffectOp, TirField, TirImpl,
@@ -318,6 +319,37 @@ pub(crate) struct ScopedElement {
     store: TirStmt,
 }
 
+/// One step from a value into the part of it a sub-pattern matches.
+#[derive(Clone)]
+pub(crate) enum PathStep {
+    /// A struct's field or a tuple's element.
+    Field {
+        index: u32,
+        name: String,
+        type_id: TypeId,
+    },
+    /// The payload of one case of a `variant`.
+    Case {
+        variant_type: TypeId,
+        case_index: u32,
+        case_name: String,
+        payload_type: TypeId,
+    },
+}
+
+/// A pattern binding of `&mut V` under a `&mut` scrutinee, where `V` is
+/// replaced on assignment: the pattern binds the value into `held`, the arm
+/// binds `user` to `&mut held`, and the arm's exits store `held` back along
+/// `path` (WEP: Writable References).
+pub(crate) struct HeldBinding {
+    name: String,
+    user: u32,
+    user_is_mut: bool,
+    held: TirExpr,
+    value_type: TypeId,
+    path: Vec<PathStep>,
+}
+
 /// One reify-side power-assert capture slot. Independent from
 /// [`super::assert::Capture`] so the two walks don't share state.
 pub(super) struct ReifyAssertSlot {
@@ -530,6 +562,13 @@ pub(crate) struct Reify<'a> {
     pub(crate) scoped_subscripts: IndexSet<AstId>,
     /// What [`Self::scoped_subscripts`] read so far, for the call to store back.
     pub(crate) scoped_elements: Vec<ScopedElement>,
+    /// The steps from the scrutinee to the sub-pattern being reified, each
+    /// with whether it was taken through a `&mut`.
+    pub(crate) pattern_path: Vec<(PathStep, bool)>,
+    /// Whether the pattern being reified is an arm's, whose end stores back.
+    pub(crate) in_arm_pattern: bool,
+    /// The bindings the arm pattern being reified holds for its arm.
+    pub(crate) held_bindings: Vec<HeldBinding>,
     /// Call site for location literals (`#file` / `#line` / `#function`) in a
     /// default-argument expression, which report the call site rather than the
     /// callee module reify swaps to for name resolution. Set only by the
@@ -682,6 +721,9 @@ impl<'a> Reify<'a> {
             compound_overrides: IndexMap::default(),
             scoped_subscripts: IndexSet::default(),
             scoped_elements: Vec::new(),
+            pattern_path: Vec::new(),
+            in_arm_pattern: false,
+            held_bindings: Vec::new(),
             call_site_location: None,
             pending_local_structs: IndexMap::default(),
             pending_template_structs: Vec::new(),
@@ -4407,10 +4449,11 @@ impl<'a> Reify<'a> {
                 expr,
                 span: elem_span,
             } => {
-                let scrutinee = self.reify_expr(expr, ctx, None);
+                let (scrutinee, elements) = self.reify_scrutinee(expr, ctx);
                 let scrutinee = self.probe_expr(ProbeSite::Around, expr.id(), scrutinee);
                 let scrutinee_type = scrutinee.type_id;
-                let tir_pattern = self.reify_pattern(pattern, scrutinee_type, *elem_span, ctx);
+                let (tir_pattern, held) =
+                    self.reify_arm_pattern(pattern, scrutinee_type, *elem_span, ctx);
                 let inner_block = TirBlock::new(inner(self, ctx), span);
                 // Use the shared `block_result_type` so a then/else
                 // block ending in a value `If` / `Match` / nested chain
@@ -4438,32 +4481,30 @@ impl<'a> Reify<'a> {
                     None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
                 };
                 let arms = vec![
-                    TirMatchArm {
-                        pattern: tir_pattern,
-                        guard: None,
-                        body: then_body,
-                        span: *elem_span,
-                        consumes: true,
-                    },
-                    TirMatchArm {
-                        pattern: TirPattern::Wildcard,
-                        guard: None,
-                        body: else_body,
-                        span: else_arm_span,
-                        consumes: false,
-                    },
-                ];
-                TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(
-                        TirExprKind::Match {
-                            expr: Box::new(scrutinee),
-                            arms,
+                    (
+                        TirMatchArm {
+                            pattern: tir_pattern,
+                            guard: None,
+                            body: then_body,
+                            span: *elem_span,
+                            consumes: true,
                         },
-                        match_type,
-                        span,
-                    )),
-                    span,
-                )
+                        held,
+                    ),
+                    (
+                        TirMatchArm {
+                            pattern: TirPattern::Wildcard,
+                            guard: None,
+                            body: else_body,
+                            span: else_arm_span,
+                            consumes: false,
+                        },
+                        Vec::new(),
+                    ),
+                ];
+                let matched =
+                    self.match_storing_back(scrutinee, elements, arms, match_type, span, ctx);
+                TirStmt::new(TirStmtKind::Expr(matched), span)
             }
             ast::ConditionElement::Expr(expr) => {
                 let condition = self.reify_condition_expr(expr, ctx);
@@ -6313,22 +6354,46 @@ impl<'a> Reify<'a> {
         ctx: &mut FunctionContext,
         reify: impl FnOnce(&mut Self, &mut FunctionContext) -> TirExpr,
     ) -> TirExpr {
+        let (call, elements) = self.holding_elements(receiver, args, ctx, reify);
+        if elements.is_empty() {
+            return call;
+        }
+        self.store_back_after(call, elements, ctx)
+    }
+
+    /// `reify`, with each element `receiver` and `args` take as a scoped
+    /// `&mut` held in a temp, for the caller to store back.
+    fn holding_elements(
+        &mut self,
+        receiver: Option<&ast::Expr>,
+        args: &[ast::Expr],
+        ctx: &mut FunctionContext,
+        reify: impl FnOnce(&mut Self, &mut FunctionContext) -> TirExpr,
+    ) -> (TirExpr, Vec<ScopedElement>) {
         let scoped: IndexSet<AstId> = scoped_subscripts(receiver, args)
             .filter(|index| self.ann_index_assign_dispatch(index.id).is_some())
             .map(|index| index.id)
             .collect();
         if scoped.is_empty() {
-            return reify(self, ctx);
+            return (reify(self, ctx), Vec::new());
         }
         let outer_subscripts = std::mem::replace(&mut self.scoped_subscripts, scoped);
         let outer_elements = std::mem::take(&mut self.scoped_elements);
-        let call = reify(self, ctx);
+        let reified = reify(self, ctx);
         self.scoped_subscripts = outer_subscripts;
         let elements = std::mem::replace(&mut self.scoped_elements, outer_elements);
-        if elements.is_empty() {
-            return call;
-        }
-        self.store_back_after(call, elements, ctx)
+        (reified, elements)
+    }
+
+    /// A pattern's scrutinee, with the element a `&mut xs[i]` holds.
+    fn reify_scrutinee(
+        &mut self,
+        scrutinee: &ast::Expr,
+        ctx: &mut FunctionContext,
+    ) -> (TirExpr, Vec<ScopedElement>) {
+        self.holding_elements(None, std::slice::from_ref(scrutinee), ctx, |r, ctx| {
+            r.reify_expr(scrutinee, ctx, None)
+        })
     }
 
     /// `&mut container[index]` as a temp holding the element, which
@@ -7170,41 +7235,39 @@ impl<'a> Reify<'a> {
     /// annotate time) into a two-arm match: pattern → true, wildcard
     /// → false. Mirror `Elaborator::desugar_matches_expr`.
     fn reify_matches(&mut self, m: &ast::MatchesExpr, ctx: &mut FunctionContext) -> TirExpr {
-        let scrutinee = self.reify_expr(&m.expr, ctx, None);
+        let (scrutinee, elements) = self.reify_scrutinee(&m.expr, ctx);
         let scrutinee_type = scrutinee.type_id;
 
         let ctx = &mut ctx.enter_scope();
-        let pattern_tir = self.reify_pattern(&m.pattern, scrutinee_type, m.span, ctx);
+        let (pattern_tir, held) = self.reify_arm_pattern(&m.pattern, scrutinee_type, m.span, ctx);
         let arm_body = match &m.guard {
             Some(guard) => self.reify_condition_expr(guard, ctx),
             None => bool_lit(true, m.span),
         };
 
         let arms = vec![
-            TirMatchArm {
-                pattern: pattern_tir,
-                guard: None,
-                body: arm_body,
-                span: m.span,
-                consumes: false,
-            },
-            TirMatchArm {
-                pattern: TirPattern::Wildcard,
-                guard: None,
-                body: bool_lit(false, m.span),
-                span: m.span,
-                consumes: false,
-            },
+            (
+                TirMatchArm {
+                    pattern: pattern_tir,
+                    guard: None,
+                    body: arm_body,
+                    span: m.span,
+                    consumes: false,
+                },
+                held,
+            ),
+            (
+                TirMatchArm {
+                    pattern: TirPattern::Wildcard,
+                    guard: None,
+                    body: bool_lit(false, m.span),
+                    span: m.span,
+                    consumes: false,
+                },
+                Vec::new(),
+            ),
         ];
-
-        TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(scrutinee),
-                arms,
-            },
-            TypeTable::BOOL,
-            m.span,
-        )
+        self.match_storing_back(scrutinee, elements, arms, TypeTable::BOOL, m.span, ctx)
     }
 
     /// A struct value's `(name, concrete type, declared index)` fields. Mirrors
@@ -7435,38 +7498,39 @@ impl<'a> Reify<'a> {
         expected_type: Option<TypeId>,
         recorded_type: TypeId,
     ) -> TirExpr {
-        let scrutinee = self.reify_expr(&match_expr.expr, ctx, None);
+        let (scrutinee, elements) = self.reify_scrutinee(&match_expr.expr, ctx);
         let scrutinee_type = scrutinee.type_id;
 
-        let arms: Vec<TirMatchArm> = match_expr
+        let arms = match_expr
             .arms
             .iter()
             .map(|arm| {
                 let ctx = &mut ctx.enter_scope();
-                let pattern = self.reify_pattern(&arm.pattern, scrutinee_type, arm.span, ctx);
+                let (pattern, held) =
+                    self.reify_arm_pattern(&arm.pattern, scrutinee_type, arm.span, ctx);
                 let guard = arm
                     .guard
                     .as_ref()
                     .map(|g| self.reify_condition_expr(g, ctx));
                 let body = self.reify_expr(&arm.body, ctx, expected_type);
                 let body = self.probe_expr(ProbeSite::Around, arm.body.id(), body);
-                TirMatchArm {
+                let arm = TirMatchArm {
                     pattern,
                     guard,
                     body,
                     span: arm.span,
                     consumes: true,
-                }
+                };
+                (arm, held)
             })
             .collect();
-
-        TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(scrutinee),
-                arms,
-            },
+        self.match_storing_back(
+            scrutinee,
+            elements,
+            arms,
             recorded_type,
             match_expr.span,
+            ctx,
         )
     }
 
@@ -9509,6 +9573,12 @@ impl<'a> Reify<'a> {
     ) -> TirPattern {
         match pattern {
             ast::Pattern::Wildcard => TirPattern::Wildcard,
+            ast::Pattern::Ident { id, name, span } | ast::Pattern::MutIdent { id, name, span }
+                if self.holds_binding(scrutinee_type) =>
+            {
+                let is_mut = matches!(pattern, ast::Pattern::MutIdent { .. });
+                self.hold_binding(name, *id, *span, is_mut, scrutinee_type, ctx)
+            }
             ast::Pattern::Ident { id, name, span } => {
                 let local_index = ctx.add_local_at(
                     name.clone(),
@@ -9610,7 +9680,12 @@ impl<'a> Reify<'a> {
                         let elem_ty = elem_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
                         let binding_ty =
                             self.tysys.apply_scrutinee_ref_kind(scrutinee_type, elem_ty);
-                        self.reify_pattern(p, binding_ty, site, ctx)
+                        let step = PathStep::Field {
+                            index: u32::try_from(i).unwrap(),
+                            name: i.to_string(),
+                            type_id: elem_ty,
+                        };
+                        self.reify_sub_pattern(p, step, scrutinee_type, binding_ty, site, ctx)
                     })
                     .collect();
                 TirPattern::Tuple(sub_patterns, *has_rest)
@@ -9683,11 +9758,26 @@ impl<'a> Reify<'a> {
                 let binding_scrutinee = self
                     .tysys
                     .apply_scrutinee_ref_kind(scrutinee_type, payload_type);
+                let case_index = resolved_case_index(case_index, &case_name);
+                let step = PathStep::Case {
+                    variant_type: peeled_scrutinee,
+                    case_index,
+                    case_name: case_name.clone(),
+                    payload_type,
+                };
                 let sub_patterns: Vec<TirPattern> = bindings
                     .iter()
-                    .map(|p| self.reify_pattern(p, binding_scrutinee, site, ctx))
+                    .map(|p| {
+                        self.reify_sub_pattern(
+                            p,
+                            step.clone(),
+                            scrutinee_type,
+                            binding_scrutinee,
+                            site,
+                            ctx,
+                        )
+                    })
                     .collect();
-                let case_index = resolved_case_index(case_index, &case_name);
                 TirPattern::Variant {
                     enum_type: peeled_scrutinee,
                     variant_name: case_name,
@@ -9707,12 +9797,26 @@ impl<'a> Reify<'a> {
                 // arm-scope bindings at the first alternative's locals.
                 let mut resolved: Vec<TirPattern> = Vec::with_capacity(alternatives.len());
                 if let Some(first_alt) = alternatives.first() {
+                    let first_held = self.held_bindings.len();
                     let first = self.reify_pattern(first_alt, scrutinee_type, site, ctx);
+                    let later_held = self.held_bindings.len();
                     let first_bindings = collect_pattern_bindings_with_index(&first);
                     resolved.push(first);
 
                     for alt in alternatives.iter().skip(1) {
+                        let alt_held = self.held_bindings.len();
                         let alt_resolved = self.reify_pattern(alt, scrutinee_type, site, ctx);
+                        // Each alternative keeps its own path to store back
+                        // along, and shares the first one's locals.
+                        let (firsts, alts) = self.held_bindings.split_at_mut(alt_held);
+                        for held in alts {
+                            let first = firsts[first_held..later_held]
+                                .iter()
+                                .find(|first| first.name == held.name)
+                                .expect("every alternative binds the same names");
+                            held.user = first.user;
+                            held.held = first.held.clone();
+                        }
                         let alt_bindings = collect_pattern_bindings_with_index(&alt_resolved);
                         let mut remapped = alt_resolved;
                         for (first_bind, alt_bind) in first_bindings.iter().zip(alt_bindings.iter())
@@ -9727,11 +9831,18 @@ impl<'a> Reify<'a> {
                     // Point the arm-scope bindings at the first
                     // alternative's locals so the body reads the slot the
                     // payload was extracted into.
-                    for (name, local_index, _type_id) in &first_bindings {
+                    let held_users = self.held_bindings[first_held..later_held]
+                        .iter()
+                        .map(|held| (held.name.as_str(), held.user));
+                    for (name, local_index) in first_bindings
+                        .iter()
+                        .map(|(name, index, _)| (name.as_str(), *index))
+                        .chain(held_users)
+                    {
                         if let Some(scope) = ctx.scopes.last_mut()
                             && let Some(var) = scope.get_mut(name)
                         {
-                            var.index = *local_index;
+                            var.index = local_index;
                         }
                     }
                 }
@@ -9904,7 +10015,13 @@ impl<'a> Reify<'a> {
                 let binding_ty = self
                     .tysys
                     .apply_scrutinee_ref_kind(scrutinee_type, field_ty);
-                let pattern = self.reify_pattern(&f.pattern, binding_ty, site, ctx);
+                let step = PathStep::Field {
+                    index: field_index,
+                    name: f.field_name.clone(),
+                    type_id: field_ty,
+                };
+                let pattern =
+                    self.reify_sub_pattern(&f.pattern, step, scrutinee_type, binding_ty, site, ctx);
                 TirStructPatternField {
                     field_name: f.field_name.clone(),
                     field_index,
@@ -9918,6 +10035,359 @@ impl<'a> Reify<'a> {
             fields: tir_fields,
             has_rest,
         }
+    }
+
+    /// An arm's pattern, and the bindings it holds for the arm.
+    fn reify_arm_pattern(
+        &mut self,
+        pattern: &ast::Pattern,
+        scrutinee_type: TypeId,
+        site: Span,
+        ctx: &mut FunctionContext,
+    ) -> (TirPattern, Vec<HeldBinding>) {
+        assert!(!self.in_arm_pattern && self.held_bindings.is_empty());
+        self.in_arm_pattern = true;
+        let pattern = self.reify_pattern(pattern, scrutinee_type, site, ctx);
+        self.in_arm_pattern = false;
+        (pattern, std::mem::take(&mut self.held_bindings))
+    }
+
+    /// `pattern` as the part of the value `scrutinee_type` matches that `step`
+    /// reaches.
+    fn reify_sub_pattern(
+        &mut self,
+        pattern: &ast::Pattern,
+        step: PathStep,
+        scrutinee_type: TypeId,
+        binding_type: TypeId,
+        site: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        let through_mut = matches!(
+            self.tysys
+                .peel_scrutinee_refs(scrutinee_type, RefBinding::None)
+                .1,
+            RefBinding::MutRef
+        );
+        self.pattern_path.push((step, through_mut));
+        let pattern = self.reify_pattern(pattern, binding_type, site, ctx);
+        self.pattern_path.pop();
+        pattern
+    }
+
+    /// Whether a binding of `binding_type` holds its value for the arm: a
+    /// `&mut` a `&mut` scrutinee gives it, to a type replaced on assignment.
+    fn holds_binding(&self, binding_type: TypeId) -> bool {
+        let (true, Some((_, true))) = (self.in_arm_pattern, self.pattern_path.last()) else {
+            return false;
+        };
+        let ResolvedType::MutRef(value_type) =
+            *self.tysys.type_table.borrow().get(binding_type)
+        else {
+            return false;
+        };
+        self.tysys
+            .type_table
+            .borrow()
+            .is_boxed_reference_target(value_type)
+            && !self.is_affine_type(value_type)
+    }
+
+    /// The pattern binding the value into a temp, for [`HeldBinding`].
+    fn hold_binding(
+        &mut self,
+        name: &str,
+        id: AstId,
+        span: Span,
+        is_mut: bool,
+        binding_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        let ResolvedType::MutRef(value_type) =
+            *self.tysys.type_table.borrow().get(binding_type)
+        else {
+            unreachable!("`holds_binding` admits a `&mut` alone")
+        };
+        let user = ctx.add_local_at(name.to_string(), binding_type, is_mut, Some(id), span);
+        let held_name = minted_name("held", ctx.fresh_serial());
+        let held = ctx.add_local(held_name.clone(), value_type, true, None);
+        ctx.address_taken_locals.insert(held);
+        self.held_bindings.push(HeldBinding {
+            name: name.to_string(),
+            user,
+            user_is_mut: is_mut,
+            held: local_ref(held, &held_name, value_type),
+            value_type,
+            path: self.pattern_path.iter().map(|(step, _)| step.clone()).collect(),
+        });
+        TirPattern::Binding {
+            name: held_name,
+            local_index: held,
+            type_id: value_type,
+        }
+    }
+
+    /// The `match` of `scrutinee` over `arms`, each with the bindings its
+    /// pattern holds. An arm holding any binds `&mut` of each temp for its
+    /// guard and body, and stores each back at every exit of the body. An `|`
+    /// whose alternatives hold splits into an arm per alternative, each storing
+    /// back along its own path. The element a `&mut xs[i]` scrutinee holds is
+    /// stored back at every exit of the match.
+    fn match_storing_back(
+        &mut self,
+        scrutinee: TirExpr,
+        elements: Vec<ScopedElement>,
+        arms: Vec<(TirMatchArm, Vec<HeldBinding>)>,
+        match_type: TypeId,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let (mut prefix, stores): (Vec<TirStmt>, Vec<TirStmt>) = (
+            elements.iter().flat_map(|e| e.prefix.clone()).collect(),
+            elements.into_iter().map(|e| e.store).collect(),
+        );
+        let (scrutinee, place) = if arms.iter().all(|(_, held)| held.is_empty()) {
+            (scrutinee, None)
+        } else {
+            let (scrutinee, place) = self.matched_place(scrutinee, ctx, &mut prefix);
+            (scrutinee, Some(place))
+        };
+        let arms = arms
+            .into_iter()
+            .flat_map(|(arm, held)| match &place {
+                Some(place) if !held.is_empty() => self.hold_arm(arm, &held, place, ctx),
+                _ => vec![arm],
+            })
+            .collect();
+        let matched = TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(scrutinee),
+                arms,
+            },
+            match_type,
+            span,
+        );
+        if prefix.is_empty() {
+            return matched;
+        }
+        store_back_at_exits(matched, prefix, &stores, ctx)
+    }
+
+    /// The scrutinee to match, and the place a store back writes. A `&mut` of
+    /// a place re-evaluated without effect is written there; any other `&mut`
+    /// is bound once and written through.
+    fn matched_place(
+        &self,
+        scrutinee: TirExpr,
+        ctx: &mut FunctionContext,
+        prefix: &mut Vec<TirStmt>,
+    ) -> (TirExpr, TirExpr) {
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::MutRef,
+            expr,
+        } = &scrutinee.kind
+            && is_stable_place(expr)
+        {
+            let place = (**expr).clone();
+            return (scrutinee, place);
+        }
+        let ResolvedType::MutRef(pointee) = *self.tysys.type_table.borrow().get(scrutinee.type_id)
+        else {
+            unreachable!("only a `&mut` scrutinee gives a binding a `&mut`")
+        };
+        let span = scrutinee.span;
+        let reference = if matches!(scrutinee.kind, TirExprKind::Local { .. }) {
+            scrutinee
+        } else {
+            bind_fresh(ctx, "matched", scrutinee, prefix)
+        };
+        let place = deref_expr(reference.clone(), pointee, span);
+        (reference, place)
+    }
+
+    fn hold_arm(
+        &self,
+        arm: TirMatchArm,
+        held: &[HeldBinding],
+        place: &TirExpr,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TirMatchArm> {
+        let held_locals: IndexSet<u32> = held
+            .iter()
+            .filter_map(|h| scoped_temp(&h.held))
+            .collect();
+        let mut seen = 0;
+        let alternatives = alternatives_holding(&arm.pattern, &held_locals, &mut seen);
+        assert_eq!(seen, held.len(), "each held binding is one pattern binding");
+        alternatives
+            .into_iter()
+            .map(|(pattern, taken)| {
+                let span = arm.span;
+                let mut lent = Vec::new();
+                let mut stores = Vec::new();
+                for h in taken.iter().map(|&at| &held[at]) {
+                    let ref_type = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_mut_ref(h.value_type);
+                    lent.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name: h.name.clone(),
+                            local_index: h.user,
+                            is_mut: h.user_is_mut,
+                            type_id: ref_type,
+                            value: Some(mut_ref_expr(h.held.clone(), ref_type, span)),
+                            storage: LetStorage::Planned,
+                        },
+                        span,
+                    ));
+                    let store = self.store_along(place.clone(), &h.path, h.held.clone(), span, ctx);
+                    stores.push(TirStmt::new(TirStmtKind::Expr(store), span));
+                }
+                let guard = arm.guard.clone().map(|guard| {
+                    let mut stmts = lent.clone();
+                    stmts.push(TirStmt::new(TirStmtKind::Expr(guard), span));
+                    TirExpr::new(
+                        TirExprKind::Block(TirBlock::new(stmts, span)),
+                        TypeTable::BOOL,
+                        span,
+                    )
+                });
+                TirMatchArm {
+                    pattern,
+                    guard,
+                    body: store_back_at_exits(arm.body.clone(), lent, &stores, ctx),
+                    span,
+                    consumes: arm.consumes,
+                }
+            })
+            .collect()
+    }
+
+    /// `place = value`, where `path` leads from `place` to the part `value`
+    /// replaces. A chain of cases rebuilds the value around it; a case whose
+    /// payload is written in place stores into the payload it holds now.
+    fn store_along(
+        &self,
+        place: TirExpr,
+        path: &[PathStep],
+        value: TirExpr,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let Some((step, rest)) = path.split_first() else {
+            return assign(place, value);
+        };
+        let PathStep::Case {
+            variant_type,
+            case_index,
+            ref case_name,
+            payload_type,
+        } = *step
+        else {
+            let PathStep::Field {
+                index,
+                ref name,
+                type_id,
+            } = *step
+            else {
+                unreachable!()
+            };
+            let field = field_access(place, index, name.clone(), type_id, span);
+            return self.store_along(field, rest, value, span, ctx);
+        };
+        if rest
+            .iter()
+            .all(|step| matches!(step, PathStep::Case { .. }))
+        {
+            let rebuilt = path.iter().rev().fold(value, |payload, step| {
+                let PathStep::Case {
+                    variant_type,
+                    case_index,
+                    case_name,
+                    ..
+                } = step
+                else {
+                    unreachable!()
+                };
+                construct_case(*variant_type, *case_index, case_name, payload, span)
+            });
+            let rebuilt = if rebuilt.type_id == place.type_id {
+                rebuilt
+            } else {
+                bare_cast(rebuilt, place.type_id, span)
+            };
+            return assign(place, rebuilt);
+        }
+        let in_place = !self
+            .tysys
+            .type_table
+            .borrow()
+            .is_boxed_reference_target(payload_type);
+        let (binding_type, scrutinee) = if in_place {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let place_ref = tt.make_mut_ref(place.type_id);
+            (
+                tt.make_mut_ref(payload_type),
+                mut_ref_expr(place.clone(), place_ref, span),
+            )
+        } else {
+            (payload_type, place.clone())
+        };
+        let payload_name = minted_name("payload", ctx.fresh_serial());
+        let payload = ctx.add_local(payload_name.clone(), binding_type, !in_place, None);
+        let payload_ref = local_ref(payload, &payload_name, binding_type);
+        let mut stmts = Vec::new();
+        if in_place {
+            let inner = deref_expr(payload_ref, payload_type, span);
+            let store = self.store_along(inner, rest, value, span, ctx);
+            stmts.push(TirStmt::new(TirStmtKind::Expr(store), span));
+        } else {
+            ctx.address_taken_locals.insert(payload);
+            let store = self.store_along(payload_ref.clone(), rest, value, span, ctx);
+            stmts.push(TirStmt::new(TirStmtKind::Expr(store), span));
+            let rebuilt = construct_case(variant_type, case_index, case_name, payload_ref, span);
+            stmts.push(TirStmt::new(TirStmtKind::Expr(assign(place, rebuilt)), span));
+        }
+        let pattern = TirPattern::Variant {
+            enum_type: variant_type,
+            variant_name: case_name.clone(),
+            case_index,
+            bindings: vec![TirPattern::Binding {
+                name: payload_name,
+                local_index: payload,
+                type_id: binding_type,
+            }],
+            payload_type,
+        };
+        TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(scrutinee),
+                arms: vec![
+                    TirMatchArm {
+                        pattern,
+                        guard: None,
+                        body: TirExpr::new(
+                            TirExprKind::Block(TirBlock::new(stmts, span)),
+                            TypeTable::UNIT,
+                            span,
+                        ),
+                        span,
+                        consumes: true,
+                    },
+                    TirMatchArm {
+                        pattern: TirPattern::Wildcard,
+                        guard: None,
+                        body: unit_placeholder(span),
+                        span,
+                        consumes: false,
+                    },
+                ],
+            },
+            TypeTable::UNIT,
+            span,
+        )
     }
 
     /// The case `case_name` of `owner` that annotate resolved at `site`, built
@@ -10919,6 +11389,163 @@ fn breaks_out(body: &TirBlock) -> bool {
     };
     finder.visit_block(body);
     finder.found
+}
+
+/// A place whose evaluation has no effect, so a store back may name it again.
+fn is_stable_place(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { .. } => true,
+        TirExprKind::FieldAccess { expr, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr,
+        } => is_stable_place(expr),
+        _ => false,
+    }
+}
+
+/// The alternatives of `pattern` with no `|` holding a binding of
+/// `held_locals`, each with the indices of the held bindings it binds, which
+/// count those met so far in `seen`. Held bindings are met in the order reify
+/// pushed them: every alternative in turn, every part left to right.
+fn alternatives_holding(
+    pattern: &TirPattern,
+    held_locals: &IndexSet<u32>,
+    seen: &mut usize,
+) -> Vec<(TirPattern, Vec<usize>)> {
+    let parts = |parts: &[TirPattern], seen: &mut usize| {
+        let mut combined: Vec<(Vec<TirPattern>, Vec<usize>)> = vec![(Vec::new(), Vec::new())];
+        for part in parts {
+            let alternatives = alternatives_holding(part, held_locals, seen);
+            combined = combined
+                .into_iter()
+                .flat_map(|(done, taken)| {
+                    alternatives.iter().map(move |(alt, alt_taken)| {
+                        let mut done = done.clone();
+                        done.push(alt.clone());
+                        let mut taken = taken.clone();
+                        taken.extend(alt_taken);
+                        (done, taken)
+                    })
+                })
+                .collect();
+        }
+        combined
+    };
+    match pattern {
+        TirPattern::Binding { local_index, .. } if held_locals.contains(local_index) => {
+            *seen += 1;
+            vec![(pattern.clone(), vec![*seen - 1])]
+        }
+        TirPattern::Or(alternatives) if holds_any(pattern, held_locals) => alternatives
+            .iter()
+            .flat_map(|alt| alternatives_holding(alt, held_locals, seen))
+            .collect(),
+        TirPattern::Tuple(elements, has_rest) => parts(elements, seen)
+            .into_iter()
+            .map(|(elements, taken)| (TirPattern::Tuple(elements, *has_rest), taken))
+            .collect(),
+        TirPattern::Variant {
+            enum_type,
+            variant_name,
+            case_index,
+            bindings,
+            payload_type,
+        } => parts(bindings, seen)
+            .into_iter()
+            .map(|(bindings, taken)| {
+                let variant = TirPattern::Variant {
+                    enum_type: *enum_type,
+                    variant_name: variant_name.clone(),
+                    case_index: *case_index,
+                    bindings,
+                    payload_type: *payload_type,
+                };
+                (variant, taken)
+            })
+            .collect(),
+        TirPattern::Struct {
+            struct_type,
+            fields,
+            has_rest,
+        } => {
+            let patterns: Vec<TirPattern> = fields.iter().map(|f| f.pattern.clone()).collect();
+            parts(&patterns, seen)
+                .into_iter()
+                .map(|(patterns, taken)| {
+                    let fields = fields
+                        .iter()
+                        .zip(patterns)
+                        .map(|(f, pattern)| TirStructPatternField {
+                            field_name: f.field_name.clone(),
+                            field_index: f.field_index,
+                            pattern,
+                        })
+                        .collect();
+                    let destructured = TirPattern::Struct {
+                        struct_type: *struct_type,
+                        fields,
+                        has_rest: *has_rest,
+                    };
+                    (destructured, taken)
+                })
+                .collect()
+        }
+        _ => vec![(pattern.clone(), Vec::new())],
+    }
+}
+
+fn holds_any(pattern: &TirPattern, held_locals: &IndexSet<u32>) -> bool {
+    collect_pattern_bindings_with_index(pattern)
+        .iter()
+        .any(|(_, local, _)| held_locals.contains(local))
+}
+
+/// `body` with `lent` ahead of it, `stores` at each of its exits, and
+/// `stores` after it where it ends in a value.
+fn store_back_at_exits(
+    body: TirExpr,
+    lent: Vec<TirStmt>,
+    stores: &[TirStmt],
+    ctx: &mut FunctionContext,
+) -> TirExpr {
+    let (type_id, span) = (body.type_id, body.span);
+    let mut stmts = lent;
+    let value = if matches!(type_id, TypeTable::UNIT | TypeTable::NEVER) {
+        stmts.push(TirStmt::new(TirStmtKind::Expr(body), span));
+        None
+    } else {
+        Some(bind_fresh(ctx, "arm_value", body, &mut stmts))
+    };
+    let mut block = TirBlock::new(stmts, span);
+    let label = minted_name("arm", ctx.fresh_serial());
+    store_at_exits(&mut block, &label, stores, ctx);
+    if type_id != TypeTable::NEVER {
+        block.stmts.extend(stores.iter().cloned());
+    }
+    if let Some(value) = value {
+        block.stmts.push(TirStmt::new(TirStmtKind::Expr(value), span));
+    }
+    TirExpr::new(TirExprKind::Block(block), type_id, span)
+}
+
+fn construct_case(
+    variant_type: TypeId,
+    case_index: u32,
+    case_name: &str,
+    payload: TirExpr,
+    span: Span,
+) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::VariantConstruct {
+            variant_type,
+            case_index,
+            case_name: case_name.to_string(),
+            payload: Some(Box::new(payload)),
+        },
+        variant_type,
+        span,
+    )
 }
 
 /// Put `stores` ahead of every jump out of `block`, the body of the labeled

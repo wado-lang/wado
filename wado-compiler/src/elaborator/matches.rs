@@ -22,7 +22,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         _expected_type: Option<TypeId>,
     ) -> TypeId {
         self.record_desugar(m.id, DesugarKind::Matches);
-        let scrutinee_type = self.resolve_expr(&m.expr, ctx, None);
+        let scrutinee_type = self.resolve_scrutinee(&m.expr, ctx);
 
         // Pattern arm. The pattern's bindings (e.g. `Some(x)`) must be in
         // scope for the optional guard, and `resolve_if_pattern` records

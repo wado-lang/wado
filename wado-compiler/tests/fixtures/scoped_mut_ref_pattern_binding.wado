@@ -1,0 +1,210 @@
+// A pattern under a `&mut` scrutinee binding a part replaced on assignment
+// holds it for the arm, and every exit of the arm stores it back: its end, a
+// `return`, a `break`, a `continue` and a `?`. A chain of cases is rebuilt
+// around the binding; a payload written in place takes the store.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Counter {
+    count: Option<i32>,
+}
+
+impl Counter {
+    fn bump(&mut self) {
+        if let Some(n) = &mut self.count {
+            *n += 1;
+        }
+    }
+
+    fn clear(&mut self) {
+        self.count = null;
+    }
+}
+
+variant Num {
+    Pos(i32),
+    Neg(i32),
+    Zero,
+}
+
+fn add_one(o: &mut Option<i32>) {
+    if let Some(n) = o {
+        *n += 1;
+    }
+}
+
+fn read(o: &mut Option<i32>) -> i32 {
+    if let Some(x) = o {
+        return *x;
+    }
+    return 0;
+}
+
+fn grow_then_return(o: &mut Option<i32>) -> i32 {
+    match o {
+        Some(n) => {
+            *n *= 10;
+            if *n > 50 {
+                return *n;
+            }
+            *n += 1;
+            return 0;
+        }
+        null => return -1,
+    }
+}
+
+fn parse_into(o: &mut Option<i32>, text: String) -> Result<i32, ParseIntError> {
+    if let Some(n) = o {
+        *n = 7;
+        *n += i32::from_str(text)?;
+        return Ok(*n);
+    }
+    return Ok(0);
+}
+
+test "a case's payload" {
+    let mut o: Option<i32> = Some(3);
+    if let Some(n) = &mut o {
+        *n += 1;
+    }
+    assert o == Some(4);
+    add_one(&mut o);
+    assert o == Some(5);
+    assert read(&mut o) == 5;
+}
+
+test "a field's payload" {
+    let mut c = Counter { count: Some(1) };
+    c.bump();
+    c.bump();
+    assert c.count == Some(3);
+}
+
+test "a write by another route is overwritten" {
+    let mut c = Counter { count: Some(1) };
+    if let Some(n) = &mut c.count {
+        c.clear();
+        *n += 1;
+    }
+    assert c.count == Some(2);
+}
+
+test "struct and tuple fields" {
+    let mut p = Point { x: 10, y: 20 };
+    match &mut p {
+        Point { x, y } => {
+            *x = 100;
+            *y = 200;
+        }
+    }
+    assert p.x == 100 && p.y == 200;
+    let mut t: [i32, String] = [1, "a"];
+    if let [n, s] = &mut t {
+        *n += 1;
+        s.push_str("b");
+    }
+    assert t.0 == 2 && t.1 == "ab";
+}
+
+test "nested cases rebuild" {
+    let mut o: Option<Option<i32>> = Some(Some(1));
+    if let Some(Some(n)) = &mut o {
+        *n += 41;
+    }
+    assert o == Some(Some(42));
+}
+
+test "a payload written in place takes the store" {
+    let mut o: Option<Point> = Some(Point { x: 1, y: 2 });
+    if let Some(Point { x, .. }) = &mut o {
+        *x = 5;
+    }
+    let Some(p) = o else { unreachable(); };
+    assert p.x == 5 && p.y == 2;
+    let mut r: Result<Option<[i32, i32]>, String> = Ok(Some([1, 2]));
+    if let Ok(Some([a, _])) = &mut r {
+        *a = 9;
+    }
+    let Ok(Some(pair)) = r else { unreachable(); };
+    assert pair.0 == 9 && pair.1 == 2;
+}
+
+test "or-patterns store along the alternative matched" {
+    let mut xs: List<Num> = [Num::Pos(1), Num::Neg(2), Num::Zero];
+    for let mut i = 0; i < xs.len(); i += 1 {
+        match &mut xs[i] {
+            Pos(n) | Neg(n) => *n *= 10,
+            _::Zero => {}
+        }
+    }
+    assert xs[0] matches { Pos(10) };
+    assert xs[1] matches { Neg(20) };
+}
+
+test "every exit stores back" {
+    let mut o: Option<i32> = Some(3);
+    assert grow_then_return(&mut o) == 0;
+    assert o == Some(31);
+    assert grow_then_return(&mut o) == 310;
+    assert o == Some(310);
+    let mut p: Option<i32> = Some(0);
+    assert parse_into(&mut p, "x").is_err();
+    assert p == Some(7);
+    assert parse_into(&mut p, "1") == Ok(8);
+    assert p == Some(8);
+}
+
+test "loops" {
+    let mut o: Option<i32> = Some(0);
+    let mut turns = 0;
+    while let Some(n) = &mut o {
+        *n += 1;
+        turns += 1;
+        if *n == 2 {
+            continue;
+        }
+        if *n == 4 {
+            break;
+        }
+    }
+    assert o == Some(4) && turns == 4;
+}
+
+fn first_some(xs: &mut List<Option<i32>>) -> i32 {
+    for let mut i = 0; i < xs.len(); i += 1 {
+        if let Some(n) = &mut xs[i] {
+            *n += 100;
+            return i;
+        }
+    }
+    return -1;
+}
+
+test "an element's payload" {
+    let mut xs: List<Option<i32>> = [null, Some(1), Some(2)];
+    assert first_some(&mut xs) == 1;
+    assert xs == [null, Some(101), Some(2)];
+}
+
+test "a closure" {
+    let mut o: Option<fn() -> i32> = Some(|| 1);
+    if let Some(f) = &mut o {
+        *f = || 3;
+    }
+    let Some(f) = o else { unreachable(); };
+    assert f() == 3;
+}
+
+test "a guard and matches see the held value" {
+    let mut o: Option<i32> = Some(5);
+    match &mut o {
+        Some(n) && *n > 3 => *n = 0,
+        _ => {}
+    }
+    assert o == Some(0);
+    assert &mut o matches { Some(n) && *n == 0 };
+}

@@ -1233,13 +1233,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// `type_id` wrapped in the scrutinee's reference kind — the one place that
-    /// wrap happens, because it is where `&mut` onto a scalar is refused: Wasm
-    /// GC has no interior pointer to one, so it would reference a copy.
+    /// wrap happens, because it is where `&mut` onto a scalar is refused where
+    /// no arm ends to store it back: Wasm GC has no interior pointer to one, so
+    /// it would reference a copy. An arm's binding holds the value instead,
+    /// which reify stores back at the arm's exits.
     fn pattern_binding_type(
         &self,
         name: &str,
         type_id: TypeId,
         ref_binding: RefBinding,
+        must_bind: bool,
         span: Span,
     ) -> TypeId {
         match ref_binding {
@@ -1250,7 +1253,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .intern(ResolvedType::Ref(type_id)),
             RefBinding::MutRef => {
-                if self.tysys.is_replace_on_assign_place_type(type_id) {
+                if must_bind && self.tysys.is_replace_on_assign_place_type(type_id) {
                     let _ = self.emit(TypeError::CannotMutate {
                         message: format!(
                             "cannot bind '{name}' as a mutable reference to {REPLACE_ON_ASSIGN_TYPE}: \
@@ -1492,7 +1495,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expr,
                     span,
                 } => {
-                    let scrutinee_type = self.resolve_expr(expr, ctx, None);
+                    let scrutinee_type = self.resolve_scrutinee(expr, ctx);
                     self.resolve_if_pattern(pattern, scrutinee_type, ctx, *span);
                 }
                 ConditionElement::Expr(expr) => {
@@ -1724,8 +1727,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
                 let is_mut = is_mut || ctx.must_bind.is_some_and(|m| m.is_mut);
-                let binding_type =
-                    self.pattern_binding_type(name, scrutinee_type, ref_binding, *name_span);
+                let binding_type = self.pattern_binding_type(
+                    name,
+                    scrutinee_type,
+                    ref_binding,
+                    ctx.must_bind.is_some(),
+                    *name_span,
+                );
                 let index = self.bind_local(ctx, *id, name, *name_span, is_mut, binding_type);
                 vec![(name.clone(), index, binding_type)]
             }

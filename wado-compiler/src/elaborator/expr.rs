@@ -3220,6 +3220,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// A pattern's scrutinee, where a `&mut xs[i]` is a scoped `&mut` the
+    /// match stores back.
+    pub(super) fn resolve_scrutinee(
+        &mut self,
+        scrutinee: &ast::Expr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let ctx = &mut ctx.scoping_subscripts(None, std::slice::from_ref(scrutinee));
+        self.resolve_expr(scrutinee, ctx, None)
+    }
+
     pub(super) fn resolve_match_expr(
         &mut self,
         match_expr: &ast::MatchExpr,
@@ -3243,7 +3254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        let mut scrutinee_type = self.resolve_expr(&match_expr.expr, ctx, None);
+        let mut scrutinee_type = self.resolve_scrutinee(&match_expr.expr, ctx);
 
         // Resolve each arm for its facts (binding + guard + body). Surface only
         // the arm bodies' `(type_id, span)` — reify rebuilds the match node, so
