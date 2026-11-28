@@ -3203,7 +3203,6 @@ fn emit_rule_inner_fn<S: AsStrSlice>(
 fn emit_seeded_alt_fn(
     w: &mut CodeWriter,
     f: &mut FnSpec,
-    rule: &ParserRule,
     ctx: &mut EmitContext,
     mut body: fn mut(&mut CodeWriter),
 ) {
@@ -3315,7 +3314,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     }
                     f.set_prunable();
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
-                    emit_seeded_alt_fn(w, &mut f, rule, ctx, |w| gen_alt_body(w, rule, body, alt_index, &NO_AFTER, ctx));
+                    emit_seeded_alt_fn(w, &mut f, ctx, |w| gen_alt_body(w, rule, body, alt_index, &NO_AFTER, ctx));
                     w.blank();
 
                     // Emit the per-alt scan helper only when the dispatch
@@ -3339,7 +3338,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         // A non-greedy `??` inside the atom predicts against the rule's
         // invocation precedence (`atn_enters_cond` reads it).
         add_min_prec_param(&mut f);
-        emit_seeded_alt_fn(w, &mut f, rule, ctx, |w| {
+        emit_seeded_alt_fn(w, &mut f, ctx, |w| {
             gen_rule_entry_sync(w, ctx, rule);
             gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, ctx, &og, fn_name);
         });
@@ -3862,7 +3861,7 @@ fn gen_elements_with_non_greedy(
             } else {
                 panic("gen_elements_with_non_greedy: Repeat element / op mismatch");
             };
-            let follow = inner_walker_follow_for_repeat(rep, rep_op, elements, i, outer_follow, ctx);
+            let follow = inner_walker_follow_for_repeat(rep_op, elements, i, outer_follow, ctx);
             gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &follow);
         } else if op_is_leaf(op) {
             gen_op_leaf(w, op, ctx, name_counts, proven);
@@ -3903,15 +3902,14 @@ fn gen_elements_with_non_greedy(
 /// next-iteration FIRST union picks up tokens that would otherwise
 /// exit the outer construct).
 fn inner_walker_follow_for_repeat(
-    rep: &RepeatElement,
     rep_op: &RepeatOp,
     elements: &List<Element>,
     i: i32,
     outer_follow: &List<i32>,
     ctx: &mut EmitContext,
 ) -> List<i32> {
-    let is_greedy_optional = if let _::Optional = rep.kind {
-        !rep.non_greedy;
+    let is_greedy_optional = if let _::Optional = rep_op.kind {
+        !rep_op.non_greedy;
     } else {
         false;
     };
@@ -5353,8 +5351,8 @@ fn gen_op_repeat_optional_group(
     let _ = dedup_name(&rep_op.field, name_counts);
     let opt = OptionalGroup { rep_op, g_op, g_elem, inner: &rep.element };
 
-    if optional_asks_simulator(rep.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx) {
-        let enters = atn_parse_enters(w, ctx, rep_op.atn_decision, rep.non_greedy);
+    if optional_asks_simulator(rep_op.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx) {
+        let enters = atn_parse_enters(w, ctx, rep_op.atn_decision, rep_op.non_greedy);
         let simulated = simulated_enters(w, rep_op, enters, ctx, name_counts, StaticPath::GroupWalk(rep.element));
         opt.gen_present(w, ctx, &simulated);
         return;
@@ -5996,9 +5994,7 @@ fn gen_op_group(
     // scalar Label nesting; lower does not produce that today, but
     // the loop costs nothing.
     if entry matches { _::Required } {
-        if let Group(g_elem) = peel_scalar_label(elem) {
-            gen_decision_sync(w, ctx, ctx.plan.decision_entry_expect(g_elem.atn_decision), "sync_alts", proven);
-        }
+        gen_decision_sync(w, ctx, ctx.plan.decision_entry_expect(g_op.atn_decision), "sync_alts", proven);
     }
     let entry = open_group_entry(w, elem, ctx, entry);
     let Group(g_elem) = peel_scalar_label(elem) else {
@@ -6039,10 +6035,7 @@ fn gen_group_shape(
     atn: GroupAtn,
 ) {
     match &g_op.shape {
-        TokenOnly(to) => {
-            let kinds = ctx.analysis.single_token_kinds(&g_elem.alternatives);
-            gen_consume_token_group_op(w, to, &kinds, ctx, name_counts, proven);
-        },
+        TokenOnly(to) => gen_consume_token_group_op(w, to, &to.kinds, ctx, name_counts, proven),
         SingleAlt(_) => gen_consume_single_alt_group_op(
             w,
             &g_op.alts[0],
@@ -6190,14 +6183,14 @@ fn gen_op_repeat_with_follow_override(
     name_counts: &mut List<[String, i32]>,
     follow: &List<i32>,
 ) {
-    gen_decision_sync(w, ctx, ctx.plan.decision_entry_expect(rep.atn_decision), "sync_enter");
-    if let _::Optional = rep.kind {
+    gen_decision_sync(w, ctx, ctx.plan.decision_entry_expect(rep_op.atn_decision), "sync_enter");
+    if let _::Optional = rep_op.kind {
         // The simulator decides as under the op-only walker
         // (`gen_op_optional`); a group body's emitters ask it themselves.
-        if optional_asks_simulator(rep.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx)
+        if optional_asks_simulator(rep_op.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx)
             && rep_op.body_shape matches { _::LeafRuleCall | _::LeafOther } {
             let _ = dedup_name(&rep_op.field, name_counts);
-            let enters = atn_parse_enters(w, ctx, rep_op.atn_decision, rep.non_greedy);
+            let enters = atn_parse_enters(w, ctx, rep_op.atn_decision, rep_op.non_greedy);
             let simulated = simulated_enters(w, rep_op, enters, ctx, name_counts, StaticPath::LeafWalk(*follow));
             gen_optional_present(w, &rep_op.body, &simulated, ctx, &NO_KINDS);
         } else {
@@ -6205,7 +6198,7 @@ fn gen_op_repeat_with_follow_override(
         }
         return;
     }
-    if rep.non_greedy {
+    if rep_op.non_greedy {
         gen_op_repeat_non_greedy(w, rep, rep_op, ctx, name_counts, follow);
         return;
     }
@@ -6225,7 +6218,7 @@ fn gen_op_repeat_non_greedy(
 ) {
     let body = RepeatBody::of(rep_op, &NO_KINDS);
     let inner = &rep.element;
-    let is_plus = rep.kind matches { _::Plus };
+    let is_plus = rep_op.kind matches { _::Plus };
     let _ = dedup_name(&rep_op.field, name_counts);
     if is_plus {
         // The mandatory first iteration is a required position: no loop guard
@@ -6711,7 +6704,7 @@ fn gen_op_repeat_star_plus_greedy(
     };
     let body = RepeatBody::of(rep_op, &iter_follow);
     let inner = &rep.element;
-    let is_plus = rep.kind matches { _::Plus };
+    let is_plus = rep_op.kind matches { _::Plus };
     let _ = dedup_name(&rep_op.field, name_counts);
     if rep_op.atn_decides {
         if is_plus {

@@ -1105,6 +1105,8 @@ pub struct GroupOp {
     /// walkers partition alike (invariant 9); `null` where there is nothing to
     /// write, the caller's FOLLOW being the answer.
     pub empty_alt_admits: Option<EmptyAltAdmits>,
+    /// Surface `GroupElement.atn_decision` id, which the entry sync keys on.
+    pub atn_decision: i32 = -1,
     /// The group's ATN decision site where its empty alternative contends with
     /// another on a token that can follow the group; -1 where lookahead decides.
     pub atn_site: i32 = -1,
@@ -1250,6 +1252,8 @@ pub struct TokenOnlyShape {
     pub field: String,
     /// The name `field` was deduplicated from, which a label reference reads.
     pub dedup_base: String,
+    /// The kinds the alternatives consume, each once, in alternative order.
+    pub kinds: List<i32> = [],
 }
 
 pub struct SingleAltShape {

@@ -2765,7 +2765,7 @@ fn lower_op<S: AsStrSlice>(
             follow_is_exact,
             outer_suffix,
         ),
-        Group(g) => with_alt_actions(
+        Group(g) => with_surface_group(
             lower_group_op(
                 &g,
                 name_counts,
@@ -2795,22 +2795,23 @@ fn lower_op<S: AsStrSlice>(
     };
 }
 
-/// Lower a `Group` element into the `GroupShape` `classify_group` names.
-/// Inner ops share the surrounding alt's `name_counts` only for `Transparent`,
-/// whose wrapping is purely syntactic; every storable shape gets its own scope.
-/// `op`, lowered from `g`, with each alternative carrying the actions written
-/// in it, for the op-only walker, which has no surface alternative to read
-/// them from.
-fn with_alt_actions(op: Op, g: &GroupElement) -> Op {
+/// `op`, lowered from `g`, with `g`'s decision site and each alternative
+/// carrying the actions written in it, for the op-only walker, which has no
+/// surface alternative to read them from.
+fn with_surface_group(op: Op, g: &GroupElement) -> Op {
     let Group(mut go) = op else {
         unreachable();
     };
+    go.atn_decision = g.atn_decision;
     for let alt of &mut go.alts {
         alt.actions = g.alternatives[alt.alt_index].actions;
     }
     return Op::Group(go);
 }
 
+/// Lower a `Group` element into the `GroupShape` `classify_group` names.
+/// Inner ops share the surrounding alt's `name_counts` only for `Transparent`,
+/// whose wrapping is purely syntactic; every storable shape gets its own scope.
 fn lower_group_op<S: AsStrSlice>(
     g: &GroupElement,
     name_counts: &mut List<[String, i32]>,
@@ -3196,7 +3197,11 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
     }
     let dispatch = build_direct_dispatch(alts, &first_sets, ctx);
     return Op::Group(GroupOp {
-        shape: GroupShape::TokenOnly(TokenOnlyShape { field, dedup_base }),
+        shape: GroupShape::TokenOnly(TokenOnlyShape {
+            field,
+            dedup_base,
+            kinds: ctx.analysis.single_token_kinds(alts),
+        }),
         alts: bodies,
         scan_group: group_op_scan_group(&scan_bodies, alts, &null, ctx),
         dispatch: dispatch,
