@@ -1235,7 +1235,11 @@ pub(crate) fn impl_self_layers(
 /// Whether `func` is an impl written for the cell `receiver` reaches, or for a
 /// newtype on the way down to it: the cell's own method rather than one of
 /// what it holds.
-pub(crate) fn dispatched_on_cell(func: &FunctionRef, receiver: TypeId, type_table: &TypeTable) -> bool {
+pub(crate) fn dispatched_on_cell(
+    func: &FunctionRef,
+    receiver: TypeId,
+    type_table: &TypeTable,
+) -> bool {
     let Some(written) = func.method_info.as_ref().map(|info| &info.receiver) else {
         return false;
     };
@@ -1250,7 +1254,9 @@ pub(crate) fn dispatched_on_cell(func: &FunctionRef, receiver: TypeId, type_tabl
         if matches!(type_table.get(link), crate::tir::ResolvedType::Shared(_)) {
             return false;
         }
-        link = type_table.link_below(link).expect("a cell's chain ends at it");
+        link = type_table
+            .link_below(link)
+            .expect("a cell's chain ends at it");
     }
 }
 

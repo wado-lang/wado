@@ -391,7 +391,9 @@ no cell is taken from a variable or a field, so no cell aliases one.
 `c`, a `&` included, and `c` needs no `mut`: the dereference of a cell starts
 [the path a write goes through](./spec-expressions.md#variable-mutability)
 again. A field access, a method call, an index and a `for` loop dereference a
-cell as they do a `&mut`, so `for let x of c` is `for let x of &mut *c`.
+cell as they do a `&mut`, so `for let x of c` is `for let x of &mut *c`. A
+cell passes where a `&T` is expected, as a `&mut T` does, and only a cell
+where a cell is.
 
 A copy of a cell is the same cell, so the deep copy of a value stops at one.
 `Shared::new(*c)` makes a separate cell. `T` is not affine: an affine value has
@@ -424,14 +426,14 @@ storage and no `&mut` outlives the rules of one by coming out of a cell.
 What a cell implements follows from its being a reference whose copies are one
 object:
 
-| Trait                       | A `Shared<T>`                                              |
-| --------------------------- | ---------------------------------------------------------- |
-| `Eq`                        | where `T` is: `==` compares what the cells hold            |
-| `Ord`                       | not implemented, as for a reference                        |
-| `Hash`                      | not implemented, as for a reference                        |
-| `Default`                   | where `T` is, as `Shared::new(T::default())`               |
-| `Inspect`                   | `${c:?}` writes what the cell holds, as `Shared(…)`        |
-| `Serialize` / `Deserialize` | not implemented: two holders of one cell would become two  |
+| Trait                       | A `Shared<T>`                                             |
+| --------------------------- | --------------------------------------------------------- |
+| `Eq`                        | where `T` is: `==` compares what the cells hold           |
+| `Ord`                       | not implemented, as for a reference                       |
+| `Hash`                      | not implemented, as for a reference                       |
+| `Default`                   | where `T` is, as `Shared::new(T::default())`              |
+| `Inspect`                   | `${c:?}` writes what the cell holds, as `Shared(…)`       |
+| `Serialize` / `Deserialize` | not implemented: two holders of one cell would become two |
 
 `ref_eq(a, b)` asks whether two cells are one. A struct holding a cell derives
 `Eq` over what its cells hold, and derives none of `Ord`, `Hash`, `Serialize`

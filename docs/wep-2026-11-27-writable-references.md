@@ -123,7 +123,8 @@ definition as `Array<T>` is: `pub type Shared<T>;`.
 - `*c` is the place the cell holds. It reads and writes whatever path reached
   `c`, a `&` included, and `c` needs no `mut`. A field access, a method call,
   an index and a `for` loop dereference a cell as they do a `&mut`, so
-  `for let x of c` is `for let x of &mut *c`.
+  `for let x of c` is `for let x of &mut *c`. A cell passes where a `&T` is
+  expected, so `ref_eq(a, b)` takes two cells.
 - A copy of a cell is the same cell, so the deep copy of a value stops at one.
   `Shared::new(*c)` makes a separate cell.
 - `==` compares what two cells hold, as it does for two references, and
@@ -348,7 +349,7 @@ spare a call site. Each step leaves the tree building and its tests passing.
 - [x] Every cell written as a `&mut` moves to `Shared<T>`: `Signal<T>` in Rill,
   `ValueSerializer { out: &mut v }` in `core:value`, and each `&mut` to a
   type replaced on assignment that a variable, a value or a `return` holds.
-- [ ] A cell is a reference: an index and a `for` loop dereference it, `==`
+- [x] A cell is a reference: an index and a `for` loop dereference it, `==`
   compares what cells hold, and every `Eq` that means identity calls `ref_eq`.
 - [ ] The scoped forms store back from every place: a call argument and a
   receiver on an element, a pattern binding of a type replaced on

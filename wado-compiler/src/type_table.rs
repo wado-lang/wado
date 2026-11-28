@@ -3255,9 +3255,9 @@ impl TypeTable {
     /// what it holds.
     pub fn ref_pointee(&self, type_id: TypeId) -> Option<TypeId> {
         match self.get(type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) | ResolvedType::Shared(inner) => {
-                Some(*inner)
-            }
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Shared(inner) => Some(*inner),
             _ => None,
         }
     }
