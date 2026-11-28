@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795850562588,
+  "lastUpdate": 1795855108445,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -83305,6 +83305,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6a06481b7887a6b154157c8e3239147414666176"
         },
         "date": 1795850561755,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334842,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "45ad382fe44916fbdf66fc54abcbb49fb4789f16",
+          "message": "Merge pull request #2792 from wado-lang/ccr-f4485b28-pgkhnc\n\nfeat(cli): create packages and workspaces with `wado new` and `wado workspace`",
+          "timestamp": "2026-11-28T17:18:37+09:00",
+          "tree_id": "d93b6c7cb03cfd4460b9aec04392668df6323869",
+          "url": "https://github.com/wado-lang/wado/commit/45ad382fe44916fbdf66fc54abcbb49fb4789f16"
+        },
+        "date": 1795855107087,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
