@@ -1,0 +1,51 @@
+//! Rust, read through Gale's Rust grammar.
+
+use { parse_rust, token_kind_name } from "wado-lang:gale/src/rust.wado";
+use { Tree, TokenClass } from "./tree.wado";
+
+fn class_of(kind: i32) -> TokenClass {
+    let name = token_kind_name(kind);
+    if name == "NON_KEYWORD_IDENTIFIER" || name == "RAW_IDENTIFIER" || name == "LIFETIME_OR_LABEL" {
+        return TokenClass::Name;
+    }
+    if name.ends_with("_LITERAL") {
+        return TokenClass::Literal;
+    }
+    return TokenClass::Fixed;
+}
+
+/// The tree of a Rust file, or the first syntax error: recovery drops tokens,
+/// so a shape taken from a broken tree would hide what it dropped.
+pub fn read_rust(path: String, source: String) -> Result<Tree, String> {
+    let result = parse_rust(&source);
+    if result.diagnostics.len() > 0 {
+        return Result::Err(`${result.diagnostics[0].message}`);
+    }
+    let cst = &result.cst;
+    let toks = &result.tokens;
+    let mut classes: List<TokenClass> = [];
+    let mut tree = Tree { path, source };
+    for let mut i = 0; i < cst.row_count(); i += 1 {
+        match cst.tag[i] {
+            _::Open => {
+                let span = cst.span(i);
+                tree.open(cst.kind(i) as i32, span.start, span.end);
+            },
+            _::Close => tree.close(),
+            _::Tok => {
+                let t = cst.token_index(i);
+                let kind = toks.kind_at(t);
+                while classes.len() <= kind {
+                    classes.push(class_of(classes.len()));
+                }
+                let span = toks.span_at(t);
+                tree.token(kind, classes[kind], span.start, span.end);
+            },
+            _::Miss => {
+            },
+            _::Skip => {
+            },
+        }
+    }
+    return Result::Ok(tree);
+}

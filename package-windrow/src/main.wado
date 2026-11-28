@@ -1,0 +1,74 @@
+//! `windrow [--min-tokens N] <path>…`: every `.rs` file under the paths, and
+//! the clones among them, largest first.
+
+use { read_rust, find_clones, Tree } from "./lib.wado";
+use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+
+fn rust_files(root: &String) -> List<String> with (Stderr, Preopens) {
+    if root.ends_with(".rs") {
+        return [*root];
+    }
+    let mut out: List<String> = [];
+    let walk = match fs::walk_dir(root) {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln(`error: ${e}`);
+            return out;
+        },
+    };
+    for let found of walk {
+        match found {
+            Ok(entry) => {
+                if entry.path.ends_with(".rs") {
+                    out.push(entry.path);
+                }
+            },
+            Err(e) => eprintln(`error: ${e}`),
+        }
+    }
+    return out;
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
+    let argv = args();
+    let mut min_tokens = 100;
+    let mut roots: List<String> = [];
+    for let mut i = 0; i < argv.len(); i += 1 {
+        if argv[i] == "--min-tokens" {
+            i += 1;
+            min_tokens = i32::from_str(&argv[i]).expect("--min-tokens takes a number");
+        } else {
+            roots.push(argv[i]);
+        }
+    }
+    assert !roots.is_empty(), "name the paths to scan";
+    let mut trees: List<Tree> = [];
+    for let root of &roots {
+        for let path of rust_files(root) {
+            let source = match fs::read_to_string(&path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln(`error: ${e}`);
+                    continue;
+                },
+            };
+            match read_rust(path, source) {
+                Ok(tree) => trees.push(tree),
+                Err(message) => eprintln(`skipped ${path}: ${message}`),
+            }
+        }
+    }
+    let groups = find_clones(&trees, min_tokens);
+    for let group of &groups {
+        println(`${group.tokens} tokens x ${group.sites.len()}`);
+        for let site of &group.sites {
+            let tree = &trees[site.tree];
+            let first = tree.line_of(tree.start[site.row]);
+            let last = tree.line_of(tree.end[site.row]);
+            println(`  ${tree.path}:${first}-${last}`);
+        }
+    }
+    eprintln(`${trees.len()} files, ${groups.len()} groups`);
+}

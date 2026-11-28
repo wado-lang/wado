@@ -1,0 +1,63 @@
+use { read_rust, find_clones, Tree } from "../src/lib.wado";
+
+fn tree(path: String, source: String) -> Tree {
+    return read_rust(path, source).unwrap();
+}
+
+global COPY_A: String = "fn total(items: &[Item]) -> i64 {
+    let mut sum = 0;
+    for item in items {
+        if item.active && item.weight > 3 {
+            sum += item.weight * item.count;
+        }
+    }
+    sum
+}";
+
+global COPY_B: String = "fn weighed(rows: &[Row]) -> i64 {
+    let mut acc = 0;
+    for row in rows {
+        if row.enabled && row.mass > 7 {
+            acc += row.mass * row.n;
+        }
+    }
+    acc
+}";
+
+global OTHER: String = "fn first(rows: &[Row]) -> Option<&Row> {
+    rows.iter().find(|r| r.enabled)
+}";
+
+test "two functions equal up to names and constants are one group" {
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("b.rs", COPY_B),
+        tree("c.rs", OTHER),
+    ];
+    let groups = find_clones(&trees, 20);
+    assert groups.len() == 1;
+    assert groups[0].sites.len() == 2;
+    assert groups[0].sites[0].tree == 0;
+    assert groups[0].sites[1].tree == 1;
+}
+
+test "a group is reported at the largest node that repeats" {
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("b.rs", COPY_B),
+    ];
+    let groups = find_clones(&trees, 5);
+    assert groups.len() == 1;
+    let site = groups[0].sites[0];
+    assert trees[0].line_of(trees[0].start[site.row]) == 1;
+}
+
+test "a changed operator breaks the shape" {
+    let changed = COPY_B.replace("row.mass * row.n", "row.mass + row.n");
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("b.rs", changed),
+    ];
+    let groups = find_clones(&trees, 40);
+    assert groups.is_empty();
+}

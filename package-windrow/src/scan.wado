@@ -1,0 +1,62 @@
+//! Clones across a set of trees: every shape at least `min_tokens` long that
+//! more than one node takes, each reported at the largest node that repeats.
+
+use { Tree } from "./tree.wado";
+use { Shapes, shapes } from "./shape.wado";
+use { HashMap, HashSet } from "core:collections";
+
+/// A node: the tree it is in, by index into the scanned list, and its row.
+pub struct Site {
+    pub tree: i32,
+    pub row: i32,
+}
+
+/// Nodes sharing one shape, each `tokens` tokens long.
+pub struct Group {
+    pub tokens: i32,
+    pub sites: List<Site>,
+}
+
+pub fn find_clones(trees: &List<Tree>, min_tokens: i32) -> List<Group> {
+    let mut all: List<Shapes> = List::with_capacity(trees.len());
+    let mut by_hash = HashMap::<u64, List<Site>>::new();
+    for let mut t = 0; t < trees.len(); t += 1 {
+        let s = shapes(&trees[t]);
+        for let mut row = 0; row < s.hash.len(); row += 1 {
+            if s.close[row] >= 0 && s.tokens[row] >= min_tokens {
+                if !by_hash.contains_key(s.hash[row]) {
+                    by_hash[s.hash[row]] = [];
+                }
+                by_hash[s.hash[row]].push(Site { tree: t, row });
+            }
+        }
+        all.push(s);
+    }
+    let mut repeated = HashSet::<u64>::new();
+    for let [h, sites] of by_hash.entries() {
+        if sites.len() > 1 {
+            repeated.insert(*h);
+        }
+    }
+    let mut groups: List<Group> = [];
+    for let [h, sites] of by_hash.entries() {
+        if !repeated.contains(*h) {
+            continue;
+        }
+        let first = sites[0];
+        let s = &all[first.tree];
+        let parent = s.parent[first.row];
+        // A node inside a repeating node is reported as part of it.
+        if parent >= 0 && s.tokens[parent] >= min_tokens && repeated.contains(s.hash[parent]) {
+            continue;
+        }
+        groups.push(Group { tokens: s.tokens[first.row], sites: *sites });
+    }
+    groups.sort_by(|a, b| weight(b).cmp(&weight(a)));
+    return groups;
+}
+
+/// The tokens a group's copies repeat.
+fn weight(g: &Group) -> i32 {
+    return g.tokens * (g.sites.len() - 1);
+}

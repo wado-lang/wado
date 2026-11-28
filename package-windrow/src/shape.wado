@@ -1,0 +1,69 @@
+//! The shape of every node: a hash of its subtree with names and literals
+//! abstracted, so two nodes share a shape exactly when one is a copy of the
+//! other up to renaming and changed constants (barring a hash collision).
+
+use { Tree } from "./tree.wado";
+
+global FNV_OFFSET: u64 = 14695981039346656037;
+global FNV_PRIME: u64 = 1099511628211;
+
+fn mix(h: u64, word: i32) -> u64 {
+    return (h ^ word as u32 as u64) * FNV_PRIME;
+}
+
+fn mix_hash(h: u64, word: u64) -> u64 {
+    return mix(mix(h, (word >> 32) as i32), word as i32);
+}
+
+/// Per row of a tree, read only at its `Open` rows: the node's shape, how many
+/// tokens it spans, its parent's row (-1 at a root), and its `Close` row.
+pub struct Shapes {
+    pub hash: List<u64>,
+    pub tokens: List<i32>,
+    pub parent: List<i32>,
+    pub close: List<i32>,
+}
+
+pub fn shapes(tree: &Tree) -> Shapes {
+    let n = tree.len();
+    let mut out = Shapes {
+        hash: List::filled(n, 0 as u64),
+        tokens: List::filled(n, 0),
+        parent: List::filled(n, -1),
+        close: List::filled(n, -1),
+    };
+    let mut open: List<i32> = [];
+    let mut acc: List<u64> = [];
+    for let mut i = 0; i < n; i += 1 {
+        match tree.row[i] {
+            _::Open => {
+                if let Some(p) = open.last() {
+                    out.parent[i] = p;
+                }
+                open.push(i);
+                acc.push(mix(mix(FNV_OFFSET, 1), tree.kind[i]));
+            },
+            _::Token => {
+                let top = acc.len() - 1;
+                acc[top] = match tree.class[i] {
+                    _::Name => mix(acc[top], 2),
+                    _::Literal => mix(mix(acc[top], 3), tree.kind[i]),
+                    _::Fixed => mix(mix(acc[top], 4), tree.kind[i]),
+                };
+                out.tokens[open[open.len() - 1]] += 1;
+            },
+            _::Close => {
+                let node = open.pop().unwrap();
+                let h = mix(acc.pop().unwrap(), 5);
+                out.hash[node] = h;
+                out.close[node] = i;
+                if let Some(top) = acc.last() {
+                    acc[acc.len() - 1] = mix_hash(top, h);
+                    out.tokens[out.parent[node]] += out.tokens[node];
+                }
+            },
+        }
+    }
+    assert open.is_empty(), "every Open row must have its Close";
+    return out;
+}

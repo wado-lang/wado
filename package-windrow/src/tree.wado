@@ -1,0 +1,68 @@
+//! A syntax tree in no grammar's types: the rows of a Gale CST, each token
+//! sorted into what its shape keeps of it. A language adapter builds one from
+//! its parser's result; nothing after that knows which grammar it came from.
+
+/// What a token's shape keeps of it. A name and a literal stand for any other
+/// of their class, so two copies that renamed a variable or changed a constant
+/// keep one shape.
+pub enum TokenClass {
+    Name,
+    Literal,
+    Fixed,
+}
+
+pub enum Row {
+    Open,
+    Close,
+    Token,
+}
+
+/// One file's tree, as parallel columns over its rows. `kind` is the node kind
+/// of an `Open` row and the token kind of a `Token` row; `start` is a byte
+/// offset into the file.
+pub struct Tree {
+    pub path: String,
+    pub source: String,
+    pub row: List<Row> = [],
+    pub kind: List<i32> = [],
+    pub class: List<TokenClass> = [],
+    pub start: List<i32> = [],
+    pub end: List<i32> = [],
+}
+
+impl Tree {
+    pub fn open(&mut self, kind: i32, start: i32, end: i32) {
+        self.push(Row::Open, kind, TokenClass::Fixed, start, end);
+    }
+
+    pub fn close(&mut self) {
+        self.push(Row::Close, 0, TokenClass::Fixed, 0, 0);
+    }
+
+    pub fn token(&mut self, kind: i32, class: TokenClass, start: i32, end: i32) {
+        self.push(Row::Token, kind, class, start, end);
+    }
+
+    fn push(&mut self, row: Row, kind: i32, class: TokenClass, start: i32, end: i32) {
+        self.row.push(row);
+        self.kind.push(kind);
+        self.class.push(class);
+        self.start.push(start);
+        self.end.push(end);
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.row.len();
+    }
+
+    /// The 1-based line holding byte offset `at`.
+    pub fn line_of(&self, at: i32) -> i32 {
+        let mut line = 1;
+        for let mut i = 0; i < at; i += 1 {
+            if unchecked self.source.byte_at(i) == b'\n' {
+                line += 1;
+            }
+        }
+        return line;
+    }
+}
