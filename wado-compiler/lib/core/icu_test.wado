@@ -57,6 +57,7 @@ test "a property takes a value after `=`, or is binary without one" {
 
 // Each property has its own exports and its own generated impls, so each is
 // asked once: its strict and lenient names, its refusal, and its set.
+
 test "every property answers through its own exports" {
     let cases: List<[String, String, char]> = [
         ["gc=Lu", "general category = uppercase letter", 'A'],
@@ -92,6 +93,7 @@ test "every property answers through its own exports" {
 
 // A caller complementing an approximate set would admit real members of the
 // property, which is the failure that matters for a `\P{...}` in a grammar.
+
 test "a name this build does not answer is refused, not an empty set" {
     assert BinaryProperty::from_str_lenient("Other_ID_Start") matches { Err(_) };
     assert BinaryProperty::from_str_lenient("Other_Alphabetic") matches { Err(_) };
@@ -183,6 +185,7 @@ test "a tag that is not well-formed is refused" {
 
 // No language has a subtag of 5 to 8 letters: BCP 47 reserves the length for
 // registration, and ICU4X stores a language in 3 bytes.
+
 test "a reserved language length is refused" {
     assert !Locale::is_well_formed("abcde");
 }

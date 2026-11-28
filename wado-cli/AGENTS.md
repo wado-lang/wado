@@ -29,7 +29,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
   states its own spec.
 - A short flag means one thing across the subcommands that compile: `-f` is
   `--feature` there, never `--filter` or `--format`. Outside that family only
-  `init -f` (`--force`) claims it.
+  `init -f` and `new -f` (`--force`) claim it.
 - `-O` takes its level attached and explicit (`-O2`); a bare `-O` is an error.
 - `process::exit` belongs to `main()` alone. A subcommand returns `CliExit`
   (`args.rs`) from both its parse and its run, so there is exactly one exit

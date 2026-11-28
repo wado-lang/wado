@@ -11,7 +11,6 @@
 use { println, Stdout } from "core:cli";
 use { TreeMap } from "core:collections";
 
-
 pub variant JsonValue {
     Null,
     Bool(bool),
@@ -20,7 +19,6 @@ pub variant JsonValue {
     Arr(List<JsonValue>),
     Obj(TreeMap<String, JsonValue>),
 }
-
 
 fn is_digit(b: u8) -> bool {
     return b >= b'0' && b <= b'9';
@@ -54,7 +52,6 @@ fn is_low_surrogate(cp: i32) -> bool {
 fn surrogate_to_codepoint(high: i32, low: i32) -> i32 {
     return (high - 0xD800) * 0x400 + (low - 0xDC00) + 0x10000;
 }
-
 
 test "hex-digit-check" {
     assert is_hex_digit(b'0');
@@ -92,7 +89,6 @@ test "surrogate-pair-to-codepoint" {
     let cp = surrogate_to_codepoint(high, low);
     assert cp == 0x1F600;
 }
-
 
 struct Parser {
     bytes: List<u8>,
@@ -142,7 +138,6 @@ impl Parser {
     }
 }
 
-
 test "parser-from-bytes" {
     let bytes: List<u8> = [b'{', b'}'];
     let mut p = Parser::from_bytes(bytes);
@@ -175,7 +170,6 @@ test "parser-is-eof" {
     assert p.is_eof();
 }
 
-
 impl Parser {
     fn match_literal(&mut self, lit: String) -> bool {
         let start = self.pos;
@@ -191,6 +185,7 @@ impl Parser {
     }
 
     // Parse \uXXXX and return the code point, or -1 on failure
+
     fn parse_unicode_escape(&mut self) -> i32 {
         let mut value = 0;
         for let mut i = 0; i < 4; i += 1 {
@@ -210,6 +205,7 @@ impl Parser {
     // Decode a UTF-8 byte sequence at the current position.
     // Returns the Unicode codepoint as i32, or -1 on invalid UTF-8.
     // Advances pos past the decoded bytes.
+
     fn decode_utf8(&mut self) -> i32 {
         let b0 = self.bytes[self.pos] as i32;
 
@@ -306,7 +302,6 @@ test "parse-unicode-escape-japanese" {
     assert cp == 12354;
 }
 
-
 impl Parser {
     fn parse_null(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
@@ -339,7 +334,6 @@ test "parse-null-invalid" {
     let mut p = Parser::new("nul");
     assert p.parse_null() matches { null };
 }
-
 
 impl Parser {
     fn parse_bool(&mut self) -> Option<JsonValue> {
@@ -384,7 +378,6 @@ test "parse-bool-invalid" {
     let mut p = Parser::new("tru");
     assert p.parse_bool() matches { null };
 }
-
 
 impl Parser {
     fn parse_number(&mut self) -> Option<JsonValue> {
@@ -531,7 +524,6 @@ test "parse-number-invalid" {
     let mut p = Parser::new("abc");
     assert p.parse_number() matches { null };
 }
-
 
 impl Parser {
     fn parse_string_value(&mut self) -> Option<String> {
@@ -838,7 +830,6 @@ test "parse-string-multiple-emoji" {
     }
 }
 
-
 impl Parser {
     fn parse_array(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
@@ -938,7 +929,6 @@ test "parse-array-mixed" {
     }
 }
 
-
 impl Parser {
     fn parse_object(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
@@ -1034,7 +1024,6 @@ test "parse-object-nested" {
     }
 }
 
-
 impl Parser {
     fn parse_value(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
@@ -1062,7 +1051,6 @@ impl Parser {
     }
 }
 
-
 fn parse_json(input: String) -> Option<JsonValue> {
     let mut p = Parser::new(input);
     let result = p.parse_value();
@@ -1072,7 +1060,6 @@ fn parse_json(input: String) -> Option<JsonValue> {
     }
     return result;
 }
-
 
 test "parse-value-null" {
     if let Some(v) = parse_json("null") {
@@ -1235,7 +1222,6 @@ test "parse-empty-input" {
     assert parse_json("") matches { null };
 }
 
-
 fn escape_json_string(s: &String) -> String {
     let mut result = String::with_capacity(s.len() + 2);
     result.push('"');
@@ -1386,7 +1372,6 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
 fn stringify_pretty(value: &JsonValue) -> String {
     return stringify_at_level(value, 0, 2);
 }
-
 
 test "stringify-null" {
     let v = JsonValue::Null;
@@ -1544,7 +1529,6 @@ test "roundtrip-pretty" {
         assert false;
     }
 }
-
 
 export fn run() with Stdout {
     let input = "{\"name\":\"Wado\",\"version\":1,\"features\":[\"JSON\",\"UTF-8\",\"Unicode\"],\"emoji\":\"🎉\",\"nested\":{\"language\":\"日本語\",\"ok\":true},\"nothing\":null}";

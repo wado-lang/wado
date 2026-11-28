@@ -546,6 +546,7 @@ test "a bound text takes its text node out when it is disposed of" {
 }
 
 // Counts the insertions that reach the DOM beneath it.
+
 struct Insertions {
     count: i32,
 }
@@ -801,6 +802,7 @@ test "each gives equal items a row each" {
 
 // Leaves the tree as the HTML parser would: adjacent text joined into one
 // node, and empty text gone.
+
 fn serve(parent: Element) with Dom {
     let mut child = parent.first_child();
     while let Some(current) = child {
@@ -866,6 +868,7 @@ fn page_view(root: Element, page: Page) -> View {
 
 // Builds the page, serves it, and hydrates what was served with signals of its
 // own, so a write reaches only the hydrated bindings.
+
 fn hydrated(root: Element) -> Page with Dom {
     let _built = scope(|| {
         build(page_view(root, new_page()));
@@ -1078,6 +1081,7 @@ test "hydrate traps on a served page missing an element its view builds" {
 
 // Hydrates `view` as a build that checks no contracts does, and answers how
 // many mismatches it met.
+
 fn rebuilt(view: View) -> i32 with Dom {
     let mut mismatches = 0;
     let _hydrated = scope(|| {

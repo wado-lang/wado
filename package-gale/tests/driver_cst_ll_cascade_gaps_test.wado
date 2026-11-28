@@ -17,6 +17,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(entry: fn(&String, i32) -> g::Pars
 
 // `X` alone is alt 0 with `Y?` empty — a token the FIRST-derived cascade never
 // names, so only the tournament can reach it.
+
 test "tree: nullable remainder still parses" {
     assert_tree(g::parse_n, "X", "(n X)");
 }
@@ -30,6 +31,7 @@ test "tree: the competing alt is unaffected" {
 }
 
 // The repeat alt the cascade cannot express.
+
 test "tree: repeat alt reached through the tournament" {
     assert_tree(g::parse_m, "X W W V", "(m X W W V)");
 }
@@ -41,6 +43,7 @@ test "tree: the competing two-token alt" {
 // Nothing the grammar accepts. The rule's own error path names the rule; a
 // fallback that committed to an alt would report that alt's next token from
 // deeper in the input instead.
+
 test "no alt matches: the rule's error path reports it" {
     let result = g::parse_m("X W Z", i32::MAX);
     assert !result.ok(), "expected a diagnostic";
@@ -50,6 +53,7 @@ test "no alt matches: the rule's error path reports it" {
 
 // The prediction read past `X W` before giving up; the rule recovers from where
 // the decision began, so neither token drops out of the tree.
+
 test "no alt matches: recovery starts at the decision, keeping every token" {
     let result = g::parse_m("X W Z", i32::MAX);
     assert result.diagnostics[0].span.start == 0;

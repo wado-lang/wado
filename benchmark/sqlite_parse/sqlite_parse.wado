@@ -16,13 +16,13 @@ use sqlite from "../../package-gale/tests/grammars/SQLite.g4"
         },
     };
 
-
 test "smoke" {
     // Tiny inline statement; no Preopens needed.
     assert sqlite::parse("SELECT 1;").ok();
 }
 
 // Every eighth statement of queries.sql.
+
 #[workload]
 test "workload" {
     assert sqlite::parse(#include_str("./queries_sample.sql")).ok();

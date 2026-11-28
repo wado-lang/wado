@@ -72,6 +72,7 @@ use mnist from "../models/mnist-12/model.onnx"
 
 // `pytorch-operator/test_operator_basic`: `Add`, `Mul`, `Tanh`, `Sigmoid` and
 // `Neg` over `float[1]`.
+
 test "the generated graph reproduces the output ONNX ships" {
     let [a, a_extents] = tensor_of(
         #include_bytes("../onnx/pytorch-operator/test_operator_basic/test_data_set_0/input_0.pb"),
@@ -99,6 +100,7 @@ test "the generated graph reproduces the output ONNX ships" {
 // `pytorch-operator/test_operator_params`: the same elementwise chain as
 // `test_operator_basic`, with one operand an initializer. ONNX ships one input
 // for it and no second, since the weight travels in the model.
+
 test "a graph with an initializer reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
         #include_bytes("../onnx/pytorch-operator/test_operator_params/test_data_set_0/input_0.pb"),
@@ -121,6 +123,7 @@ test "a graph with an initializer reproduces the output ONNX ships" {
 
 // `pytorch-operator/test_operator_pow`: one binary operator over
 // `float[1, 2, 3, 4]`.
+
 test "Pow reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
         #include_bytes("../onnx/pytorch-operator/test_operator_pow/test_data_set_0/input_0.pb"),
@@ -147,6 +150,7 @@ test "Pow reproduces the output ONNX ships" {
 
 // `pytorch-operator/test_operator_exp` and `test_operator_sqrt`: one unary
 // operator each over `float[3, 4]`.
+
 test "Exp reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
         #include_bytes("../onnx/pytorch-operator/test_operator_exp/test_data_set_0/input_0.pb"),
@@ -189,6 +193,7 @@ test "Sqrt reproduces the output ONNX ships" {
 
 // `pytorch-operator/test_operator_addmm`: two `Gemm` nodes whose bias
 // broadcasts across the batch axis.
+
 test "Gemm reproduces the output ONNX ships" {
     let [a, a_extents] = tensor_of(
         #include_bytes("../onnx/pytorch-operator/test_operator_addmm/test_data_set_0/input_0.pb"),
@@ -219,6 +224,7 @@ test "Gemm reproduces the output ONNX ships" {
 
 // `pytorch-operator/test_operator_mm`: a one-element `Constant` as a `Gemm`
 // bias, folded into the operator's `Expr`. Its axis is named all the same.
+
 test "a scalar Constant folds into the Gemm bias" {
     let [a, a_extents] = tensor_of(
         #include_bytes("../onnx/pytorch-operator/test_operator_mm/test_data_set_0/input_0.pb"),
@@ -246,6 +252,7 @@ test "a scalar Constant folds into the Gemm bias" {
 // `pytorch-converted/test_Linear_no_bias`: `Transpose` then `MatMul`, the only
 // committed graph reaching `MatMul`. Its weight is an initializer, so ONNX
 // ships one input and the weight travels in the model.
+
 test "MatMul reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
         #include_bytes("../onnx/pytorch-converted/test_Linear_no_bias/test_data_set_0/input_0.pb"),
@@ -268,6 +275,7 @@ test "MatMul reproduces the output ONNX ships" {
 
 // `pytorch-operator/test_operator_flatten`: a `Flatten` at axis 1 over
 // `float[1, 2, 3, 4]`.
+
 test "Flatten reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
         #include_bytes("../onnx/pytorch-operator/test_operator_flatten/test_data_set_0/input_0.pb"),
@@ -293,6 +301,7 @@ test "Flatten reproduces the output ONNX ships" {
 
 // The window operators: `MaxPool` over one and two spatial axes, and `Conv`
 // with its bias.
+
 test "MaxPool over two padded axes reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
         #include_bytes("../onnx/pytorch-converted/test_MaxPool2d/test_data_set_0/input_0.pb"),
@@ -355,6 +364,7 @@ test "Conv with a bias reproduces the output ONNX ships" {
 
 // MNIST-12 from the ONNX Model Zoo, with the weights it carries, against the
 // logits shipped beside it. Every axis takes the name the graph gives it.
+
 test "MNIST-12 reproduces the logits the Model Zoo ships" {
     let [x, x_extents] = tensor_of(#include_bytes("../models/mnist-12/test_data_set_0/input_0.pb"));
     let [want, want_extents] = tensor_of(#include_bytes("../models/mnist-12/test_data_set_0/output_0.pb"));

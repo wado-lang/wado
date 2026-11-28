@@ -168,7 +168,6 @@ test "tokenize lexer commands" {
     assert tokens.len() >= 5, "expected at least 5 tokens";
 }
 
-
 test "parse minimal grammar" {
     let r = a4_parse("grammar Foo;");
     assert r.ok(), "expected a clean parse";
@@ -215,6 +214,7 @@ test "a lexer rule's bracket opens a char set, not an argument list" {
 // lexer must: (a) keep those tokens out of the main stream, and (b) emit
 // them as trivia with `channel == 3`, not 0 or 1. This exercises the
 // generic `channel(X)` routing path, not just the HIDDEN shortcut.
+
 test "user channel: LINE_COMMENT routed to COMMENT channel" {
     let tokens = a4_tokenize("// hi\n42");
     // LINE_COMMENT must not appear in the main stream.

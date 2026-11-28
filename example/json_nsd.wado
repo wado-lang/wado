@@ -37,6 +37,7 @@ use { TreeMap } from "core:collections";
 
 // Sub-serializers hold `&mut String` so writes flow back to the outer buffer
 // the caller owns: a `String` field would be a copy of it.
+
 pub struct NsdSeqSerializer {
     buf: &mut String,
     count: i32,
@@ -366,6 +367,7 @@ impl DeserializeStruct for NsdStructAccess {
     // NSD is positional: the field schema `S` is irrelevant here. It stays in
     // the signature to satisfy the `DeserializeStruct` trait; the same generated
     // `next_field::<StructType>()` call site drives both SD and NSD formats.
+
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
         if !entry_head(self.de, b']', self.first)? {
             return Result::Ok(null);
@@ -393,6 +395,7 @@ impl DeserializeStruct for NsdStructAccess {
     // NSD names no key, so the tag is the element a tagged case is written
     // with first, and nothing can repeat it. The payload's fields follow it
     // from index 0.
+
     fn tag<S: AsStrSlice>(&mut self, key: S, _on_duplicate: DuplicateFieldPolicy) -> Result<String, DeserializeError> {
         if !entry_head(self.de, b']', self.first)? {
             return Result::Err(DeserializeError::missing_field(key));
@@ -932,6 +935,7 @@ variant Tree {
     Leaf(i32),
     Node(List<Tree>),
 }
+
 impl Deserialize for Tree;
 
 fn nested_tree(depth: i32) -> String {

@@ -21,6 +21,7 @@ struct Cli {
     verbose: bool = false,
     output: Option<String> = null,
 }
+
 impl Deserialize for Cli;
 
 fn cli(r: Result<Cli, ArgsError>) -> Cli {
@@ -34,6 +35,7 @@ struct RunCli {
     since: Instant,
     trace: Option<Uuid> = null,
 }
+
 impl Deserialize for RunCli;
 
 test "a field type that asks for any" {
@@ -101,6 +103,7 @@ struct HalfCli {
     scale: f16,
     gain: bf16,
 }
+
 impl Deserialize for HalfCli;
 
 test "a half option rounds its text once, leniently" {
@@ -153,6 +156,7 @@ test "malformed empty option name reports a clear error" {
 
 // Positional fields need not be contiguous in declaration order: `positional_at`
 // maps the rank-th positional to its field index across the option fields.
+
 struct Mixed {
     jobs: i32 = 1,  // field 0 (option)
     #[wire(positional)]
@@ -161,6 +165,7 @@ struct Mixed {
     #[wire(positional)]
     b: String,  // field 3 (positional rank 1)
 }
+
 impl Deserialize for Mixed;
 
 fn mixed(r: Result<Mixed, ArgsError>) -> Mixed {
@@ -191,6 +196,7 @@ struct Variadic {
     #[wire(positional)]
     rest: List<String> = [],
 }
+
 impl Deserialize for Variadic;
 
 fn variadic(r: Result<Variadic, ArgsError>) -> Variadic {
@@ -220,6 +226,7 @@ test "double dash forces remaining tokens positional" {
 
 // Repeatable `List<T>` options: each `--name v` appends; occurrences may be
 // interspersed with other options.
+
 struct Repeatable {
     #[wire(positional)]
     input: String,
@@ -227,6 +234,7 @@ struct Repeatable {
     n: List<i32> = [],  // repeatable, typed
     jobs: i32 = 1,
 }
+
 impl Deserialize for Repeatable;
 
 fn repeatable(r: Result<Repeatable, ArgsError>) -> Repeatable {
@@ -262,6 +270,7 @@ test "repeatable option absent yields empty default" {
 struct Required {
     define: List<String>,  // repeatable, required (>=1)
 }
+
 impl Deserialize for Required;
 
 test "required repeatable present" {
@@ -280,21 +289,25 @@ test "required repeatable absent reports MissingArgument" {
 
 // Subcommands: a `#[wire(positional)]` variant field. The leading bare token
 // selects the case (externally tagged); the payload parses from the rest.
+
 struct AddArgs {
     #[wire(positional)]
     path: String,
     all: bool = false,
 }
+
 impl Deserialize for AddArgs;
 
 variant RemoteCmd {
     AddRemote(AddRemoteArgs),
     List,
 }
+
 struct AddRemoteArgs {
     #[wire(positional)]
     name: String,
 }
+
 impl Deserialize for AddRemoteArgs;
 impl Deserialize for RemoteCmd;
 
@@ -303,6 +316,7 @@ variant Command {
     Remote(RemoteCmd),
     Status,
 }
+
 impl Deserialize for Command;
 
 struct App {
@@ -311,6 +325,7 @@ struct App {
     #[wire(positional)]
     command: Command,
 }
+
 impl Deserialize for App;
 
 fn app(r: Result<App, ArgsError>) -> App {
@@ -346,17 +361,20 @@ test "unknown subcommand reports UnknownSubcommand" {
 
 // `#[wire(name_policy)]` on the subcommand variant gives idiomatic lowercase /
 // kebab tags while the cases stay PascalCase — serde-general, no args support.
+
 #[wire(name_policy = "kebab-case")]
 variant KebabCmd {
     AddRemote(AddRemoteArgs),
     List,
 }
+
 impl Deserialize for KebabCmd;
 
 struct KebabApp {
     #[wire(positional)]
     command: KebabCmd,
 }
+
 impl Deserialize for KebabApp;
 
 test "kebab subcommand tag from name_policy" {
@@ -371,6 +389,7 @@ test "kebab subcommand tag from name_policy" {
 struct ScalarOpt {
     jobs: i32 = 1,
 }
+
 impl Deserialize for ScalarOpt;
 
 test "a repeated scalar option takes the last occurrence" {
@@ -389,6 +408,7 @@ struct EnumOpts {
     tint: Option<Shade> = null,
     layer: List<Shade> = [],
 }
+
 impl Deserialize for EnumOpts;
 
 test "an enum option takes its value from the next token or after `=`" {
@@ -415,6 +435,7 @@ struct DryRun {
     dark_shade: Shade = Shade::Light,
     dark_layer: List<Shade> = [],
 }
+
 impl Deserialize for DryRun;
 
 test "an error names the option as written" {
@@ -440,6 +461,7 @@ struct FeatureOpts {
     shade: Shade = Shade::Light,
     features: Feature = Feature::none(),
 }
+
 impl Deserialize for FeatureOpts;
 
 test "an enum option that named its case is not blamed for a later unknown name" {
@@ -463,6 +485,7 @@ struct Numbers {
     h: char = ' ',
     small: i8 = 0,
 }
+
 impl Deserialize for Numbers;
 
 test "every scalar option type converts leniently" {
@@ -506,6 +529,7 @@ impl Deserialize for Even {
 struct EvenOpt {
     even: Even = Even { n: 0 },
 }
+
 impl Deserialize for EvenOpt;
 
 test "a field type's own failure reports InvalidValue" {
@@ -518,6 +542,7 @@ test "a field type's own failure reports InvalidValue" {
 struct MapOpt {
     pairs: HashMap<String, String> = HashMap::new(),
 }
+
 impl Deserialize for MapOpt;
 
 test "a map option is unsupported" {
@@ -545,12 +570,14 @@ variant Pick {
     One(RemoteCmd),
     Two(String),
 }
+
 impl Deserialize for Pick;
 
 struct PickApp {
     #[wire(positional)]
     pick: Pick,
 }
+
 impl Deserialize for PickApp;
 
 test "a subcommand missing its payload reports MissingArgument" {
@@ -563,6 +590,7 @@ struct Counts {
     #[wire(positional)]
     counts: List<i32> = [],
 }
+
 impl Deserialize for Counts;
 
 test "a variadic element that does not convert reports InvalidValue" {
@@ -576,8 +604,10 @@ test "from_env parses the process arguments" {
 
 // A hand-written impl reaches the struct and variant accesses the generated
 // code never calls.
+
 struct Skipper {
 }
+
 impl Deserialize for Skipper {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Skipper, DeserializeError> {
         let mut s = d.begin_struct("Skipper", 0).unwrap();
@@ -589,6 +619,7 @@ impl Deserialize for Skipper {
 
 struct UnitProbe {
 }
+
 impl Deserialize for UnitProbe {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<UnitProbe, DeserializeError> {
         let mut v = d.begin_variant("UnitProbe", 1).unwrap();
@@ -603,9 +634,11 @@ test "a hand-written impl may skip a field, but not probe a case for a payload" 
 
 // A hand-written impl that recovers from a failed read: the failure it
 // swallowed is not the one a later field reports.
+
 struct Tolerant {
     n: i32,
 }
+
 impl Deserialize for Tolerant {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Tolerant, DeserializeError> {
         return Result::Ok(Tolerant { n: i32::deserialize(d).unwrap_or(0) });
@@ -616,6 +649,7 @@ struct Recovering {
     a: Tolerant,
     b: i32,
 }
+
 impl Deserialize for Recovering;
 
 test "a failure an impl recovered from is not reported for a later one" {

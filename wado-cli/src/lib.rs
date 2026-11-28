@@ -37,6 +37,7 @@ pub mod manifest;
 mod markdown;
 mod marl;
 pub mod metadata_embed;
+pub mod new;
 pub mod oci;
 pub mod publish;
 pub mod query;
@@ -56,6 +57,7 @@ mod test_cache;
 mod test_report;
 pub mod update;
 pub mod wit;
+pub mod workspace;
 
 pub use compiler_host::FilesystemCompilerHost;
 

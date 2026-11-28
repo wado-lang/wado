@@ -279,6 +279,7 @@ test "format_decimal_prec with precision" {
 
 // The two-phase algorithm the single-scaling fast path replaces: pin the
 // decimal position with a one-digit scaling, then scale again for the digits.
+
 fn fixed_width_for_prec_ref(f: f64, precision: i32) -> FormatResult {
     let unpack = unpack64(f);
     let m = unpack.mantissa;
@@ -323,6 +324,7 @@ fn fixed_width_for_prec_ref(f: f64, precision: i32) -> FormatResult {
 
 // A carry or a low `log10_pow2` estimate changes which `FormatResult` encodes a
 // value, so the two are compared by what they render, not by their fields.
+
 fn assert_matches_reference(f: f64) {
     for let mut prec = 0; prec <= 17; prec += 1 {
         let got = fixed_width_for_prec(f, prec);
@@ -349,6 +351,7 @@ test "fixed_width_for_prec matches the two-phase reference over every magnitude"
 
 // A rounding carry and a low `log10_pow2` estimate both live at a decade
 // boundary or a half-way point, where a random mantissa never lands.
+
 test "fixed_width_for_prec matches the two-phase reference at decade boundaries" {
     let significands: List<u64> = [
         1, 5, 9, 10, 99, 100, 4999999999999999, 5000000000000001, 9999999999999999, 10000000000000000,
@@ -365,6 +368,7 @@ test "fixed_width_for_prec matches the two-phase reference at decade boundaries"
 // values under-rounded toward zero. Values whose first significant digit sits
 // just below the last printed place must still round to nearest (half-even),
 // matching IEEE / C `printf("%.6f")` / Rust `{:.6}`.
+
 test "fixed_width_for_prec small magnitudes round to nearest (issue #1229)" {
     // 0.0000006 = 6e-7 is 0.6 of the millionths place, so it rounds up to 1.
     let up = fixed_width_for_prec(0.0000006, 6);
@@ -394,6 +398,7 @@ test "fixed_width_for_prec small magnitudes round to nearest (issue #1229)" {
 
 // End-to-end formatting regression for issue #1229, exercising the same path
 // the `${x:.6f}` template specifier uses.
+
 test "fixed-point formatting of small magnitudes (issue #1229)" {
     assert `${0.0000006:.6f}` == "0.000001";
     assert `${0.00000055:.6f}` == "0.000001";

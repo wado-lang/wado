@@ -64,6 +64,7 @@ pub fn literal_field_name<S: AsStrSlice>(text: S) -> String {
 // once in an alt (e.g. two `ID` tokens) the second occurrence gets a
 // `_2` suffix, the third `_3`, and so on. `List<[String, i32]>` is
 // the running counter: `[base, count_emitted_so_far]`.
+
 fn get_count<S: AsStrSlice>(counts: &List<[String, i32]>, name: S) -> i32 {
     for let entry of counts {
         if entry.0 == name.as_str_slice() {

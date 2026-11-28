@@ -40,7 +40,6 @@ fn deep_position_names(
     return [depth_names(ctx, &sets), consumed];
 }
 
-
 test "tail_greedy_first: rule with tail-position Optional token" {
     // a : X Y? ;
     let a = mk_rule("a", [
@@ -121,7 +120,6 @@ test "tail_greedy_first: transitive via tail RuleRef" {
     assert tg[0] == "TK_Y";
 }
 
-
 test "tail_greedy_first: tail Optional with multi-token inner is excluded" {
     // `(A B)?` is tail-position but the inner consumes 2 tokens per
     // iteration. Suppressing it via the follow gate would conflict with
@@ -169,7 +167,6 @@ test "tail_greedy_first: tail Optional with single-token-alt Group inner is also
     let tg = tail_greedy_names(&mut ctx, "r", &mut visiting);
     assert tg.is_empty(), "expected empty (Group inner blanket-excluded)";
 }
-
 
 // `position_first_sets_from`: K-token prefix FIRST sets walked from an
 // element slice. Generalises `alt_position_first_sets` (which is the

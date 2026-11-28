@@ -279,6 +279,7 @@ impl Parser {
 
     // A backreference may precede its group, so these early errors of
     // AtomEscape wait for the whole pattern.
+
     fn check_references(&self) -> Result<(), PatternError> {
         let groups = `${self.groups}`;
         for let r of &self.references {
@@ -382,6 +383,7 @@ impl Parser {
     }
 
     // Disjunction :: Alternative ( `|` Disjunction )?
+
     fn disjunction(&mut self) -> Result<Node, PatternError> {
         let mark = self.declared.len();
         let mut alternatives: List<Node> = [self.alternative()?];
@@ -404,6 +406,7 @@ impl Parser {
     }
 
     // Alternative :: Term*
+
     fn alternative(&mut self) -> Result<Node, PatternError> {
         let mut terms: List<Node> = [];
         loop {
@@ -416,6 +419,7 @@ impl Parser {
     }
 
     // Term :: Assertion | Atom Quantifier?
+
     fn term(&mut self) -> Result<Node, PatternError> {
         let start = self.pos;
         let [atom, quantifiable] = self.atom()?;
@@ -591,6 +595,7 @@ impl Parser {
     }
 
     // RegularExpressionModifiers :: one of `i` `m` `s`, each at most once.
+
     fn modifiers(&mut self) -> Result<Flag, PatternError> {
         let mut flags = Flag::none();
         loop {
@@ -612,6 +617,7 @@ impl Parser {
     }
 
     // GroupName :: `<` RegExpIdentifierName `>`
+
     fn group_name(&mut self) -> Result<String, PatternError> {
         let mut name = "";
         loop {
@@ -685,6 +691,7 @@ impl Parser {
     }
 
     // CharacterClassEscape :: d D s S w W p{…} P{…}
+
     fn class_escape(&mut self, start: i32) -> Result<Option<NamedSet>, PatternError> {
         let Some(c) = self.peek() else {
             return Ok(null);
@@ -708,6 +715,7 @@ impl Parser {
     // `\p{` UnicodePropertyValueExpression `}`: ECMA-262's own `Any`, `ASCII`
     // and `Assigned` (table-binary-unicode-properties), then the names
     // `core:icu` knows.
+
     fn property(&mut self, start: i32) -> Result<NamedProperty, PatternError> {
         self.expect('{', "`\\p` must be followed by `{`")?;
         let from = self.pos;
@@ -723,6 +731,7 @@ impl Parser {
     }
 
     // CharacterEscape[+UnicodeMode], with `rex`'s `\ ` and `\#`.
+
     fn character_escape(&mut self, start: i32) -> Result<u32, PatternError> {
         let c = self.bump();
         return match c {
@@ -767,6 +776,7 @@ impl Parser {
     }
 
     // RegExpUnicodeEscapeSequence[+UnicodeMode], after its `\u`.
+
     fn unicode_escape(&mut self, start: i32) -> Result<u32, PatternError> {
         if self.eat('{') {
             let from = self.pos;
@@ -809,6 +819,7 @@ impl Parser {
     }
 
     // CharacterClass, after its `[`.
+
     fn class(&mut self, start: i32) -> Result<CharSet, PatternError> {
         let negated = self.eat('^');
         let mut items: List<ClassItem> = [];
@@ -844,6 +855,7 @@ impl Parser {
     }
 
     // ClassAtom[+UnicodeMode]
+
     fn class_atom(&mut self) -> Result<ClassItem, PatternError> {
         let start = self.pos;
         let c = self.bump();
@@ -915,16 +927,19 @@ fn property_ranges(text: StrSlice) -> Option<List<[u32, u32]>> {
 }
 
 // LineTerminator: LF, CR, LS, PS.
+
 internal fn is_line_terminator(code: u32) -> bool {
     return code == 0x0A || code == 0x0D || code == 0x2028 || code == 0x2029;
 }
 
 // IdentifierStartChar :: UnicodeIDStart | `$` | `_`
+
 fn is_identifier_start(c: char) -> bool {
     return c == '$' || c == '_' || contains(BinaryProperty::IdStart, c);
 }
 
 // IdentifierPartChar :: UnicodeIDContinue | `$` | ZWNJ | ZWJ
+
 fn is_identifier_part(c: char) -> bool {
     return c == '$' || c == '\u{200C}' || c == '\u{200D}' || contains(BinaryProperty::IdContinue, c);
 }

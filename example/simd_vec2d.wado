@@ -42,12 +42,14 @@ impl Vec2 {
     }
 
     // Dot product: x1*x2 + y1*y2
+
     fn dot(&self, other: &Vec2) -> f64 {
         let prod = self.v * other.v;
         return prod.extract_lane(0) + prod.extract_lane(1);
     }
 
     // 2D cross product (z-component of 3D cross): x1*y2 - y1*x2
+
     fn cross(&self, other: &Vec2) -> f64 {
         // Multiply [x1, y1] * [y2, x2], then subtract lanes
         let other_swapped: f64x2 = [
@@ -59,32 +61,38 @@ impl Vec2 {
     }
 
     // Squared length (avoids sqrt)
+
     fn length_sq(&self) -> f64 {
         return self.dot(self);
     }
 
     // Length
+
     fn length(&self) -> f64 {
         return f64::sqrt(self.length_sq());
     }
 
     // Normalize to unit vector
+
     fn normalize(&self) -> Vec2 {
         let len = self.length();
         return self.scale(1.0 / len);
     }
 
     // Distance between two points
+
     fn distance(&self, other: &Vec2) -> f64 {
         return self.sub(other).length();
     }
 
     // Perpendicular vector (90 degree rotation counterclockwise)
+
     fn perp(&self) -> Vec2 {
         return Vec2::new(-self.y(), self.x());
     }
 
     // Reflect vector across a normal
+
     fn reflect(&self, normal: &Vec2) -> Vec2 {
         // r = v - 2*(v.n)*n
         let d = self.dot(normal);
@@ -92,16 +100,19 @@ impl Vec2 {
     }
 
     // Component-wise min
+
     fn min(&self, other: &Vec2) -> Vec2 {
         return Vec2 { v: self.v.min(&other.v) };
     }
 
     // Component-wise max
+
     fn max(&self, other: &Vec2) -> Vec2 {
         return Vec2 { v: self.v.max(&other.v) };
     }
 
     // Linear interpolation
+
     fn lerp(&self, other: &Vec2, t: f64) -> Vec2 {
         let t_vec = f64x2::splat(t);
         let one_minus_t = f64x2::splat(1.0 - t);
@@ -116,6 +127,7 @@ impl Display for Vec2 {
 }
 
 // Axis-aligned bounding box
+
 struct AABB {
     min: Vec2,
     max: Vec2,

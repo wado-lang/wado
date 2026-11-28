@@ -3,8 +3,10 @@
 //! generate in-process without importing the CLI's `export fn run`.
 
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
+
 // Only the path functions, which perform no I/O: this file opens its own files
 // because it searches every grant, which `core:fs` does not.
+
 use fs from "core:fs";
 use { assemble_grammar } from "./g4/parser.wado";
 use { Grammar } from "./ir.wado";
