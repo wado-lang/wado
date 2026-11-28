@@ -16,7 +16,7 @@ wado run package-windrow/src/main.wado -- [--min-tokens N] [--similarity S] <pat
 ```
 
 A path is a `.rs` file or a directory walked for them. `--min-tokens` is the
-smallest node compared, in tokens; the default is 100. `--similarity` is the
+smallest node compared, in tokens; the default is 40. `--similarity` is the
 least similarity reported, in (0, 1]; the default is 0.8. Each group prints its
 largest member's size, the least similarity between two of its members, and
 every member's lines, the groups that repeat the most tokens first:
@@ -33,3 +33,21 @@ repeats one small shape, such as a long or-pattern of enum cases, is not
 compared: its few distinct runs make any two such nodes look alike. Nor is test
 code, an item under `#[test]` or `#[cfg(test)]`: a fixture repeats its shape on
 purpose.
+
+## Recall
+
+`tools/recall.wado` replays past commits on this repository and counts those
+where a group joins a node the commit deleted to another node. Over 286 commits
+whose subject names a deduplication, against 193 feature commits as a baseline
+for chance, at similarity 0.8:
+
+| Smallest match | Deduplications | Feature commits |
+| -------------- | -------------- | --------------- |
+| 20 tokens      | 63%            | 36%             |
+| 30 tokens      | 38%            | 17%             |
+| 40 tokens      | 29%            | 9%              |
+| 60 tokens      | 17%            | 6%              |
+
+Below 30 tokens a match is as likely by chance as on a deduplication, hence the
+default of 40. A feature commit's match is often a real copy nobody folded yet,
+so the baseline overstates the noise.
