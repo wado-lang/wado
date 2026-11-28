@@ -21,7 +21,7 @@
 //! compiler-side module freely `use`s it. `atn_test.wado` pins the
 //! `atn_blob_bytes` -> `atn_decode` round-trip.
 
-use { AltAction, Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
+use { AltAction, Grammar, ParserRule, Alternative, Element, RepeatKind, prediction_guards } from "./ir.wado";
 use { LoweredGrammar, LeftRecursiveRule, LrAlt } from "./gir.wado";
 use { lr_operand_prec } from "./lower.wado";
 use { element_is_self_ref } from "./lr_util.wado";
@@ -376,7 +376,7 @@ fn build_lr_suffix(
     } else {
         NOT_AN_OPERAND;
     };
-    return build_sequence(b, &alt.elements, r, rule_index, &alt.prediction_guards(), 1, operand_prec);
+    return build_sequence(b, &alt.elements, r, rule_index, &prediction_guards(&alt.actions), 1, operand_prec);
 }
 
 /// The `atn_call_site` id of a self-ref element (unwrapping labels), or -1.
@@ -435,7 +435,7 @@ fn build_alternation(
         let prefix_prec = if operand_precs.is_empty() { 0 } else { operand_precs[i] };
         let last = alts[i].elements.len() - 1;
         let operand_prec = |k: i32| if prefix_prec > 0 && k == last { prefix_prec } else { NOT_AN_OPERAND };
-        let seg = build_sequence(b, &alts[i].elements, rule, rule_index, &alts[i].prediction_guards(), 0, operand_prec);
+        let seg = build_sequence(b, &alts[i].elements, rule, rule_index, &prediction_guards(&alts[i].actions), 0, operand_prec);
         b.add_eps(start, seg.0);
         b.add_eps(seg.1, end);
     }

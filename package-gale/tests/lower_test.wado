@@ -18,6 +18,7 @@ use {
     RepeatKind,
     GroupElement,
     Visibility,
+    prediction_guards,
 } from "../src/ir.wado";
 use { collect_literal_tokens } from "../src/lexer_gen.wado";
 use { lower } from "../src/lower.wado";
@@ -4455,7 +4456,7 @@ WS : ' ' -> skip ;
 
 /// The action id of the predicate opening `rule`'s alternative `index`.
 fn left_edge_pred_id(g: &Grammar, rule: i32, index: i32) -> i32 {
-    let opening = g.parser_rules[rule].alternatives[index].prediction_guards()[0];
+    let opening = prediction_guards(&g.parser_rules[rule].alternatives[index].actions)[0];
     assert opening.before_index == 0 && opening.kind matches { _::Predicate };
     return opening.source.action_id;
 }

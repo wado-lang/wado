@@ -321,11 +321,13 @@ test "GroupShape variants round-trip" {
     let s = GroupShape::SimpleCst(SimpleCstShape {
         type_name: "StmtOrExpr",
         field: "stmt_or_expr",
+        dedup_base: "stmt_or_expr",
     });
-    let t = GroupShape::TokenOnly(TokenOnlyShape { field: "op", dedup_base: "op" });
+    let t = GroupShape::TokenOnly(TokenOnlyShape { field: "op", dedup_base: "op", kinds: [1, 2] });
     let a = GroupShape::SingleAlt(SingleAltShape {
         struct_name: "Pair",
         field: "pair",
+        dedup_base: "pair",
         owner_rule: "obj",
     });
     let g = GroupShape::General(GeneralShape {
