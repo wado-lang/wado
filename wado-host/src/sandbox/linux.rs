@@ -140,22 +140,14 @@ fn probe_listener() -> io::Result<bool> {
     let filter = asm.finish();
     // SAFETY: the closure makes only system calls, on memory built above.
     let pid = unsafe {
-        vfork::spawn(|| {
+        vfork::spawn(&[], || {
             let listens = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0
                 && install_filter(&filter, libc::SECCOMP_FILTER_FLAG_NEW_LISTENER).is_ok();
-            i32::from(!listens)
+            Ok(i32::from(!listens))
         })
     }?;
-    let status = reap(pid)?;
+    let status = vfork::reap(pid)?;
     Ok(libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0)
-}
-
-/// The status the child `pid` ended with, once it has.
-fn reap(pid: libc::pid_t) -> io::Result<libc::c_int> {
-    let mut status = 0;
-    // SAFETY: `status` outlives the call.
-    retried(|| unsafe { libc::waitpid(pid, &raw mut status, 0) })?;
-    Ok(status)
 }
 
 pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Result<Spawned> {
@@ -209,32 +201,32 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Resul
     }
     let streams =
         [&stdin, &stdout, &stderr].map(|stream| stream.child.as_ref().map(AsRawFd::as_raw_fd));
-    let mut failure = None;
+    let mut keep: Vec<RawFd> = streams
+        .into_iter()
+        .flatten()
+        .chain([ruleset.as_raw_fd()])
+        .chain(listener_tx.as_ref().map(AsRawFd::as_raw_fd))
+        .chain(command.cwd.map(AsRawFd::as_raw_fd))
+        .filter(|&fd| fd > libc::STDERR_FILENO)
+        .collect();
+    keep.sort_unstable();
     // SAFETY: the closure makes only system calls, on memory built above.
     let pid = unsafe {
-        vfork::spawn(|| {
-            let confined = confine_self(
+        vfork::spawn(&keep, || {
+            confine_self(
                 &ruleset,
                 &filter,
                 command.cwd,
                 listener_tx.as_ref().map(AsRawFd::as_raw_fd),
                 terminal,
-            );
-            failure = Some(match confined {
-                Ok(()) => vfork::exec(&image, streams),
-                Err(err) => err,
-            });
-            127
+            )?;
+            Err(vfork::exec(&image, streams))
         })
     };
     // The host's copy of the sender: with it closed, the thread above sees a
     // child that ended before it sent a listener.
     drop(listener_tx);
     let pid = pid?;
-    if let Some(failure) = failure {
-        reap(pid)?;
-        return Err(failure);
-    }
     Ok(Spawned {
         child: Child::new(pid),
         stdin: stdin.host,
@@ -329,7 +321,9 @@ fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
 
 /// `call` until a signal no longer interrupts it. Safe in the child before its
 /// `exec`.
-fn retried<T: Copy + PartialEq + From<i8>>(mut call: impl FnMut() -> T) -> io::Result<T> {
+pub(super) fn retried<T: Copy + PartialEq + From<i8>>(
+    mut call: impl FnMut() -> T,
+) -> io::Result<T> {
     loop {
         let ret = call();
         if ret != T::from(-1) {
@@ -1441,7 +1435,7 @@ fn check(ret: libc::c_int) -> io::Result<()> {
     Ok(())
 }
 
-fn check_long(ret: libc::c_long) -> io::Result<()> {
+pub(super) fn check_long(ret: libc::c_long) -> io::Result<()> {
     if ret == -1 {
         return Err(io::Error::last_os_error());
     }

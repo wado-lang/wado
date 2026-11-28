@@ -15,6 +15,8 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+#[cfg(target_os = "linux")]
+use super::vfork;
 use super::{
     Access, Availability, Command, ExitStatus, Network, Policy, Refusal, Refusals, Spawned, Stdio,
     Trace, availability, spawn,
@@ -972,6 +974,38 @@ fn write_script(dir: &Path) -> PathBuf {
     fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
     path
+}
+
+/// A child holds none of the host's descriptors but those it is handed, from
+/// its first step: one another thread has open for writing would make that
+/// thread's exec of the file fail with `ETXTBSY` while the child confines
+/// itself.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_child_closes_every_descriptor_it_is_not_handed() {
+    let other = File::open("/dev/null").unwrap();
+    let handed = File::open("/dev/null").unwrap();
+    let [other, handed] = [other.as_raw_fd(), handed.as_raw_fd()];
+    // SAFETY: the closure makes only system calls.
+    let pid = unsafe {
+        vfork::spawn(&[handed], || {
+            let open = |fd| libc::fcntl(fd, libc::F_GETFD) != -1;
+            Ok(i32::from(open(other) || !open(handed)))
+        })
+    }
+    .unwrap();
+    let status = vfork::reap(pid).unwrap();
+    assert!(libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0);
+}
+
+/// What fails in the child before its `exec` fails the spawn.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_child_s_failure_is_the_spawn_s() {
+    // SAFETY: the closure makes no call at all.
+    let spawned =
+        unsafe { vfork::spawn(&[], || Err(std::io::Error::from_raw_os_error(libc::EACCES))) };
+    assert_eq!(spawned.unwrap_err().raw_os_error(), Some(libc::EACCES));
 }
 
 #[test]
