@@ -50,7 +50,7 @@ use {
 } from "./eval.wado";
 use { ask_json, Credential, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
-use { review, Submission, MAX_REVIEWERS } from "../src/review.wado";
+use { review, Finding, Submission, MAX_REVIEWERS } from "../src/review.wado";
 use { hold_tree, Tree, home_runner, with_mise_tools, reset_snapshot, index } from "../src/snapshot.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
@@ -231,8 +231,13 @@ fn review_once(
     grading: &mut Usage,
 ) -> Run with (Client, Preopens, Process, MonotonicClock) {
     let r = review(credential, CLAUDE_MODEL, review_prompt, ws, REVIEWERS, MAX_TURNS, EFFORT);
+    let mut candidates: List<Finding> = [];
+    for let s of &r.searches {
+        candidates.extend(&s.findings);
+    }
     let mut reviewed = Run {
         findings: r.findings,
+        candidates,
         turns: r.total_turns(),
         calls: r.calls,
         usage: Some(r.spent()),
