@@ -331,6 +331,15 @@ pub struct RuleHeader {
     /// The rule a rule whose whole body is one bare call to it forwards to, by
     /// snake name; `null` where the rule does anything else.
     pub forwards_to: Option<String> = null,
+    /// The labels `@after` reads in a rule of several alternatives.
+    pub after_labels: List<LabelCapture> = [],
+}
+
+/// A label `@after` reads: a token's (`is_token`) or a call of `ref_name`'s.
+pub struct LabelCapture {
+    pub base: String,
+    pub is_token: bool,
+    pub ref_name: String,
 }
 
 impl RuleHeader {

@@ -263,10 +263,10 @@ pub fn lower_for_analysis(grammar: &mut Grammar, token_kinds: TokenKinds) -> [Lo
 
 /// The context the parser emits in: what lowering settled, planned against the
 /// lowered grammar and its ATN.
-fn emit_context(grammar: &Grammar, lowered: &LoweredGrammar, lctx: LowerContext, atn: &Atn) -> EmitContext {
+fn emit_context(lowered: &LoweredGrammar, lctx: LowerContext, atn: &Atn) -> EmitContext {
     let LowerContext { analysis, settings, follow, tables, diagnostics, marks, decisions, .. } = lctx;
     let mut analysis = analysis;
-    let plan = plan_parser(grammar, lowered, &mut analysis, &settings, &marks, atn);
+    let plan = plan_parser(lowered, &mut analysis, &settings, &marks, atn);
     let rules = lowered.parser_rules.iter_ref().map(|r| *rule_header(r)).collect();
     return EmitContext::new(rules, analysis, settings, follow, tables, diagnostics, plan, decisions);
 }
@@ -315,7 +315,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // Every grammar reads its recovery sets off the ATN; only the simulator's
     // grammars also embed it.
     let atn = build_atn_with(grammar, &lowered, num_tokens);
-    let mut ctx = emit_context(grammar, &lowered, lctx, &atn);
+    let mut ctx = emit_context(&lowered, lctx, &atn);
     // Lexer ATN: built when a lexer rule's non-greedy body recurses into
     // itself (the nested-comment class static lexing cannot decide). The
     // `atn_class_map` carries each such rule's `name -> latn rule index`

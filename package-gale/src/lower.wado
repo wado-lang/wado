@@ -58,6 +58,7 @@ use {
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
 use { GateScope, gate_assignment, runnable_gate_scope } from "./scan_gate.wado";
+use { after_labels } from "./label_scope.wado";
 use { rule_type_name, literal_field_name, dedup_name } from "./gen_util.wado";
 use {
     not_element_field_name,
@@ -2917,6 +2918,7 @@ fn lower_header(rule: &ParserRule, ctx: &mut LowerContext) -> RuleHeader {
         first,
         scan_gate_scope: scan_gate_scope(rule, &ctx.settings),
         forwards_to: forwarding_target(rule),
+        after_labels: after_labels(rule),
     };
 }
 

@@ -3,8 +3,7 @@
 //! slots, the ATN simulator, the scan memo), the ATN's decision tables, the
 //! recovery sets, and what each rule's actions read off its calls.
 
-use { Grammar, Element } from "./ir.wado";
-use { LoweredGrammar, Op, Rule } from "./gir.wado";
+use { LabelCapture, LoweredGrammar, Op, Rule, rule_header } from "./gir.wado";
 use { RuleAttrs } from "./rule_attrs.wado";
 use { GrammarAnalysis, close_over_callers } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
@@ -16,8 +15,6 @@ use {
     action_reads_rule_ctx,
     action_reads_rule_span,
     rule_binding_reads,
-    body_names_binding,
-    binding_name,
 } from "./action_translate.wado";
 use { HashMap, HashSet } from "core:collections";
 
@@ -26,9 +23,7 @@ use { HashMap, HashSet } from "core:collections";
 pub struct RuleCaptures {
     pub spans: List<String> = [],
     pub nodes: List<String> = [],
-    /// The labels `@after` reads in a rule of several alternatives: it runs
-    /// once the alternative that bound them has ended, so each alternative
-    /// leaves its label's value in the rule's value struct.
+    /// `label_scope::after_labels`.
     pub labels: List<LabelCapture> = [],
 }
 
@@ -37,13 +32,6 @@ impl RuleCaptures {
     pub fn is_empty(&self) -> bool {
         return self.spans.is_empty() && self.nodes.is_empty() && self.labels.is_empty();
     }
-}
-
-/// A label `@after` reads: a token's (`is_token`) or a call of `ref_name`'s.
-pub struct LabelCapture {
-    pub base: String,
-    pub is_token: bool,
-    pub ref_name: String,
 }
 
 global NO_CAPTURES: RuleCaptures = RuleCaptures {};
@@ -106,7 +94,7 @@ pub struct ParserPlan {
     binding_reads: List<Option<List<String>>> = [],
 }
 
-/// Decide the parser `grammar` lowers to.
+/// Decide the parser `lowered` emits to.
 ///
 /// The scan memo answers each left-recursive or rescanned rule's scan once per
 /// reading of a position. Candidates of a scan tournament that share a prefix
@@ -117,25 +105,21 @@ pub struct ParserPlan {
 /// holds: the walk hides it, and an answer that needed it is not kept. The
 /// left-recursion loop's caller check reports the callers it reads the same way.
 pub fn plan_parser(
-    grammar: &Grammar,
     lowered: &LoweredGrammar,
     analysis: &mut GrammarAnalysis,
     settings: &GenSettings,
     marks: &LowerMarks,
     atn: &Atn,
-) -> ParserPlan
-    contract lowered.parser_rules.len() == grammar.parser_rules.len(), "`lower` lowers each parser rule in order"
-{
-    let rule_count = grammar.parser_rules.len();
+) -> ParserPlan {
+    let rule_count = lowered.parser_rules.len();
     let needs_atn = marks.needs_atn();
     let rescanned = analysis.rule_rescans();
     let any_lr = lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) });
-    let mut lr_snakes: List<String> = [];
-    for let mut i = 0; i < rule_count; i += 1 {
-        if let LeftRecursive(_) = &lowered.parser_rules[i] {
-            lr_snakes.push(grammar.parser_rules[i].snake_name);
-        }
-    }
+    let lr_snakes: List<String> = lowered.parser_rules
+        .iter_ref()
+        .filter(|r| r matches { LeftRecursive(_) })
+        .map(|r| rule_header(r).snake_name)
+        .collect();
     let mut lr_decs: List<i32> = [];
     let mut body_decs: List<i32> = [];
     if needs_atn {
@@ -173,7 +157,7 @@ pub fn plan_parser(
         // simulator's grammars also embed it.
         recovery: recovery_sets(atn, analysis.eof_kind_id()),
         rule_captures: if settings.emit_actions {
-            rule_captures_of(grammar, analysis.rule_attrs(), lowered);
+            rule_captures_of(analysis.rule_attrs(), lowered);
         } else {
             HashMap::new();
         },
@@ -340,14 +324,10 @@ fn name_set(names: &List<String>) -> HashSet<String> {
 
 /// What every rule's actions read off its labeled rule calls, so the value
 /// struct, the capture emit, and the reference all read one answer.
-fn rule_captures_of(
-    grammar: &Grammar,
-    attrs: &List<RuleAttrs>,
-    lowered: &LoweredGrammar,
-) -> HashMap<String, RuleCaptures> {
+fn rule_captures_of(attrs: &List<RuleAttrs>, lowered: &LoweredGrammar) -> HashMap<String, RuleCaptures> {
     let mut captures: HashMap<String, RuleCaptures> = HashMap::new();
-    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
-        let rule = &grammar.parser_rules[i];
+    for let mut i = 0; i < lowered.parser_rules.len(); i += 1 {
+        let header = rule_header(&lowered.parser_rules[i]);
         let bodies = attrs[i].action_bodies;
         if bodies.is_empty() {
             continue;
@@ -372,51 +352,12 @@ fn rule_captures_of(
                 }
             }
         }
-        if let Some(after) = &rule.after_action && rule.alternatives.len() > 1 {
-            for let alt of &rule.alternatives {
-                for let e of &alt.elements {
-                    collect_after_labels(e, &after.text, &mut c.labels);
-                }
-            }
-        }
+        c.labels = header.after_labels;
         if !c.is_empty() {
-            captures[rule.name] = c;
+            captures[header.name] = c;
         }
     }
     return captures;
-}
-
-/// Each label or reference inside `e` the `@after` body `after` names.
-fn collect_after_labels(e: &Element, after: &String, out: &mut List<LabelCapture>) {
-    let named = match e {
-        Label(l) && !l.list => match &l.element {
-            RuleRef(r) => Option::Some(LabelCapture { base: binding_name(&l.name), is_token: false, ref_name: r.name }),
-            _ => Option::Some(LabelCapture { base: binding_name(&l.name), is_token: true, ref_name: "" }),
-        },
-        TokenRef(t) => Option::Some(LabelCapture { base: binding_name(&t.name), is_token: true, ref_name: "" }),
-        RuleRef(r) => Option::Some(LabelCapture { base: binding_name(&r.name), is_token: false, ref_name: r.name }),
-        _ => null,
-    };
-    if let Some(label) = named {
-        if body_names_binding(after, &label.base)
-            && !out.iter_ref().any(|o| o.is_token == label.is_token && o.base == label.base) {
-            out.push(label);
-        }
-        return;
-    }
-    match e {
-        Label(l) => collect_after_labels(&l.element, after, out),
-        Repeat(r) => collect_after_labels(&r.element, after, out),
-        Group(g) => {
-            for let alt of &g.alternatives {
-                for let inner of &alt.elements {
-                    collect_after_labels(inner, after, out);
-                }
-            }
-        },
-        _ => {
-        },
-    }
 }
 
 fn body_reads_any<S: AsStrSlice>(bodies: &List<String>, base: S, want_node: bool) -> bool {

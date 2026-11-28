@@ -2,10 +2,10 @@
 //! starts because a body may read one before it is bound (`LabelReach::Shared`).
 //! Lowering decides it from the surface alternative; emit declares what it says.
 
-use { AltAction, Element } from "./ir.wado";
-use { Op } from "./gir.wado";
+use { AltAction, Element, ParserRule } from "./ir.wado";
+use { LabelCapture, Op } from "./gir.wado";
 use { AltBinding, LabelReach } from "./attr_resolve.wado";
-use { body_names_binding, element_names_binding } from "./action_translate.wado";
+use { binding_name, body_names_binding, element_names_binding } from "./action_translate.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { PredicateSite, predicates_met_entering } from "./gate_conditions.wado";
 
@@ -58,6 +58,54 @@ pub fn alt_label_scope(
         bindings.push(s);
     }
     return bindings;
+}
+
+/// The labels `rule`'s `@after` reads where the rule has several alternatives:
+/// `@after` runs once the alternative that bound them has ended, so each
+/// alternative leaves its label's value in the rule's value struct.
+pub fn after_labels(rule: &ParserRule) -> List<LabelCapture> {
+    let mut out: List<LabelCapture> = [];
+    if let Some(after) = &rule.after_action && rule.alternatives.len() > 1 {
+        for let alt of &rule.alternatives {
+            for let e of &alt.elements {
+                collect_after_labels(e, &after.text, &mut out);
+            }
+        }
+    }
+    return out;
+}
+
+/// Each label or reference inside `e` the `@after` body `after` names.
+fn collect_after_labels(e: &Element, after: &String, out: &mut List<LabelCapture>) {
+    let named = match e {
+        Label(l) && !l.list => match &l.element {
+            RuleRef(r) => Option::Some(LabelCapture { base: binding_name(&l.name), is_token: false, ref_name: r.name }),
+            _ => Option::Some(LabelCapture { base: binding_name(&l.name), is_token: true, ref_name: "" }),
+        },
+        TokenRef(t) => Option::Some(LabelCapture { base: binding_name(&t.name), is_token: true, ref_name: "" }),
+        RuleRef(r) => Option::Some(LabelCapture { base: binding_name(&r.name), is_token: false, ref_name: r.name }),
+        _ => null,
+    };
+    if let Some(label) = named {
+        if body_names_binding(after, &label.base)
+            && !out.iter_ref().any(|o| o.is_token == label.is_token && o.base == label.base) {
+            out.push(label);
+        }
+        return;
+    }
+    match e {
+        Label(l) => collect_after_labels(&l.element, after, out),
+        Repeat(r) => collect_after_labels(&r.element, after, out),
+        Group(g) => {
+            for let alt of &g.alternatives {
+                for let inner of &alt.elements {
+                    collect_after_labels(inner, after, out);
+                }
+            }
+        },
+        _ => {
+        },
+    }
 }
 
 /// The actual post-dedup bindings of an alt's top-level leaf ops, so the action
