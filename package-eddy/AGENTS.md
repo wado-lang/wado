@@ -14,8 +14,8 @@ tools (reading, searching and symbol lookup) and report candidates. One call mer
 them and keeps the most severe, and a reproducer agent per candidate writes
 and runs a test that shows it. A smaller reporter model then turns each
 reproducer's finding into a structured record. Eddy tries each reproduction
-again alone in a clean checkout to set `verified`, and on the base to set
-`on_base`, and reports only the verified findings, writes the patches and comments under
+again alone in a clean checkout to set `verified` and reports only the
+verified findings, writes the patches and comments under
 `scratchpad/eddy/<head>/`, records the run in the wiki, and prices the tokens
 each model took.
 

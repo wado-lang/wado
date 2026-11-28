@@ -53,8 +53,9 @@ research points. The evidence behind them is in
 - [x] A reviewer reads the definitions a change touched, whole, not the diff.
   Eddy picks them from the diff, so the reviewer's tokens go to logic rather
   than to a diff of hundreds of thousands of tokens, which cost each search
-  most of its price. A defect the change left in place is a finding too: it
-  is worth as much, and the run on the base tells it apart. On #1697 the
+  most of its price. A defect the change left in place is a finding too, and
+  is not told apart: whether to fix it with the change is each project's
+  call. On #1697 the
   culprit's defect lay in a whole function's logic that no diff-reading search
   named.
 - [x] Only a finding a test reproduced is reported. One nobody reproduced

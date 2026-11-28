@@ -41,9 +41,7 @@ The steps run one after another, so a review takes longer than a single
 reviewer would.
 
 The findings go to stdout as JSON. Each carries its `repro`, and only a finding
-whose test reproduced it again alone is reported; the record keeps the others.
-The test then runs on the merge base too, which tells a defect the change
-brought in from one it left in place:
+whose test reproduced it again alone is reported; the record keeps the others:
 
 - `patch` is the test it wrote, as a diff against the reviewed commit.
 - `run` is the command that runs it: `cargo`, `mise` for a task of the
@@ -55,12 +53,8 @@ brought in from one it left in place:
   patch alone in a clean checkout, after the review. The reviewer's word is not
   taken for it.
 - `output` is what that run reported.
-- `on_base` says whether the test fails the same way on the merge base, which
-  makes the defect one the change left in place. It is absent where the patch
-  does not apply there.
-
-The test asserts the right behaviour, so `git apply` and that command give
-the failing test to fix against.
+  The test asserts the right behaviour, so `git apply` and that command give
+  the failing test to fix against.
 
 Each finding is also written under `scratchpad/eddy/<head>/`, numbered from 1:
 

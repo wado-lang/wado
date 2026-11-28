@@ -49,27 +49,10 @@ fn short_sha(commit: &String) -> String {
     return commit.substr_bytes(0, i32::min(commit.len(), 9));
 }
 
-/// Where a reproduced defect came from, as the run on the change's base says.
-fn origin(r: &Repro) -> String {
-    return match r.on_base {
-        Some(true) => "before",
-        Some(false) => "this change",
-        null => "unknown",
-    };
-}
-
-fn origin_note(r: &Repro) -> String {
-    return match r.on_base {
-        Some(true) => ", and on the change's base too: the change left it in place",
-        Some(false) => ", and not on the change's base: the change brought it in",
-        null => "",
-    };
-}
-
 fn body(f: &Finding, commit: &String, id: &String, with_steps: bool) -> String {
     let short = short_sha(commit);
     let status = match &f.repro {
-        Some(r) && r.verified => `reproduced on \`${short}\`${origin_note(r)}`,
+        Some(r) && r.verified => `reproduced on \`${short}\``,
         Some(r) && r.patch.is_empty() => `not reproduced: the reviewer's test could not be tried alone, since ${shortened(
             &r.output,
             SUMMARY_LIMIT,
@@ -108,14 +91,11 @@ pub fn review_comment(
     if let Some(e) = report_error {
         out.push_str(`The findings are not placed or reproduced: ${shortened(e, SUMMARY_LIMIT)}\n\n`);
     }
-    out.push_str("| # | Where | Finding | Reproduced | Since |\n| - | - | - | - | - |\n");
+    out.push_str("| # | Where | Finding | Reproduced |\n| - | - | - | - |\n");
     for let [i, f] of findings.into_iter().enumerate() {
         let place = if f.line > 0 { `${f.file}:${f.line}` } else { f.file };
-        let [reproduced, since] = match &f.repro {
-            Some(r) && r.verified => ["yes", origin(r)],
-            _ => ["no", ""],
-        };
-        out.push_str(`| ${i + 1} | ${cell(&code_span(&place))} | ${cell(&f.summary)} | ${reproduced} | ${since} |\n`);
+        let reproduced = if f.repro matches { Some(r) && r.verified } { "yes" } else { "no" };
+        out.push_str(`| ${i + 1} | ${cell(&code_span(&place))} | ${cell(&f.summary)} | ${reproduced} |\n`);
     }
     out.push_str("\n");
     // Room for the note even if it had to name every finding.
@@ -372,17 +352,13 @@ test "a review's comment tables the findings above each one's comment" {
                 expect: "e",
                 verified: true,
                 output: "e\n",
-                on_base: Some(true),
             }),
         },
     ];
     let text = review_comment(&findings, &"0123456789abcdef", &"cost: $0.6000 (m $0.6000)", &null, &null);
     assert text.starts_with("## Eddy\n\nReviewed `012345678`. 2 findings; cost: $0.6000 (m $0.6000)\n\n| #");
     assert text.contains(
-        "| # | Where | Finding | Reproduced | Since |\n| - | - | - | - | - |\n| 1 | ` src/a.rs:7 ` | a \\| b c | no |  |\n| 2 | ` src/b.rs ` | S | yes | before |\n",
-    );
-    assert text.contains(
-        "**S** — reproduced on `012345678`, and on the change's base too: the change left it in place",
+        "| # | Where | Finding | Reproduced |\n| - | - | - | - |\n| 1 | ` src/a.rs:7 ` | a \\| b c | no |\n| 2 | ` src/b.rs ` | S | yes |\n",
     );
     assert text.contains("<details><summary>Finding 1</summary>\n\n**a | b\nc** — not reproduced");
     assert text.contains("<!-- eddy 012345678-2 -->\n");
@@ -397,7 +373,7 @@ test "a table cell escapes what would end the cell or open a tag" {
     let piped = review_comment(&[
         Finding { file: "a|b", summary: "S", detail: "D" },
     ], &"0123456789", &"cost: $0", &null, &null);
-    assert piped.contains("| 1 | ` a\\|b ` | S | no |  |\n");
+    assert piped.contains("| 1 | ` a\\|b ` | S | no |\n");
 }
 
 test "a review's comment with nothing found, or nothing finished, says so" {

@@ -14,9 +14,9 @@
 //!
 //! A second model, `--reporter` (`claude-haiku-5-5`), then reads what each
 //! reproducer did and gives its finding its line and the test that reproduced
-//! it, which is tried again alone, and then on the merge base, to tell a
-//! defect the change brought in from one it left in place. Only a finding
-//! that test reproduces alone is reported; the record keeps the rest.
+//! it, which is tried again alone. Only a finding that test reproduces alone
+//! is reported, whether the change brought it in or left it in place; the
+//! record keeps the rest.
 //! `--report-again` reports the last recorded review of the head once more,
 //! with no new review, to try another reporter on the same findings.
 //!
@@ -181,7 +181,6 @@ ${commits.trim()}`;
             options.reporter,
             &change,
             &w,
-            &base,
             &head,
             &mut result,
             &mut report_usage,
