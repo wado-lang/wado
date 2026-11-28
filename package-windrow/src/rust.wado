@@ -33,13 +33,12 @@ fn marks_test(kind: i32, text: StrSlice) -> TestMark {
         return TestMark::None;
     }
     let mut compact = "";
-    for let c of text.chars() {
+    for let c of without_string_values(text).chars() {
         if !c.is_whitespace() {
             compact.push(c);
         }
     }
-    let bare = without_string_values(compact.as_str_slice());
-    let predicate = bare.trim_prefix("#!").trim_prefix("#");
+    let predicate = compact.trim_prefix("#!").trim_prefix("#");
     if predicate == "[test]" {
         return TestMark::Parent;
     }
@@ -54,7 +53,6 @@ fn marks_test(kind: i32, text: StrSlice) -> TestMark {
 /// `s` with each `= "…"` or `= r#"…"#` value emptied to `""`, so no character
 /// inside one reads as a delimiter or a predicate.
 fn without_string_values(s: StrSlice) -> String {
-    assert !s.chars().any(|c| c.is_whitespace()), "a value must follow its `=` directly";
     let mut out = "";
     let mut kept = 0;
     let mut i = 0;
@@ -63,6 +61,9 @@ fn without_string_values(s: StrSlice) -> String {
         if unchecked s.byte_at(i) != b'=' {
             i = j;
             continue;
+        }
+        while j < s.len() && (unchecked s.byte_at(j) as char).is_whitespace() {
+            j += 1;
         }
         let raw = j < s.len() && unchecked s.byte_at(j) == b'r';
         let mut hashes = 0;

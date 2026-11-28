@@ -355,6 +355,8 @@ test "a cfg marks test code only by the test predicate" {
         #`#[cfg(all(unix, x = "\",test,"))]
 ${COPY_B}`#, #`#[cfg(all(unix, x = r#"\",test"#))]
 ${COPY_B}`#, #`#[cfg(all(unix, x = r"\", y = ",test,"))]
+${COPY_B}`#, #`#[cfg(any(test, mode = "\
+"))]
 ${COPY_B}`#,
     ];
     for let source of compared {
