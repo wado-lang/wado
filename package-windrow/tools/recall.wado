@@ -99,7 +99,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
     let argv = args();
     let mut commits = "";
     let mut min_tokens = 40;
-    let mut measure = Measure::ShapeOrNames;
+    let mut measure = Measure::Shape;
     let mut files: List<String> = ["*.rs", "*.wado"];
     for let mut i = 0; i < argv.len(); i += 1 {
         if argv[i] == "--commits" {
@@ -108,14 +108,14 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
         } else if argv[i] == "--min-tokens" {
             i += 1;
             min_tokens = i32::from_str(&argv[i]).expect("--min-tokens takes a number");
-        } else if argv[i] == "--shape-only" {
-            measure = Measure::Shape;
+        } else if argv[i] == "--names" {
+            measure = Measure::ShapeOrNames;
         } else if argv[i] == "--files" {
             i += 1;
             files = argv[i].split(",").map(|f| f.to_string()).collect();
         } else {
             panic(
-                `usage: recall --commits <file> [--min-tokens <n>] [--shape-only] [--files <glob,…>]; not ${argv[i]}`,
+                `usage: recall --commits <file> [--min-tokens <n>] [--names] [--files <glob,…>]; not ${argv[i]}`,
             );
         }
     }

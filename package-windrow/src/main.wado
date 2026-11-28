@@ -1,8 +1,8 @@
-//! `windrow [--min-tokens N] [--similarity S] <path>…`: every `.rs` and `.wado`
-//! file under the paths, and the groups of nodes alike among them, largest
-//! first.
+//! `windrow [--min-tokens N] [--similarity S] [--names] <path>…`: every `.rs`
+//! and `.wado` file under the paths, and the groups of nodes alike among them,
+//! largest first.
 
-use { read_source, find_similar, Tree } from "./lib.wado";
+use { read_source, find_similar, Tree, Measure } from "./lib.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
@@ -40,11 +40,14 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
     let argv = args();
     let mut min_tokens = 40;
     let mut similarity = 0.8;
+    let mut measure = Measure::Shape;
     let mut roots: List<String> = [];
     for let mut i = 0; i < argv.len(); i += 1 {
         if argv[i] == "--min-tokens" {
             i += 1;
             min_tokens = i32::from_str(&argv[i]).expect("--min-tokens takes a number");
+        } else if argv[i] == "--names" {
+            measure = Measure::ShapeOrNames;
         } else if argv[i] == "--similarity" {
             i += 1;
             similarity = f64::from_str(&argv[i]).expect("--similarity takes a number");
@@ -70,7 +73,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
             }
         }
     }
-    let groups = find_similar(&trees, min_tokens, similarity);
+    let groups = find_similar(&trees, min_tokens, similarity, measure);
     for let group of &groups {
         println(`${group.tokens} tokens x ${group.sites.len()}, similarity ${group.similarity:.2}`);
         for let site of &group.sites {

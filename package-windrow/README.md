@@ -7,17 +7,21 @@ Jaccard index of their sets of six-token runs: 1 for a copy, less as the
 operators, calls and structure part.
 
 It reads only the tree, never types or name resolution, so it runs fast and
-works for any language Gale has a grammar for. Rust is the first.
+works for any language Gale has a grammar for. It reads Rust and Wado.
 
 ## Usage
 
 ```sh
-wado run package-windrow/src/main.wado -- [--min-tokens N] [--similarity S] <path>…
+wado run package-windrow/src/main.wado -- [--min-tokens N] [--similarity S] [--names] <path>…
 ```
 
-A path is a `.rs` file or a directory walked for them. `--min-tokens` is the
-smallest node compared, in tokens; the default is 40. `--similarity` is the
-least similarity reported, in (0, 1]; the default is 0.8. Each group prints its
+A path is a `.rs` or `.wado` file, or a directory walked for them.
+`--min-tokens` is the smallest node compared, in tokens; the default is 40.
+`--similarity` is the least similarity reported, in (0, 1]; the default is 0.8.
+`--names` also counts two nodes alike by the names they call, types, methods
+and paths, when both call at least eight and are somewhat alike in shape: one
+logic written as a loop and as an iterator chain shares those, not its runs.
+Each group prints its
 largest member's size, the least similarity between two of its members, and
 every member's lines, the groups that repeat the most tokens first:
 
@@ -31,23 +35,26 @@ Every two members of a group are alike, and a group is reported at the largest
 nodes that are, so a member's inner nodes are not listed again. A node that
 repeats one small shape, such as a long or-pattern of enum cases, is not
 compared: its few distinct runs make any two such nodes look alike. Nor is test
-code, an item under `#[test]` or `#[cfg(test)]`: a fixture repeats its shape on
-purpose.
+code, a Rust item under `#[test]` or `#[cfg(test)]` or a Wado `test` block: a
+fixture repeats its shape on purpose.
 
 ## Recall
 
 `tools/recall.wado` replays past commits on this repository and counts those
-where a group joins a node the commit deleted to another node. Over 286 commits
-whose subject names a deduplication, against 193 feature commits as a baseline
-for chance, at similarity 0.8:
+where a group joins a node the commit deleted to another node. Commits whose
+subject names a deduplication are measured against feature commits, a baseline
+for chance. At 40 tokens and similarity 0.8:
 
-| Smallest match | Deduplications | Feature commits |
-| -------------- | -------------- | --------------- |
-| 20 tokens      | 63%            | 36%             |
-| 30 tokens      | 38%            | 17%             |
-| 40 tokens      | 29%            | 9%              |
-| 60 tokens      | 17%            | 6%              |
+| Files | Measure       | Deduplications | Feature commits |
+| ----- | ------------- | -------------- | --------------- |
+| Rust  | shape         | 36% of 286     | 18% of 193      |
+| Rust  | shape + names | 43% of 286     | 27% of 193      |
+| Wado  | shape         | 36% of 70      | 9% of 116       |
+| Wado  | shape + names | 49% of 70      | 18% of 116      |
 
-Below 30 tokens a match is as likely by chance as on a deduplication, hence the
-default of 40. A feature commit's match is often a real copy nobody folded yet,
-so the baseline overstates the noise.
+Names find more deduplications, and about as many more chance matches, so they
+are not on by default. A match on a feature commit is often a real copy nobody
+folded yet, so the baseline overstates the noise.
+
+Below 30 tokens a match is about as likely by chance as on a deduplication, hence
+the default of 40.

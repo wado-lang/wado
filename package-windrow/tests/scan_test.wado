@@ -69,8 +69,8 @@ test "a changed operator lowers the similarity below one" {
         tree("a.rs", COPY_A),
         tree("b.rs", changed),
     ];
-    assert find_similar(&trees, 40, 1.0, Measure::Shape).is_empty();
-    let groups = find_similar(&trees, 40, 0.6, Measure::Shape);
+    assert find_similar(&trees, 40, 1.0).is_empty();
+    let groups = find_similar(&trees, 40, 0.6);
     assert groups.len() == 1;
     assert groups[0].similarity < 1.0;
 }
@@ -167,10 +167,10 @@ test "one logic in two syntaxes is alike by the names it calls" {
         tree("a.rs", a),
         tree("b.rs", b),
     ];
-    let groups = find_similar(&trees, 20, 0.65);
+    let groups = find_similar(&trees, 20, 0.65, Measure::ShapeOrNames);
     assert groups.len() == 1;
     assert groups[0].sites.iter_ref().all(|s| s.start(&trees) == 0);
-    assert find_similar(&trees, 20, 0.65, Measure::Shape).iter_ref().all(|g| g.sites[0].start(&trees) > 0);
+    assert find_similar(&trees, 20, 0.65).iter_ref().all(|g| g.sites[0].start(&trees) > 0);
 }
 
 test "wado code is compared, its test blocks left out" {

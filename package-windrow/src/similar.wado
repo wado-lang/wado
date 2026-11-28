@@ -27,6 +27,10 @@ global MIN_DISTINCT: f64 = 0.5;
 global RICH_RUNS: f64 = 128.0;
 /// Fewer spelled names than this are shared by chance: `new`, `push`, `Some`.
 global MIN_NAMES: i32 = 8;
+/// Two nodes of a file share its vocabulary, so names count only between
+/// nodes somewhat alike in shape too. Over Wado's history this floor halved
+/// the matches on feature commits and kept most on deduplications.
+global SHAPE_FLOOR: f64 = 0.4;
 
 /// What is compared: a node, or a run of the children of a sequence node. It
 /// is in the tree at `tree`, an index into the scanned list, and spans the
@@ -272,7 +276,7 @@ fn pair_key(a: i32, b: i32) -> u64 {
 /// however differently written.
 fn estimate(units: &Units, a: i32, b: i32) -> f64 {
     let by_shape = agreement(&units.signature, a, b);
-    if !units.named[a] || !units.named[b] {
+    if !units.named[a] || !units.named[b] || by_shape < SHAPE_FLOOR {
         return by_shape;
     }
     return f64::max(by_shape, agreement(&units.names, a, b));
@@ -328,7 +332,7 @@ pub fn find_similar(
     trees: &List<Tree>,
     min_tokens: i32,
     similarity: f64,
-    measure: Measure = Measure::ShapeOrNames,
+    measure: Measure = Measure::Shape,
 ) -> List<Group> {
     assert min_tokens >= K, "a node shorter than one run has no runs to compare";
     let mut seeds: List<u64> = [];
