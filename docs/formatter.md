@@ -117,19 +117,17 @@ unless one of these rules decides it:
 
 ## What it rewrites
 
-Only what carries no meaning, with one exception: a `///` block a blank line
-keeps off the declaration below it closes up to it, and then documents it. A
-blank line there is taken for a slip, so `Reflect::doc()` answers the block's
-text after formatting rather than `null`.
-
-Beyond that: redundant parentheses, an explicit `-> ()` return
+Only what carries no meaning: redundant parentheses, an explicit `-> ()` return
 type, repeated or missing statement semicolons, an `impl` block's type
 parameters (always written out), a field name's quoting (bare when it is an
-identifier), and a doc comment that documents nothing. A block of consecutive
-`///` lines documents the declaration below it, with only blank lines between,
-and a
-`//!` line documents the module when it comes before the first item. Any other
-`///` or `//!` line, such as one above a statement, is written as `//`.
+identifier), and a doc comment that documents nothing, which it writes as `//`.
+The doc comment of a declaration is the block of consecutive `///` lines
+nearest above it, with only blank lines between. The module's is the `//!`
+lines before its first item.
+
+One rewrite does carry meaning. The blank line between a declaration and its
+`///` block is taken for a slip and dropped, so `Reflect::doc()` answers the
+block's text after formatting rather than `null`.
 
 Everything else is kept as written, including the spelling of every literal
 (hex, octal, digit separators, float form, string and template escapes),
