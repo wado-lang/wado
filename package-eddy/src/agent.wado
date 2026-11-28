@@ -5,6 +5,7 @@ use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { Value } from "core:value";
+use { to_string } from "core:json";
 use { converse, message, Credential, Format, Message, Usage } from "./anthropic.wado";
 use { Workspace } from "./tools.wado";
 
@@ -59,6 +60,48 @@ struct Blocks {
     content: List<Value>,
 }
 
+/// A text block the cache keeps an entry at the end of.
+struct CachedText {
+    #[wire(name = "type")]
+    kind: String = "text",
+    text: String,
+    cache_control: Ephemeral,
+}
+
+struct Ephemeral {
+    #[wire(name = "type")]
+    kind: String = "ephemeral",
+}
+
+/// What an agent is first asked: `shared`, which other agents are asked too,
+/// and then `own`, its part alone. The cache keeps an entry at the end of
+/// `shared`, so another agent under the same system prompt and tools reads it
+/// from the cache rather than writing it again.
+pub struct Task {
+    pub shared: String,
+    pub own: String = "",
+}
+
+impl Task {
+    /// The task as one text, for a request that is not a conversation.
+    pub fn text(&self) -> String {
+        return if self.own.is_empty() { self.shared } else { `${self.shared}\n\n${self.own}` };
+    }
+
+    fn opening(&self) -> Value {
+        if self.own.is_empty() {
+            return message(&Message { role: "user", content: self.shared });
+        }
+        return message(&Blocks {
+            role: "user",
+            content: [
+                message(&CachedText { text: self.shared, cache_control: Ephemeral {} }),
+                message(&TextBlock { text: self.own }),
+            ],
+        });
+    }
+}
+
 /// The answer `model` gives to `task` after reading `ws` with the tools, in at
 /// most `max_turns` turns, at `effort`, held to `format`. The last turn takes
 /// no tool call.
@@ -66,7 +109,7 @@ pub fn run_agent(
     credential: &mut Credential,
     model: String,
     system: String,
-    task: String,
+    task: &Task,
     ws: &Workspace,
     max_turns: i32,
     max_tokens: i32,
@@ -75,7 +118,7 @@ pub fn run_agent(
 ) -> AgentRun with (Client, Preopens, Process, MonotonicClock) {
     assert max_turns >= 1;
     let declared = ws.tools();
-    let mut messages = [message(&Message { role: "user", content: task })] as List<Value>;
+    let mut messages = [task.opening()] as List<Value>;
     let [mut turns, mut calls, mut usage] = [0, [] as List<Call>, Usage {}];
     let mut requests: List<Request> = [];
     let first = MonotonicClock::now();
@@ -149,4 +192,12 @@ fn count_of(calls: &List<Call>, name: &String) -> i32 {
         }
     }
     return n;
+}
+
+test "an agent's own part follows the shared one, which the cache keeps an entry at the end of" {
+    let alone = to_string(&Task { shared: "diff" }.opening()).unwrap();
+    assert alone == #"{"role":"user","content":"diff"}"#;
+    let split = to_string(&Task { shared: "diff", own: "focus" }.opening()).unwrap();
+    assert split == #"{"role":"user","content":[{"type":"text","text":"diff","cache_control":{"type":"ephemeral"}},{"type":"text","text":"focus"}]}"#;
+    assert Task { shared: "diff", own: "focus" }.text() == "diff\n\nfocus";
 }

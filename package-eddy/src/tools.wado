@@ -217,7 +217,8 @@ fn running_tools(runner: &Runner) -> List<Tool> {
             "Run",
             `Runs a program at the repository root with the given arguments, cargo unless program names another, and returns how it ended and the end of its stderr and stdout.
 - Examples for cargo: ["test", "-p", "wado-lsp", "--test", "my_check"]; ["run", "--bin", "wado", "--", "run", "check.wado"]; ["test", "-p", "wado-compiler", "--lib", "some_test_name"].${mise}
-- The tests of the packages the change touches and the wado binary were built before the review, so building them again is quick; a build of anything else takes minutes. It stops after timeout seconds (default ${RUN_TIMEOUT}, at most ${RUN_TIMEOUT_LIMIT}).
+- The tests of the packages the change touches and the wado binary were built before the review, in the dev profile, so building them again is quick; a build of anything else takes minutes.
+- Build in the dev profile, as plain cargo build, cargo run and cargo test do: --release builds everything again. It stops after timeout seconds (default ${RUN_TIMEOUT}, at most ${RUN_TIMEOUT_LIMIT}).
 - A review makes at most ${runner.runs} runs.`,
             `{
   "type": "object",

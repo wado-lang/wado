@@ -15,7 +15,7 @@ use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { ask_json, shaped, Credential, Format, Usage } from "./anthropic.wado";
-use { run_agent, Call, Request } from "./agent.wado";
+use { run_agent, Call, Request, Task } from "./agent.wado";
 use { empty_index } from "./symbols.wado";
 use { Runner, Workspace } from "./tools.wado";
 
@@ -27,7 +27,7 @@ global MAX_FINDINGS: i32 = 10;
 
 global ANSWER: String = `Report at most ${MAX_FINDINGS} findings, the most severe first. An empty list is a valid answer.`;
 
-global SEARCH: String = "Several reviewers search this change, each for what one focus covers, and a later step checks and reproduces what they report. Report every defect your focus covers that you find, one you are not sure of included, and say in its detail what would confirm it. Report a defect outside your focus only if it is severe. You run nothing.";
+global SEARCH: String = "Several reviewers search this change, each for what one focus covers, and a later step checks and reproduces what they report. Your focus follows the diff. Report every defect your focus covers that you find, one you are not sure of included, and say in its detail what would confirm it. Report a defect outside your focus only if it is severe. You run nothing.";
 
 global CONFIRM: String = "Reviewers searched this change, each for one focus, and reported the CANDIDATES after the diff. They read without running anything, so two may name the same defect and some are wrong.
 Merge the candidates that name one defect into one finding. Check each against the code, and drop one the code refutes. Work through every candidate, the most severe first, and report the ones that survive.";
@@ -182,15 +182,22 @@ ${self.diff}
 </diff>`;
     }
 
-    /// The task with the candidates to confirm after the diff, in the words
-    /// their reviewers answered with.
-    fn confirming(&self, candidates: &List<Finding>) -> String {
-        let told: List<Told> = candidates.into_iter().map(|f| f.told()).collect();
-        return `${self.task()}
+    /// What a search for `focus` is asked: the change, which every search
+    /// shares, and then its focus.
+    fn searched_for(&self, focus: &Focus) -> Task {
+        return Task { shared: self.task(), own: `Your focus is ${focus.covers}.` };
+    }
 
-<candidates>
+    /// The change and then the candidates to confirm, in the words their
+    /// reviewers answered with.
+    fn confirmed_from(&self, candidates: &List<Finding>) -> Task {
+        let told: List<Told> = candidates.into_iter().map(|f| f.told()).collect();
+        return Task {
+            shared: self.task(),
+            own: `<candidates>
 ${to_string(&told).unwrap()}
-</candidates>`;
+</candidates>`,
+        };
     }
 }
 
@@ -209,8 +216,10 @@ fn tools_told(ws: &Option<Workspace>) -> String {
     return told;
 }
 
-fn searching(focus: &Focus, ws: &Option<Workspace>) -> String {
-    return `${ROLE}\n${SEARCH}\nYour focus is ${focus.covers}.\n${ANSWER}${tools_told(ws)}`;
+/// What every search is told. It names no focus, so that the searches share
+/// it and the diff after it in the cache.
+fn searching(ws: &Option<Workspace>) -> String {
+    return `${ROLE}\n${SEARCH}\n${ANSWER}${tools_told(ws)}`;
 }
 
 fn confirming(ws: &Option<Workspace>) -> String {
@@ -254,7 +263,15 @@ pub fn review(
     let mut candidates: List<Finding> = [];
     for let i of 0..<reviewers {
         let focus = &FOCI[i];
-        let mut search = ask(credential, model, searching(focus, &reading), change.task(), &reading, max_turns, effort);
+        let mut search = ask(
+            credential,
+            model,
+            searching(&reading),
+            &change.searched_for(focus),
+            &reading,
+            max_turns,
+            effort,
+        );
         search.focus = focus.name;
         let failed = search.error;
         candidates.extend(&search.findings);
@@ -271,7 +288,7 @@ pub fn review(
         credential,
         model,
         confirming(&confirmer),
-        change.confirming(&candidates),
+        &change.confirmed_from(&candidates),
         &confirmer,
         max_turns + extra_turns,
         effort,
@@ -287,7 +304,7 @@ fn ask(
     credential: &mut Credential,
     model: String,
     system: String,
-    task: String,
+    task: &Task,
     ws: &Option<Workspace>,
     max_turns: i32,
     effort: String,
@@ -295,7 +312,7 @@ fn ask(
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
         let mut usage = Usage {};
-        return match ask_json::<Answer>(credential, model, system, task, 32_000, &mut usage) {
+        return match ask_json::<Answer>(credential, model, system, task.text(), 32_000, &mut usage) {
             Ok(a) => Reviewed {
                 findings: a.findings(),
                 usage: Some(usage),
@@ -351,7 +368,7 @@ test "a reviewer is asked for a finding's words and nothing a report adds" {
     let ws: Option<Workspace> = Some(Workspace { root: "src", runner: Some(runner) });
     for let told of [
         confirming(&ws),
-        searching(&FOCI[0], &ws),
+        searching(&ws),
     ] {
         assert !told.contains(#""line""#) && !told.contains(#""repro""#) && !told.contains(#""paths""#);
     }
@@ -360,12 +377,14 @@ test "a reviewer is asked for a finding's words and nothing a report adds" {
     assert !format.contains(#""line""#) && !format.contains(#""repro""#) && !format.contains(#""paths""#);
 }
 
-test "each search is told its own focus" {
+test "the searches share the system prompt and the diff, and each is told its own focus after them" {
+    let change = Submission { heading: "PULL REQUEST #1: t", diff: "+a" };
     for let f of &FOCI {
-        let told = searching(f, &null);
-        assert told.contains(f.covers);
+        let task = change.searched_for(f);
+        assert task.shared == change.task() && task.own.contains(f.covers);
+        assert !searching(&null).contains(f.covers);
         for let other of &FOCI {
-            assert other.name == f.name || !told.contains(other.covers);
+            assert other.name == f.name || !task.own.contains(other.covers);
         }
     }
 }
