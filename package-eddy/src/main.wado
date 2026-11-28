@@ -4,15 +4,17 @@
 //! `--reviewers` (4) reviewers each search the diff from the merge base of
 //! `--base` (`origin/main`) to `--head` (`HEAD`) for one focus, and read a
 //! checkout of the head under `scratchpad/` through Read, Grep and Glob. One
-//! more merges what they found and checks it: it also writes tests into that
-//! checkout and runs them through Write and Run, with `cargo`, and where `mise`
-//! is set up, with it and each tool it installed for the project. That needs
-//! `--process-read` on the `cargo` and `rustup` homes, and for `mise` on its
-//! binary and its data directory; `--no-run` checks by reading alone.
+//! call merges what they found and keeps the most severe. A reproducer per
+//! candidate kept then writes a test into that checkout and runs it through
+//! Write and Run, with `cargo`, and where `mise` is set up, with it and each
+//! tool it installed for the project. That needs `--process-read` on the
+//! `cargo` and `rustup` homes, and for `mise` on its binary and its data
+//! directory; `--no-run` reports the candidates unreproduced.
 //!
-//! A second model, `--reporter` (`claude-haiku-5-5`), then reads what the
-//! confirming reviewer did and gives each finding its line and the test that reproduced
-//! it, which is tried again alone before the finding carries it.
+//! A second model, `--reporter` (`claude-haiku-5-5`), then reads what each
+//! reproducer did and gives its finding its line and the test that reproduced
+//! it, which is tried again alone. Only a finding that test reproduces alone
+//! is reported; the record keeps the rest.
 //! `--report-again` reports the last recorded review of the head once more,
 //! with no new review, to try another reporter on the same findings.
 //!
@@ -50,7 +52,7 @@ use { git, try_git, paths_between, diff_between } from "./git.wado";
 use { Credential, Usage } from "./anthropic.wado";
 use { comment, finding_id, review_comment } from "./comment.wado";
 use { cost_summary } from "./cost.wado";
-use { report } from "./report.wado";
+use { report_all } from "./report.wado";
 use { spend_report, spends } from "./spend.wado";
 use { review, Submission, Finding, Reviewed, MAX_REVIEWERS } from "./review.wado";
 use { hold_tree, home_runner, with_mise_tools } from "./snapshot.wado";
@@ -152,18 +154,27 @@ ${commits.trim()}`;
     let w = Workspace { root, runner };
     let change = Submission { heading, diff };
     let mut result = if let Some(earlier) = &earlier {
-        reviewed_again(&w, &earlier.result);
+        reviewed_again(&earlier.result);
     } else {
         if w.runner matches { Some(_) } {
             w.prebuild(&changed);
         }
-        review(&mut credential, CLAUDE_MODEL, &change, &Some(w), options.reviewers, options.max_turns, options.effort);
+        review(
+            &mut credential,
+            CLAUDE_MODEL,
+            &change,
+            &Some(w),
+            &head,
+            options.reviewers,
+            options.max_turns,
+            options.effort,
+        );
     };
     // A report that fails leaves the findings as the reviewer worded them.
     let mut report_usage = Usage {};
     let report_error: Option<String> = match &result.error {
         Some(_) => null,
-        null => match report(&mut credential, options.reporter, &change, &w, &head, &mut result, &mut report_usage) {
+        null => match report_all(&mut credential, options.reporter, &change, &w, &head, &mut result, &mut report_usage) {
             Ok(_) => null,
             Err(e) => Some(e),
         },
@@ -192,7 +203,7 @@ ${commits.trim()}`;
     let path = fs::join(&records, `${Instant::now().epoch_milliseconds()}-${token_hex(4)}.json`);
     fs::write(&path, &to_bytes_pretty(&attempt).unwrap()).unwrap();
     eprintln(
-        `recorded in ${path}: ${result.searches.len()} searches, ${result.total_turns()} turns, ${result.calls.len()} tool calls confirming`,
+        `recorded in ${path}: ${result.searches.len()} searches, ${result.candidates.len()} candidates kept, ${result.reproductions.len()} tried, ${result.findings.len()} reproduced alone, ${result.total_turns()} turns`,
     );
     // Computed here rather than recorded: a price changes, and the tokens a
     // review took do not.
@@ -235,26 +246,28 @@ fn last_attempt(records: &String) -> Attempt with (Stderr, Exit, Preopens) {
     };
 }
 
-/// `earlier`, a recorded review, as its reviewer left it: the findings in its
-/// words, and in the fresh tree at `w` the files it wrote. Reporting it again
-/// tries another reporter on one review, where a second review would find
-/// other things.
-fn reviewed_again(w: &Workspace, earlier: &Reviewed) -> Reviewed with (Preopens, Process) {
-    let mut again = *earlier;
-    // The earlier attempt holds what the review took; this one took nothing.
+/// `earlier`, a recorded review, as its reviewers left it: the findings in
+/// their words, before any was placed or reproduced. Reporting it again tries
+/// another reporter on one review, where a second review would find other
+/// things.
+fn reviewed_again(earlier: &Reviewed) -> Reviewed {
+    let mut again = unreported(earlier);
+    again.searches = [];
+    for let r of &mut again.reproductions {
+        *r = unreported(r);
+    }
+    return again;
+}
+
+/// `step` with nothing a report added, and nothing spent: the earlier attempt
+/// holds what the review took.
+fn unreported(step: &Reviewed) -> Reviewed {
+    let mut again = *step;
     again.usage = null;
     again.requests = [];
-    again.searches = [];
     for let f of &mut again.findings {
         f.line = 0;
         f.repro = null;
-    }
-    if w.runner matches { Some(_) } {
-        for let c of &again.calls {
-            if c.name == "Write" && !c.is_error {
-                w.call(&c.name, &c.input).unwrap();
-            }
-        }
     }
     return again;
 }

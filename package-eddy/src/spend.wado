@@ -14,7 +14,7 @@ use { Value } from "core:value";
 use { Call, Request } from "./agent.wado";
 use { Usage } from "./anthropic.wado";
 use { charges, charges_of, cost_usd } from "./cost.wado";
-use { Reviewed } from "./review.wado";
+use { Finding, Reviewed } from "./review.wado";
 
 /// What one reviewer spent, in US dollars, by part: `output`, `prompt`, and a
 /// tool's name. A record that kept no requests splits only into output,
@@ -39,15 +39,27 @@ impl Spend {
     }
 }
 
-/// What each reviewer of `reviewed`, all on `model`, spent: each search, then
-/// the reviewer that confirmed them. `null` for a model with no listed price.
+/// What each step of `reviewed`, all on `model`, spent: each search, the
+/// triage, then each reproduction. `null` for a model with no listed price.
 pub fn spends(model: &String, reviewed: &Reviewed) -> Option<List<Spend>> {
     let mut out: List<Spend> = [];
     for let s of &reviewed.searches {
         out.push(spend(model, &`search ${s.focus}`, s)?);
     }
-    let name = if reviewed.searches.is_empty() { "review" } else { "confirm" };
+    // A record written before the triage held a reviewer that confirmed the
+    // searches, and one before the searches a single reviewer.
+    let name = if !reviewed.candidates.is_empty() {
+        "triage";
+    } else if reviewed.searches.is_empty() {
+        "review";
+    } else {
+        "confirm";
+    };
     out.push(spend(model, &name, reviewed)?);
+    for let [i, r] of reviewed.reproductions.into_iter().enumerate() {
+        let tried = if r.candidates.is_empty() { "" } else { ` ${r.candidates[0].file}` };
+        out.push(spend(model, &`reproduce ${i + 1}${tried}`, &r)?);
+    }
     return Some(out);
 }
 
@@ -105,15 +117,15 @@ fn charge_turn(s: &mut Spend, calls: &List<Call>, turn: i32, dollars: f64) {
     }
 }
 
-/// `spends` as lines: the total, then each reviewer with its turns and its
-/// parts, the dearest first.
-pub fn spend_report(spends: &List<Spend>) -> String {
+/// What `steps` spent, as lines: the total, then each step with its turns and
+/// its parts, the dearest first.
+pub fn spend_report(steps: &List<Spend>) -> String {
     let mut all = 0.0;
-    for let s of spends {
+    for let s of steps {
         all += s.total();
     }
     let mut out = `spend: $${all:.4}`;
-    for let s of spends {
+    for let s of steps {
         let mut parts: List<[String, f64]> = [];
         for let [part, dollars] of s.parts.entries() {
             parts.push([*part, *dollars]);
@@ -179,15 +191,31 @@ test "a record that kept no requests is spent by kind of token alone" {
     assert spends(&"claude-next", &r) matches { null };
 }
 
-test "a split review is spent search by search, then by the reviewer that confirmed them" {
+test "a split review is spent search by search, then by the triage and each reproduction" {
     let one = Reviewed { turns: 1, usage: Some(Usage { output_tokens: 1_000_000 }) };
+    let candidate = Finding { file: "a.rs", summary: "s", detail: "d" };
     let r = Reviewed {
         ..one,
         searches: [
             Reviewed { ..one, focus: "code" },
         ],
+        candidates: [candidate],
+        reproductions: [
+            Reviewed {
+                ..one,
+                candidates: [candidate],
+            },
+        ],
     };
     let report = spend_report(&spends(&"claude-opus-5-5", &r).unwrap());
-    assert report.starts_with("spend: $40.0000\n  search code: $20.0000 in 1 turns (output $20.0000, ");
-    assert report.contains("\n  confirm: $20.0000 in 1 turns (output $20.0000, ");
+    assert report.starts_with("spend: $60.0000\n  search code: $20.0000 in 1 turns (output $20.0000, ");
+    assert report.contains("\n  triage: $20.0000 in 1 turns (output $20.0000, ");
+    assert report.contains("\n  reproduce 1 a.rs: $20.0000 in 1 turns (output $20.0000, ");
+    let confirmed = Reviewed {
+        ..one,
+        searches: [
+            Reviewed { ..one, focus: "code" },
+        ],
+    };
+    assert spend_report(&spends(&"claude-opus-5-5", &confirmed).unwrap()).contains("\n  confirm: ");
 }

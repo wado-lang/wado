@@ -13,28 +13,31 @@ implemented yet.
 From the repository root, with `CLAUDE_API_KEY` set and the branch committed:
 
 ```sh
-mise run eddy-review             # the reviewers read; the last writes tests and runs them
-mise run eddy-review --no-run    # every reviewer reads the diff and the tree, and runs nothing
+mise run eddy-review             # the reviewers read; a reproducer per candidate writes a test and runs it
+mise run eddy-review --no-run    # the candidates are reported unreproduced
 ```
 
-A review takes two steps:
+A review takes three steps:
 
 1. Search. `--reviewers` reviewers (4, the most) each read the change for one
    focus: the changed code itself, its callers, state and time, and the
    toolchain as its users see it. They run nothing and report candidates, the
    uncertain ones included.
-2. Confirm. One more reviewer reads every candidate. It merges those that name
-   one defect, drops those the code refutes, and reproduces the rest. Its Run
-   budget is three runs per candidate, up to ten candidates. Before the review
-   Eddy builds the tests of each package the change touches and the `wado`
-   binary. A Run that builds for longer than the API keeps its cache would
-   otherwise have the whole conversation written to the cache again.
+2. Triage. One call merges the candidates that name one defect and keeps the
+   ten most severe. It reads the candidates alone, not the diff, and judges
+   none of them right or wrong.
+3. Reproduce. A reproducer per candidate kept reads the diff of the
+   candidate's file and has three runs to show it with a test. Reading settles
+   nothing: a candidate no run shows is not reported. Before the review Eddy
+   builds the tests of each package the change touches and the `wado` binary.
+   A Run that builds for longer than the API keeps its cache would otherwise
+   have the whole conversation written to the cache again.
 
-The searches run one after another, so a review takes longer than a single
+The steps run one after another, so a review takes longer than a single
 reviewer would.
 
-The findings go to stdout as JSON. A finding the reviewer reproduced carries
-its `repro`:
+The findings go to stdout as JSON. Each carries its `repro`, and only a finding
+whose test reproduced it again alone is reported; the record keeps the others:
 
 - `patch` is the test it wrote, as a diff against the reviewed commit.
 - `run` is the command that runs it: `cargo`, `mise` for a task of the
@@ -67,9 +70,8 @@ takes a comment on a line, or 0.
 The reviewers are asked for none of this. Their instructions hold the review
 alone: what to look for, and to reproduce a finding with a test that asserts
 the right behaviour. A second, smaller model (`--reporter`, Claude Haiku 5.5)
-then reads the findings, the files the confirming reviewer wrote and the runs
-it made,
-and names each finding's line, its test and the run that failed. Anything
+then reads each reproducer's finding, the files it wrote and the runs it made,
+and names the finding's line, its test and the run that failed. Anything
 about how a finding is reported goes into that second prompt, so it cannot
 cost the review its attention. `--report-again` reports the last recorded
 review of a commit once more, which tries another reporter on the same
