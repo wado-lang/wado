@@ -16,7 +16,9 @@ use crate::component_model::{CmInterfaceRegistry, SourceInterfaceBatch};
 use crate::hashmap::IndexMap;
 use crate::logger::Logger;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{KILN_ADAPTER_GENERATE, KILN_ADAPTER_NAMESPACE, kiln_adapter_path};
+use crate::name::{
+    KILN_ADAPTER_GENERATE, KILN_ADAPTER_NAMESPACE, KILN_GENERATE, kiln_adapter_path,
+};
 use crate::token::Span;
 use crate::wir::{ImportEntry, ImportKind};
 use crate::world_registry::WorldInfo;
@@ -173,7 +175,7 @@ pub fn inject_kiln_request_adapter(
     let mut target: Option<(usize, String, Span, Type, RequestOptions)> = None;
     for (idx, item) in module.items.iter().enumerate() {
         let Item::Function(func) = item else { continue };
-        if !func.is_export || func.name != "generate" {
+        if !func.is_export || func.name != KILN_GENERATE {
             continue;
         }
         let Some(first) = func.params.first() else {
@@ -200,7 +202,6 @@ pub fn inject_kiln_request_adapter(
 
     let has_options = matches!(request_options, RequestOptions::Explicit(_));
     let options_type = match request_options {
-        // The author's `Request<T>` keeps its ids as the `let`'s annotation.
         RequestOptions::Explicit(ty) => ty.refreshed(&mut || module.alloc_ast_id()),
         RequestOptions::Default => Type::Named(NamedType::new(
             module.alloc_ast_id(),
@@ -295,14 +296,14 @@ pub fn inject_kiln_request_adapter(
         },
         name_span: span,
         is_mut: false,
-        ty: Some(request_ty),
+        ty: Some(request_ty.refreshed(&mut || module.alloc_ast_id())),
         value: Some(request_lit),
         else_block: None,
         span,
     });
 
-    // `with &mut KilnLogSink {} do { <the author's body> }`, the body moved in
-    // below once the function is borrowed.
+    // `with &mut KilnLogSink {} do { return $kiln_generate(<param_name>); }`,
+    // the call filled in below.
     let sink = Expr::Unary(Box::new(UnaryExpr {
         id: module.alloc_ast_id(),
         op: UnaryOp::MutRef,
@@ -377,7 +378,7 @@ pub fn inject_kiln_request_adapter(
     }
     let wire_generate = Function {
         id: module.alloc_ast_id(),
-        name: "generate".to_string(),
+        name: KILN_GENERATE.to_string(),
         name_span,
         visibility: Visibility::Public,
         is_export: true,

@@ -217,9 +217,13 @@ pub fn is_effect_default(name: &str) -> bool {
 /// How a function name reads where a user sees it — `#function`, and the
 /// call-site name a defaulted argument captures. A default implementation's
 /// storage name is an internal detail, so it renders as the operation it
-/// implements (`Log::event`); every other name passes through unchanged.
+/// implements (`Log::event`), and a Kiln generator's own function as the
+/// `generate` its author wrote; every other name passes through unchanged.
 #[must_use]
 pub fn display_function_name(name: &str) -> String {
+    if name == KILN_ADAPTER_GENERATE {
+        return KILN_GENERATE.to_string();
+    }
     let Some(rest) = name.strip_prefix(EFFECT_DEFAULT_PREFIX) else {
         return name.to_string();
     };
@@ -255,6 +259,9 @@ pub fn diagnostic_function_name(
         return declared.to_display_name();
     }
     let local = name.strip_prefix(&format!("{module}/")).unwrap_or(name);
+    if local == KILN_ADAPTER_GENERATE {
+        return KILN_GENERATE.to_string();
+    }
     as_declared(local)
 }
 
@@ -1246,8 +1253,12 @@ pub fn kiln_adapter_path(item: &str) -> String {
     namespace_member_alias(KILN_ADAPTER_NAMESPACE, item)
 }
 
-/// The name a Kiln generator's own `generate` takes once the request adapter
-/// stands in for it on the wire, so the wire parameters stay out of its scope.
+/// The export a Kiln generator provides, and the name its author gives it.
+pub const KILN_GENERATE: &str = "generate";
+
+/// The name a Kiln generator's own [`KILN_GENERATE`] takes once the request
+/// adapter stands in for it on the wire, so the wire parameters stay out of
+/// its scope.
 pub const KILN_ADAPTER_GENERATE: &str = "$kiln_generate";
 
 /// Prefix the const-object globalization pass stamps on the globals it hoists
