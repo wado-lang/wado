@@ -56,8 +56,8 @@ counted. At 40 tokens and similarity 0.8:
 | ----- | ------------- | -------------- | --------------- |
 | Rust  | shape         | 38% of 289     | 15% of 194      |
 | Rust  | shape + names | 44% of 289     | 23% of 194      |
-| Wado  | shape         | 39% of 72      | 12% of 121      |
-| Wado  | shape + names | 43% of 72      | 13% of 121      |
+| Wado  | shape         | 39% of 72      | 12% of 122      |
+| Wado  | shape + names | 43% of 72      | 14% of 122      |
 
 Names find a few more deduplications, and in Rust more chance matches as well,
 so they are not on by default. A match on a feature commit is often a real copy

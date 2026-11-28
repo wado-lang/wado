@@ -20,10 +20,11 @@ fn git_text(command: Command) -> String with Process {
 }
 
 /// The line ranges of `file` a commit deleted, 1-based and inclusive, in the
-/// parent's numbering: the `-a,b` side of each `-U0` hunk header.
-fn deleted_ranges(parent: &String, sha: &String, file: &String) -> List<[i32, i32]> with Process {
+/// parent's numbering: the `-a,b` side of each `-U0` hunk header. `paths` are
+/// the file's parent and commit paths, so a rename deletes only what it did.
+fn deleted_ranges(parent: &String, sha: &String, paths: &List<String>) -> List<[i32, i32]> with Process {
     let mut out: List<[i32, i32]> = [];
-    for let line of git_text(cmd`git diff -U0 --inter-hunk-context=0 ${parent} ${sha} -- ${file}`).lines() {
+    for let line of git_text(cmd`git diff -U0 --inter-hunk-context=0 -M ${parent} ${sha} -- ${paths}`).lines() {
         if !line.starts_with("@@ -") {
             continue;
         }
@@ -122,14 +123,16 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
         let parent = git_text(cmd`git rev-parse ${sha}^`).trim().to_string();
         let mut trees: List<Tree> = [];
         let mut deleted: List<List<[i32, i32]>> = [];
-        // A file the commit deleted may hold the copy it folded away.
-        for let file of git_text(cmd`git diff --name-only --diff-filter=MD ${parent} ${sha} -- ${files}`).lines() {
-            let file = file.to_string();
+        // A file the commit deleted or renamed may hold the copy it folded away.
+        let changed = git_text(cmd`git diff --name-status --diff-filter=MDR -M ${parent} ${sha} -- ${files}`);
+        for let line of changed.lines() {
+            let paths: List<String> = line.split("\t").skip(1).map(|p| p.to_string()).collect();
+            let file = paths[0];
             let source = git_text(cmd`git show ${parent}:${file}`);
             match read_source(file, source) {
                 Ok(tree) => {
                     trees.push(tree);
-                    deleted.push(deleted_ranges(&parent, &sha, &file));
+                    deleted.push(deleted_ranges(&parent, &sha, &paths));
                 },
                 Err(message) => eprintln(`${sha}: skipped ${file}: ${message}`),
             }
