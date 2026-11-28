@@ -5282,7 +5282,7 @@ fn gen_op_optional_with_shape_lookahead_storable(
             // every shape branch runs them; only the element is conditional.
             gen_alt_actions_at(w, &body.actions, i, ctx);
             if entry.positions.contains(&i) {
-                gen_op(w, &body.ops[i], ctx, &mut nc);
+                gen_op(w, shape_present_op(&body.ops[i]), ctx, &mut nc);
             }
         }
         gen_alt_actions_at(w, &body.actions, body.ops.len(), ctx);
@@ -5291,6 +5291,16 @@ fn gen_op_optional_with_shape_lookahead_storable(
     if !s.shapes.is_empty() {
         w.end();
     }
+}
+
+/// What a shape holding `op`'s position parses there: the shape already chose
+/// a `?` present, as its scan body (`lower_scan_shape_body`) measured it, so
+/// the parse takes the body without deciding again.
+fn shape_present_op(op: &Op) -> &Op {
+    if let Repeat(r) = op && r.kind matches { _::Optional } {
+        return &r.body;
+    }
+    return op;
 }
 
 /// Bump `name_counts` for a leaf `Op` exactly the way lower did, by

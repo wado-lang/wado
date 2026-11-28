@@ -18197,10 +18197,7 @@ fn scan_expr__alt_15(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo
 fn _parse_expr__inner_alt_21(p: &mut Parser, min_prec: i32, follow: i64 = 0) {
     if !SYNC_79.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_79, &EXPECTED_79); }
     if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_EXISTS {
-        if !SYNC_80.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_80, &EXPECTED_80); }
-        if p.peek_kind() == TK_K_NOT {
-            p.take();
-        }
+        p.expect(TK_K_NOT, &SYNC_20, false);
         p.expect(TK_K_EXISTS, &SYNC_58, false);
     } else if p.peek_kind() == TK_K_EXISTS {
         p.expect(TK_K_EXISTS, &SYNC_58, false);
@@ -18319,7 +18316,7 @@ fn _parse_expr__inner_alt_22(p: &mut Parser, min_prec: i32, follow: i64 = 0) {
         p.atn_ret_pending = 1832;
         _parse_expr(p, FOLLOW_SITE_73);
     }
-    if !SYNC_81.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_81, &EXPECTED_81); }
+    if !SYNC_80.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_80, &EXPECTED_80); }
     let mut _plus_first = true;
     while !p.recovering && (_plus_first || p.peek_kind() == TK_K_WHEN) {
         _plus_first = false;
@@ -18331,9 +18328,9 @@ fn _parse_expr__inner_alt_22(p: &mut Parser, min_prec: i32, follow: i64 = 0) {
         p.site = 243;
         p.atn_ret_pending = 1842;
         _parse_expr(p, follow_push(FOLLOW_SITE_75, follow));
-        if !SYNC_82.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_82, &EXPECTED_82); }
+        if !SYNC_81.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_81, &EXPECTED_81); }
     }
-    if !SYNC_83.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_83, &EXPECTED_83); }
+    if !SYNC_82.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_82, &EXPECTED_82); }
     if p.peek_kind() == TK_K_ELSE && _kind_set_9(p.peek_at(1)) {
         p.take();
         p.site = 244;
@@ -18789,7 +18786,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 6 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
-            if !SYNC_84.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_84, &EXPECTED_84); }
+            if !SYNC_83.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_83, &EXPECTED_83); }
             if p.peek_kind() == TK_K_NOT {
                 p.take();
             }
@@ -18923,8 +18920,8 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
                     p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED);
                 } else {
                     if gd_atn == 0 {
-                        p.expect(TK_OPEN_PAR, &SYNC_85, false);
-                        if !SYNC_85.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_85, &EXPECTED_85); }
+                        p.expect(TK_OPEN_PAR, &SYNC_84, false);
+                        if !SYNC_84.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_84, &EXPECTED_84); }
                         let mut opt_scan_pos: i32 = -1;
                         opt_scan: {
                             let tokens = &p.kinds;
@@ -19195,12 +19192,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 10 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
-            if !SYNC_86.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_86, &EXPECTED_86); }
+            if !SYNC_85.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_85, &EXPECTED_85); }
             if p.peek_kind() == TK_K_NOT {
                 p.take();
             }
-            if !SYNC_87.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_87, &EXPECTED_87); }
-            p.expect_set(&SYNC_87, &EXPECTED_87);
+            if !SYNC_86.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_86, &EXPECTED_86); }
+            p.expect_set(&SYNC_86, &EXPECTED_86);
             p.site = 232;
             p.atn_ret_pending = 1954;
             _parse_expr(p, follow_push(FOLLOW_SITE_77, follow), 0);
@@ -19248,7 +19245,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
                 p.take();
                 p.expect(TK_K_NULL, &SYNC_78, true);
             } else {
-                p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_88);
+                p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_87);
             }
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 12 {
@@ -19284,7 +19281,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 13 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
-            if !SYNC_89.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_89, &EXPECTED_89); }
+            if !SYNC_88.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_88, &EXPECTED_88); }
             if p.peek_kind() == TK_K_NOT {
                 p.take();
             }
@@ -19374,7 +19371,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) {
             _parse_column_name(p);
             if !SYNC_21.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_21, &EXPECTED_21); }
         }
-        p.expect(TK_CLOSE_PAR, &SYNC_90, true);
+        p.expect(TK_CLOSE_PAR, &SYNC_89, true);
     }
     loop {
         if p.recovering { break; }
@@ -19460,13 +19457,13 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) {
             atn_shadow(200, 1, p.pos, if rs_enters { 0 } else { 1 }, if rs_simulated_301 { 0 } else { 1 });
         }
         if !rs_simulated_301 { break; }
-        if !SYNC_91.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_91, &EXPECTED_91); }
+        if !SYNC_90.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_90, &EXPECTED_90); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_ON {
             p.take();
+            if !SYNC_91.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_91, &EXPECTED_91); }
+            p.expect_set(&SYNC_91, &EXPECTED_91);
             if !SYNC_92.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_92, &EXPECTED_92); }
-            p.expect_set(&SYNC_92, &EXPECTED_92);
-            if !SYNC_93.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_93, &EXPECTED_93); }
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_SET {
                 let gd_atn = atn_verified(203, 2, &mut p.atn, &p.kinds, p.pos, 0, atn_decide_203(&mut p.atn, &p.kinds, p.pos, 0));
@@ -19507,20 +19504,20 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) {
                     p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED);
                 } else {
                     if gd_atn == 0 {
-                        p.expect(TK_K_SET, &SYNC_94, false);
-                        p.expect(TK_K_NULL, &SYNC_90, true);
+                        p.expect(TK_K_SET, &SYNC_93, false);
+                        p.expect(TK_K_NULL, &SYNC_89, true);
                     } else {
-                        p.expect(TK_K_SET, &SYNC_95, false);
-                        p.expect(TK_K_DEFAULT, &SYNC_90, true);
+                        p.expect(TK_K_SET, &SYNC_94, false);
+                        p.expect(TK_K_DEFAULT, &SYNC_89, true);
                     }
                 }
             } else if _kind_set_41(grp_kind) {
                 p.take();
             } else if grp_kind == TK_K_NO {
                 p.take();
-                p.expect(TK_K_ACTION, &SYNC_90, true);
+                p.expect(TK_K_ACTION, &SYNC_89, true);
             } else {
-                p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_93);
+                p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_92);
             }
         } else if grp_kind == TK_K_MATCH {
             p.take();
@@ -19528,7 +19525,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) {
             p.atn_ret_pending = 2051;
             _parse_name(p);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_91);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_90);
         }
     }
     let rs_pick_306 = atn_verified(204, 2, &mut p.atn, &p.kinds, p.pos, 0, atn_decide_204(&mut p.atn, &p.kinds, p.pos, 0));
@@ -19686,11 +19683,11 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) {
         atn_shadow(204, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_306 { 0 } else { 1 });
     }
     if rs_simulated_306 {
-        if !SYNC_96.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_96, &EXPECTED_96); }
+        if !SYNC_95.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_95, &EXPECTED_95); }
         if p.peek_kind() == TK_K_NOT {
             p.take();
         }
-        p.expect(TK_K_DEFERRABLE, &SYNC_97, true);
+        p.expect(TK_K_DEFERRABLE, &SYNC_96, true);
         let rs_pick_309 = atn_verified(206, 2, &mut p.atn, &p.kinds, p.pos, 0, atn_decide_206(&mut p.atn, &p.kinds, p.pos, 0));
         if rs_pick_309 < 0 && rs_pick_309 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
         let rs_simulated_309 = rs_pick_309 == 0;
@@ -19777,10 +19774,10 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) {
                     p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED);
                 } else {
                     if gd_atn == 0 {
-                        p.expect(TK_K_INITIALLY, &SYNC_98, false);
+                        p.expect(TK_K_INITIALLY, &SYNC_97, false);
                         p.expect(TK_K_DEFERRED, &EMPTY_SYNC, true);
                     } else {
-                        p.expect(TK_K_INITIALLY, &SYNC_99, false);
+                        p.expect(TK_K_INITIALLY, &SYNC_98, false);
                         p.expect(TK_K_IMMEDIATE, &EMPTY_SYNC, true);
                     }
                 }
@@ -19798,19 +19795,19 @@ fn _parse_foreign_key_clause(p: &mut Parser, follow: i64 = 0) {
 
 fn _parse_raise_function__inner(p: &mut Parser) {
     p.expect(TK_K_RAISE, &SYNC_58, false);
-    p.expect(TK_OPEN_PAR, &SYNC_100, false);
-    if !SYNC_100.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_100, &EXPECTED_100); }
+    p.expect(TK_OPEN_PAR, &SYNC_99, false);
+    if !SYNC_99.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_99, &EXPECTED_99); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_IGNORE {
         p.take();
     } else if _kind_set_42(grp_kind) {
         p.take();
-        p.expect(TK_COMMA, &SYNC_101, false);
+        p.expect(TK_COMMA, &SYNC_100, false);
         p.site = 250;
         p.atn_ret_pending = 2092;
         _parse_error_message(p);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_100);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_99);
     }
     p.expect(TK_CLOSE_PAR, &EMPTY_SYNC, true);
     return;
@@ -19889,14 +19886,14 @@ fn _parse_indexed_column(p: &mut Parser, follow: i64 = 0) {
 }
 
 fn _parse_table_constraint__inner(p: &mut Parser, follow: i64 = 0) {
-    if !SYNC_102.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_102, &EXPECTED_102); }
+    if !SYNC_101.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_101, &EXPECTED_101); }
     if p.peek_kind() == TK_K_CONSTRAINT && _kind_set_5(p.peek_at(1)) {
         p.take();
         p.site = 253;
         p.atn_ret_pending = 2122;
         _parse_name(p);
     }
-    if !SYNC_103.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_103, &EXPECTED_103); }
+    if !SYNC_102.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_102, &EXPECTED_102); }
     let grp_kind = p.peek_kind();
     if _kind_set_43(grp_kind) {
         let grp_kind = p.peek_kind();
@@ -19906,7 +19903,7 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow: i64 = 0) {
         } else if grp_kind == TK_K_UNIQUE {
             p.take();
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_104);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_103);
         }
         p.expect(TK_OPEN_PAR, &SYNC_7, false);
         p.site = 254;
@@ -19946,12 +19943,12 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow: i64 = 0) {
             _parse_column_name(p);
             if !SYNC_21.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_21, &EXPECTED_21); }
         }
-        p.expect(TK_CLOSE_PAR, &SYNC_105, false);
+        p.expect(TK_CLOSE_PAR, &SYNC_104, false);
         p.site = 260;
         p.atn_ret_pending = 2178;
         _parse_foreign_key_clause(p, follow);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_103);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_102);
     }
     return;
 }
@@ -20166,7 +20163,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: i64 = 0) {
             p.atn_ret_pending = 2219;
             _parse_index_name(p);
         } else {
-            p.expect(TK_K_NOT, &SYNC_106, false);
+            p.expect(TK_K_NOT, &SYNC_105, false);
             p.expect(TK_K_INDEXED, &EMPTY_SYNC, true);
         }
     }
@@ -20294,7 +20291,7 @@ fn _parse_common_table_expression__inner(p: &mut Parser, follow: i64 = 0) {
             _parse_column_name(p);
             if !SYNC_21.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_21, &EXPECTED_21); }
         }
-        p.expect(TK_CLOSE_PAR, &SYNC_107, false);
+        p.expect(TK_CLOSE_PAR, &SYNC_106, false);
     }
     p.expect(TK_K_AS, &SYNC_58, false);
     p.expect(TK_OPEN_PAR, &SYNC_13, false);
@@ -20315,7 +20312,7 @@ fn _parse_result_column__inner_alt_1(p: &mut Parser, follow: i64 = 0) {
     p.site = 274;
     p.atn_ret_pending = 2286;
     _parse_table_name(p);
-    p.expect(TK_DOT, &SYNC_108, false);
+    p.expect(TK_DOT, &SYNC_107, false);
     p.expect(TK_STAR, &EMPTY_SYNC, true);
     return;
 }
@@ -20363,7 +20360,7 @@ fn _parse_result_column__inner_alt_2(p: &mut Parser, follow: i64 = 0) {
         atn_shadow(230, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_340 { 0 } else { 1 });
     }
     if rs_simulated_340 {
-        if !SYNC_109.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_109, &EXPECTED_109); }
+        if !SYNC_108.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_108, &EXPECTED_108); }
         if p.peek_kind() == TK_K_AS {
             p.take();
         }
@@ -20563,7 +20560,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) {
         atn_shadow(234, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_345 { 0 } else { 1 });
     }
     if rs_simulated_345 {
-        if !SYNC_110.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_110, &EXPECTED_110); }
+        if !SYNC_109.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_109, &EXPECTED_109); }
         if p.peek_kind() == TK_K_AS {
             p.take();
         }
@@ -20618,7 +20615,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) {
             p.atn_ret_pending = 2334;
             _parse_index_name(p);
         } else {
-            p.expect(TK_K_NOT, &SYNC_106, false);
+            p.expect(TK_K_NOT, &SYNC_105, false);
             p.expect(TK_K_INDEXED, &EMPTY_SYNC, true);
         }
     }
@@ -20792,8 +20789,8 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) {
     p.site = 282;
     p.atn_ret_pending = 2348;
     _parse_table_function_name(p);
-    p.expect(TK_OPEN_PAR, &SYNC_85, false);
-    if !SYNC_85.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_85, &EXPECTED_85); }
+    p.expect(TK_OPEN_PAR, &SYNC_84, false);
+    if !SYNC_84.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_84, &EXPECTED_84); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -20833,7 +20830,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) {
             if !SYNC_21.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_21, &EXPECTED_21); }
         }
     }
-    p.expect(TK_CLOSE_PAR, &SYNC_110, true);
+    p.expect(TK_CLOSE_PAR, &SYNC_109, true);
     let rs_pick_356 = atn_verified(241, 2, &mut p.atn, &p.kinds, p.pos, 0, atn_decide_241(&mut p.atn, &p.kinds, p.pos, 0));
     if rs_pick_356 < 0 && rs_pick_356 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
     let rs_simulated_356 = rs_pick_356 == 0;
@@ -20862,7 +20859,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) {
         atn_shadow(241, 1, p.pos, if opt_enter_2 { 0 } else { 1 }, if rs_simulated_356 { 0 } else { 1 });
     }
     if rs_simulated_356 {
-        if !SYNC_110.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_110, &EXPECTED_110); }
+        if !SYNC_109.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_109, &EXPECTED_109); }
         if p.peek_kind() == TK_K_AS {
             p.take();
         }
@@ -21099,7 +21096,7 @@ fn _parse_table_or_subquery__inner_alt_3(p: &mut Parser, follow: i64 = 0) {
     p.site = 289;
     p.atn_ret_pending = 2400;
     _parse_select_stmt(p, follow_push(FOLLOW_SITE_100, follow));
-    p.expect(TK_CLOSE_PAR, &SYNC_110, true);
+    p.expect(TK_CLOSE_PAR, &SYNC_109, true);
     let rs_pick_362 = atn_verified(245, 2, &mut p.atn, &p.kinds, p.pos, 0, atn_decide_245(&mut p.atn, &p.kinds, p.pos, 0));
     if rs_pick_362 < 0 && rs_pick_362 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
     let rs_simulated_362 = rs_pick_362 == 0;
@@ -21128,7 +21125,7 @@ fn _parse_table_or_subquery__inner_alt_3(p: &mut Parser, follow: i64 = 0) {
         atn_shadow(245, 1, p.pos, if opt_enter { 0 } else { 1 }, if rs_simulated_362 { 0 } else { 1 });
     }
     if rs_simulated_362 {
-        if !SYNC_110.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_110, &EXPECTED_110); }
+        if !SYNC_109.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_109, &EXPECTED_109); }
         if p.peek_kind() == TK_K_AS {
             p.take();
         }
@@ -21333,17 +21330,17 @@ fn _parse_join_clause(p: &mut Parser, follow: i64 = 0) {
 }
 
 fn _parse_join_operator__inner(p: &mut Parser, follow: i64 = 0) {
-    if !SYNC_111.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_111, &EXPECTED_111); }
+    if !SYNC_110.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_110, &EXPECTED_110); }
     let kind = p.peek_kind();
     if kind == TK_COMMA {
         p.take();
         return;
     } else if _kind_set_50(kind) {
-        if !SYNC_112.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_112, &EXPECTED_112); }
+        if !SYNC_111.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_111, &EXPECTED_111); }
         if p.peek_kind() == TK_K_NATURAL {
             p.take();
         }
-        if !SYNC_113.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_113, &EXPECTED_113); }
+        if !SYNC_112.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_112, &EXPECTED_112); }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let gd_kind = p.peek_kind();
@@ -21380,15 +21377,15 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: i64 = 0) {
         }
         if gd_best >= 0 {
             if gd_winner == 0 {
-                p.expect(TK_K_LEFT, &SYNC_114, false);
-                if !SYNC_114.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_114, &EXPECTED_114); }
+                p.expect(TK_K_LEFT, &SYNC_113, false);
+                if !SYNC_113.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_113, &EXPECTED_113); }
                 if p.peek_kind() == TK_K_OUTER {
                     p.take();
                 }
             } else if gd_winner == 1 {
-                p.expect(TK_K_INNER, &SYNC_115, false);
+                p.expect(TK_K_INNER, &SYNC_114, false);
             } else {
-                p.expect(TK_K_CROSS, &SYNC_115, false);
+                p.expect(TK_K_CROSS, &SYNC_114, false);
             }
         }
         p.expect(TK_K_JOIN, &EMPTY_SYNC, true);
@@ -21397,7 +21394,7 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: i64 = 0) {
     p.no_viable(
         "no alternative of join_operator matches",
         p.peek_span(),
-        &EXPECTED_111,
+        &EXPECTED_110,
     );
     return;
 }
@@ -22179,7 +22176,7 @@ fn scan_compound_operator__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
 }
 
 fn _parse_compound_operator__inner_alt_1(p: &mut Parser) {
-    p.expect(TK_K_UNION, &SYNC_116, false);
+    p.expect(TK_K_UNION, &SYNC_115, false);
     p.expect(TK_K_ALL, &EMPTY_SYNC, true);
     return;
 }
@@ -22262,7 +22259,7 @@ fn _parse_signed_number(p: &mut Parser, follow: i64 = 0) {
 }
 
 fn _parse_literal_value__inner(p: &mut Parser) {
-    if !SYNC_117.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_117, &EXPECTED_117); }
+    if !SYNC_116.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_116, &EXPECTED_116); }
     let kind = p.peek_kind();
     if _kind_set_22(kind) {
         p.take();
@@ -22271,7 +22268,7 @@ fn _parse_literal_value__inner(p: &mut Parser) {
     p.no_viable(
         "no alternative of literal_value matches",
         p.peek_span(),
-        &EXPECTED_117,
+        &EXPECTED_116,
     );
     return;
 }
@@ -22283,7 +22280,7 @@ fn _parse_literal_value(p: &mut Parser) {
 }
 
 fn _parse_unary_operator__inner(p: &mut Parser) {
-    if !SYNC_118.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_118, &EXPECTED_118); }
+    if !SYNC_117.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_117, &EXPECTED_117); }
     let kind = p.peek_kind();
     if _kind_set_27(kind) {
         p.take();
@@ -22292,7 +22289,7 @@ fn _parse_unary_operator__inner(p: &mut Parser) {
     p.no_viable(
         "no alternative of unary_operator matches",
         p.peek_span(),
-        &EXPECTED_118,
+        &EXPECTED_117,
     );
     return;
 }
@@ -22383,7 +22380,7 @@ fn _parse_module_argument(p: &mut Parser, follow: i64 = 0) {
 }
 
 fn _parse_column_alias__inner(p: &mut Parser) {
-    if !SYNC_119.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_119, &EXPECTED_119); }
+    if !SYNC_118.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_118, &EXPECTED_118); }
     let kind = p.peek_kind();
     if _kind_set_46(kind) {
         p.take();
@@ -22392,7 +22389,7 @@ fn _parse_column_alias__inner(p: &mut Parser) {
     p.no_viable(
         "no alternative of column_alias matches",
         p.peek_span(),
-        &EXPECTED_119,
+        &EXPECTED_118,
     );
     return;
 }
@@ -22404,7 +22401,7 @@ fn _parse_column_alias(p: &mut Parser) {
 }
 
 fn _parse_keyword__inner(p: &mut Parser) {
-    if !SYNC_120.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_120, &EXPECTED_120); }
+    if !SYNC_119.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_119, &EXPECTED_119); }
     let kind = p.peek_kind();
     if _kind_set_51(kind) {
         p.take();
@@ -22413,7 +22410,7 @@ fn _parse_keyword__inner(p: &mut Parser) {
     p.no_viable(
         "no alternative of keyword matches",
         p.peek_span(),
-        &EXPECTED_120,
+        &EXPECTED_119,
     );
     return;
 }
@@ -22561,7 +22558,7 @@ fn _parse_savepoint_name(p: &mut Parser) {
 }
 
 fn _parse_table_alias__inner(p: &mut Parser) {
-    if !SYNC_121.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_121, &EXPECTED_121); }
+    if !SYNC_120.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_120, &EXPECTED_120); }
     let kind = p.peek_kind();
     if _kind_set_46(kind) {
         p.take();
@@ -22577,7 +22574,7 @@ fn _parse_table_alias__inner(p: &mut Parser) {
     p.no_viable(
         "no alternative of table_alias matches",
         p.peek_span(),
-        &EXPECTED_121,
+        &EXPECTED_120,
     );
     return;
 }
@@ -23371,75 +23368,73 @@ global SYNC_77: KindSet = [8];
 global SYNC_78: KindSet = [-2130706976, 4160, 402919424, 2099301];
 global SYNC_79: KindSet = [4, 0, 32, 32];
 global EXPECTED_79: List<i32> = [TK_K_EXISTS, TK_K_NOT, TK_OPEN_PAR];
-global SYNC_80: KindSet = [0, 0, 32, 32];
-global EXPECTED_80: List<i32> = [TK_K_EXISTS, TK_K_NOT];
-global SYNC_81: KindSet = [0, 0, 0, 0, 65536];
-global EXPECTED_81: List<i32> = [TK_K_WHEN];
-global SYNC_82: KindSet = [0, 0, 3, 0, 65536];
-global EXPECTED_82: List<i32> = [TK_K_ELSE, TK_K_END, TK_K_WHEN];
-global SYNC_83: KindSet = [0, 0, 3];
-global EXPECTED_83: List<i32> = [TK_K_ELSE, TK_K_END];
-global SYNC_84: KindSet = [0, 0, 262144, 32];
-global EXPECTED_84: List<i32> = [TK_K_IN, TK_K_NOT];
-global SYNC_85: KindSet = [-16776308, -1, -1, -1, 33554431];
-global EXPECTED_85: List<i32> = [TK_BIND_PARAMETER, TK_BLOB_LITERAL, TK_CLOSE_PAR, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_MINUS, TK_NUMERIC_LITERAL, TK_OPEN_PAR, TK_PLUS, TK_STRING_LITERAL, TK_TILDE];
-global SYNC_86: KindSet = [0, 0, 4096, 2097189];
-global EXPECTED_86: List<i32> = [TK_K_GLOB, TK_K_LIKE, TK_K_MATCH, TK_K_NOT, TK_K_REGEXP];
-global SYNC_87: KindSet = [0, 0, 4096, 2097157];
-global EXPECTED_87: List<i32> = [TK_K_GLOB, TK_K_LIKE, TK_K_MATCH, TK_K_REGEXP];
-global EXPECTED_88: List<i32> = [TK_K_ISNULL, TK_K_NOT, TK_K_NOTNULL];
-global SYNC_89: KindSet = [0, 64, 0, 32];
-global EXPECTED_89: List<i32> = [TK_K_BETWEEN, TK_K_NOT];
-global SYNC_90: KindSet = [0, 16777216, 0, 1060];
-global SYNC_91: KindSet = [0, 0, 0, 1028];
-global EXPECTED_91: List<i32> = [TK_K_MATCH, TK_K_ON];
-global SYNC_92: KindSet = [0, 67108864, 0, 0, 1024];
-global EXPECTED_92: List<i32> = [TK_K_DELETE, TK_K_UPDATE];
-global SYNC_93: KindSet = [0, 256, 0, 67108880, 1];
-global EXPECTED_93: List<i32> = [TK_K_CASCADE, TK_K_NO, TK_K_RESTRICT, TK_K_SET];
-global SYNC_94: KindSet = [0, 0, 0, 128];
-global SYNC_95: KindSet = [0, 8388608];
-global SYNC_96: KindSet = [0, 16777216, 0, 32];
-global EXPECTED_96: List<i32> = [TK_K_DEFERRABLE, TK_K_NOT];
-global SYNC_97: KindSet = [0, 0, 2097152];
-global SYNC_98: KindSet = [0, 33554432];
-global SYNC_99: KindSet = [0, 0, 131072];
-global SYNC_100: KindSet = [16777216, 0, 65664, 268435456];
-global EXPECTED_100: List<i32> = [TK_K_ABORT, TK_K_FAIL, TK_K_IGNORE, TK_K_ROLLBACK];
-global SYNC_101: KindSet = [0, 0, 0, 0, 8388608];
-global SYNC_102: KindSet = [0, 67584, 512, 65536, 512];
-global EXPECTED_102: List<i32> = [TK_K_CHECK, TK_K_CONSTRAINT, TK_K_FOREIGN, TK_K_PRIMARY, TK_K_UNIQUE];
-global SYNC_103: KindSet = [0, 2048, 512, 65536, 512];
-global EXPECTED_103: List<i32> = [TK_K_CHECK, TK_K_FOREIGN, TK_K_PRIMARY, TK_K_UNIQUE];
-global EXPECTED_104: List<i32> = [TK_K_PRIMARY, TK_K_UNIQUE];
-global SYNC_105: KindSet = [0, 0, 0, 1048576];
-global SYNC_106: KindSet = [0, 0, 1048576];
-global SYNC_107: KindSet = [0, 1];
-global SYNC_108: KindSet = [64];
-global SYNC_109: KindSet = [0, 1, 0, 0, 9437184];
-global EXPECTED_109: List<i32> = [TK_IDENTIFIER, TK_K_AS, TK_STRING_LITERAL];
-global SYNC_110: KindSet = [4, 1, 0, 0, 9437184];
-global EXPECTED_110: List<i32> = [TK_IDENTIFIER, TK_K_AS, TK_OPEN_PAR, TK_STRING_LITERAL];
-global SYNC_111: KindSet = [16, 262144, -1606418432, 8];
-global EXPECTED_111: List<i32> = [TK_COMMA, TK_K_CROSS, TK_K_INNER, TK_K_JOIN, TK_K_LEFT, TK_K_NATURAL];
-global SYNC_112: KindSet = [0, 262144, -1606418432, 8];
-global EXPECTED_112: List<i32> = [TK_K_CROSS, TK_K_INNER, TK_K_JOIN, TK_K_LEFT, TK_K_NATURAL];
-global SYNC_113: KindSet = [0, 262144, -1606418432];
-global EXPECTED_113: List<i32> = [TK_K_CROSS, TK_K_INNER, TK_K_JOIN, TK_K_LEFT];
-global SYNC_114: KindSet = [0, 0, 536870912, 8192];
-global EXPECTED_114: List<i32> = [TK_K_JOIN, TK_K_OUTER];
-global SYNC_115: KindSet = [0, 0, 536870912];
-global SYNC_116: KindSet = [268435456];
-global SYNC_117: KindSet = [0, 3670016, 0, 128, 27262976];
-global EXPECTED_117: List<i32> = [TK_BLOB_LITERAL, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_NULL, TK_NUMERIC_LITERAL, TK_STRING_LITERAL];
-global SYNC_118: KindSet = [896, 0, 0, 32];
-global EXPECTED_118: List<i32> = [TK_K_NOT, TK_MINUS, TK_PLUS, TK_TILDE];
-global SYNC_119: KindSet = [0, 0, 0, 0, 9437184];
-global EXPECTED_119: List<i32> = [TK_IDENTIFIER, TK_STRING_LITERAL];
-global SYNC_120: KindSet = [-16777216, -1, -1, -1, 1048575];
-global EXPECTED_120: List<i32> = [TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT];
-global SYNC_121: KindSet = [4, 0, 0, 0, 9437184];
-global EXPECTED_121: List<i32> = [TK_IDENTIFIER, TK_OPEN_PAR, TK_STRING_LITERAL];
+global SYNC_80: KindSet = [0, 0, 0, 0, 65536];
+global EXPECTED_80: List<i32> = [TK_K_WHEN];
+global SYNC_81: KindSet = [0, 0, 3, 0, 65536];
+global EXPECTED_81: List<i32> = [TK_K_ELSE, TK_K_END, TK_K_WHEN];
+global SYNC_82: KindSet = [0, 0, 3];
+global EXPECTED_82: List<i32> = [TK_K_ELSE, TK_K_END];
+global SYNC_83: KindSet = [0, 0, 262144, 32];
+global EXPECTED_83: List<i32> = [TK_K_IN, TK_K_NOT];
+global SYNC_84: KindSet = [-16776308, -1, -1, -1, 33554431];
+global EXPECTED_84: List<i32> = [TK_BIND_PARAMETER, TK_BLOB_LITERAL, TK_CLOSE_PAR, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_MINUS, TK_NUMERIC_LITERAL, TK_OPEN_PAR, TK_PLUS, TK_STRING_LITERAL, TK_TILDE];
+global SYNC_85: KindSet = [0, 0, 4096, 2097189];
+global EXPECTED_85: List<i32> = [TK_K_GLOB, TK_K_LIKE, TK_K_MATCH, TK_K_NOT, TK_K_REGEXP];
+global SYNC_86: KindSet = [0, 0, 4096, 2097157];
+global EXPECTED_86: List<i32> = [TK_K_GLOB, TK_K_LIKE, TK_K_MATCH, TK_K_REGEXP];
+global EXPECTED_87: List<i32> = [TK_K_ISNULL, TK_K_NOT, TK_K_NOTNULL];
+global SYNC_88: KindSet = [0, 64, 0, 32];
+global EXPECTED_88: List<i32> = [TK_K_BETWEEN, TK_K_NOT];
+global SYNC_89: KindSet = [0, 16777216, 0, 1060];
+global SYNC_90: KindSet = [0, 0, 0, 1028];
+global EXPECTED_90: List<i32> = [TK_K_MATCH, TK_K_ON];
+global SYNC_91: KindSet = [0, 67108864, 0, 0, 1024];
+global EXPECTED_91: List<i32> = [TK_K_DELETE, TK_K_UPDATE];
+global SYNC_92: KindSet = [0, 256, 0, 67108880, 1];
+global EXPECTED_92: List<i32> = [TK_K_CASCADE, TK_K_NO, TK_K_RESTRICT, TK_K_SET];
+global SYNC_93: KindSet = [0, 0, 0, 128];
+global SYNC_94: KindSet = [0, 8388608];
+global SYNC_95: KindSet = [0, 16777216, 0, 32];
+global EXPECTED_95: List<i32> = [TK_K_DEFERRABLE, TK_K_NOT];
+global SYNC_96: KindSet = [0, 0, 2097152];
+global SYNC_97: KindSet = [0, 33554432];
+global SYNC_98: KindSet = [0, 0, 131072];
+global SYNC_99: KindSet = [16777216, 0, 65664, 268435456];
+global EXPECTED_99: List<i32> = [TK_K_ABORT, TK_K_FAIL, TK_K_IGNORE, TK_K_ROLLBACK];
+global SYNC_100: KindSet = [0, 0, 0, 0, 8388608];
+global SYNC_101: KindSet = [0, 67584, 512, 65536, 512];
+global EXPECTED_101: List<i32> = [TK_K_CHECK, TK_K_CONSTRAINT, TK_K_FOREIGN, TK_K_PRIMARY, TK_K_UNIQUE];
+global SYNC_102: KindSet = [0, 2048, 512, 65536, 512];
+global EXPECTED_102: List<i32> = [TK_K_CHECK, TK_K_FOREIGN, TK_K_PRIMARY, TK_K_UNIQUE];
+global EXPECTED_103: List<i32> = [TK_K_PRIMARY, TK_K_UNIQUE];
+global SYNC_104: KindSet = [0, 0, 0, 1048576];
+global SYNC_105: KindSet = [0, 0, 1048576];
+global SYNC_106: KindSet = [0, 1];
+global SYNC_107: KindSet = [64];
+global SYNC_108: KindSet = [0, 1, 0, 0, 9437184];
+global EXPECTED_108: List<i32> = [TK_IDENTIFIER, TK_K_AS, TK_STRING_LITERAL];
+global SYNC_109: KindSet = [4, 1, 0, 0, 9437184];
+global EXPECTED_109: List<i32> = [TK_IDENTIFIER, TK_K_AS, TK_OPEN_PAR, TK_STRING_LITERAL];
+global SYNC_110: KindSet = [16, 262144, -1606418432, 8];
+global EXPECTED_110: List<i32> = [TK_COMMA, TK_K_CROSS, TK_K_INNER, TK_K_JOIN, TK_K_LEFT, TK_K_NATURAL];
+global SYNC_111: KindSet = [0, 262144, -1606418432, 8];
+global EXPECTED_111: List<i32> = [TK_K_CROSS, TK_K_INNER, TK_K_JOIN, TK_K_LEFT, TK_K_NATURAL];
+global SYNC_112: KindSet = [0, 262144, -1606418432];
+global EXPECTED_112: List<i32> = [TK_K_CROSS, TK_K_INNER, TK_K_JOIN, TK_K_LEFT];
+global SYNC_113: KindSet = [0, 0, 536870912, 8192];
+global EXPECTED_113: List<i32> = [TK_K_JOIN, TK_K_OUTER];
+global SYNC_114: KindSet = [0, 0, 536870912];
+global SYNC_115: KindSet = [268435456];
+global SYNC_116: KindSet = [0, 3670016, 0, 128, 27262976];
+global EXPECTED_116: List<i32> = [TK_BLOB_LITERAL, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_NULL, TK_NUMERIC_LITERAL, TK_STRING_LITERAL];
+global SYNC_117: KindSet = [896, 0, 0, 32];
+global EXPECTED_117: List<i32> = [TK_K_NOT, TK_MINUS, TK_PLUS, TK_TILDE];
+global SYNC_118: KindSet = [0, 0, 0, 0, 9437184];
+global EXPECTED_118: List<i32> = [TK_IDENTIFIER, TK_STRING_LITERAL];
+global SYNC_119: KindSet = [-16777216, -1, -1, -1, 1048575];
+global EXPECTED_119: List<i32> = [TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT];
+global SYNC_120: KindSet = [4, 0, 0, 0, 9437184];
+global EXPECTED_120: List<i32> = [TK_IDENTIFIER, TK_OPEN_PAR, TK_STRING_LITERAL];
 
 global FOLLOW_TABLES: FollowTables = FollowTables {
     stride: 5,
