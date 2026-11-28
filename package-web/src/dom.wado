@@ -6,6 +6,97 @@ pub enum AriaNotifyPriority {
     High,
 }
 
+#[cm("wado-lang:web/types#canvas-color-type")]
+pub enum CanvasColorType {
+    Unorm8,
+    Float16,
+}
+
+#[cm("wado-lang:web/types#canvas-direction")]
+pub enum CanvasDirection {
+    Ltr,
+    Rtl,
+    Inherit,
+}
+
+#[cm("wado-lang:web/types#canvas-fill-rule")]
+pub enum CanvasFillRule {
+    Nonzero,
+    Evenodd,
+}
+
+#[cm("wado-lang:web/types#canvas-font-kerning")]
+pub enum CanvasFontKerning {
+    Auto,
+    Normal,
+    None,
+}
+
+#[cm("wado-lang:web/types#canvas-font-stretch")]
+pub enum CanvasFontStretch {
+    UltraCondensed,
+    ExtraCondensed,
+    Condensed,
+    SemiCondensed,
+    Normal,
+    SemiExpanded,
+    Expanded,
+    ExtraExpanded,
+    UltraExpanded,
+}
+
+#[cm("wado-lang:web/types#canvas-font-variant-caps")]
+pub enum CanvasFontVariantCaps {
+    Normal,
+    SmallCaps,
+    AllSmallCaps,
+    PetiteCaps,
+    AllPetiteCaps,
+    Unicase,
+    TitlingCaps,
+}
+
+#[cm("wado-lang:web/types#canvas-line-cap")]
+pub enum CanvasLineCap {
+    Butt,
+    Round,
+    Square,
+}
+
+#[cm("wado-lang:web/types#canvas-line-join")]
+pub enum CanvasLineJoin {
+    Round,
+    Bevel,
+    Miter,
+}
+
+#[cm("wado-lang:web/types#canvas-text-align")]
+pub enum CanvasTextAlign {
+    Start,
+    End,
+    Left,
+    Right,
+    Center,
+}
+
+#[cm("wado-lang:web/types#canvas-text-baseline")]
+pub enum CanvasTextBaseline {
+    Top,
+    Hanging,
+    Middle,
+    Alphabetic,
+    Ideographic,
+    Bottom,
+}
+
+#[cm("wado-lang:web/types#canvas-text-rendering")]
+pub enum CanvasTextRendering {
+    Auto,
+    OptimizeSpeed,
+    OptimizeLegibility,
+    GeometricPrecision,
+}
+
 #[cm("wado-lang:web/types#document-ready-state")]
 pub enum DocumentReadyState {
     Loading,
@@ -36,6 +127,27 @@ pub enum FullscreenNavigationUi {
     Auto,
     Show,
     Hide,
+}
+
+#[cm("wado-lang:web/types#image-data-pixel-format")]
+pub enum ImageDataPixelFormat {
+    RgbaUnorm8,
+    RgbaFloat16,
+}
+
+#[cm("wado-lang:web/types#image-smoothing-quality")]
+pub enum ImageSmoothingQuality {
+    Low,
+    Medium,
+    High,
+}
+
+#[cm("wado-lang:web/types#predefined-color-space")]
+pub enum PredefinedColorSpace {
+    Srgb,
+    SrgbLinear,
+    DisplayP3,
+    DisplayP3Linear,
 }
 
 #[cm("wado-lang:web/types#scroll-behavior")]
@@ -91,6 +203,20 @@ pub struct AriaNotificationOptions {
     pub priority: Option<AriaNotifyPriority> = null,
 }
 
+#[cm("wado-lang:web/types#canvas-rendering-context2-d-settings")]
+pub struct CanvasRenderingContext2DSettings {
+    #[cm("alpha")]
+    pub alpha: Option<bool> = null,
+    #[cm("desynchronized")]
+    pub desynchronized: Option<bool> = null,
+    #[cm("color-space")]
+    pub color_space: Option<PredefinedColorSpace> = null,
+    #[cm("color-type")]
+    pub color_type: Option<CanvasColorType> = null,
+    #[cm("will-read-frequently")]
+    pub will_read_frequently: Option<bool> = null,
+}
+
 #[cm("wado-lang:web/types#check-visibility-options")]
 pub struct CheckVisibilityOptions {
     #[cm("check-opacity")]
@@ -103,6 +229,58 @@ pub struct CheckVisibilityOptions {
     pub opacity_property: Option<bool> = null,
     #[cm("visibility-property")]
     pub visibility_property: Option<bool> = null,
+}
+
+#[cm("wado-lang:web/types#dom-matrix2-d-init")]
+pub struct DomMatrix2DInit {
+    #[cm("a")]
+    pub a: Option<f64> = null,
+    #[cm("b")]
+    pub b: Option<f64> = null,
+    #[cm("c")]
+    pub c: Option<f64> = null,
+    #[cm("d")]
+    pub d: Option<f64> = null,
+    #[cm("e")]
+    pub e: Option<f64> = null,
+    #[cm("f")]
+    pub f: Option<f64> = null,
+    #[cm("m11")]
+    pub m11: Option<f64> = null,
+    #[cm("m12")]
+    pub m12: Option<f64> = null,
+    #[cm("m21")]
+    pub m21: Option<f64> = null,
+    #[cm("m22")]
+    pub m22: Option<f64> = null,
+    #[cm("m41")]
+    pub m41: Option<f64> = null,
+    #[cm("m42")]
+    pub m42: Option<f64> = null,
+}
+
+#[cm("wado-lang:web/types#dom-point-init")]
+pub struct DomPointInit {
+    #[cm("x")]
+    pub x: Option<f64> = null,
+    #[cm("y")]
+    pub y: Option<f64> = null,
+    #[cm("z")]
+    pub z: Option<f64> = null,
+    #[cm("w")]
+    pub w: Option<f64> = null,
+}
+
+#[cm("wado-lang:web/types#dom-rect-init")]
+pub struct DomRectInit {
+    #[cm("x")]
+    pub x: Option<f64> = null,
+    #[cm("y")]
+    pub y: Option<f64> = null,
+    #[cm("width")]
+    pub width: Option<f64> = null,
+    #[cm("height")]
+    pub height: Option<f64> = null,
 }
 
 #[cm("wado-lang:web/types#element-creation-options")]
@@ -159,6 +337,14 @@ pub struct GetHtmlOptions {
 pub struct GetRootNodeOptions {
     #[cm("composed")]
     pub composed: Option<bool> = null,
+}
+
+#[cm("wado-lang:web/types#image-data-settings")]
+pub struct ImageDataSettings {
+    #[cm("color-space")]
+    pub color_space: Option<PredefinedColorSpace> = null,
+    #[cm("pixel-format")]
+    pub pixel_format: Option<ImageDataPixelFormat> = null,
 }
 
 #[cm("wado-lang:web/types#import-node-options")]
@@ -254,10 +440,36 @@ pub variant EventListenerOptionsOrBool {
     AsBool(bool),
 }
 
+#[cm("wado-lang:web/types#f64-or-dom-point-init")]
+pub variant F64OrDomPointInit {
+    AsF64(f64),
+    AsDomPointInit(DomPointInit),
+}
+
+#[cm("wado-lang:web/types#f64-or-dom-point-init-or-f64-or-dom-point-init-list")]
+pub variant F64OrDomPointInitOrF64OrDomPointInitList {
+    AsF64(f64),
+    AsDomPointInit(DomPointInit),
+    AsF64OrDomPointInitList(List<F64OrDomPointInit>),
+}
+
 #[cm("wado-lang:web/types#node-or-string")]
 pub variant NodeOrString {
     AsNode(Node),
     AsString(String),
+}
+
+#[cm("wado-lang:web/types#path2-d-or-string")]
+pub variant Path2DOrString {
+    AsPath2D(Path2D),
+    AsString(String),
+}
+
+#[cm("wado-lang:web/types#string-or-canvas-gradient-or-canvas-pattern")]
+pub variant StringOrCanvasGradientOrCanvasPattern {
+    AsString(String),
+    AsCanvasGradient(CanvasGradient),
+    AsCanvasPattern(CanvasPattern),
 }
 
 #[cm("wado-lang:web/types#string-or-element-creation-options")]
@@ -297,7 +509,7 @@ impl NodeFilter {
     pub const SHOW_NOTATION: u32 = 0x800;
 }
 
-#[cm("wado-lang:web/event-target", linearity = "unrestricted", repr = "externref", classes = "0..=8")]
+#[cm("wado-lang:web/event-target", linearity = "unrestricted", repr = "externref", classes = "0..=11")]
 pub resource EventTarget {
     #[cm("wado-lang:web/event-target#new")]
     fn new() -> EventTarget;
@@ -312,7 +524,7 @@ pub resource EventTarget {
     fn dispatch_event(&self, event: Event) -> bool;
 }
 
-#[cm("wado-lang:web/event", linearity = "unrestricted", repr = "externref", classes = "9..=9")]
+#[cm("wado-lang:web/event", linearity = "unrestricted", repr = "externref", classes = "12..=12")]
 pub resource Event {
     #[cm("wado-lang:web/event#new")]
     #[cm_params("type", "event-init-dict")]
@@ -386,7 +598,7 @@ impl Event {
     pub const BUBBLING_PHASE: u16 = 3;
 }
 
-#[cm("wado-lang:web/node", linearity = "unrestricted", repr = "externref", classes = "1..=7")]
+#[cm("wado-lang:web/node", linearity = "unrestricted", repr = "externref", classes = "1..=10")]
 pub resource Node extends EventTarget {
     #[cm("wado-lang:web/node#node-type")]
     #[cm_params("self")]
@@ -415,6 +627,9 @@ pub resource Node extends EventTarget {
     #[cm("wado-lang:web/node#has-child-nodes")]
     #[cm_params("self")]
     fn has_child_nodes(&self) -> bool;
+    #[cm("wado-lang:web/node#child-nodes")]
+    #[cm_params("self")]
+    fn child_nodes(&self) -> NodeList;
     #[cm("wado-lang:web/node#first-child")]
     #[cm_params("self")]
     fn first_child(&self) -> Option<Node>;
@@ -501,7 +716,7 @@ impl Node {
     pub const DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC: u16 = 0x20;
 }
 
-#[cm("wado-lang:web/character-data", linearity = "unrestricted", repr = "externref", classes = "2..=3")]
+#[cm("wado-lang:web/character-data", linearity = "unrestricted", repr = "externref", classes = "2..=4")]
 pub resource CharacterData extends Node {
     #[cm("wado-lang:web/character-data#data")]
     #[cm_params("self")]
@@ -560,7 +775,7 @@ pub resource Text extends CharacterData {
     fn whole_text(&self) -> String;
 }
 
-#[cm("wado-lang:web/element", linearity = "unrestricted", repr = "externref", classes = "4..=6")]
+#[cm("wado-lang:web/element", linearity = "unrestricted", repr = "externref", classes = "5..=8")]
 pub resource Element extends Node {
     #[cm("wado-lang:web/element#get-spatial-navigation-container")]
     #[cm_params("self")]
@@ -571,6 +786,12 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#spatial-navigation-search")]
     #[cm_params("self", "dir", "options")]
     fn spatial_navigation_search(&self, dir: SpatialNavigationDirection, options: Option<SpatialNavigationSearchOptions> = null) -> Option<Node>;
+    #[cm("wado-lang:web/element#part")]
+    #[cm_params("self")]
+    fn part(&self) -> DomTokenList;
+    #[cm("wado-lang:web/element#get-bounding-client-rect")]
+    #[cm_params("self")]
+    fn get_bounding_client_rect(&self) -> DomRect;
     #[cm("wado-lang:web/element#check-visibility")]
     #[cm_params("self", "options")]
     fn check_visibility(&self, options: Option<CheckVisibilityOptions> = null) -> bool;
@@ -652,6 +873,9 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#set-class-name")]
     #[cm_params("self", "value")]
     fn set_class_name(&self, value: String);
+    #[cm("wado-lang:web/element#class-list")]
+    #[cm_params("self")]
+    fn class_list(&self) -> DomTokenList;
     #[cm("wado-lang:web/element#slot")]
     #[cm_params("self")]
     fn slot(&self) -> String;
@@ -700,6 +924,15 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#webkit-matches-selector")]
     #[cm_params("self", "selectors")]
     fn webkit_matches_selector(&self, selectors: String) -> bool;
+    #[cm("wado-lang:web/element#get-elements-by-tag-name")]
+    #[cm_params("self", "qualified-name")]
+    fn get_elements_by_tag_name(&self, qualified_name: String) -> HtmlCollection;
+    #[cm("wado-lang:web/element#get-elements-by-tag-name-ns")]
+    #[cm_params("self", "namespace", "local-name")]
+    fn get_elements_by_tag_name_ns(&self, namespace: Option<String>, local_name: String) -> HtmlCollection;
+    #[cm("wado-lang:web/element#get-elements-by-class-name")]
+    #[cm_params("self", "class-names")]
+    fn get_elements_by_class_name(&self, class_names: String) -> HtmlCollection;
     #[cm("wado-lang:web/element#insert-adjacent-element")]
     #[cm_params("self", "where", "element")]
     fn insert_adjacent_element(&self, where: String, element: Element) -> Option<Element>;
@@ -745,6 +978,12 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#request-pointer-lock")]
     #[cm_params("self", "options")]
     async fn request_pointer_lock(&self, options: Option<PointerLockOptions> = null) -> AsyncCall<Result<(), Rejection>>;
+    #[cm("wado-lang:web/element#region-overset")]
+    #[cm_params("self")]
+    fn region_overset(&self) -> String;
+    #[cm("wado-lang:web/element#children")]
+    #[cm_params("self")]
+    fn children(&self) -> HtmlCollection;
     #[cm("wado-lang:web/element#first-element-child")]
     #[cm_params("self")]
     fn first_element_child(&self) -> Option<Element>;
@@ -769,6 +1008,9 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#query-selector")]
     #[cm_params("self", "selectors")]
     fn query_selector(&self, selectors: String) -> Option<Element>;
+    #[cm("wado-lang:web/element#query-selector-all")]
+    #[cm_params("self", "selectors")]
+    fn query_selector_all(&self, selectors: String) -> NodeList;
     #[cm("wado-lang:web/element#previous-element-sibling")]
     #[cm_params("self")]
     fn previous_element_sibling(&self) -> Option<Element>;
@@ -1110,7 +1352,7 @@ pub resource Element extends Node {
     fn scroll_by(&self);
 }
 
-#[cm("wado-lang:web/html-element", linearity = "unrestricted", repr = "externref", classes = "5..=6")]
+#[cm("wado-lang:web/html-element", linearity = "unrestricted", repr = "externref", classes = "6..=8")]
 pub resource HtmlElement extends Element {
     #[cm("wado-lang:web/html-element#container-timing")]
     #[cm_params("self")]
@@ -1166,6 +1408,9 @@ pub resource HtmlElement extends Element {
     #[cm("wado-lang:web/html-element#set-dir")]
     #[cm_params("self", "value")]
     fn set_dir(&self, value: String);
+    #[cm("wado-lang:web/html-element#hidden")]
+    #[cm_params("self")]
+    fn hidden(&self) -> Option<BoolOrF64OrString>;
     #[cm("wado-lang:web/html-element#set-hidden")]
     #[cm_params("self", "value")]
     fn set_hidden(&self, value: Option<BoolOrF64OrString>);
@@ -1256,6 +1501,9 @@ pub resource HtmlElement extends Element {
     #[cm("wado-lang:web/html-element#set-heading-reset")]
     #[cm_params("self", "value")]
     fn set_heading_reset(&self, value: bool);
+    #[cm("wado-lang:web/html-element#style")]
+    #[cm_params("self")]
+    fn style(&self) -> CssStyleProperties;
     #[cm("wado-lang:web/html-element#content-editable")]
     #[cm_params("self")]
     fn content_editable(&self) -> String;
@@ -1309,7 +1557,7 @@ pub resource HtmlElement extends Element {
     fn blur(&self);
 }
 
-#[cm("wado-lang:web/html-input-element", linearity = "unrestricted", repr = "externref", classes = "6..=6")]
+#[cm("wado-lang:web/html-input-element", linearity = "unrestricted", repr = "externref", classes = "7..=7")]
 pub resource HtmlInputElement extends HtmlElement {
     #[cm("wado-lang:web/html-input-element#webkitdirectory")]
     #[cm_params("self")]
@@ -1542,6 +1790,9 @@ pub resource HtmlInputElement extends HtmlElement {
     #[cm("wado-lang:web/html-input-element#set-custom-validity")]
     #[cm_params("self", "error")]
     fn set_custom_validity(&self, error: String);
+    #[cm("wado-lang:web/html-input-element#labels")]
+    #[cm_params("self")]
+    fn labels(&self) -> Option<NodeList>;
     #[cm("wado-lang:web/html-input-element#select")]
     #[cm_params("self")]
     fn select(&self);
@@ -1607,7 +1858,7 @@ pub resource HtmlInputElement extends HtmlElement {
     fn set_popover_target_action(&self, value: String);
 }
 
-#[cm("wado-lang:web/document", linearity = "unrestricted", repr = "externref", classes = "7..=7")]
+#[cm("wado-lang:web/document", linearity = "unrestricted", repr = "externref", classes = "9..=9")]
 pub resource Document extends Node {
     #[cm("wado-lang:web/document#element-from-point")]
     #[cm_params("self", "x", "y")]
@@ -1644,15 +1895,30 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#document-element")]
     #[cm_params("self")]
     fn document_element(&self) -> Option<Element>;
+    #[cm("wado-lang:web/document#get-elements-by-tag-name")]
+    #[cm_params("self", "qualified-name")]
+    fn get_elements_by_tag_name(&self, qualified_name: String) -> HtmlCollection;
+    #[cm("wado-lang:web/document#get-elements-by-tag-name-ns")]
+    #[cm_params("self", "namespace", "local-name")]
+    fn get_elements_by_tag_name_ns(&self, namespace: Option<String>, local_name: String) -> HtmlCollection;
+    #[cm("wado-lang:web/document#get-elements-by-class-name")]
+    #[cm_params("self", "class-names")]
+    fn get_elements_by_class_name(&self, class_names: String) -> HtmlCollection;
     #[cm("wado-lang:web/document#create-element")]
     #[cm_params("self", "local-name", "options")]
     fn create_element(&self, local_name: String, options: Option<StringOrElementCreationOptions> = null) -> Element;
     #[cm("wado-lang:web/document#create-element-ns")]
     #[cm_params("self", "namespace", "qualified-name", "options")]
     fn create_element_ns(&self, namespace: Option<String>, qualified_name: String, options: Option<StringOrElementCreationOptions> = null) -> Element;
+    #[cm("wado-lang:web/document#create-document-fragment")]
+    #[cm_params("self")]
+    fn create_document_fragment(&self) -> DocumentFragment;
     #[cm("wado-lang:web/document#create-text-node")]
     #[cm_params("self", "data")]
     fn create_text_node(&self, data: String) -> Text;
+    #[cm("wado-lang:web/document#create-comment")]
+    #[cm_params("self", "data")]
+    fn create_comment(&self, data: String) -> Comment;
     #[cm("wado-lang:web/document#import-node")]
     #[cm_params("self", "node", "options")]
     fn import_node(&self, node: Node, options: Option<BoolOrImportNodeOptions> = null) -> Node;
@@ -1722,6 +1988,27 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#set-body")]
     #[cm_params("self", "value")]
     fn set_body(&self, value: Option<HtmlElement>);
+    #[cm("wado-lang:web/document#images")]
+    #[cm_params("self")]
+    fn images(&self) -> HtmlCollection;
+    #[cm("wado-lang:web/document#embeds")]
+    #[cm_params("self")]
+    fn embeds(&self) -> HtmlCollection;
+    #[cm("wado-lang:web/document#plugins")]
+    #[cm_params("self")]
+    fn plugins(&self) -> HtmlCollection;
+    #[cm("wado-lang:web/document#links")]
+    #[cm_params("self")]
+    fn links(&self) -> HtmlCollection;
+    #[cm("wado-lang:web/document#forms")]
+    #[cm_params("self")]
+    fn forms(&self) -> HtmlCollection;
+    #[cm("wado-lang:web/document#scripts")]
+    #[cm_params("self")]
+    fn scripts(&self) -> HtmlCollection;
+    #[cm("wado-lang:web/document#get-elements-by-name")]
+    #[cm_params("self", "element-name")]
+    fn get_elements_by_name(&self, element_name: String) -> NodeList;
     #[cm("wado-lang:web/document#open-with-unused1-unused2")]
     #[cm_params("self", "unused1", "unused2")]
     fn open_with_unused1_unused2(&self, unused1: Option<String> = null, unused2: Option<String> = null) -> Document;
@@ -1797,6 +2084,12 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#set-bg-color")]
     #[cm_params("self", "value")]
     fn set_bg_color(&self, value: String);
+    #[cm("wado-lang:web/document#anchors")]
+    #[cm_params("self")]
+    fn anchors(&self) -> HtmlCollection;
+    #[cm("wado-lang:web/document#applets")]
+    #[cm_params("self")]
+    fn applets(&self) -> HtmlCollection;
     #[cm("wado-lang:web/document#clear")]
     #[cm_params("self")]
     fn clear(&self);
@@ -1851,6 +2144,9 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#pointer-lock-element")]
     #[cm_params("self")]
     fn pointer_lock_element(&self) -> Option<Element>;
+    #[cm("wado-lang:web/document#children")]
+    #[cm_params("self")]
+    fn children(&self) -> HtmlCollection;
     #[cm("wado-lang:web/document#first-element-child")]
     #[cm_params("self")]
     fn first_element_child(&self) -> Option<Element>;
@@ -1875,6 +2171,9 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#query-selector")]
     #[cm_params("self", "selectors")]
     fn query_selector(&self, selectors: String) -> Option<Element>;
+    #[cm("wado-lang:web/document#query-selector-all")]
+    #[cm_params("self", "selectors")]
+    fn query_selector_all(&self, selectors: String) -> NodeList;
     #[cm("wado-lang:web/document#create-ns-resolver")]
     #[cm_params("self", "node-resolver")]
     fn create_ns_resolver(&self, node_resolver: Node) -> Node;
@@ -1885,7 +2184,7 @@ pub resource Document extends Node {
     fn open(&self);
 }
 
-#[cm("wado-lang:web/window", linearity = "unrestricted", repr = "externref", classes = "8..=8")]
+#[cm("wado-lang:web/window", linearity = "unrestricted", repr = "externref", classes = "11..=11")]
 pub resource Window extends EventTarget {
     #[cm("wado-lang:web/window#credentialless")]
     #[cm_params("self")]
@@ -1899,6 +2198,9 @@ pub resource Window extends EventTarget {
     #[cm("wado-lang:web/window#request-resize")]
     #[cm_params("self")]
     fn request_resize(&self);
+    #[cm("wado-lang:web/window#get-computed-style")]
+    #[cm_params("self", "elt", "pseudo-elt")]
+    fn get_computed_style(&self, elt: Element, pseudo_elt: Option<String> = null) -> CssStyleProperties;
     #[cm("wado-lang:web/window#move-to")]
     #[cm_params("self", "x", "y")]
     fn move_to(&self, x: i32, y: i32);
@@ -2088,7 +2390,7 @@ pub resource Window extends EventTarget {
     fn create_image_bitmap(&self);
 }
 
-#[cm("wado-lang:web/node-iterator", linearity = "unrestricted", repr = "externref", classes = "10..=10")]
+#[cm("wado-lang:web/node-iterator", linearity = "unrestricted", repr = "externref", classes = "13..=13")]
 pub resource NodeIterator {
     #[cm("wado-lang:web/node-iterator#root")]
     #[cm_params("self")]
@@ -2113,7 +2415,7 @@ pub resource NodeIterator {
     fn detach(&self);
 }
 
-#[cm("wado-lang:web/tree-walker", linearity = "unrestricted", repr = "externref", classes = "11..=11")]
+#[cm("wado-lang:web/tree-walker", linearity = "unrestricted", repr = "externref", classes = "14..=14")]
 pub resource TreeWalker {
     #[cm("wado-lang:web/tree-walker#root")]
     #[cm_params("self")]
@@ -2148,6 +2450,672 @@ pub resource TreeWalker {
     #[cm("wado-lang:web/tree-walker#next-node")]
     #[cm_params("self")]
     fn next_node(&self) -> Option<Node>;
+}
+
+#[cm("wado-lang:web/comment", linearity = "unrestricted", repr = "externref", classes = "4..=4")]
+pub resource Comment extends CharacterData {
+    #[cm("wado-lang:web/comment#new")]
+    #[cm_params("data")]
+    fn new(data: String = "") -> Comment;
+}
+
+#[cm("wado-lang:web/document-fragment", linearity = "unrestricted", repr = "externref", classes = "10..=10")]
+pub resource DocumentFragment extends Node {
+    #[cm("wado-lang:web/document-fragment#new")]
+    fn new() -> DocumentFragment;
+    #[cm("wado-lang:web/document-fragment#get-element-by-id")]
+    #[cm_params("self", "element-id")]
+    fn get_element_by_id(&self, element_id: String) -> Option<Element>;
+    #[cm("wado-lang:web/document-fragment#children")]
+    #[cm_params("self")]
+    fn children(&self) -> HtmlCollection;
+    #[cm("wado-lang:web/document-fragment#first-element-child")]
+    #[cm_params("self")]
+    fn first_element_child(&self) -> Option<Element>;
+    #[cm("wado-lang:web/document-fragment#last-element-child")]
+    #[cm_params("self")]
+    fn last_element_child(&self) -> Option<Element>;
+    #[cm("wado-lang:web/document-fragment#child-element-count")]
+    #[cm_params("self")]
+    fn child_element_count(&self) -> u32;
+    #[cm("wado-lang:web/document-fragment#prepend")]
+    #[cm_params("self", "nodes")]
+    fn prepend(&self, nodes: List<NodeOrString>);
+    #[cm("wado-lang:web/document-fragment#append")]
+    #[cm_params("self", "nodes")]
+    fn append(&self, nodes: List<NodeOrString>);
+    #[cm("wado-lang:web/document-fragment#replace-children")]
+    #[cm_params("self", "nodes")]
+    fn replace_children(&self, nodes: List<NodeOrString>);
+    #[cm("wado-lang:web/document-fragment#move-before")]
+    #[cm_params("self", "node", "child")]
+    fn move_before(&self, node: Node, child: Option<Node>);
+    #[cm("wado-lang:web/document-fragment#query-selector")]
+    #[cm_params("self", "selectors")]
+    fn query_selector(&self, selectors: String) -> Option<Element>;
+    #[cm("wado-lang:web/document-fragment#query-selector-all")]
+    #[cm_params("self", "selectors")]
+    fn query_selector_all(&self, selectors: String) -> NodeList;
+}
+
+#[cm("wado-lang:web/node-list", linearity = "unrestricted", repr = "externref", classes = "15..=15")]
+pub resource NodeList {
+    #[cm("wado-lang:web/node-list#length")]
+    #[cm_params("self")]
+    fn length(&self) -> u32;
+}
+
+#[cm("wado-lang:web/html-collection", linearity = "unrestricted", repr = "externref", classes = "16..=16")]
+pub resource HtmlCollection {
+    #[cm("wado-lang:web/html-collection#length")]
+    #[cm_params("self")]
+    fn length(&self) -> u32;
+}
+
+#[cm("wado-lang:web/dom-token-list", linearity = "unrestricted", repr = "externref", classes = "17..=17")]
+pub resource DomTokenList {
+    #[cm("wado-lang:web/dom-token-list#length")]
+    #[cm_params("self")]
+    fn length(&self) -> u32;
+    #[cm("wado-lang:web/dom-token-list#contains")]
+    #[cm_params("self", "token")]
+    fn contains(&self, token: String) -> bool;
+    #[cm("wado-lang:web/dom-token-list#add")]
+    #[cm_params("self", "tokens")]
+    fn add(&self, tokens: List<String>);
+    #[cm("wado-lang:web/dom-token-list#remove")]
+    #[cm_params("self", "tokens")]
+    fn remove(&self, tokens: List<String>);
+    #[cm("wado-lang:web/dom-token-list#toggle")]
+    #[cm_params("self", "token", "force")]
+    fn toggle(&self, token: String, force: Option<bool> = null) -> bool;
+    #[cm("wado-lang:web/dom-token-list#replace")]
+    #[cm_params("self", "token", "new-token")]
+    fn replace(&self, token: String, new_token: String) -> bool;
+    #[cm("wado-lang:web/dom-token-list#supports")]
+    #[cm_params("self", "token")]
+    fn supports(&self, token: String) -> bool;
+    #[cm("wado-lang:web/dom-token-list#value")]
+    #[cm_params("self")]
+    fn value(&self) -> String;
+    #[cm("wado-lang:web/dom-token-list#set-value")]
+    #[cm_params("self", "value")]
+    fn set_value(&self, value: String);
+}
+
+#[cm("wado-lang:web/css-style-declaration", linearity = "unrestricted", repr = "externref", classes = "18..=19")]
+pub resource CssStyleDeclaration {
+    #[cm("wado-lang:web/css-style-declaration#css-text")]
+    #[cm_params("self")]
+    fn css_text(&self) -> String;
+    #[cm("wado-lang:web/css-style-declaration#set-css-text")]
+    #[cm_params("self", "value")]
+    fn set_css_text(&self, value: String);
+    #[cm("wado-lang:web/css-style-declaration#length")]
+    #[cm_params("self")]
+    fn length(&self) -> u32;
+    #[cm("wado-lang:web/css-style-declaration#get-property-value")]
+    #[cm_params("self", "property")]
+    fn get_property_value(&self, property: String) -> String;
+    #[cm("wado-lang:web/css-style-declaration#get-property-priority")]
+    #[cm_params("self", "property")]
+    fn get_property_priority(&self, property: String) -> String;
+    #[cm("wado-lang:web/css-style-declaration#set-property")]
+    #[cm_params("self", "property", "value", "priority")]
+    fn set_property(&self, property: String, value: String, priority: String = "");
+    #[cm("wado-lang:web/css-style-declaration#remove-property")]
+    #[cm_params("self", "property")]
+    fn remove_property(&self, property: String) -> String;
+}
+
+#[cm("wado-lang:web/css-style-properties", linearity = "unrestricted", repr = "externref", classes = "19..=19")]
+pub resource CssStyleProperties extends CssStyleDeclaration {
+    #[cm("wado-lang:web/css-style-properties#css-float")]
+    #[cm_params("self")]
+    fn css_float(&self) -> String;
+    #[cm("wado-lang:web/css-style-properties#set-css-float")]
+    #[cm_params("self", "value")]
+    fn set_css_float(&self, value: String);
+}
+
+#[cm("wado-lang:web/dom-rect-read-only", linearity = "unrestricted", repr = "externref", classes = "20..=21")]
+pub resource DomRectReadOnly {
+    #[cm("wado-lang:web/dom-rect-read-only#new")]
+    #[cm_params("x", "y", "width", "height")]
+    fn new(x: f64 = 0.0, y: f64 = 0.0, width: f64 = 0.0, height: f64 = 0.0) -> DomRectReadOnly;
+    #[cm("wado-lang:web/dom-rect-read-only#from-rect")]
+    #[cm_params("other")]
+    fn from_rect(other: Option<DomRectInit> = null) -> DomRectReadOnly;
+    #[cm("wado-lang:web/dom-rect-read-only#x")]
+    #[cm_params("self")]
+    fn x(&self) -> f64;
+    #[cm("wado-lang:web/dom-rect-read-only#y")]
+    #[cm_params("self")]
+    fn y(&self) -> f64;
+    #[cm("wado-lang:web/dom-rect-read-only#width")]
+    #[cm_params("self")]
+    fn width(&self) -> f64;
+    #[cm("wado-lang:web/dom-rect-read-only#height")]
+    #[cm_params("self")]
+    fn height(&self) -> f64;
+    #[cm("wado-lang:web/dom-rect-read-only#top")]
+    #[cm_params("self")]
+    fn top(&self) -> f64;
+    #[cm("wado-lang:web/dom-rect-read-only#right")]
+    #[cm_params("self")]
+    fn right(&self) -> f64;
+    #[cm("wado-lang:web/dom-rect-read-only#bottom")]
+    #[cm_params("self")]
+    fn bottom(&self) -> f64;
+    #[cm("wado-lang:web/dom-rect-read-only#left")]
+    #[cm_params("self")]
+    fn left(&self) -> f64;
+}
+
+#[cm("wado-lang:web/dom-rect", linearity = "unrestricted", repr = "externref", classes = "21..=21")]
+pub resource DomRect extends DomRectReadOnly {
+    #[cm("wado-lang:web/dom-rect#new")]
+    #[cm_params("x", "y", "width", "height")]
+    fn new(x: f64 = 0.0, y: f64 = 0.0, width: f64 = 0.0, height: f64 = 0.0) -> DomRect;
+    #[cm("wado-lang:web/dom-rect#from-rect")]
+    #[cm_params("other")]
+    fn from_rect(other: Option<DomRectInit> = null) -> DomRect;
+    #[cm("wado-lang:web/dom-rect#set-x")]
+    #[cm_params("self", "value")]
+    fn set_x(&self, value: f64);
+    #[cm("wado-lang:web/dom-rect#set-y")]
+    #[cm_params("self", "value")]
+    fn set_y(&self, value: f64);
+    #[cm("wado-lang:web/dom-rect#set-width")]
+    #[cm_params("self", "value")]
+    fn set_width(&self, value: f64);
+    #[cm("wado-lang:web/dom-rect#set-height")]
+    #[cm_params("self", "value")]
+    fn set_height(&self, value: f64);
+}
+
+#[cm("wado-lang:web/html-canvas-element", linearity = "unrestricted", repr = "externref", classes = "8..=8")]
+pub resource HtmlCanvasElement extends HtmlElement {
+    #[cm("wado-lang:web/html-canvas-element#width")]
+    #[cm_params("self")]
+    fn width(&self) -> u32;
+    #[cm("wado-lang:web/html-canvas-element#set-width")]
+    #[cm_params("self", "value")]
+    fn set_width(&self, value: u32);
+    #[cm("wado-lang:web/html-canvas-element#height")]
+    #[cm_params("self")]
+    fn height(&self) -> u32;
+    #[cm("wado-lang:web/html-canvas-element#set-height")]
+    #[cm_params("self", "value")]
+    fn set_height(&self, value: u32);
+    #[cm("wado-lang:web/html-canvas-element#to-data-url")]
+    #[cm_params("self", "type")]
+    fn to_data_url(&self, type: String = "image/png") -> String;
+}
+
+#[cm("wado-lang:web/canvas-rendering-context2-d", linearity = "unrestricted", repr = "externref", classes = "22..=22")]
+pub resource CanvasRenderingContext2D {
+    #[cm("wado-lang:web/canvas-rendering-context2-d#canvas")]
+    #[cm_params("self")]
+    fn canvas(&self) -> HtmlCanvasElement;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#get-context-attributes")]
+    #[cm_params("self")]
+    fn get_context_attributes(&self) -> CanvasRenderingContext2DSettings;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#save")]
+    #[cm_params("self")]
+    fn save(&self);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#restore")]
+    #[cm_params("self")]
+    fn restore(&self);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#reset")]
+    #[cm_params("self")]
+    fn reset(&self);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#is-context-lost")]
+    #[cm_params("self")]
+    fn is_context_lost(&self) -> bool;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#scale")]
+    #[cm_params("self", "x", "y")]
+    fn scale(&self, x: f64, y: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#rotate")]
+    #[cm_params("self", "angle")]
+    fn rotate(&self, angle: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#translate")]
+    #[cm_params("self", "x", "y")]
+    fn translate(&self, x: f64, y: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#transform")]
+    #[cm_params("self", "a", "b", "c", "d", "e", "f")]
+    fn transform(&self, a: f64, b: f64, c: f64, d: f64, e: f64, f: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-transform-with-a-b-c-d-e-f")]
+    #[cm_params("self", "a", "b", "c", "d", "e", "f")]
+    fn set_transform_with_a_b_c_d_e_f(&self, a: f64, b: f64, c: f64, d: f64, e: f64, f: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-transform-with-transform")]
+    #[cm_params("self", "transform")]
+    fn set_transform_with_transform(&self, transform: Option<DomMatrix2DInit> = null);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#reset-transform")]
+    #[cm_params("self")]
+    fn reset_transform(&self);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#global-alpha")]
+    #[cm_params("self")]
+    fn global_alpha(&self) -> f64;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-global-alpha")]
+    #[cm_params("self", "value")]
+    fn set_global_alpha(&self, value: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#global-composite-operation")]
+    #[cm_params("self")]
+    fn global_composite_operation(&self) -> String;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-global-composite-operation")]
+    #[cm_params("self", "value")]
+    fn set_global_composite_operation(&self, value: String);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#image-smoothing-enabled")]
+    #[cm_params("self")]
+    fn image_smoothing_enabled(&self) -> bool;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-image-smoothing-enabled")]
+    #[cm_params("self", "value")]
+    fn set_image_smoothing_enabled(&self, value: bool);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#image-smoothing-quality")]
+    #[cm_params("self")]
+    fn image_smoothing_quality(&self) -> ImageSmoothingQuality;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-image-smoothing-quality")]
+    #[cm_params("self", "value")]
+    fn set_image_smoothing_quality(&self, value: ImageSmoothingQuality);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#stroke-style")]
+    #[cm_params("self")]
+    fn stroke_style(&self) -> StringOrCanvasGradientOrCanvasPattern;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-stroke-style")]
+    #[cm_params("self", "value")]
+    fn set_stroke_style(&self, value: StringOrCanvasGradientOrCanvasPattern);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#fill-style")]
+    #[cm_params("self")]
+    fn fill_style(&self) -> StringOrCanvasGradientOrCanvasPattern;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-fill-style")]
+    #[cm_params("self", "value")]
+    fn set_fill_style(&self, value: StringOrCanvasGradientOrCanvasPattern);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#create-linear-gradient")]
+    #[cm_params("self", "x0", "y0", "x1", "y1")]
+    fn create_linear_gradient(&self, x0: f64, y0: f64, x1: f64, y1: f64) -> CanvasGradient;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#create-radial-gradient")]
+    #[cm_params("self", "x0", "y0", "r0", "x1", "y1", "r1")]
+    fn create_radial_gradient(&self, x0: f64, y0: f64, r0: f64, x1: f64, y1: f64, r1: f64) -> CanvasGradient;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#create-conic-gradient")]
+    #[cm_params("self", "start-angle", "x", "y")]
+    fn create_conic_gradient(&self, start_angle: f64, x: f64, y: f64) -> CanvasGradient;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#create-pattern")]
+    #[cm_params("self", "image", "repetition")]
+    fn create_pattern(&self, image: HtmlCanvasElement, repetition: String) -> Option<CanvasPattern>;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#shadow-offset-x")]
+    #[cm_params("self")]
+    fn shadow_offset_x(&self) -> f64;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-shadow-offset-x")]
+    #[cm_params("self", "value")]
+    fn set_shadow_offset_x(&self, value: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#shadow-offset-y")]
+    #[cm_params("self")]
+    fn shadow_offset_y(&self) -> f64;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-shadow-offset-y")]
+    #[cm_params("self", "value")]
+    fn set_shadow_offset_y(&self, value: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#shadow-blur")]
+    #[cm_params("self")]
+    fn shadow_blur(&self) -> f64;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-shadow-blur")]
+    #[cm_params("self", "value")]
+    fn set_shadow_blur(&self, value: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#shadow-color")]
+    #[cm_params("self")]
+    fn shadow_color(&self) -> String;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-shadow-color")]
+    #[cm_params("self", "value")]
+    fn set_shadow_color(&self, value: String);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#filter")]
+    #[cm_params("self")]
+    fn filter(&self) -> String;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-filter")]
+    #[cm_params("self", "value")]
+    fn set_filter(&self, value: String);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#clear-rect")]
+    #[cm_params("self", "x", "y", "w", "h")]
+    fn clear_rect(&self, x: f64, y: f64, w: f64, h: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#fill-rect")]
+    #[cm_params("self", "x", "y", "w", "h")]
+    fn fill_rect(&self, x: f64, y: f64, w: f64, h: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#stroke-rect")]
+    #[cm_params("self", "x", "y", "w", "h")]
+    fn stroke_rect(&self, x: f64, y: f64, w: f64, h: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#begin-path")]
+    #[cm_params("self")]
+    fn begin_path(&self);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#fill-with-fill-rule")]
+    #[cm_params("self", "fill-rule")]
+    fn fill_with_fill_rule(&self, fill_rule: CanvasFillRule = CanvasFillRule::Nonzero);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#fill-with-path-fill-rule")]
+    #[cm_params("self", "path", "fill-rule")]
+    fn fill_with_path_fill_rule(&self, path: Path2D, fill_rule: CanvasFillRule = CanvasFillRule::Nonzero);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#stroke")]
+    #[cm_params("self")]
+    fn stroke(&self);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#stroke-with-path")]
+    #[cm_params("self", "path")]
+    fn stroke_with_path(&self, path: Path2D);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#clip-with-fill-rule")]
+    #[cm_params("self", "fill-rule")]
+    fn clip_with_fill_rule(&self, fill_rule: CanvasFillRule = CanvasFillRule::Nonzero);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#clip-with-path-fill-rule")]
+    #[cm_params("self", "path", "fill-rule")]
+    fn clip_with_path_fill_rule(&self, path: Path2D, fill_rule: CanvasFillRule = CanvasFillRule::Nonzero);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#is-point-in-path-with-x-y-fill-rule")]
+    #[cm_params("self", "x", "y", "fill-rule")]
+    fn is_point_in_path_with_x_y_fill_rule(&self, x: f64, y: f64, fill_rule: CanvasFillRule = CanvasFillRule::Nonzero) -> bool;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#is-point-in-path-with-path-x-y-fill-rule")]
+    #[cm_params("self", "path", "x", "y", "fill-rule")]
+    fn is_point_in_path_with_path_x_y_fill_rule(&self, path: Path2D, x: f64, y: f64, fill_rule: CanvasFillRule = CanvasFillRule::Nonzero) -> bool;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#is-point-in-stroke-with-x-y")]
+    #[cm_params("self", "x", "y")]
+    fn is_point_in_stroke_with_x_y(&self, x: f64, y: f64) -> bool;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#is-point-in-stroke-with-path-x-y")]
+    #[cm_params("self", "path", "x", "y")]
+    fn is_point_in_stroke_with_path_x_y(&self, path: Path2D, x: f64, y: f64) -> bool;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#draw-focus-if-needed-with-element")]
+    #[cm_params("self", "element")]
+    fn draw_focus_if_needed_with_element(&self, element: Element);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#draw-focus-if-needed-with-path-element")]
+    #[cm_params("self", "path", "element")]
+    fn draw_focus_if_needed_with_path_element(&self, path: Path2D, element: Element);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#fill-text")]
+    #[cm_params("self", "text", "x", "y", "max-width")]
+    fn fill_text(&self, text: String, x: f64, y: f64, max_width: Option<f64> = null);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#stroke-text")]
+    #[cm_params("self", "text", "x", "y", "max-width")]
+    fn stroke_text(&self, text: String, x: f64, y: f64, max_width: Option<f64> = null);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#measure-text")]
+    #[cm_params("self", "text")]
+    fn measure_text(&self, text: String) -> TextMetrics;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#draw-image-with-dx-dy")]
+    #[cm_params("self", "image", "dx", "dy")]
+    fn draw_image_with_dx_dy(&self, image: HtmlCanvasElement, dx: f64, dy: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#draw-image-with-dx-dy-dw-dh")]
+    #[cm_params("self", "image", "dx", "dy", "dw", "dh")]
+    fn draw_image_with_dx_dy_dw_dh(&self, image: HtmlCanvasElement, dx: f64, dy: f64, dw: f64, dh: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#draw-image-with-sx-sy-sw-sh-dx-dy-dw-dh")]
+    #[cm_params("self", "image", "sx", "sy", "sw", "sh", "dx", "dy", "dw", "dh")]
+    fn draw_image_with_sx_sy_sw_sh_dx_dy_dw_dh(&self, image: HtmlCanvasElement, sx: f64, sy: f64, sw: f64, sh: f64, dx: f64, dy: f64, dw: f64, dh: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#create-image-data-with-sw-sh-settings")]
+    #[cm_params("self", "sw", "sh", "settings")]
+    fn create_image_data_with_sw_sh_settings(&self, sw: i32, sh: i32, settings: Option<ImageDataSettings> = null) -> ImageData;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#create-image-data-with-image-data")]
+    #[cm_params("self", "image-data")]
+    fn create_image_data_with_image_data(&self, image_data: ImageData) -> ImageData;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#get-image-data")]
+    #[cm_params("self", "sx", "sy", "sw", "sh", "settings")]
+    fn get_image_data(&self, sx: i32, sy: i32, sw: i32, sh: i32, settings: Option<ImageDataSettings> = null) -> ImageData;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#put-image-data")]
+    #[cm_params("self", "image-data", "dx", "dy")]
+    fn put_image_data(&self, image_data: ImageData, dx: i32, dy: i32);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#put-image-data-with-dirty-x-dirty-y-dirty-width-dirty-height")]
+    #[cm_params("self", "image-data", "dx", "dy", "dirty-x", "dirty-y", "dirty-width", "dirty-height")]
+    fn put_image_data_with_dirty_x_dirty_y_dirty_width_dirty_height(&self, image_data: ImageData, dx: i32, dy: i32, dirty_x: i32, dirty_y: i32, dirty_width: i32, dirty_height: i32);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#line-width")]
+    #[cm_params("self")]
+    fn line_width(&self) -> f64;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-line-width")]
+    #[cm_params("self", "value")]
+    fn set_line_width(&self, value: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#line-cap")]
+    #[cm_params("self")]
+    fn line_cap(&self) -> CanvasLineCap;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-line-cap")]
+    #[cm_params("self", "value")]
+    fn set_line_cap(&self, value: CanvasLineCap);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#line-join")]
+    #[cm_params("self")]
+    fn line_join(&self) -> CanvasLineJoin;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-line-join")]
+    #[cm_params("self", "value")]
+    fn set_line_join(&self, value: CanvasLineJoin);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#miter-limit")]
+    #[cm_params("self")]
+    fn miter_limit(&self) -> f64;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-miter-limit")]
+    #[cm_params("self", "value")]
+    fn set_miter_limit(&self, value: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-line-dash")]
+    #[cm_params("self", "segments")]
+    fn set_line_dash(&self, segments: List<f64>);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#get-line-dash")]
+    #[cm_params("self")]
+    fn get_line_dash(&self) -> List<f64>;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#line-dash-offset")]
+    #[cm_params("self")]
+    fn line_dash_offset(&self) -> f64;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-line-dash-offset")]
+    #[cm_params("self", "value")]
+    fn set_line_dash_offset(&self, value: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#lang")]
+    #[cm_params("self")]
+    fn lang(&self) -> String;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-lang")]
+    #[cm_params("self", "value")]
+    fn set_lang(&self, value: String);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#font")]
+    #[cm_params("self")]
+    fn font(&self) -> String;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-font")]
+    #[cm_params("self", "value")]
+    fn set_font(&self, value: String);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#text-align")]
+    #[cm_params("self")]
+    fn text_align(&self) -> CanvasTextAlign;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-text-align")]
+    #[cm_params("self", "value")]
+    fn set_text_align(&self, value: CanvasTextAlign);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#text-baseline")]
+    #[cm_params("self")]
+    fn text_baseline(&self) -> CanvasTextBaseline;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-text-baseline")]
+    #[cm_params("self", "value")]
+    fn set_text_baseline(&self, value: CanvasTextBaseline);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#direction")]
+    #[cm_params("self")]
+    fn direction(&self) -> CanvasDirection;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-direction")]
+    #[cm_params("self", "value")]
+    fn set_direction(&self, value: CanvasDirection);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#letter-spacing")]
+    #[cm_params("self")]
+    fn letter_spacing(&self) -> String;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-letter-spacing")]
+    #[cm_params("self", "value")]
+    fn set_letter_spacing(&self, value: String);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#font-kerning")]
+    #[cm_params("self")]
+    fn font_kerning(&self) -> CanvasFontKerning;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-font-kerning")]
+    #[cm_params("self", "value")]
+    fn set_font_kerning(&self, value: CanvasFontKerning);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#font-stretch")]
+    #[cm_params("self")]
+    fn font_stretch(&self) -> CanvasFontStretch;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-font-stretch")]
+    #[cm_params("self", "value")]
+    fn set_font_stretch(&self, value: CanvasFontStretch);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#font-variant-caps")]
+    #[cm_params("self")]
+    fn font_variant_caps(&self) -> CanvasFontVariantCaps;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-font-variant-caps")]
+    #[cm_params("self", "value")]
+    fn set_font_variant_caps(&self, value: CanvasFontVariantCaps);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#text-rendering")]
+    #[cm_params("self")]
+    fn text_rendering(&self) -> CanvasTextRendering;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-text-rendering")]
+    #[cm_params("self", "value")]
+    fn set_text_rendering(&self, value: CanvasTextRendering);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#word-spacing")]
+    #[cm_params("self")]
+    fn word_spacing(&self) -> String;
+    #[cm("wado-lang:web/canvas-rendering-context2-d#set-word-spacing")]
+    #[cm_params("self", "value")]
+    fn set_word_spacing(&self, value: String);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#close-path")]
+    #[cm_params("self")]
+    fn close_path(&self);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#move-to")]
+    #[cm_params("self", "x", "y")]
+    fn move_to(&self, x: f64, y: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#line-to")]
+    #[cm_params("self", "x", "y")]
+    fn line_to(&self, x: f64, y: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#quadratic-curve-to")]
+    #[cm_params("self", "cpx", "cpy", "x", "y")]
+    fn quadratic_curve_to(&self, cpx: f64, cpy: f64, x: f64, y: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#bezier-curve-to")]
+    #[cm_params("self", "cp1x", "cp1y", "cp2x", "cp2y", "x", "y")]
+    fn bezier_curve_to(&self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#arc-to")]
+    #[cm_params("self", "x1", "y1", "x2", "y2", "radius")]
+    fn arc_to(&self, x1: f64, y1: f64, x2: f64, y2: f64, radius: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#rect")]
+    #[cm_params("self", "x", "y", "w", "h")]
+    fn rect(&self, x: f64, y: f64, w: f64, h: f64);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#round-rect")]
+    #[cm_params("self", "x", "y", "w", "h", "radii")]
+    fn round_rect(&self, x: f64, y: f64, w: f64, h: f64, radii: Option<F64OrDomPointInitOrF64OrDomPointInitList> = null);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#arc")]
+    #[cm_params("self", "x", "y", "radius", "start-angle", "end-angle", "counterclockwise")]
+    fn arc(&self, x: f64, y: f64, radius: f64, start_angle: f64, end_angle: f64, counterclockwise: bool = false);
+    #[cm("wado-lang:web/canvas-rendering-context2-d#ellipse")]
+    #[cm_params("self", "x", "y", "radius-x", "radius-y", "rotation", "start-angle", "end-angle", "counterclockwise")]
+    fn ellipse(&self, x: f64, y: f64, radius_x: f64, radius_y: f64, rotation: f64, start_angle: f64, end_angle: f64, counterclockwise: bool = false);
+    #[unavailable("overloaded; use `set_transform_with_a_b_c_d_e_f` or `set_transform_with_transform`")]
+    fn set_transform(&self);
+    #[unavailable("overloaded; use `fill_with_fill_rule` or `fill_with_path_fill_rule`")]
+    fn fill(&self);
+    #[unavailable("overloaded; use `clip_with_fill_rule` or `clip_with_path_fill_rule`")]
+    fn clip(&self);
+    #[unavailable("overloaded; use `is_point_in_path_with_x_y_fill_rule` or `is_point_in_path_with_path_x_y_fill_rule`")]
+    fn is_point_in_path(&self);
+    #[unavailable("overloaded; use `is_point_in_stroke_with_x_y` or `is_point_in_stroke_with_path_x_y`")]
+    fn is_point_in_stroke(&self);
+    #[unavailable("overloaded; use `draw_focus_if_needed_with_element` or `draw_focus_if_needed_with_path_element`")]
+    fn draw_focus_if_needed(&self);
+    #[unavailable("overloaded; use `draw_image_with_dx_dy`, `draw_image_with_dx_dy_dw_dh` or `draw_image_with_sx_sy_sw_sh_dx_dy_dw_dh`")]
+    fn draw_image(&self);
+    #[unavailable("overloaded; use `create_image_data_with_sw_sh_settings` or `create_image_data_with_image_data`")]
+    fn create_image_data(&self);
+}
+
+#[cm("wado-lang:web/canvas-gradient", linearity = "unrestricted", repr = "externref", classes = "23..=23")]
+pub resource CanvasGradient {
+    #[cm("wado-lang:web/canvas-gradient#add-color-stop")]
+    #[cm_params("self", "offset", "color")]
+    fn add_color_stop(&self, offset: f64, color: String);
+}
+
+#[cm("wado-lang:web/canvas-pattern", linearity = "unrestricted", repr = "externref", classes = "24..=24")]
+pub resource CanvasPattern {
+    #[cm("wado-lang:web/canvas-pattern#set-transform")]
+    #[cm_params("self", "transform")]
+    fn set_transform(&self, transform: Option<DomMatrix2DInit> = null);
+}
+
+#[cm("wado-lang:web/path2-d", linearity = "unrestricted", repr = "externref", classes = "25..=25")]
+pub resource Path2D {
+    #[cm("wado-lang:web/path2-d#new")]
+    #[cm_params("path")]
+    fn new(path: Option<Path2DOrString> = null) -> Path2D;
+    #[cm("wado-lang:web/path2-d#add-path")]
+    #[cm_params("self", "path", "transform")]
+    fn add_path(&self, path: Path2D, transform: Option<DomMatrix2DInit> = null);
+    #[cm("wado-lang:web/path2-d#close-path")]
+    #[cm_params("self")]
+    fn close_path(&self);
+    #[cm("wado-lang:web/path2-d#move-to")]
+    #[cm_params("self", "x", "y")]
+    fn move_to(&self, x: f64, y: f64);
+    #[cm("wado-lang:web/path2-d#line-to")]
+    #[cm_params("self", "x", "y")]
+    fn line_to(&self, x: f64, y: f64);
+    #[cm("wado-lang:web/path2-d#quadratic-curve-to")]
+    #[cm_params("self", "cpx", "cpy", "x", "y")]
+    fn quadratic_curve_to(&self, cpx: f64, cpy: f64, x: f64, y: f64);
+    #[cm("wado-lang:web/path2-d#bezier-curve-to")]
+    #[cm_params("self", "cp1x", "cp1y", "cp2x", "cp2y", "x", "y")]
+    fn bezier_curve_to(&self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64);
+    #[cm("wado-lang:web/path2-d#arc-to")]
+    #[cm_params("self", "x1", "y1", "x2", "y2", "radius")]
+    fn arc_to(&self, x1: f64, y1: f64, x2: f64, y2: f64, radius: f64);
+    #[cm("wado-lang:web/path2-d#rect")]
+    #[cm_params("self", "x", "y", "w", "h")]
+    fn rect(&self, x: f64, y: f64, w: f64, h: f64);
+    #[cm("wado-lang:web/path2-d#round-rect")]
+    #[cm_params("self", "x", "y", "w", "h", "radii")]
+    fn round_rect(&self, x: f64, y: f64, w: f64, h: f64, radii: Option<F64OrDomPointInitOrF64OrDomPointInitList> = null);
+    #[cm("wado-lang:web/path2-d#arc")]
+    #[cm_params("self", "x", "y", "radius", "start-angle", "end-angle", "counterclockwise")]
+    fn arc(&self, x: f64, y: f64, radius: f64, start_angle: f64, end_angle: f64, counterclockwise: bool = false);
+    #[cm("wado-lang:web/path2-d#ellipse")]
+    #[cm_params("self", "x", "y", "radius-x", "radius-y", "rotation", "start-angle", "end-angle", "counterclockwise")]
+    fn ellipse(&self, x: f64, y: f64, radius_x: f64, radius_y: f64, rotation: f64, start_angle: f64, end_angle: f64, counterclockwise: bool = false);
+}
+
+#[cm("wado-lang:web/text-metrics", linearity = "unrestricted", repr = "externref", classes = "26..=26")]
+pub resource TextMetrics {
+    #[cm("wado-lang:web/text-metrics#width")]
+    #[cm_params("self")]
+    fn width(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#actual-bounding-box-left")]
+    #[cm_params("self")]
+    fn actual_bounding_box_left(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#actual-bounding-box-right")]
+    #[cm_params("self")]
+    fn actual_bounding_box_right(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#font-bounding-box-ascent")]
+    #[cm_params("self")]
+    fn font_bounding_box_ascent(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#font-bounding-box-descent")]
+    #[cm_params("self")]
+    fn font_bounding_box_descent(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#actual-bounding-box-ascent")]
+    #[cm_params("self")]
+    fn actual_bounding_box_ascent(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#actual-bounding-box-descent")]
+    #[cm_params("self")]
+    fn actual_bounding_box_descent(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#em-height-ascent")]
+    #[cm_params("self")]
+    fn em_height_ascent(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#em-height-descent")]
+    #[cm_params("self")]
+    fn em_height_descent(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#hanging-baseline")]
+    #[cm_params("self")]
+    fn hanging_baseline(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#alphabetic-baseline")]
+    #[cm_params("self")]
+    fn alphabetic_baseline(&self) -> f64;
+    #[cm("wado-lang:web/text-metrics#ideographic-baseline")]
+    #[cm_params("self")]
+    fn ideographic_baseline(&self) -> f64;
+}
+
+#[cm("wado-lang:web/image-data", linearity = "unrestricted", repr = "externref", classes = "27..=27")]
+pub resource ImageData {
+    #[cm("wado-lang:web/image-data#new-with-sw-sh-settings")]
+    #[cm_params("sw", "sh", "settings")]
+    fn new_with_sw_sh_settings(sw: u32, sh: u32, settings: Option<ImageDataSettings> = null) -> ImageData;
+    #[cm("wado-lang:web/image-data#width")]
+    #[cm_params("self")]
+    fn width(&self) -> u32;
+    #[cm("wado-lang:web/image-data#height")]
+    #[cm_params("self")]
+    fn height(&self) -> u32;
+    #[cm("wado-lang:web/image-data#pixel-format")]
+    #[cm_params("self")]
+    fn pixel_format(&self) -> ImageDataPixelFormat;
+    #[cm("wado-lang:web/image-data#color-space")]
+    #[cm_params("self")]
+    fn color_space(&self) -> PredefinedColorSpace;
+    #[unavailable("overloaded; use `new_with_sw_sh_settings`")]
+    fn new();
 }
 
 /// Why a promise was rejected: any value, which need not be an `Error`.

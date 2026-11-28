@@ -1,6 +1,7 @@
 use {
     AddEventListenerOptions,
     AddEventListenerOptionsOrBool,
+    BoolOrF64OrString,
     Document,
     DocumentReadyState,
     DocumentVisibilityState,
@@ -293,6 +294,40 @@ test "a document nothing loads or shows is complete and hidden" {
         let doc = Dom::document();
         assert doc.ready_state() == DocumentReadyState::Complete;
         assert doc.visibility_state() == DocumentVisibilityState::Hidden;
+    };
+}
+
+test "hidden answers a boolean, or the string of the hidden-until-found state" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let body = Dom::document().body().unwrap();
+        assert body.hidden() == Option::Some(BoolOrF64OrString::AsBool(false));
+        body.set_attribute("hidden", "bogus");
+        assert body.hidden() == Option::Some(BoolOrF64OrString::AsBool(true));
+        body.set_attribute("hidden", "Until-Found");
+        assert body.hidden() == Option::Some(BoolOrF64OrString::AsString("until-found"));
+    };
+}
+
+test "setting hidden keeps the attribute unless the value is falsy" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let body = Dom::document().body().unwrap();
+        body.set_hidden(Option::Some(BoolOrF64OrString::AsString("UNTIL-FOUND")));
+        assert body.get_attribute("hidden") == Option::Some("until-found");
+        body.set_hidden(Option::Some(BoolOrF64OrString::AsF64(2.0)));
+        assert body.get_attribute("hidden") == Option::Some("");
+        for let falsy of [
+            Option::Some(BoolOrF64OrString::AsBool(false)),
+            Option::Some(BoolOrF64OrString::AsString("")),
+            null,
+            Option::Some(BoolOrF64OrString::AsF64(-0.0)),
+            Option::Some(BoolOrF64OrString::AsF64(f64::NAN)),
+        ] as List<Option<BoolOrF64OrString>> {
+            body.set_hidden(Option::Some(BoolOrF64OrString::AsBool(true)));
+            body.set_hidden(falsy);
+            assert !body.has_attribute("hidden");
+        }
     };
 }
 
