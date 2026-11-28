@@ -25,8 +25,6 @@ fn after_debug_string(bytes: &[u8], start: usize) -> usize {
 /// - `span: Span { ... }` → `span: SPAN` (source positions differ after format)
 /// - `has_trailing_comma: ...` → removed (formatting hint, not semantic)
 /// - `quoted: ...`, `contextual_keywords: [...]` → removed (a field name's spelling, not semantic)
-/// - `doc: ...` → removed (a `///` block a blank line kept off its declaration
-///   closes up to it, and documents it from then on)
 /// - `type_params: [...]` → `type_params: NORM` (formatter normalizes `impl<T> Foo<T>` to `impl Foo<T>`)
 ///
 /// The goal is to catch **semantic** changes (dropped expressions, changed precedence)
@@ -85,10 +83,7 @@ fn normalize_ast_debug(debug: &str) -> String {
         // `contextual_keywords: [...]`, which gains the keyword a dropped
         // pair of quotes leaves bare. Each spans lines, so consume through
         // the line that closes it.
-        if bytes[i..].starts_with(b"quoted:")
-            || bytes[i..].starts_with(b"contextual_keywords:")
-            || bytes[i..].starts_with(b"doc:")
-        {
+        if bytes[i..].starts_with(b"quoted:") || bytes[i..].starts_with(b"contextual_keywords:") {
             let mut depth = 0i32;
             while i < bytes.len() && !(bytes[i] == b'\n' && depth == 0) {
                 if bytes[i] == b'"' {
@@ -151,6 +146,32 @@ fn normalize_ast_debug(debug: &str) -> String {
     String::from_utf8(result).expect("Debug output should be valid UTF-8")
 }
 
+/// The Debug renderings of an AST and of its formatted reparse, normalized,
+/// with the one change to a doc the formatter makes taken back out of
+/// `formatted`: a `///` block a blank line kept off its declaration closes up
+/// to it, and its `doc: None` becomes `Some`. Any other change to a doc stays.
+fn normalized_pair(original: &str, formatted: &str) -> (String, String) {
+    let original = normalize_ast_debug(original);
+    let formatted = normalize_ast_debug(formatted);
+    let mut kept: Vec<&str> = Vec::new();
+    let mut original_lines = original.lines();
+    let mut lines = formatted.lines();
+    while let Some(line) = lines.next() {
+        let theirs = original_lines.next();
+        if let Some(theirs) = theirs
+            && theirs.trim() == "doc: None,"
+            && line.trim() == "doc: Some("
+        {
+            lines.by_ref().find(|rest| rest.trim() == "),");
+            kept.push(theirs);
+            continue;
+        }
+        kept.push(line);
+    }
+    let formatted = kept.join("\n");
+    (original, formatted)
+}
+
 /// Assert that formatting preserves AST semantics: parse(source) ≡ parse(format(source)).
 ///
 /// This catches bugs where the formatter changes program meaning (e.g., dropping
@@ -174,8 +195,10 @@ fn assert_format_preserves_ast(source: &str) {
         ))
         .ast;
 
-    let original_debug = normalize_ast_debug(&format!("{original_ast:#?}"));
-    let formatted_debug = normalize_ast_debug(&format!("{formatted_ast:#?}"));
+    let (original_debug, formatted_debug) = normalized_pair(
+        &format!("{original_ast:#?}"),
+        &format!("{formatted_ast:#?}"),
+    );
 
     if original_debug != formatted_debug {
         // Find first differing line for a useful error message
@@ -3803,8 +3826,10 @@ fn test_roundtrip_ast_all_fixtures() {
             }
         };
 
-        let original_debug = normalize_ast_debug(&format!("{original_ast:#?}"));
-        let formatted_debug = normalize_ast_debug(&format!("{formatted_ast:#?}"));
+        let (original_debug, formatted_debug) = normalized_pair(
+            &format!("{original_ast:#?}"),
+            &format!("{formatted_ast:#?}"),
+        );
 
         if original_debug != formatted_debug {
             let orig_lines: Vec<&str> = original_debug.lines().collect();
@@ -3955,8 +3980,10 @@ fn test_roundtrip_ast_all_stdlib() {
                 }
             };
 
-            let original_debug = normalize_ast_debug(&format!("{original_ast:#?}"));
-            let formatted_debug = normalize_ast_debug(&format!("{formatted_ast:#?}"));
+            let (original_debug, formatted_debug) = normalized_pair(
+                &format!("{original_ast:#?}"),
+                &format!("{formatted_ast:#?}"),
+            );
 
             if original_debug != formatted_debug {
                 let orig_lines: Vec<&str> = original_debug.lines().collect();
@@ -4051,6 +4078,58 @@ fn foo() {
 
 /// A bracket inside a quoted name is text, so stripping the spelling stops at
 /// the spelling and still compares the value after it.
+/// A doc the formatter gains by closing a detached block up is the one doc
+/// change the round-trip check accepts; a doc lost or rewritten still fails it.
+#[test]
+fn test_normalized_pair_accepts_only_a_gained_doc() {
+    let debug = |source: &str| {
+        let ast = wado_compiler::parse(source)
+            .into_fail_fast()
+            .expect("parse failed")
+            .ast;
+        format!("{ast:#?}")
+    };
+    let [bare, documented, other] =
+        ["fn f();\n", "/// A.\nfn f();\n", "/// B.\nfn f();\n"].map(debug);
+    let agree = |original: &str, formatted: &str| {
+        let (original, formatted) = normalized_pair(original, formatted);
+        original == formatted
+    };
+    assert!(agree(&bare, &documented));
+    assert!(!agree(&documented, &bare));
+    assert!(!agree(&documented, &other));
+}
+
+/// A world entry has no id to hold a comment, so one before it, or on its line,
+/// stays there rather than gathering after the last entry.
+#[test]
+fn test_format_keeps_comments_on_world_entries() {
+    let source = concat!(
+        "pub world W {\n",
+        "    // The out.\n",
+        "    import Stdout;  // Trailing.\n",
+        "    import Stderr;\n",
+        "    // The run.\n",
+        "    export fn run();\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "pub world W {\n",
+        "    // The out.\n",
+        "\n",
+        "    import Stdout;  // Trailing.\n",
+        "    import Stderr;\n",
+        "\n",
+        "    // The run.\n",
+        "\n",
+        "    export fn run();\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
 #[test]
 fn test_normalize_ast_debug_reads_brackets_in_strings_as_text() {
     let ast = |source: &str| {

@@ -1555,29 +1555,20 @@ impl<'a> Unparser<'a> {
             .chain(w.exports.iter().map(WorldExport::span))
             .min_by_key(|span| span.start);
         self.with_braced_body(w.span, first_entry, |this| {
-            let entry = Unit::Item { braced: false };
             for imp in &w.imports {
-                this.emit_blank_lines_to(imp.span.line, entry);
-                this.write_indent();
-                this.output.push_str("import ");
-                this.output.push_str(&imp.interface_name);
-                this.output.push_str(";\n");
-                this.last_source_line = imp.span.end_line();
+                this.world_entry(w.span, imp.span, |this| {
+                    this.output.push_str("import ");
+                    this.output.push_str(&imp.interface_name);
+                });
             }
 
             for exp in &w.exports {
                 match exp {
-                    WorldExport::Interface(iface) => {
-                        this.emit_blank_lines_to(iface.span.line, entry);
-                        this.write_indent();
+                    WorldExport::Interface(iface) => this.world_entry(w.span, iface.span, |this| {
                         this.output.push_str("export ");
                         this.output.push_str(&iface.interface_name);
-                        this.output.push_str(";\n");
-                        this.last_source_line = iface.span.end_line();
-                    }
-                    WorldExport::Function(func) => {
-                        this.emit_blank_lines_to(func.span.line, entry);
-                        this.write_indent();
+                    }),
+                    WorldExport::Function(func) => this.world_entry(w.span, func.span, |this| {
                         this.output.push_str("export ");
                         this.emit_kw_if(func.is_async, "async ");
                         this.output.push_str("fn ");
@@ -1590,11 +1581,26 @@ impl<'a> Unparser<'a> {
                                 s.unparse_type(ret);
                             }
                         });
-                        this.output.push_str(";\n");
-                    }
+                    }),
                 }
             }
         });
+    }
+
+    /// One entry of the world at `world`, ending in `;`. An entry has no id to
+    /// hold comments, so the ones before it and on its line are found by
+    /// position.
+    fn world_entry<F: FnOnce(&mut Self)>(&mut self, world: Span, span: Span, body: F) {
+        let unit = Unit::Item { braced: false };
+        self.flush_comments_in(world.start, span.start, Spacing::KeepBlankLines);
+        self.emit_blank_lines_to(span.line, unit);
+        self.write_indent();
+        body(self);
+        self.output.push(';');
+        self.emit_line_end_comments(span, None, world.end);
+        self.output.push('\n');
+        self.last_source_line = span.end_line();
+        self.last_unit = Some(unit);
     }
 
     fn unparse_test(&mut self, t: &TestDecl) {

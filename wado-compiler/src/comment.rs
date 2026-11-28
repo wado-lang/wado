@@ -153,6 +153,12 @@ impl TriviaMap {
         }
     }
 
+    /// Take over the doc lines a parse of part of this file recorded, such as
+    /// a template interpolation's.
+    pub fn absorb_doc_lines(&mut self, part: TriviaMap) {
+        self.doc_lines.extend(part.doc_lines);
+    }
+
     /// Whether the `///` line starting at `pos` documents a declaration.
     pub fn is_doc_line(&self, pos: usize) -> bool {
         self.doc_lines.contains(&pos)
