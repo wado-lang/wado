@@ -239,33 +239,40 @@ pub fn find_similar(trees: &List<Tree>, min_tokens: i32, similarity: f64) -> Lis
         }
     }
 
-    // A pair is reported at its largest: one inside a pair that is alike too
-    // is part of it.
     let mut outermost: List<[u64, f64]> = [];
     for let [key, sim] of alike.entries() {
-        let a = (*key >> 32) as i32;
-        let b = *key as i32;
-        let mut inside = false;
-        for let x of self_and_enclosing(&units, a) {
-            for let y of self_and_enclosing(&units, b) {
-                let outer = if x < y { pair_key(x, y) } else { pair_key(y, x) };
-                if (x != a || y != b) && alike.contains_key(outer) {
-                    inside = true;
-                }
-            }
-        }
-        if !inside {
+        if !inside_alike(&units, &alike, (*key >> 32) as i32, *key as i32) {
             outermost.push([*key, *sim]);
         }
     }
     outermost.sort_by(|p, q| q.1.cmp(&p.1));
-    return join(trees, &units, &outermost, similarity);
+    return join(trees, &units, &alike, &outermost, similarity);
+}
+
+/// Whether `a` and `b` lie inside a pair of nodes that is alike too, so the
+/// pair is reported as part of that one: at its largest.
+fn inside_alike(units: &Units, alike: &HashMap<u64, f64>, a: i32, b: i32) -> bool {
+    for let x of self_and_enclosing(units, a) {
+        for let y of self_and_enclosing(units, b) {
+            let outer = if x < y { pair_key(x, y) } else { pair_key(y, x) };
+            if (x != a || y != b) && alike.contains_key(outer) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// Groups in which every two members are alike, joined from the most alike
 /// pair down: chaining pairs instead would let a group drift from its first
 /// member one small step at a time.
-fn join(trees: &List<Tree>, units: &Units, pairs: &List<[u64, f64]>, similarity: f64) -> List<Group> {
+fn join(
+    trees: &List<Tree>,
+    units: &Units,
+    alike: &HashMap<u64, f64>,
+    pairs: &List<[u64, f64]>,
+    similarity: f64,
+) -> List<Group> {
     let mut group_of: List<i32> = List::filled(units.tokens.len(), -1);
     let mut members: List<List<i32>> = [];
     let mut lowest: List<f64> = [];
@@ -282,7 +289,10 @@ fn join(trees: &List<Tree>, units: &Units, pairs: &List<[u64, f64]>, similarity:
         for let x of &side_a {
             for let y of &side_b {
                 let e = estimate(units, *x, *y);
-                all_alike = all_alike && e >= similarity && !overlaps(trees, units, *x, *y);
+                all_alike = all_alike
+                    && e >= similarity
+                    && !overlaps(trees, units, *x, *y)
+                    && !inside_alike(units, alike, *x, *y);
                 low = f64::min(low, e);
             }
         }

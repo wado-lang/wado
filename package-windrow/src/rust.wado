@@ -1,7 +1,14 @@
 //! Rust, read through Gale's Rust grammar.
 
-use { parse_rust, token_kind_name } from "wado-lang:gale/src/rust.wado";
+use { parse_rust, token_kind_name, RK_OUTER_ATTRIBUTE } from "wado-lang:gale/src/rust.wado";
 use { Tree, TokenClass } from "./tree.wado";
+
+/// Whether an attribute's text marks test code: `#[test]`, or a `cfg` that
+/// names `test`. A copied test is a fixture's shape, not a defect.
+fn marks_test(text: String) -> bool {
+    let compact = text.replace(" ", "").replace("\n", "");
+    return compact == "#[test]" || compact.starts_with("#[cfg(test");
+}
 
 fn class_of(kind: i32) -> TokenClass {
     let name = token_kind_name(kind);
@@ -23,10 +30,54 @@ pub fn read_rust(path: String, source: String) -> Result<Tree, String> {
     }
     let cst = &result.cst;
     let toks = &result.tokens;
-    let mut classes: List<TokenClass> = [];
-    let mut tree = Tree { path, source };
+    // The node an attribute marking test code is attached to, by its row.
+    let mut test_code: List<bool> = List::filled(cst.row_count(), false);
+    let mut open: List<i32> = [];
     for let mut i = 0; i < cst.row_count(); i += 1 {
         match cst.tag[i] {
+            _::Open => {
+                if cst.kind(i) == RK_OUTER_ATTRIBUTE && open.len() > 0 {
+                    let span = cst.span(i);
+                    if marks_test(source.slice(span.start, span.end).to_string()) {
+                        test_code[open[open.len() - 1]] = true;
+                    }
+                }
+                open.push(i);
+            },
+            _::Close => {
+                open.pop();
+            },
+            _::Tok => {
+            },
+            _::Miss => {
+            },
+            _::Skip => {
+            },
+        }
+    }
+    let mut classes: List<TokenClass> = [];
+    let mut tree = Tree { path, source };
+    let mut depth = 0;
+    let mut skip_until = -1;
+    for let mut i = 0; i < cst.row_count(); i += 1 {
+        let tag = cst.tag[i];
+        if tag matches { _::Open } {
+            depth += 1;
+            if skip_until < 0 && test_code[i] {
+                skip_until = depth;
+            }
+        }
+        let skipping = skip_until >= 0;
+        if tag matches { _::Close } {
+            if skip_until == depth {
+                skip_until = -1;
+            }
+            depth -= 1;
+        }
+        if skipping {
+            continue;
+        }
+        match tag {
             _::Open => {
                 let span = cst.span(i);
                 tree.open(cst.kind(i) as i32, span.start, span.end);

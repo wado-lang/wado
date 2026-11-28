@@ -30,4 +30,6 @@ every member's lines, the groups that repeat the most tokens first:
 Every two members of a group are alike, and a group is reported at the largest
 nodes that are, so a member's inner nodes are not listed again. A node that
 repeats one small shape, such as a long or-pattern of enum cases, is not
-compared: its few distinct runs make any two such nodes look alike.
+compared: its few distinct runs make any two such nodes look alike. Nor is test
+code, an item under `#[test]` or `#[cfg(test)]`: a fixture repeats its shape on
+purpose.

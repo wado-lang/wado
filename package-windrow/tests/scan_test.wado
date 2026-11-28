@@ -75,6 +75,39 @@ test "a changed operator lowers the similarity below one" {
     assert groups[0].similarity < 1.0;
 }
 
+test "a group's inner nodes join no other group together" {
+    let loop_only = "fn other(xs: &[X], log: &mut Log) -> Report {
+    log.start(\"other\", 1, 2, 3);
+    let mut acc = 0;
+    for x in xs {
+        if x.on && x.w > 1 {
+            acc += x.w * x.c;
+        }
+        if x.bad {
+            acc -= x.p;
+        }
+    }
+    log.finish(acc, \"done\");
+    Report::new(acc, log.lines(), 0, 1)
+}";
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("b.rs", COPY_B),
+        tree("c.rs", loop_only),
+    ];
+    let groups = find_similar(&trees, 20, 0.8);
+    let mut joining_a_and_b = 0;
+    for let g of &groups {
+        let in_a = g.sites.iter_ref().any(|s| s.tree == 0);
+        let in_b = g.sites.iter_ref().any(|s| s.tree == 1);
+        if in_a && in_b {
+            joining_a_and_b += 1;
+        }
+    }
+    assert joining_a_and_b == 1;
+    assert groups.iter_ref().any(|g| g.sites.iter_ref().any(|s| s.tree == 2));
+}
+
 test "a node repeating one small shape is not compared" {
     let a = "fn f(t: &T) { match t { A::B { .. } | A::C(_) | A::D | A::E { .. } | A::F(_) | A::G | A::H { .. } | A::I(_) | A::J => {} } }";
     let b = "fn g(u: &U) { match u { X::Y(_) | X::Z { .. } | X::W | X::V(_) | X::Q { .. } | X::R | X::S(_) | X::P { .. } | X::O => 1 } }";
@@ -83,6 +116,16 @@ test "a node repeating one small shape is not compared" {
         tree("b.rs", b),
     ];
     assert find_similar(&trees, 30, 0.5).is_empty();
+}
+
+test "test code is not compared" {
+    let as_test = `#[cfg(test)]\nmod tests {\n${COPY_B}\n}`;
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("b.rs", as_test),
+        tree("c.rs", `#[test]\n${COPY_B}`),
+    ];
+    assert find_similar(&trees, 20, 0.9).is_empty();
 }
 
 test "unrelated code is not alike" {
