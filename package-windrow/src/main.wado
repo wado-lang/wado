@@ -1,7 +1,7 @@
-//! `windrow [--min-tokens N] <path>…`: every `.rs` file under the paths, and
-//! the clones among them, largest first.
+//! `windrow [--min-tokens N] [--similarity S] <path>…`: every `.rs` file under
+//! the paths, and the groups of nodes alike among them, largest first.
 
-use { read_rust, find_clones, Tree } from "./lib.wado";
+use { read_rust, find_similar, Tree } from "./lib.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
@@ -34,11 +34,16 @@ fn rust_files(root: &String) -> List<String> with (Stderr, Preopens) {
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
     let argv = args();
     let mut min_tokens = 100;
+    let mut similarity = 0.8;
     let mut roots: List<String> = [];
     for let mut i = 0; i < argv.len(); i += 1 {
         if argv[i] == "--min-tokens" {
             i += 1;
             min_tokens = i32::from_str(&argv[i]).expect("--min-tokens takes a number");
+        } else if argv[i] == "--similarity" {
+            i += 1;
+            similarity = f64::from_str(&argv[i]).expect("--similarity takes a number");
+            assert 0.0 < similarity && similarity <= 1.0, "--similarity must be in (0, 1]";
         } else {
             roots.push(argv[i]);
         }
@@ -60,9 +65,9 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
             }
         }
     }
-    let groups = find_clones(&trees, min_tokens);
+    let groups = find_similar(&trees, min_tokens, similarity);
     for let group of &groups {
-        println(`${group.tokens} tokens x ${group.sites.len()}`);
+        println(`${group.tokens} tokens x ${group.sites.len()}, similarity ${group.similarity:.2}`);
         for let site of &group.sites {
             let tree = &trees[site.tree];
             let first = tree.line_of(tree.start[site.row]);

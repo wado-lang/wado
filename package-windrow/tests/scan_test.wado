@@ -1,4 +1,4 @@
-use { read_rust, find_clones, Tree } from "../src/lib.wado";
+use { read_rust, find_similar, Tree } from "../src/lib.wado";
 
 fn tree(path: String, source: String) -> Tree {
     return read_rust(path, source).unwrap();
@@ -10,6 +10,9 @@ global COPY_A: String = "fn total(items: &[Item]) -> i64 {
         if item.active && item.weight > 3 {
             sum += item.weight * item.count;
         }
+        if item.flagged {
+            sum -= item.penalty;
+        }
     }
     sum
 }";
@@ -20,12 +23,19 @@ global COPY_B: String = "fn weighed(rows: &[Row]) -> i64 {
         if row.enabled && row.mass > 7 {
             acc += row.mass * row.n;
         }
+        if row.marked {
+            acc -= row.fine;
+        }
     }
     acc
 }";
 
 global OTHER: String = "fn first(rows: &[Row]) -> Option<&Row> {
-    rows.iter().find(|r| r.enabled)
+    let found = rows.iter().find(|r| r.enabled);
+    match found {
+        Some(r) => Some(r),
+        None => None,
+    }
 }";
 
 test "two functions equal up to names and constants are one group" {
@@ -34,30 +44,51 @@ test "two functions equal up to names and constants are one group" {
         tree("b.rs", COPY_B),
         tree("c.rs", OTHER),
     ];
-    let groups = find_clones(&trees, 20);
+    let groups = find_similar(&trees, 20, 1.0);
     assert groups.len() == 1;
+    assert groups[0].similarity == 1.0;
     assert groups[0].sites.len() == 2;
     assert groups[0].sites[0].tree == 0;
     assert groups[0].sites[1].tree == 1;
 }
 
-test "a group is reported at the largest node that repeats" {
+test "a group is reported at the largest node that is alike" {
     let trees: List<Tree> = [
         tree("a.rs", COPY_A),
         tree("b.rs", COPY_B),
     ];
-    let groups = find_clones(&trees, 5);
+    let groups = find_similar(&trees, 10, 0.9);
     assert groups.len() == 1;
     let site = groups[0].sites[0];
     assert trees[0].line_of(trees[0].start[site.row]) == 1;
 }
 
-test "a changed operator breaks the shape" {
+test "a changed operator lowers the similarity below one" {
     let changed = COPY_B.replace("row.mass * row.n", "row.mass + row.n");
     let trees: List<Tree> = [
         tree("a.rs", COPY_A),
         tree("b.rs", changed),
     ];
-    let groups = find_clones(&trees, 40);
-    assert groups.is_empty();
+    assert find_similar(&trees, 40, 1.0).is_empty();
+    let groups = find_similar(&trees, 40, 0.6);
+    assert groups.len() == 1;
+    assert groups[0].similarity < 1.0;
+}
+
+test "a node repeating one small shape is not compared" {
+    let a = "fn f(t: &T) { match t { A::B { .. } | A::C(_) | A::D | A::E { .. } | A::F(_) | A::G | A::H { .. } | A::I(_) | A::J => {} } }";
+    let b = "fn g(u: &U) { match u { X::Y(_) | X::Z { .. } | X::W | X::V(_) | X::Q { .. } | X::R | X::S(_) | X::P { .. } | X::O => 1 } }";
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    assert find_similar(&trees, 30, 0.5).is_empty();
+}
+
+test "unrelated code is not alike" {
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("c.rs", OTHER),
+    ];
+    assert find_similar(&trees, 20, 0.5).is_empty();
 }
