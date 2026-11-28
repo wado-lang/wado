@@ -22,12 +22,13 @@ Compares WebAssembly binary sizes across different languages.
 ## Results
 
 Measured 2026-11-28 with rustc 1.100.0, Zig 0.17.1, wasi-sdk 34.0, and Moonbit
-0.1.20260920 (`peter-jerry-ye/wasi` 0.25.0). Sizes are toolchain- but not
+0.10.14 (`moonc v0.10.14+7d59c7ec9`, `moon` 0.1.20260920,
+`peter-jerry-ye/wasi` 0.25.0). Sizes are toolchain- but not
 host-dependent, so a row whose toolchain has not moved does not need
 remeasuring.
 
-Moonbit stays at moonc 0.10.14, the last release found that reads
-`moon.mod.json`. A later `moon` rejects it, and `peter-jerry-ye/wasi` 0.25.0,
+Moonbit stays at 0.10.14, the last release found that reads `moon.mod.json`.
+0.10.16 and later reject it, and `peter-jerry-ye/wasi` 0.25.0,
 the latest published, still ships one.
 
 ### hello_world
