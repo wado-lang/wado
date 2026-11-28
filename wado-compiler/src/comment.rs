@@ -6,7 +6,7 @@
 
 use crate::ast::{AstId, AstVisitor, Block, Module, walk_block};
 use crate::token::Span;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A comment in the source code
 #[derive(Debug, Clone)]
@@ -85,6 +85,10 @@ pub struct TriviaMap {
     /// brace sits, and a comment before it is the head's while one after it is
     /// the body's.
     open_braces: Vec<Span>,
+    /// The starts of the `///` lines that document a declaration: the block
+    /// of consecutive ones nearest it, blank lines between the block and it
+    /// ignored. Any other `///` documents nothing.
+    doc_lines: BTreeSet<usize>,
 }
 
 impl TriviaMap {
@@ -133,6 +137,25 @@ impl TriviaMap {
         self.open_braces
             .binary_search_by_key(&pos, |b| b.start)
             .is_ok()
+    }
+
+    /// Record the `///` lines ending `before`, the comments between a
+    /// declaration and the token ahead of it, as documenting that declaration.
+    pub fn mark_doc_lines(&mut self, before: &[Comment]) {
+        let mut below: Option<usize> = None;
+        for c in before.iter().rev() {
+            let adjoins = below.is_none_or(|line| c.span.line + 1 == line);
+            if c.kind != CommentKind::DocLine || !adjoins {
+                break;
+            }
+            self.doc_lines.insert(c.span.start);
+            below = Some(c.span.line);
+        }
+    }
+
+    /// Whether the `///` line starting at `pos` documents a declaration.
+    pub fn is_doc_line(&self, pos: usize) -> bool {
+        self.doc_lines.contains(&pos)
     }
 
     /// Leading trivia for `id`, or an empty slice if none.

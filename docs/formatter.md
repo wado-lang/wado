@@ -109,8 +109,9 @@ unless one of these rules decides it:
   fields and cases included. A comment that describes the declaration after it
   then reads as detached, which shows it should be a `///` doc comment.
 - A `//!` run is followed by one blank line.
-- A `///` run keeps the source's gap before what follows it, since a blank line
-  there detaches it from the declaration.
+- A `///` run belongs to the declaration it documents. It closes up to it, a
+  blank line in between being taken for a slip, and is spaced as the
+  declaration is.
 - Between statements, and between a statement and a `//` run, the source's
   gap stands.
 
@@ -118,8 +119,12 @@ unless one of these rules decides it:
 
 Only what carries no meaning: redundant parentheses, an explicit `-> ()` return
 type, repeated or missing statement semicolons, an `impl` block's type
-parameters (always written out), and a field name's quoting (bare when it is an
-identifier).
+parameters (always written out), a field name's quoting (bare when it is an
+identifier), and a doc comment that documents nothing. A block of consecutive
+`///` lines documents the declaration below it, with only blank lines between,
+and a
+`//!` line documents the module when it comes before the first item. Any other
+`///` or `//!` line, such as one above a statement, is written as `//`.
 
 Everything else is kept as written, including the spelling of every literal
 (hex, octal, digit separators, float form, string and template escapes),

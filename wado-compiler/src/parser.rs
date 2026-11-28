@@ -497,7 +497,7 @@ impl Parser {
     /// The doc comment of the declaration whose first token, an attribute's
     /// included, is the current one: the `///` block between it and the
     /// token before, which a comment on that token's own line does not start.
-    fn doc_comment_here(&self) -> Option<String> {
+    fn doc_comment_here(&mut self) -> Option<String> {
         let first = self.tokens.get(self.pos)?;
         let previous = self.pos.checked_sub(1).map(|p| self.tokens[p].span);
         let after = previous.map_or(0, |p| p.end);
@@ -508,6 +508,7 @@ impl Parser {
         let from = before.partition_point(|c| {
             c.span.start < after || previous.is_some_and(|p| c.span.line == p.end_line)
         });
+        self.trivia.mark_doc_lines(&before[from..]);
         doc_block(&before[from..], first.span.line)
     }
 

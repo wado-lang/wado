@@ -258,11 +258,12 @@ fn function_decl_keyword_into(f: &Function, output: &mut String) {
 /// What a line of the output holds, as far as the blank lines around it go.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Unit {
-    /// A `//` or `/* */` comment on a line of its own.
+    /// A `//` or `/* */` comment on a line of its own, or a `///` or `//!`
+    /// line that documents nothing, which is written as `//`.
     Comment,
-    /// A `///` line.
+    /// A `///` line that documents a declaration.
     Doc,
-    /// A `//!` line.
+    /// A `//!` line ahead of the module's first item.
     ModuleDoc,
     /// A declaration: an item, a member, a field or a case. `braced` when it
     /// has a body of its own.
@@ -272,14 +273,6 @@ enum Unit {
 }
 
 impl Unit {
-    fn of_comment(kind: CommentKind) -> Unit {
-        match kind {
-            CommentKind::Line | CommentKind::Block => Unit::Comment,
-            CommentKind::DocLine => Unit::Doc,
-            CommentKind::ModuleDoc => Unit::ModuleDoc,
-        }
-    }
-
     fn of_function(f: &Function) -> Unit {
         Unit::Item {
             braced: f.body.is_some(),
@@ -318,16 +311,16 @@ impl Unit {
 /// `source_blanks` (0 or 1); `prev` is `None` at the start of a body, which
 /// opens with none. Each comment run is a unit of its own, so a `//` run is set
 /// apart from the declarations on both sides, which leaves a comment that
-/// should document one visibly detached. A `///` run keeps what the source
-/// had: a blank line there detaches the doc comment.
+/// should document one visibly detached. A `///` run is the declaration's own:
+/// it closes up to it, and is spaced as the declaration is.
 fn blank_lines(prev: Option<Unit>, next: Unit, source_blanks: usize) -> usize {
     let Some(prev) = prev else {
         return 0;
     };
     match (prev, next) {
+        (Unit::Doc, _) => 0,
         (a, b) if a == b && a.is_comment() => source_blanks,
         (a, b) if a.is_comment() && b.is_comment() => 1,
-        (Unit::Doc, _) => source_blanks,
         (Unit::ModuleDoc, _)
         | (Unit::Comment, Unit::Item { .. })
         | (Unit::Item { .. }, Unit::Comment) => 1,
@@ -404,6 +397,9 @@ pub struct Unparser<'a> {
     last_source_line: usize,
     /// What the output's last line holds; `None` at the start of a body.
     last_unit: Option<Unit>,
+    /// The starts of the `//!` lines that document the module: those ahead of
+    /// its first item. Any other `//!` documents nothing.
+    module_doc_lines: IndexSet<usize>,
     /// The span start of the one call whose arguments must take their wrapped
     /// form. Keyed by span rather than set as a flag: what needs to wrap is the
     /// call that *ends* the line, and a flag any nested rendering may consume
@@ -546,9 +542,9 @@ impl<'a> Unparser<'a> {
     /// Open a member's line: whatever the members before it had no slot for,
     /// then its own leading comments — in that order, so nothing lands between
     /// a doc comment and what it documents.
-    fn open_member(&mut self, id: AstId, start: usize, attrs: &[Attribute]) {
+    fn open_member(&mut self, id: AstId, start: usize, attrs: &[Attribute], unit: Unit) {
         self.flush_comments_before(self.leading_start(id, start), Spacing::KeepBlankLines);
-        self.emit_leading_for(id, attrs);
+        self.emit_leading_for(id, attrs, unit);
     }
 
     /// Where `id`'s leading run begins: the first leading comment no construct
@@ -708,6 +704,16 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_module(&mut self, module: &Module) {
+        let ahead_of_items: &[Comment] = match module.items.first() {
+            Some(first) => self.leading_of(get_item_id(first)),
+            None => self.trivia.map_or(&[], TriviaMap::dangling),
+        };
+        self.module_doc_lines = ahead_of_items
+            .iter()
+            .filter(|c| c.kind == CommentKind::ModuleDoc)
+            .map(|c| c.span.start)
+            .collect();
+
         for attr in module.inner_attributes() {
             unparse_inner_attribute_into(attr, &mut self.output);
             self.output.push('\n');
@@ -730,7 +736,12 @@ impl<'a> Unparser<'a> {
 
     fn unparse_item(&mut self, item: &Item) {
         let id = get_item_id(item);
-        self.open_member(id, get_item_span(item).start, item.attrs());
+        self.open_member(
+            id,
+            get_item_span(item).start,
+            item.attrs(),
+            Unit::of_item(item),
+        );
         self.emit_blank_lines_to(get_item_first_line(item), Unit::of_item(item));
 
         match item {
@@ -1120,7 +1131,7 @@ impl<'a> Unparser<'a> {
                 self.leading_start(clause.id, clause.span.start),
                 Spacing::Tight,
             );
-            self.emit_leading_for(clause.id, &[]);
+            self.emit_leading_for(clause.id, &[], Unit::Other);
             self.write_indent();
             self.unparse_contract_clause(clause);
             self.emit_trailing_for(clause.id);
@@ -1513,7 +1524,12 @@ impl<'a> Unparser<'a> {
 
     /// [`Self::open_member`] for `method`, and the blank lines above it.
     fn open_method(&mut self, method: &Function) {
-        self.open_member(method.id, method.span.start, &method.attrs);
+        self.open_member(
+            method.id,
+            method.span.start,
+            &method.attrs,
+            Unit::of_function(method),
+        );
         self.emit_blank_lines_to(
             effective_start_line(&method.attrs, method.span.line),
             Unit::of_function(method),
@@ -1638,14 +1654,12 @@ impl<'a> Unparser<'a> {
                 self.leading_start(stmt_id, stmt_span.start),
                 Spacing::KeepBlankLines,
             );
-            self.emit_leading_for(
-                stmt_id,
-                match stmt {
-                    Stmt::Let(l) => &l.attrs,
-                    Stmt::Item(item) => item.attrs(),
-                    _ => &[],
-                },
-            );
+            let (attrs, owner): (&[Attribute], Unit) = match stmt {
+                Stmt::Let(l) => (&l.attrs, Unit::Other),
+                Stmt::Item(item) => (item.attrs(), Unit::of_item(item)),
+                _ => (&[], Unit::Other),
+            };
+            self.emit_leading_for(stmt_id, attrs, owner);
             // `unparse_item` spaces a local item as it does a module's, anchored
             // on its attributes.
             let is_item = matches!(stmt, Stmt::Item(_));
@@ -2692,7 +2706,7 @@ impl<'a> Unparser<'a> {
                 self.leading_start(arm.id, arm.span.start),
                 Spacing::KeepBlankLines,
             );
-            self.emit_leading_for(arm.id, &[]);
+            self.emit_leading_for(arm.id, &[], Unit::Other);
             self.emit_blank_lines_to(arm.span.line, Unit::Other);
             self.unparse_match_arm(arm);
             self.emit_trailing_for_inline(arm.id);
@@ -3072,7 +3086,7 @@ impl<'a> Unparser<'a> {
     {
         let effective_line = effective_start_line(attrs, span.line);
         let unit = Unit::Item { braced: false };
-        self.open_member(id, span.start, attrs);
+        self.open_member(id, span.start, attrs, unit);
         self.emit_blank_lines_to(effective_line, unit);
         self.emit_outer_attrs(id, attrs);
         body(self);
@@ -3172,11 +3186,19 @@ impl<'a> Unparser<'a> {
 
     /// Emit `trivia.leading_of(id)` written before `attrs`, each on its own
     /// indented line with the usual blank-line padding.
-    fn emit_leading_for(&mut self, id: AstId, attrs: &[Attribute]) {
+    /// `owner` is what `id` is, which a doc comment among them is spaced as.
+    /// The doc comment goes last: a comment written inside the declaration's
+    /// head, after `pub`, say, is among them, and must not part the two.
+    fn emit_leading_for(&mut self, id: AstId, attrs: &[Attribute], owner: Unit) {
         let end = attrs.first().map_or(usize::MAX, |attr| attr.span.start);
-        for comment in self.leading_of(id) {
-            if comment.span.start < end && self.emitted_comments.insert(comment.span.start) {
-                self.emit_on_own_line(comment, Spacing::KeepBlankLines);
+        let (docs, others): (Vec<&Comment>, Vec<&Comment>) = self
+            .leading_of(id)
+            .iter()
+            .filter(|c| c.span.start < end)
+            .partition(|c| self.comment_unit(c) == Unit::Doc);
+        for comment in others.into_iter().chain(docs) {
+            if self.emitted_comments.insert(comment.span.start) {
+                self.emit_comment_line(comment, Spacing::KeepBlankLines, owner);
             }
         }
     }
@@ -3184,14 +3206,49 @@ impl<'a> Unparser<'a> {
     /// Emit `comment` on an indented line of its own, after the blank lines
     /// written above it unless `spacing` drops them.
     fn emit_on_own_line(&mut self, comment: &Comment, spacing: Spacing) {
-        let unit = Unit::of_comment(comment.kind);
+        self.emit_comment_line(comment, spacing, Unit::Doc);
+    }
+
+    /// [`Self::emit_on_own_line`] for a comment ahead of `owner`. A doc
+    /// comment's first line takes the blank lines `owner` would.
+    fn emit_comment_line(&mut self, comment: &Comment, spacing: Spacing, owner: Unit) {
+        let unit = self.comment_unit(comment);
         if spacing == Spacing::KeepBlankLines {
-            self.emit_blank_lines_to(comment.span.line, unit);
+            let spaced_as = if unit == Unit::Doc && self.last_unit != Some(Unit::Doc) {
+                owner
+            } else {
+                unit
+            };
+            self.emit_blank_lines_to(comment.span.line, spaced_as);
         }
         self.write_indent();
         self.emit_comment(comment);
         self.output.push('\n');
         self.last_unit = Some(unit);
+    }
+
+    fn comment_unit(&self, comment: &Comment) -> Unit {
+        // After `//`, a text opening with `/` or `!` would read as a doc
+        // comment again, so such a line keeps its kind.
+        let rewritable = !comment.text.starts_with(['/', '!']);
+        match comment.kind {
+            CommentKind::DocLine if !rewritable => Unit::Doc,
+            CommentKind::ModuleDoc if !rewritable => Unit::ModuleDoc,
+            CommentKind::DocLine
+                if self
+                    .trivia
+                    .is_some_and(|trivia| trivia.is_doc_line(comment.span.start)) =>
+            {
+                Unit::Doc
+            }
+            CommentKind::ModuleDoc if self.module_doc_lines.contains(&comment.span.start) => {
+                Unit::ModuleDoc
+            }
+            CommentKind::Line
+            | CommentKind::Block
+            | CommentKind::DocLine
+            | CommentKind::ModuleDoc => Unit::Comment,
+        }
     }
 
     /// Emit `trivia.trailing_of(id)` after the node, inserting it
@@ -3259,6 +3316,14 @@ impl<'a> Unparser<'a> {
     }
 
     fn emit_comment(&mut self, comment: &Comment) {
+        let documents_nothing =
+            matches!(comment.kind, CommentKind::DocLine | CommentKind::ModuleDoc)
+                && self.comment_unit(comment) == Unit::Comment;
+        if documents_nothing {
+            self.output.push_str("//");
+            self.output.push_str(&comment.text);
+            return;
+        }
         match comment.kind {
             CommentKind::Line => {
                 self.output.push_str("//");
