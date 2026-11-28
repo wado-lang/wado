@@ -26,6 +26,10 @@ Measured 2026-11-28 with rustc 1.100.0, Zig 0.17.1, wasi-sdk 34.0, and Moonbit
 host-dependent, so a row whose toolchain has not moved does not need
 remeasuring.
 
+Moonbit stays at moonc 0.10.14, the last release found that reads
+`moon.mod.json`. A later `moon` rejects it, and `peter-jerry-ye/wasi` 0.25.0,
+the latest published, still ships one.
+
 ### hello_world
 
 | Language | Size (bytes) |
