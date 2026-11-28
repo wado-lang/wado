@@ -7,6 +7,7 @@ use { eval, EvalHost, Status } from "core:eval";
 // streams the next write belongs to, since one handler answers for both. It
 // keeps each future's writable end for `end_writes`: a handler runs only until
 // its `resume`, and a write inside it would block on a reader nobody runs.
+
 affine struct MockStdio {
     to_stderr: bool = false,
     out: List<u8> = [],
@@ -111,6 +112,7 @@ test "print_bytes writes the bytes as given" {
 }
 
 // A name no environment sets, so the answer is the absent one either way.
+
 test "env answers None for a name nothing sets" {
     assert env("WADO_CLI_TEST_UNSET_0f3a9c") matches { null };
 }
@@ -125,6 +127,7 @@ test "cwd answers without trapping" {
 }
 
 // An exit never returns, so only a host that runs the program sees its status.
+
 fn exit_status(call: String) -> Status with EvalHost {
     return eval(`use { exit, exit_error, exit_success, Exit } from "core:cli";
 export fn run() with Exit { ${call}; }`).unwrap().status;

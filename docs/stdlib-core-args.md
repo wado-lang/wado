@@ -63,6 +63,7 @@ struct Options {
     verbose: bool = false,
     jobs: i32 = 1,
 }
+
 impl Deserialize for Options;
 
 assert parse::<Options>(["in.txt", "--verbose", "--jobs", "4"]) matches { Ok(opts) && opts.input == "in.txt"

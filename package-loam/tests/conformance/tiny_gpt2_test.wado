@@ -85,6 +85,7 @@ test "the same module reproduces them for seven" {
 
 // The causal mask covers 512 positions. That the owed check traps before any
 // operation runs is `emit_test`'s to show; a trap is all this one can see.
+
 #[expect_trap]
 test "a sequence longer than the mask stops compute" {
     let ids = List::<i64>::filled(513, 0);
@@ -215,6 +216,7 @@ test "a file of another length than the model the build read is refused" {
 
 // The step built with its batch left open: its empty cache takes the batch, and
 // a step from it computes a position for each row.
+
 test "a step whose batch the graph leaves open starts from an empty cache of the batch asked for" {
     let mut cpu = Cpu {};
     let cache = open_step::Cache::empty(&mut cpu, 2);

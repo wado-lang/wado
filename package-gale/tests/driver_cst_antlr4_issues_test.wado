@@ -25,6 +25,7 @@ fn assert_tree(input: String, ok: bool, actual: String, expected: String) {
 }
 
 // antlr/antlr4#4911
+
 test "an atom with an optional closing token is not a prefix operator" {
     for let [input, expected] of [
         ["a==b.c;", "(start (expr (expr a) == (expr (expr b) . c)) ;)"],
@@ -38,6 +39,7 @@ test "an atom with an optional closing token is not a prefix operator" {
 }
 
 // antlr/antlr4#4890
+
 test "a list rule recursing in its own loop takes each clause" {
     for let [input, expected] of [
         ["agent.skill ASC", "(s (orderBy (orderByClause (path (expr (atom agent . skill))) ASC)))"],
@@ -57,6 +59,7 @@ test "a list rule recursing in its own loop takes each clause" {
 
 // antlr/antlr4#4890: the first diagnostic sits where the jar reports "no viable
 // alternative", on the token after the last clause.
+
 test "a list rule anchored by EOF rejects what follows its last clause" {
     for let [input, col] of [
         ["agent.skill ASC DESC", 16],
@@ -70,6 +73,7 @@ test "a list rule anchored by EOF rejects what follows its last clause" {
 }
 
 // antlr/antlr4#4813
+
 test "a lexer loop leaves the character the next set needs" {
     for let [input, expected] of [
         ["- [ ] Task 1\n", "(checklistFile (itemLine - [ ] Task 1 \\n))"],
@@ -82,6 +86,7 @@ test "a lexer loop leaves the character the next set needs" {
 }
 
 // antlr/antlr4#4813: the brackets still take exactly one mark.
+
 test "a lexer loop does not let the next set match nothing" {
     for let input of ["- [] x\n", "- [xx] y\n"] as List<String> {
         let result = checklist::parse(input);
@@ -90,6 +95,7 @@ test "a lexer loop does not let the next set match nothing" {
 }
 
 // antlr/antlr4#4841
+
 test "assoc on a token reference is ignored and on an alternative is not" {
     for let [input, expected] of [
         ["1^2^3", "(s (e (e (e 1) ^ (e 2)) ^ (e 3)))"],

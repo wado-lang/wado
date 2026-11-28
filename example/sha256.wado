@@ -15,6 +15,7 @@ test {
 }
 
 // Round constants (cube roots of the first 64 primes).
+
 global K: List<u32> = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98,
     0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
@@ -27,11 +28,13 @@ global K: List<u32> = [
 ];
 
 // Rotate a 32-bit word right by `n` bits.
+
 fn rotr(x: u32, n: u32) -> u32 {
     return x >> n | x << 32 as u32 - n;
 }
 
 // Incremental SHA-256 hasher. Feed bytes with `update`, then `finalize` once.
+
 struct Sha256 {
     h: List<u32>,
     buffer: List<u8>,
@@ -48,6 +51,7 @@ impl Sha256 {
     }
 
     // Absorb message bytes, processing each full 512-bit block as it fills.
+
     fn update(&mut self, data: &List<u8>) {
         for let mut i = 0; i < data.len(); i += 1 {
             self.buffer.push(data[i]);
@@ -61,6 +65,7 @@ impl Sha256 {
 
     // Push a single padding byte (not counted in the message length) and
     // process the block when it becomes full.
+
     fn absorb_pad(&mut self, byte: u8) {
         self.buffer.push(byte);
         if self.buffer.len() == 64 {
@@ -71,6 +76,7 @@ impl Sha256 {
 
     // Apply the padding scheme, process the final block(s), and return the
     // 32-byte digest in big-endian order.
+
     fn finalize(&mut self) -> List<u8> {
         let bit_len: u64 = self.total_len * 8;
 
@@ -99,6 +105,7 @@ impl Sha256 {
     }
 
     // Compress the 64-byte block currently held in `self.buffer`.
+
     fn process(&mut self) {
         // Build the 64-word message schedule.
         let mut w = List::<u32>::filled(64, 0);
@@ -151,6 +158,7 @@ impl Sha256 {
 }
 
 // One-shot helper: hash a whole message and return its 32-byte digest.
+
 fn sha256(data: &List<u8>) -> List<u8> {
     let mut hasher = Sha256::new();
     hasher.update(data);
@@ -158,6 +166,7 @@ fn sha256(data: &List<u8>) -> List<u8> {
 }
 
 // Render a byte slice as a lowercase hexadecimal string.
+
 fn to_hex(digest: &List<u8>) -> String {
     let mut s = String::with_capacity(digest.len() * 2);
     for let mut i = 0; i < digest.len(); i += 1 {
@@ -167,6 +176,7 @@ fn to_hex(digest: &List<u8>) -> String {
 }
 
 // Encode the UTF-8 bytes of a string into a List<u8>.
+
 fn bytes_of<S: AsStrSlice>(s: S) -> List<u8> {
     let mut v: List<u8> = [];
     for let b of s.bytes() {

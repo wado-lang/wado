@@ -479,9 +479,11 @@ test "a status of 4xx is a response, not an error" {
         let mut res = client().request("/missing").unwrap();
         assert res.status == 404;
         assert !res.ok();
+
         struct Problem {
             error: String,
         }
+
         assert res.json::<Problem>().unwrap().error == "missing";
         builtin::drop(res);
     };

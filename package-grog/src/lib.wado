@@ -224,6 +224,7 @@ impl<M: Message + Default> Iterator for Messages<M> {
 // wait on that value before it sends more. So a varint is read a byte at a
 // time, and a value is held only once its end is known. A fill may move the
 // bytes, so a reader is made after the last one.
+
 impl<M: Message + Default> Messages<M> {
     fn next_value(&mut self, number: i32, wire_type: WireType) -> Result<Option<M>, DecodeError> with Stream {
         let input = &mut self.input;

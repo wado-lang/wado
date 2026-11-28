@@ -12,12 +12,14 @@ use g from "./grammars/all_gates_false_no_viable.g4"
 
 // The hit case: with the flag off neither alternative exists, so the parse
 // reports rather than taking the one the tournament happened to list last.
+
 test "every candidate gated off reports no viable alternative" {
     let result = g::parse("off a { b }");
     assert !result.ok();
 }
 
 // The rejection case: with the flag on the tournament still picks by length.
+
 test "with the gate open the tournament still picks the longest" {
     let result = g::parse("on a { b } ;");
     assert result.ok();

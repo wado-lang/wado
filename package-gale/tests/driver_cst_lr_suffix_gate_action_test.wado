@@ -18,6 +18,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 // The hit case: inside the `IF` head the subscript's brackets lift the ban, so
 // `b { c }` is the braced form and the `{ d }` after `]` is the head's block.
+
 test "a suffix action the scan runs too" {
     assert_tree(
         "if a[b { c }] { d }",
@@ -26,6 +27,7 @@ test "a suffix action the scan runs too" {
 }
 
 // The rejection case: the ban still applies where the suffix does not lift it.
+
 test "the head's own ban is unchanged" {
     assert_tree("if a { b }", "(start (stmt if (expr a) (block { b })))");
 }

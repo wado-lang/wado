@@ -21,6 +21,7 @@ struct ApiResponse {
     route: String,
     params: List<String>,
 }
+
 impl Serialize for ApiResponse;
 
 struct RouteResponse {
@@ -46,6 +47,7 @@ fn ok0(route: String) -> RouteResponse {
 
 // Hono's official router benchmark route set
 // (honojs/hono, benchmarks/routers/src/tool.mts).
+
 fn build_router() -> Router<Handler> {
     let mut r = Router::<Handler>::new();
 
@@ -77,6 +79,7 @@ fn dispatch(request: Request) -> RouteResponse with Request {
 // The requests `bench.sh` sends, routed short of streaming the response, which
 // would wait for a reader. A request's trailers end is written once the
 // request is dropped: an end dropped unwritten traps.
+
 #[workload]
 test "routes" {
     for let [method, path] of [

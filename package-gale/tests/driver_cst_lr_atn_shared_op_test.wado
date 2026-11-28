@@ -12,6 +12,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 // Each operator alone: the `'not'` is absent, so the loop entry sees the
 // operator's own second token and the alternatives never compete.
+
 test "tree: bare in" {
     assert_tree("a in b ;", "(stat (expr (expr a) in (expr b)) ;)");
 }
@@ -22,6 +23,7 @@ test "tree: bare like" {
 
 // Both operators now open on `'not'`; only the token after it tells them
 // apart.
+
 test "tree: not in" {
     assert_tree("a not in b ;", "(stat (expr (expr a) not in (expr b)) ;)");
 }
@@ -32,6 +34,7 @@ test "tree: not like" {
 
 // The alternatives whose shape routes the rule to the simulator in the first
 // place must keep working.
+
 test "tree: and operator" {
     assert_tree("a and b ;", "(stat (expr (expr a) and (expr b)) ;)");
 }
@@ -42,6 +45,7 @@ test "tree: between atom keeps its delimiter" {
 
 // Precedence still comes from alternative order, so `and` — declared first —
 // binds tighter than `like` and takes `b` as its left operand.
+
 test "tree: and binds tighter than not like" {
     assert_tree(
         "a not like b and c ;",
@@ -51,6 +55,7 @@ test "tree: and binds tighter than not like" {
 
 // The two shared-token operators against each other: `in` is declared before
 // `like`, so it binds tighter and `not like` takes the whole `a not in b`.
+
 test "tree: not in binds tighter than not like" {
     assert_tree(
         "a not in b not like c ;",

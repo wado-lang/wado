@@ -10,6 +10,7 @@ use { Stdin, ErrorCode } from "wasi:cli";
 // since one handler answers for both. It keeps each future's writable end for
 // `end_writes`: a handler runs only until its `resume`, and a write inside it
 // would block on a reader nobody runs.
+
 affine struct MockStdio {
     to_stderr: bool = false,
     out: List<u8> = [],
@@ -65,6 +66,7 @@ impl Stdin for MockStdio {
 }
 
 // Reads replay `input`; the stream itself is a real one.
+
 impl Stream<u8> for MockStdio {
     fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
         let end = i32::min(self.input_pos + max, self.input.len());

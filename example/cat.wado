@@ -64,6 +64,7 @@ fn cat_file(dir: &Descriptor, path: String) -> Result<(), String> with (Stdout, 
 }
 
 // The host copies the stream, so wait for it: returning first would cut it off.
+
 fn copy_to_stdout<E>(data: Stream<u8>, read_done: Future<Result<(), E>>) -> Result<(), String> with Stdout {
     let copied = Stdout::write_via_stream(data);
     let written = copied.read();
