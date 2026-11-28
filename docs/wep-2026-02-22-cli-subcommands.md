@@ -241,8 +241,8 @@ wado workspace new tools --namespace acme
 ```
 
 `wado workspace` is a family of its own because it edits `wado-workspace.toml`;
-a command on one member, such as `publish`, stays top-level. A package created under a workspace joins its
-`members`, unless git ignores its directory.
+a command on one member, such as `publish`, stays top-level. A package created
+under a workspace joins its `members`, unless git ignores its directory.
 [Tools](./spec-packages.md#tools) holds the rules.
 
 ### `wado add`
