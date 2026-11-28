@@ -110,6 +110,10 @@ export function $glue() {
     const cls = $nearestClass(value);
     return cls !== undefined && lo <= cls && cls <= hi;
   };
+  // Whether `value` is a dictionary: an object of no declared interface, and
+  // no array.
+  const $dictionary = (value) =>
+    Object(value) === value && !Array.isArray(value) && $nearestClass(value) === undefined;
 
   // What an `async` import answers: a promise of the function writing a
   // `Result` at an address, its payload `offset` in. The guest hands the
@@ -850,39 +854,25 @@ fn store(
             lines.push("});".to_string());
         }
         Shape::Variant(cases) => {
+            // WebIDL requires a union's constituents to be distinguishable, so
+            // at most one test takes the host's value.
             let (payload, ..) = variant_layout(cases);
-            let case = |index: usize, case: &UnionCase, lines: &mut Vec<String>| {
+            for (index, case) in cases.iter().enumerate() {
+                let keyword = if index == 0 { "if" } else { "} else if" };
+                lines.push(format!(
+                    "{keyword} ({}) {{",
+                    case_test(&case.ty, value, classes)
+                ));
                 lines.push(format!(
                     "  {}",
                     Scalar::U8.to_memory(&at, &index.to_string())
                 ));
                 store_nested(&case.ty, base, offset + payload, value, classes, lines);
-            };
-            // WebIDL requires a union's constituents to be distinguishable, so
-            // at most one test takes the host's value. A dictionary has none:
-            // it is the object no other case takes.
-            let mut dictionary = None;
-            let mut keyword = "if";
-            for (index, union_case) in cases.iter().enumerate() {
-                let Some(test) = case_test(&union_case.ty, value, classes) else {
-                    assert!(
-                        dictionary.is_none(),
-                        "two dictionaries are indistinguishable"
-                    );
-                    dictionary = Some((index, union_case));
-                    continue;
-                };
-                lines.push(format!("{keyword} ({test}) {{"));
-                case(index, union_case, lines);
-                keyword = "} else if";
             }
             lines.push("} else {".to_string());
-            match dictionary {
-                Some((index, union_case)) => case(index, union_case, lines),
-                None => lines.push(format!(
-                    "  throw new TypeError(`${{{value}}} is no case of the union`);"
-                )),
-            }
+            lines.push(format!(
+                "  throw new TypeError(`${{{value}}} is no case of the union`);"
+            ));
             lines.push("}".to_string());
         }
         Shape::Callback(..) => unreachable!("the WebIDL frontend returns no {ty:?}"),
@@ -903,26 +893,27 @@ fn store_nested(
     lines.extend(inner.into_iter().map(|line| format!("  {line}")));
 }
 
-/// The test that the host's `value` is of the union case `ty`, or `None` for
-/// a dictionary, which no test tells apart from any other object.
-fn case_test(ty: &WadoType, value: &str, classes: &Classes) -> Option<String> {
-    Some(match Shape::of(ty) {
+/// The test that the host's `value` is of the union case `ty`.
+fn case_test(ty: &WadoType, value: &str, classes: &Classes) -> String {
+    match Shape::of(ty) {
         Shape::Scalar(Scalar::Handle) => {
             let WadoType::Named(name) = ty else {
                 unreachable!("a handle is a named resource")
             };
-            let HandleClasses { lo, hi } = classes[name.as_str()];
+            let HandleClasses { lo, hi } = *classes
+                .get(name.as_str())
+                .expect("a union's handle must be a host interface's");
             format!("$within({value}, {lo}, {hi})")
         }
         Shape::Scalar(Scalar::Bool) => format!("typeof {value} === \"boolean\""),
         Shape::Scalar(_) => format!("typeof {value} === \"number\""),
         Shape::String | Shape::Enum(_) => format!("typeof {value} === \"string\""),
         Shape::List(_) => format!("Array.isArray({value})"),
-        Shape::Record(_) => return None,
+        Shape::Record(_) => format!("$dictionary({value})"),
         Shape::Option(_) | Shape::Variant(_) | Shape::Callback(..) => {
             unreachable!("a union's case lowers to no {ty:?}")
         }
-    })
+    }
 }
 
 impl Scalar {

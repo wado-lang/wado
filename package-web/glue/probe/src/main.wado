@@ -37,9 +37,9 @@ export fn run() with (Dom, MonotonicClock) {
     report("inspect", `${node:?} ${other:?}`);
 
     // A union in a result is the case the host's value is of: jsdom's `hidden`
-    // is a boolean, and the test makes the `<div>`'s a string.
+    // is a boolean, and the test makes the `<div>`'s a string, then a number.
     if let field: HtmlElement = input && let block: HtmlElement = div {
-        report("hidden", `${field.hidden():?} ${block.hidden():?}`);
+        report("hidden", `${field.hidden():?} ${block.hidden():?} ${block.hidden():?}`);
     }
 
     // A list carries handles both ways, each as the index of a slot.

@@ -1539,6 +1539,16 @@ fn a_union_collapses_only_where_the_guest_supplies_the_value() {
                 ),
                 true,
             ),
+            // Two constituents left are still narrowed: the host may return
+            // the third.
+            attribute(
+                "slot",
+                &union(
+                    &[plain("Node"), plain("DOMString"), plain("TrustedHTML")],
+                    false,
+                ),
+                false,
+            ),
         ],
     ));
     let (code, skipped) = defs.generate();
@@ -1556,6 +1566,7 @@ fn a_union_collapses_only_where_the_guest_supplies_the_value() {
         [
             "Element.inner_html: union narrowed in a result: `TrustedHTML` is outside the slice",
             "Element.script: union: `HTMLScriptElement` is outside the slice; `SVGScriptElement` is outside the slice",
+            "Element.slot: union narrowed in a result: `TrustedHTML` is outside the slice",
         ]
     );
 }
@@ -1712,13 +1723,14 @@ fn a_union_of_several_types_is_a_variant_either_way() {
         glue.contains("p0.hidden = (p1 === 0 ? (p2 !== 0) : $string(p2, p3));"),
         "{glue}"
     );
-    // A result's case is the one whose test the host's value passes, and a
-    // dictionary is what passes none; `Element`'s classes are `2..=2`.
+    // A result's case is the one whose test the host's value passes, and one
+    // passing none is an error; `Element`'s classes are `2..=2`.
     let tested = [
         "if ($within($value, 2, 2)) {\n            $view().setUint8($ret + 8, 0);",
+        "} else if ($dictionary($value)) {\n            $view().setUint8($ret + 8, 1);",
         "} else if (Array.isArray($value)) {\n            $view().setUint8($ret + 8, 2);",
         "} else if (typeof $value === \"number\") {\n            $view().setUint8($ret + 8, 3);",
-        "} else {\n            $view().setUint8($ret + 8, 1);\n            if ($value.bubbles === null",
+        "} else {\n            throw new TypeError(`${$value} is no case of the union`);",
     ];
     for test in tested {
         assert!(glue.contains(test), "{test}\n{glue}");

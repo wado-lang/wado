@@ -1882,13 +1882,6 @@ impl Lowering<'_> {
                     texts.join("; ")
                 };
                 match expressible.len() {
-                    1 if reasons.is_empty() || flow == Flow::In => (),
-                    1 => {
-                        return Err(Reason::new(
-                            Cause::Union,
-                            format!("union narrowed in a result: {}", texts()),
-                        ));
-                    }
                     // Its first constituent has to lower before the union can.
                     0 => {
                         return Err(Reason::new(
@@ -1896,6 +1889,14 @@ impl Lowering<'_> {
                             format!("union: {}", texts()),
                         ));
                     }
+                    // The host may return a constituent the union dropped.
+                    _ if !reasons.is_empty() && flow == Flow::Out => {
+                        return Err(Reason::new(
+                            Cause::Union,
+                            format!("union narrowed in a result: {}", texts()),
+                        ));
+                    }
+                    1 => (),
                     _ => return Ok(optional(union_of(expressible)?, nullable)),
                 }
                 (expressible.pop().unwrap(), nullable)

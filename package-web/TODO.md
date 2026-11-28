@@ -27,7 +27,7 @@ left before the slice can be everything:
 | `any`                                           | 3           | 158     | 35        |
 | a buffer                                        | 15          | 172     | 5         |
 | a namespace member                              | 0           | 133     | 0         |
-| a dictionary                                    | 24          | 51      | 6         |
+| a dictionary                                    | 24          | 52      | 6         |
 | a special operation                             | 0           | 81      | 0         |
 | `object`                                        | 4           | 67      | 7         |
 | `[HTMLConstructor]`                             | 0           | 76      | 0         |
@@ -37,13 +37,13 @@ left before the slice can be everything:
 | `Promise<…>`                                    | 0           | 32      | 1         |
 | a callback the glue cannot call                 | 0           | 13      | 5         |
 | `record<…>`                                     | 0           | 15      | 0         |
+| a union                                         | 3           | 12      | 0         |
 | a list of a list, a nullable type or a callback | 5           | 7       | 1         |
-| a union                                         | 1           | 8       | 0         |
 | a static attribute                              | 0           | 7       | 0         |
 | `ObservableArray<…>`                            | 0           | 4       | 0         |
 | `bigint`                                        | 0           | 2       | 0         |
 | `async_sequence<…>`                             | 0           | 1       | 0         |
-| Total                                           | 78          | 2184    | 62        |
+| Total                                           | 80          | 2189    | 62        |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
@@ -169,6 +169,9 @@ lower is then available to each interface the slice adds.
   `sequence<Node>` and `NodeList` do. The generator stops on it.
 - No member of the slice takes more than sixteen core values, so no test runs
   parameters read from memory against a host.
+- No member of the slice returns a union with an interface, a sequence or a
+  dictionary case, so no test runs the glue telling those apart against a
+  host.
 - `SurfaceDom` takes the options of what it does not model and ignores them:
   `passive`, since no event is cancelled, the `is` of `create_element`, and
   those of `get_html`, `scroll_into_view` and `request_fullscreen`.
