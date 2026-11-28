@@ -2752,7 +2752,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            let implements =|this: &Self, ty: TypeId, item: CompilerItem| {
+            let implements = |this: &Self, ty: TypeId, item: CompilerItem| {
                 this.tysys.compiler_trait(item).is_some_and(|trait_| {
                     this.tysys
                         .type_implements_trait(&this.annotate_ctx, ty, &trait_)
@@ -2784,9 +2784,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let implements_into_iter = walks(iterable_type_id)
                 || walks(inner_type_id)
                 || matches!(
-                self.tysys.type_table.borrow().get(iterable_type_id),
-                ResolvedType::Unknown | ResolvedType::TypeParam { .. }
-            );
+                    self.tysys.type_table.borrow().get(iterable_type_id),
+                    ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+                );
             let into_iter_receiver = if implements_into_iter {
                 // Reify expands the tag, so only an iterable that supports
                 // iteration carries one.
