@@ -12,6 +12,7 @@ use wado_manifest::{
 };
 
 use crate::args::{self, CliExit};
+use crate::discover::{checkout_root, is_git_ignored};
 use crate::workspace::{member_entry, nearest_above, with_member, write_workspace};
 
 #[derive(Debug)]
@@ -104,7 +105,7 @@ fn format_usage(command: &str, operand: &str, summary: &str) -> String {
     .unwrap();
     writeln!(
         buf,
-        "misses the package, the package is added to `members`."
+        "misses the package, the package is added to `members`, unless git ignores it."
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -193,15 +194,25 @@ pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit
     let dir = canonical(dir)?;
 
     let workspace = match nearest_above(&dir)? {
-        Some((root, text)) => {
-            let joined = with_member(&root, &text, &dir)?;
-            let joining = joined.is_some();
-            Some(Membership {
-                text: joined.unwrap_or(text),
-                joining,
+        Some((root, text)) => match with_member(&root, &text, &dir)? {
+            None => Some(Membership {
+                text,
+                joining: false,
                 root,
-            })
-        }
+            }),
+            Some(_) if is_git_ignored(&dir).map_err(CliExit::error)? => {
+                eprintln!(
+                    "{} is ignored by git, so it does not join the workspace",
+                    dir.display()
+                );
+                None
+            }
+            Some(joined) => Some(Membership {
+                text: joined,
+                joining: true,
+                root,
+            }),
+        },
         None => None,
     };
     let inherited = match &workspace {
@@ -365,7 +376,7 @@ fn inherited_fields(package: &WorkspacePackage) -> Vec<&'static str> {
 /// `dir` relative to the root of the git checkout holding it, which is what
 /// `repository-directory` names. `None` outside a checkout or at its root.
 fn repository_directory(dir: &Path) -> Option<String> {
-    let root = dir.ancestors().find(|a| a.join(".git").exists())?;
+    let root = checkout_root(dir)?;
     let relative = dir.strip_prefix(root).expect("an ancestor is a prefix");
     (relative != Path::new("")).then(|| slash_separated(relative))
 }

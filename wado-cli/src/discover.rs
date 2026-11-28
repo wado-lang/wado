@@ -184,16 +184,14 @@ fn discover_wado_files(
 
     let mut result = DiscoveryResult::default();
     let mut rules: Vec<GitignoreRule> = Vec::new();
-    let mut ancestors = Vec::new();
-    let mut dir = walk_root.as_path();
-    while !dir.join(".git").exists() {
-        let Some(parent) = dir.parent() else { break };
-        ancestors.push(parent);
-        dir = parent;
-    }
-    if dir.join(".git").exists() {
-        for ancestor in ancestors.into_iter().rev() {
-            load_gitignore(ancestor, &mut rules)?;
+    if let Some(checkout) = checkout_root(&walk_root) {
+        let above: Vec<&Path> = walk_root
+            .ancestors()
+            .skip(1)
+            .take_while(|dir| dir.starts_with(checkout))
+            .collect();
+        for dir in above.into_iter().rev() {
+            load_gitignore(dir, &mut rules)?;
         }
     }
     walk_dir(
@@ -622,6 +620,34 @@ fn parse_gitignore(content: &str, base: &Path) -> Vec<GitignoreRule> {
     out
 }
 
+/// The root of the git checkout holding `path`.
+pub(crate) fn checkout_root(path: &Path) -> Option<&Path> {
+    path.ancestors().find(|dir| dir.join(".git").exists())
+}
+
+/// Whether git ignores the directory `dir`, which must be canonical: whether
+/// it or a directory between it and the checkout's root matches the
+/// `.gitignore` rules above that directory. Outside a checkout nothing is.
+pub(crate) fn is_git_ignored(dir: &Path) -> Result<bool, WalkError> {
+    let Some(checkout) = checkout_root(dir) else {
+        return Ok(false);
+    };
+    let mut rules = Vec::new();
+    let mut level = checkout.to_path_buf();
+    for component in dir
+        .strip_prefix(checkout)
+        .expect("an ancestor is a prefix")
+        .components()
+    {
+        load_gitignore(&level, &mut rules)?;
+        level.push(component);
+        if is_ignored(&rules, &level, true) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn is_ignored(rules: &[GitignoreRule], path: &Path, is_dir: bool) -> bool {
     let mut ignored = false;
     for rule in rules {
@@ -649,6 +675,32 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::fixture::{one, touch, write_manifest};
+
+    #[test]
+    fn is_git_ignored_reads_each_gitignore_down_to_the_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        fs::create_dir(root.join(".git")).unwrap();
+        fs::create_dir_all(root.join("a/b/c")).unwrap();
+        fs::create_dir_all(root.join("a/kept")).unwrap();
+        fs::write(root.join(".gitignore"), "b/\n").unwrap();
+        fs::write(root.join("a/.gitignore"), "kept\n").unwrap();
+
+        assert!(!is_git_ignored(&root.join("a")).unwrap());
+        assert!(is_git_ignored(&root.join("a/b")).unwrap());
+        assert!(
+            is_git_ignored(&root.join("a/b/c")).unwrap(),
+            "under an ignored directory"
+        );
+        assert!(
+            is_git_ignored(&root.join("a/kept")).unwrap(),
+            "by a nested .gitignore"
+        );
+        assert!(
+            !is_git_ignored(tmp.path().parent().unwrap()).unwrap(),
+            "outside a checkout"
+        );
+    }
 
     fn names_of(root: &Path, paths: &[PathBuf]) -> BTreeSet<String> {
         paths

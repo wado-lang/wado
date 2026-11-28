@@ -287,6 +287,27 @@ fn new_under_a_workspace_adds_it_to_members() {
     );
 }
 
+/// A directory git ignores is scratch space, not a member: the package made
+/// there stands alone and the workspace file stays as written.
+#[test]
+fn new_in_a_git_ignored_directory_stays_out_of_the_workspace() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::create_dir(tmp.path().join(".git")).unwrap();
+    fs::write(tmp.path().join(".gitignore"), "scratch/\n").unwrap();
+    let ws = "[workspace]\nmembers = []\n\n[workspace.package]\nnamespace = \"acme\"\n";
+    fs::write(tmp.path().join("wado-workspace.toml"), ws).unwrap();
+
+    wado_in(tmp.path())
+        .args(["new", "scratch/demo", "--namespace", "mine"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("ignored by git"));
+
+    assert_eq!(read(&tmp.path().join("wado-workspace.toml")), ws);
+    let manifest = read(&tmp.path().join("scratch/demo/wado.toml"));
+    assert!(manifest.contains("namespace = \"mine\""), "{manifest}");
+}
+
 /// The scaffold is a package that passes its own tests.
 #[test]
 fn new_package_passes_its_tests() {
