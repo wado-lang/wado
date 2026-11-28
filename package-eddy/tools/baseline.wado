@@ -170,6 +170,9 @@ ${fix_diff}
         } else {
             null;
         };
+        if RUN && let Some(w) = &ws {
+            w.prebuild(&changed_paths(&culprit.sha));
+        }
         while out.entries[i].runs.len() < RUNS {
             if RUN && let Some(w) = &ws {
                 reset_snapshot(&w.repo, &w.root, &culprit.sha);

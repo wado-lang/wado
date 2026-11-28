@@ -130,7 +130,8 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Clie
         fail(`${e}`);
     }
     let earlier: Option<Attempt> = if options.report_again { Some(last_attempt(&records)) } else { null };
-    let diff = match diff_between(&base, &head, &paths_between(&base, &head), "branch", LIMIT) {
+    let changed = paths_between(&base, &head);
+    let diff = match diff_between(&base, &head, &changed, "branch", LIMIT) {
         Ok(diff) => diff,
         Err(e) => fail(e),
     };
@@ -153,6 +154,9 @@ ${commits.trim()}`;
     let mut result = if let Some(earlier) = &earlier {
         reviewed_again(&w, &earlier.result);
     } else {
+        if w.runner matches { Some(_) } {
+            w.prebuild(&changed);
+        }
         review(&mut credential, CLAUDE_MODEL, &change, &Some(w), options.reviewers, options.max_turns, options.effort);
     };
     // A report that fails leaves the findings as the reviewer worded them.

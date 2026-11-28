@@ -3,6 +3,7 @@
 //! With a SCIP index of the tree, FindSymbol and FindReferences as well. With
 //! a [`Runner`], Write and Run, which change the tree and run `cargo` in it.
 
+use { log_stderr } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Command, Process } from "core:process";
@@ -80,6 +81,10 @@ pub global RUN_TIMEOUT: i32 = 900;
 
 /// The longest time, in seconds, a Run may ask for.
 global RUN_TIMEOUT_LIMIT: i32 = 1800;
+
+/// How long each build before a review may take, in seconds: the first build
+/// of a tree compiles the toolchain from nothing.
+global PREBUILD_TIMEOUT: i32 = 3600;
 
 /// The most of each stream Run returns, in bytes, from its end: a build's
 /// error and a test's verdict come last.
@@ -212,7 +217,7 @@ fn running_tools(runner: &Runner) -> List<Tool> {
             "Run",
             `Runs a program at the repository root with the given arguments, cargo unless program names another, and returns how it ended and the end of its stderr and stdout.
 - Examples for cargo: ["test", "-p", "wado-lsp", "--test", "my_check"]; ["run", "--bin", "wado", "--", "run", "check.wado"]; ["test", "-p", "wado-compiler", "--lib", "some_test_name"].${mise}
-- The first build takes minutes; later ones reuse it. It stops after timeout seconds (default ${RUN_TIMEOUT}, at most ${RUN_TIMEOUT_LIMIT}).
+- The tests of the packages the change touches and the wado binary were built before the review, so building them again is quick; a build of anything else takes minutes. It stops after timeout seconds (default ${RUN_TIMEOUT}, at most ${RUN_TIMEOUT_LIMIT}).
 - A review makes at most ${runner.runs} runs.`,
             `{
   "type": "object",
@@ -426,6 +431,49 @@ impl Workspace {
 ${tail(String::from_utf8_lossy(out.stderr))}</stderr>
 <stdout>
 ${tail(String::from_utf8_lossy(out.stdout))}</stdout>` });
+    }
+
+    /// Builds before the review what the reviewer's Runs build: the tests of
+    /// each package that holds one of `changed`, the tree's paths, and the
+    /// `wado` binary, into the target directory Run builds into. A Run that
+    /// builds for longer than the API keeps its cache lets the cache lapse,
+    /// and the next request writes the whole conversation again; a build
+    /// made here costs no tokens. A build that fails is logged and left for
+    /// the reviewer's Run to meet.
+    pub fn prebuild(&self, changed: &List<String>) with (Process, Preopens) {
+        let mut commands: List<List<String>> = [];
+        for let manifest of self.package_manifests(changed) {
+            commands.push(["cargo", "test", "--no-run", "--manifest-path", manifest]);
+        }
+        commands.push(["cargo", "build", "--bin", "wado"]);
+        for let c of commands {
+            let ended = match self.run_command(&c, PREBUILD_TIMEOUT) {
+                Ok(ran) => ran.report.lines().next().unwrap_or("").to_string(),
+                Err(e) => e,
+            };
+            log_stderr(`eddy: built before the review: ${c.join(" ")}: ${ended}`);
+        }
+    }
+
+    /// The manifest of each package that holds one of `paths`, from the tree's
+    /// root, each once. A path outside every package, which only the
+    /// workspace's own manifest holds, names none.
+    internal fn package_manifests(&self, paths: &List<String>) -> List<String> with Preopens {
+        let mut out: List<String> = [];
+        for let path of paths {
+            let mut dir = fs::parent(path);
+            while let Some(d) = dir && !d.is_empty() {
+                let manifest = fs::join(&d, "Cargo.toml");
+                if fs::exists(fs::join(&self.root, &manifest)) {
+                    if !out.contains_str(&manifest) {
+                        out.push(manifest);
+                    }
+                    break;
+                }
+                dir = fs::parent(&d);
+            }
+        }
+        return out;
     }
 
     fn read(&self, input: &ReadInput) -> Result<String, String> with Preopens {

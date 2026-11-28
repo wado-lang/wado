@@ -21,6 +21,22 @@ test "only Run has a limit on its calls, its runner's" {
     assert Workspace { root: "src" }.call_limit(&"Run") matches { null };
 }
 
+test "the build before a review covers each package a changed path is in, and the wado binary" {
+    let root = "build/prebuild-test";
+    fs::remove_dir_all(root).unwrap();
+    fs::create_dir_all(`${root}/crate-a/src/deep`).unwrap();
+    fs::create_dir_all(`${root}/crate-b/src`).unwrap();
+    fs::create_dir_all(`${root}/docs`).unwrap();
+    for let m of ["Cargo.toml", "crate-a/Cargo.toml", "crate-b/Cargo.toml"] {
+        fs::write(`${root}/${m}`, &"").unwrap();
+    }
+    let ws = Workspace { root };
+    let manifests = ws.package_manifests(&[
+        "crate-a/src/deep/x.rs", "crate-a/src/y.rs", "crate-b/src/gone.rs", "docs/a.md", "mise.toml",
+    ]);
+    assert manifests == ["crate-a/Cargo.toml", "crate-b/Cargo.toml"];
+}
+
 test "Write creates the file and its directories inside the root" {
     let root = "build/tools-test";
     fs::remove_dir_all(root).unwrap();

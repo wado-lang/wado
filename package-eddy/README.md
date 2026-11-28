@@ -25,7 +25,10 @@ A review takes two steps:
    uncertain ones included.
 2. Confirm. One more reviewer reads every candidate. It merges those that name
    one defect, drops those the code refutes, and reproduces the rest. Its Run
-   budget is three runs per candidate, up to ten candidates.
+   budget is three runs per candidate, up to ten candidates. Before the review
+   Eddy builds the tests of each package the change touches and the `wado`
+   binary. A Run that builds for longer than the API keeps its cache would
+   otherwise have the whole conversation written to the cache again.
 
 The searches run one after another, so a review takes longer than a single
 reviewer would.
