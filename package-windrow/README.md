@@ -22,9 +22,9 @@ skips a directory named `target` or `build`, or one whose name starts with `.`.
 `--names` also counts two nodes alike by the names they call, types, methods
 and paths, when both call at least eight and are somewhat alike in shape: one
 logic written as a loop and as an iterator chain shares those, not its runs.
-Each group prints its
-largest member's size, the least similarity between two of its members, and
-every member's lines, the groups that repeat the most tokens first:
+Each group prints its largest member's size, the least similarity between two
+of its members, and every member's lines, the groups that repeat the most
+tokens first:
 
 ```text
 747 tokens x 2, similarity 0.89
@@ -32,9 +32,9 @@ every member's lines, the groups that repeat the most tokens first:
   wado-compiler/src/tir.rs:4295-4404
 ```
 
-Every two members of a group are alike and of sizes within the similarity of
-each other, and a group is reported at the largest
-nodes that are, so a member's inner nodes are not listed again. A node that
+Every two members of a group are alike, and of sizes within the similarity of
+each other. A group is reported at the largest nodes that are, so a member's
+inner nodes are not listed again. A node that
 repeats one small shape, such as a long or-pattern of enum cases, is not
 compared: its few distinct runs make any two such nodes look alike. Nor is test
 code, a Rust item under `#[test]` or `#[cfg(test)]` or a Wado `test` block: a

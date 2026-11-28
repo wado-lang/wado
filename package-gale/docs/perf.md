@@ -565,8 +565,7 @@ Found by reading generated code (2026-09), not yet measured on a benchmark:
 - [ ] **`exact` parses Rust and TypeScript about twice as slowly as
   `longest` (2026-10).** One run each of
   `package-gale-rust/benchmark` and `package-gale/benchmark/typescript` in
-  ms/iter, under the modes then
-  named `never` and `always`:
+  ms/iter, under the modes then named `never` and `always`:
 
   | Grammar    | longest | exact |
   | ---------- | ------- | ----- |

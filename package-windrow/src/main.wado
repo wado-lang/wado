@@ -84,8 +84,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
         println(`${group.tokens} tokens x ${group.sites.len()}, similarity ${group.similarity:.2}`);
         for let site of &group.sites {
             let tree = &trees[site.tree];
-            let first = tree.line_of(tree.start[site.row]);
-            let last = tree.line_of(tree.end[site.last]);
+            let first = tree.line_of(site.start(&trees));
+            let last = tree.line_of(site.end(&trees));
             println(`  ${tree.path}:${first}-${last}`);
         }
     }

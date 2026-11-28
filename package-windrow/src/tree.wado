@@ -2,6 +2,8 @@
 //! sorted into what its shape keeps of it. A language adapter builds one from
 //! its parser's result; nothing after that knows which grammar it came from.
 
+use { line_of } from "wado-lang:gale";
+
 /// What a token's shape keeps of it. A local name and a literal stand for any
 /// other of their class, so two copies that renamed a variable or changed a
 /// constant keep one shape. A `Spelled` name is kept as written: what it names
@@ -70,12 +72,6 @@ impl Tree {
 
     /// The 1-based line holding byte offset `at`.
     pub fn line_of(&self, at: i32) -> i32 {
-        let mut line = 1;
-        for let mut i = 0; i < at; i += 1 {
-            if unchecked self.source.byte_at(i) == b'\n' {
-                line += 1;
-            }
-        }
-        return line;
+        return line_of(&self.source, at);
     }
 }
