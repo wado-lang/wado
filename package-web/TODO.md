@@ -8,9 +8,8 @@ design and the initial implementation are in
 
 The pipeline works end to end: WebIDL snapshot, generated bindings and glue,
 `SurfaceDom`, server-side rendering, callbacks, and a jsdom run in CI. The slice
-covers twelve interfaces: `EventTarget`, `Event`, `Node`, `CharacterData`,
-`Text`, `Element`, `HTMLElement`, `HTMLInputElement`, `Document`, `Window`,
-`NodeIterator` and `TreeWalker`.
+covers the interfaces `SLICE` in `tools/webidl/snapshot.mjs` lists: the tree,
+its traversal and collections, style, and canvas.
 
 `wado-from-idl` reads every definition and member kind webidl2 writes. It names
 each thing it does not bind on stderr, and counts them by cause.
