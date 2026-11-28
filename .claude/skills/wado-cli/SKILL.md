@@ -1,6 +1,6 @@
 ---
 name: wado-cli
-description: How to drive the `wado` command — create a package or workspace, and compile, run, test, serve, format, and publish a Wado program, target a Wasm world, pick an allocator, grant directories, and inspect the compiler with dump and query. Read before invoking the `wado` binary.
+description: How to drive the `wado` command — create a package or workspace (`wado new`, `wado workspace`), and compile, run, test, serve, format, and publish a Wado program, target a Wasm world, pick an allocator, grant directories, and inspect the compiler with dump and query. Read before invoking the `wado` binary.
 ---
 
 # The `wado` CLI

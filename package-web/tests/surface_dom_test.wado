@@ -28,6 +28,7 @@ test "a callback interface holds its constants" {
 }
 
 // <body><div><p></p><span>hi</span></div><em></em></body>, by tag name.
+
 fn traversal_tree(doc: Document) -> Node with Dom {
     let body = doc.body().unwrap();
     let div = doc.create_element("div");
@@ -151,6 +152,7 @@ test "a node iterator answers the node it passes, either way" {
 
 // <body><div><p></p><span>hi</span></div><em></em></body>, and an iterator over
 // its elements whose reference is `SPAN`, the pointer on the side `before` says.
+
 fn at_span(doc: Document, before: bool) -> NodeIterator with Dom {
     let iterator = doc.create_node_iterator(
         traversal_tree(doc),
@@ -1143,6 +1145,7 @@ test "a removed subtree stays a tree, and its listeners stay with it" {
 
 // What a node the program dropped costs is what the collector copies of it:
 // kept alive, each of these would be copied at every collection after it.
+
 #[timeout(seconds = 10)]
 test "a node the program dropped is collected" {
     let mut dom = SurfaceDom::new();

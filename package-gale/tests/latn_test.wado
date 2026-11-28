@@ -8,6 +8,7 @@ use { latn_match } from "../src/runtime/latn.wado";
 // match a rule against an input string. Returns the end position of the
 // `CMT` match (or -1). Expectations are the published-ANTLR4 oracle's
 // behaviour, characterized as a black box (see runtime/latn.wado).
+
 fn cmt_match<S: AsStrSlice, S1: AsStrSlice>(grammar_src: S, input: S1) -> i32 {
     return match_rule(grammar_src, "CMT", input);
 }
@@ -66,6 +67,7 @@ test "latn: no match" {
 // Epsilon left-recursion (nullable prefix re-enters the rule without
 // consuming). The closure must prune the cycle and terminate rather than
 // recurse forever; completing within the test timeout is the assertion.
+
 test "latn: epsilon left-recursion terminates" {
     let g = "lexer grammar L;
 R : (R | 'a')*? 'b' ;
@@ -76,6 +78,7 @@ R : (R | 'a')*? 'b' ;
 
 // caseInsensitive must fold case on the ATN path like the static path:
 // 'a'/'z' match 'A'/'Z'.
+
 global CI_G: String = "lexer grammar L;
 options { caseInsensitive = true; }
 C : 'a' (C | .)+? 'z' ;

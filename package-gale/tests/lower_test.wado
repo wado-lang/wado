@@ -3459,7 +3459,6 @@ test "lit_name renders a grammar literal the way ANTLR4's vocabulary does" {
     assert `${lit_name(quote)}` == "'\"'";
 }
 
-
 // ===========================================================================
 // `render_lexer_dump`: each grammar forces one emit strategy, and the report
 // must say why the cheaper one was not available.
@@ -4412,6 +4411,7 @@ test "predict resolves a two-token shared-prefix decision" {
 
 // A numeric `type(N)` lexes a kind past the grammar's, which `.` and `~X` match
 // (see "Bugs in ANTLR4 itself").
+
 test "a wildcard predicts a kind past the grammar's" {
     let atn = build_atn(&parse("grammar T;\na : A X | . X | ~A X ;\nA : 'a' ;\nX : 'x' ;\n").unwrap());
     let sim = decode(&atn);
@@ -4432,6 +4432,7 @@ WS : ' ' -> skip ;
 
 // The program-wide DFA caches one ATN's predictions, so a second ATN, even one
 // of the same size, must not read them.
+
 #[expect_trap]
 test "the shared DFA refuses a second ATN of the same size" {
     let first = build_atn(&parse(K2_G4).unwrap());
@@ -4463,6 +4464,7 @@ fn left_edge_pred_id(g: &Grammar, rule: i32, index: i32) -> i32 {
 // ANTLR4 finds the viable alternatives first and only then drops the ones a
 // false predicate gates (`doc/predicates.md`), so failing the only viable alt
 // leaves none rather than handing the decision to one the input cannot take.
+
 test "predict drops an alternative whose predicate fails from the viable ones" {
     let mut g = parse(K2_PRED_G4).unwrap();
     assign_action_ids(&mut g);
@@ -4508,6 +4510,7 @@ Y : 'y' ;
 
 // After `x` the first alternative holds every state the second does, which
 // settles the decision only while the first may win it.
+
 test "a failed alternative covering the others does not settle the decision" {
     let mut g = parse(COVER_G4).unwrap();
     assign_atn_call_sites(&mut g);
@@ -4551,6 +4554,7 @@ A : 'a' ; B : 'b' ; X : 'x' ;
 
 // A predicate on one alternative of a called rule closes that path alone: `s`
 // still takes its first alternative through `g`'s second.
+
 test "a failed predicate in a called rule closes only its own path" {
     let mut g = parse(CALLEE_PRED_G4).unwrap();
     assign_action_ids(&mut g);
@@ -4590,6 +4594,7 @@ A : 'a' ;
 
 // The predicate reads the invocation, so failing it under `r[0]` says nothing
 // about `r[1]`, which takes the `a` after `r[0]` takes nothing.
+
 test "a failed own-invocation predicate closes no other invocation's path" {
     let mut g = parse(OWN_PRED_G4).unwrap();
     assign_atn_call_sites(&mut g);
@@ -4690,6 +4695,7 @@ test "full-context: outer ifStatement ?? consumes the else" {
 
 // A recorded verdict answers only the caller stack it was asked under: the two
 // tests above, asked at one position through one `AtnPredictor`.
+
 test "a recorded verdict is keyed by the caller stack" {
     let mut g = parse(NON_GREEDY_G4).unwrap();
     assign_atn_call_sites(&mut g);
@@ -4724,6 +4730,7 @@ WS : ' ' -> skip ;
 // A state is found by the frames its closure read, so a stack that differs
 // only below them builds no state of its own. Keyed by the whole stack, every
 // nesting depth of one construct would build the same states again.
+
 test "caller stacks that differ below the frames read share their states" {
     let mut g = parse(NESTED_K2_G4).unwrap();
     assign_atn_call_sites(&mut g);
@@ -4756,6 +4763,7 @@ test "caller stacks that differ below the frames read share their states" {
 
 // A scan whose result is kept for other callers hides the callers it has: a
 // prediction that needs one reads the whole stack, and says so.
+
 test "a prediction that needs a hidden caller reads the whole stack and says so" {
     let mut g = parse(NON_GREEDY_G4).unwrap();
     assign_atn_call_sites(&mut g);
@@ -4807,6 +4815,7 @@ Q : 'q' ;
 
 // The predictions a parse caches answer the caller stack they were asked under.
 // On `a b c`, `r` takes `a` at the `r B` call site and `a b` after `q`.
+
 test "a cached prediction answers only its own caller stack" {
     let mut g = parse(TWO_SITES_G4).unwrap();
     assign_atn_call_sites(&mut g);
@@ -4838,6 +4847,7 @@ test "a cached prediction answers only its own caller stack" {
 // stops at the atom block, so prediction terminates and returns a valid
 // alternative. (Precedence-guided enter/exit selection itself is P4.3;
 // here we only assert termination + a sane in-range result.)
+
 test "LR loop-entry prediction terminates (no naive left recursion)" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);
@@ -4862,6 +4872,7 @@ test "LR loop-entry prediction terminates (no naive left recursion)" {
 // the loop-entry edges are [enter '*' (own_prec 2), enter '+' (own_prec
 // 1), exit]; raising the context to 2 disables the '+' alt (left
 // associativity: a '+' right operand cannot re-enter '+').
+
 test "precedence pruning gates LR loop-entry enter alts by min_prec" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);
@@ -4885,6 +4896,7 @@ test "precedence pruning gates LR loop-entry enter alts by min_prec" {
 
 // A frame's restore precedence is the ATN's, not an LR-only table's: a
 // simulator without them still pops a self-ref operand at its own precedence.
+
 test "a decoded ATN restores each rule call's precedence" {
     let sim = atn_decode(&atn_blob_bytes(&build_atn(&parse(LR_G4).unwrap())));
     let mut raised = 0;
@@ -4903,6 +4915,7 @@ test "a decoded ATN restores each rule call's precedence" {
 // P4.4: the dedicated LR loop-entry decision (`atn_lr_loop_decision`) — the
 // O(n) replacement for full ALL(*) simulation on LR loops. It encodes the
 // true loop-entry semantics: precedence prune + yield-to-caller-mandatory.
+
 test "LR loop decision: precedence gates enter/exit" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);
@@ -4926,6 +4939,7 @@ test "LR loop decision: precedence gates enter/exit" {
 // representation must carry the excluded label rather than treating the
 // negated set as an unrestricted "matches anything" (which would make the
 // loop wrongly enter on `SEMI`).
+
 global LR_NEG_G4: String = "
 grammar T;
 e : e ~SEMI e | INT ;
@@ -4959,6 +4973,7 @@ test "atn_lr_loop_decision: ~SEMI suffix excludes the SEMI token" {
 
 // A caller stack becomes context nodes rather than a depth in the config key,
 // so one 1000 frames deep predicts the token-led alternative like any other.
+
 test "a deep caller stack predicts normally" {
     let g = parse(K2_G4).unwrap();
     let atn = build_atn(&g);
@@ -4982,6 +4997,7 @@ test "a deep caller stack predicts normally" {
 // loop operator: when `a` derives empty, `e` starts the `('+' e)*` loop, so
 // `e`'s FIRST legitimately includes `'+'`. `atn_decode` must handle this (not
 // reject it), and the operator must land in the rule's FIRST set.
+
 global LR_NULLABLE_ATOM_G4: String = "
 grammar T;
 e : e '+' e | a ;
@@ -5979,6 +5995,7 @@ test "java: an unterminated string literal is a loud error" {
 
 // An iteration that ends behind a nested decision's empty alternative re-enters
 // the loop's body, so that decision meets what the body opens with.
+
 test "a decision inside a loop body meets the body's predicates through the loop-back" {
     let mut g = parse("grammar T;
 r : ( {p}? 'a' | 'c' ( 'b' | ) )* 'x' ;

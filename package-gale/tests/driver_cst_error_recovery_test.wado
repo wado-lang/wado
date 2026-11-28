@@ -18,9 +18,11 @@ fn first_diag_col<S: AsStrSlice>(input: S) -> i32 {
 test "error position: malformed item under `item* EOF`" {
     assert first_diag_col("let x = ;") == 8, `expected col 8 (the ';')`;
 }
+
 test "error position: malformed item under `item* '}'`" {
     assert first_diag_col("{ let x = ; }") == 10, `expected col 10 (the ';')`;
 }
+
 test "error position: non-item token stays put" {
     assert first_diag_col("let x = y ; +") == 12, `expected col 12 (the '+')`;
 }
@@ -30,6 +32,7 @@ test "error position: non-item token stays put" {
 // `<missing>`, delete -> `<skip>`, unrecoverable run -> `<error>`). A clean
 // parse keeps these markers absent. (A scan-gated `item*` cannot commit edits —
 // see the diagnostic-position tests above — so these use the mandatory entry.)
+
 fn assert_single<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let r = errrec::parse_single(input);
     let actual = errrec::to_string_tree(&r);
@@ -39,6 +42,7 @@ fn assert_single<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 // `item : 'let' ID '=' ID ';'`; the second ID is absent. The current token (`;`)
 // is the rule's own next terminal (FIRST-of-rest), so recovery inserts a
 // synthetic ID and keeps parsing — a complete `item` with one missing leaf.
+
 test "tree: insert missing terminal" {
     assert_single("let x = ;", "(single (item let x = <missing ID> ;))");
 }
@@ -63,6 +67,7 @@ test "a deletion and a skipped run name their edits" {
 
 // A spurious extra ID before `=`; peek(1) is the expected `=`, so the extra
 // token is deleted (skipped) and `=` consumed.
+
 test "tree: delete extra terminal" {
     assert_single("let x y = z ;", "(single (item let x <skip y> = z ;))");
 }
@@ -71,6 +76,7 @@ test "tree: delete extra terminal" {
 // it (delete), nor a continuation (insert), so the run of `}` is skipped into a
 // lossless `<error>` region until the rule resyncs on `;`; the absent ID is then
 // inserted. The original input round-trips through the tree.
+
 test "tree: error region resyncs to FOLLOW" {
     assert_single(
         "let x = } } ;",
@@ -81,6 +87,7 @@ test "tree: error region resyncs to FOLLOW" {
 // `double : item item EOF`: two malformed items each insert a missing ID, so the
 // uncapped parse reports two diagnostics; `max_errors` stops recovery after the
 // first and folds.
+
 test "max_errors caps recovery diagnostics" {
     let full = errrec::parse_double("let x = ; let y = ;");
     assert full.diagnostics.len() == 2;

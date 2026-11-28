@@ -484,7 +484,6 @@ test "empty key-value literal" {
     assert m.is_empty();
 }
 
-
 #[expect_trap]
 test "index access panics for missing key" {
     let map: TreeMap<String, i32> = TreeMap::new();
@@ -772,6 +771,7 @@ impl DeserializeSeq for FailingClose {
 
 // The trait asks for every method, but a collection reaches only `begin_map`
 // or `begin_seq`.
+
 impl Deserializer for FailingClose {
     type SeqAccess = FailingClose;
     type MapAccess = FailingClose;

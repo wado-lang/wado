@@ -37,6 +37,7 @@ export struct Point {
 
 // A record that flattens to a single core value (`[i64]`), so the canonical
 // ABI returns it flat rather than through an outptr — unlike `Point`.
+
 export struct Single {
     pub value: u64,
 }
@@ -61,6 +62,7 @@ export flags Perms {
 
 // A variant with no payload-bearing case lays out as its bare discriminant,
 // one byte here, not the handle width an unknown name defaults to.
+
 export variant Status {
     Active,
     Inactive,
@@ -71,6 +73,7 @@ export type Meters = f64;
 // A variant whose cases flatten to the same slot size but different core
 // classes (`u32`→i32 vs `f32`→f32). The CM flat-ABI join widens the shared
 // slot to one class, so the other case's payload is bit-reinterpreted.
+
 export variant Mixed {
     AsInt(u32),
     AsFloat(f32),
@@ -85,39 +88,51 @@ export affine struct FutureCell {
 export fn id_bool(v: bool) -> bool {
     return v;
 }
+
 export fn id_u8(v: u8) -> u8 {
     return v;
 }
+
 export fn id_u16(v: u16) -> u16 {
     return v;
 }
+
 export fn id_u32(v: u32) -> u32 {
     return v;
 }
+
 export fn id_u64(v: u64) -> u64 {
     return v;
 }
+
 export fn id_s8(v: i8) -> i8 {
     return v;
 }
+
 export fn id_s16(v: i16) -> i16 {
     return v;
 }
+
 export fn id_s32(v: i32) -> i32 {
     return v;
 }
+
 export fn id_s64(v: i64) -> i64 {
     return v;
 }
+
 export fn id_f32(v: f32) -> f32 {
     return v;
 }
+
 export fn id_f64(v: f64) -> f64 {
     return v;
 }
+
 export fn id_char(v: char) -> char {
     return v;
 }
+
 export fn id_string(v: String) -> String {
     return v;
 }
@@ -127,50 +142,65 @@ export fn id_string(v: String) -> String {
 export fn id_list_u8(v: List<u8>) -> List<u8> {
     return v;
 }
+
 export fn id_list_s8(v: List<i8>) -> List<i8> {
     return v;
 }
+
 export fn id_list_s16(v: List<i16>) -> List<i16> {
     return v;
 }
+
 export fn id_list_u64(v: List<u64>) -> List<u64> {
     return v;
 }
+
 export fn id_list_f32(v: List<f32>) -> List<f32> {
     return v;
 }
+
 export fn id_list_f64(v: List<f64>) -> List<f64> {
     return v;
 }
+
 export fn id_list_bool(v: List<bool>) -> List<bool> {
     return v;
 }
+
 export fn id_list_string(v: List<String>) -> List<String> {
     return v;
 }
+
 export fn id_tuple_pair(v: [u32, String]) -> [u32, String] {
     return v;
 }
+
 export fn id_tuple_triple(v: [u8, bool, char]) -> [u8, bool, char] {
     return v;
 }
+
 export fn id_option_u32(v: Option<u32>) -> Option<u32> {
     return v;
 }
+
 export fn id_option_string(v: Option<String>) -> Option<String> {
     return v;
 }
 
 // `result` in all four WIT forms: both arms, ok-only, err-only, neither.
+
 export fn id_result_both(v: Result<u32, String>) -> Result<u32, String> {
     return v;
 }
+
 export fn id_result_ok(v: Result<u32, ()>) -> Result<u32, ()> {
     return v;
 }
+
 export fn id_result_err(v: Result<(), String>) -> Result<(), String> {
     return v;
 }
+
 export fn id_result_unit(v: Result<(), ()>) -> Result<(), ()> {
     return v;
 }
@@ -180,35 +210,46 @@ export fn id_result_unit(v: Result<(), ()>) -> Result<(), ()> {
 export fn id_record(v: Point) -> Point {
     return v;
 }
+
 export fn id_record_flat(v: Single) -> Single {
     return v;
 }
+
 export fn id_enum(v: Color) -> Color {
     return v;
 }
+
 export fn id_variant(v: Shape) -> Shape {
     return v;
 }
+
 export fn id_flags(v: Perms) -> Perms {
     return v;
 }
+
 export fn id_newtype(v: Meters) -> Meters {
     return v;
 }
+
 // A newtype inside `option` / `result`: the export adapter must lift and lower
 // the payload through the newtype's base representation (`f64`), including the
 // `result` join that widens the `f64`/`u32` arms to a shared 64-bit slot.
+
 export fn id_option_newtype(v: Option<Meters>) -> Option<Meters> {
     return v;
 }
+
 export fn id_result_newtype(v: Result<Meters, u32>) -> Result<Meters, u32> {
     return v;
 }
+
 export fn id_mixed(v: Mixed) -> Mixed {
     return v;
 }
+
 // `result` whose Ok/Err arms flatten to the same slot size but different core
 // classes (`f32` vs `u32`); exercises the join reinterpret on the Err arm.
+
 export fn id_result_fu(v: Result<f32, u32>) -> Result<f32, u32> {
     return v;
 }
@@ -218,18 +259,23 @@ export fn id_result_fu(v: Result<f32, u32>) -> Result<f32, u32> {
 export fn id_list_option(v: List<Option<u32>>) -> List<Option<u32>> {
     return v;
 }
+
 export fn id_option_list(v: Option<List<u8>>) -> Option<List<u8>> {
     return v;
 }
+
 export fn id_list_record(v: List<Point>) -> List<Point> {
     return v;
 }
+
 export fn id_option_record(v: Option<Point>) -> Option<Point> {
     return v;
 }
+
 export fn id_list_tuple(v: List<[u32, String]>) -> List<[u32, String]> {
     return v;
 }
+
 export fn id_result_list(v: Result<List<Point>, String>) -> Result<List<Point>, String> {
     return v;
 }
@@ -251,18 +297,23 @@ export fn id_assoc_array(v: List<[String, u32]>) -> List<[String, u32]> {
 export fn id_map_string_u32(v: HashMap<String, u32>) -> HashMap<String, u32> {
     return v;
 }
+
 export fn id_map_u32_string(v: HashMap<u32, String>) -> HashMap<u32, String> {
     return v;
 }
+
 export fn id_map_string_record(v: HashMap<String, Point>) -> HashMap<String, Point> {
     return v;
 }
+
 export fn id_map_string_list(v: HashMap<String, List<u8>>) -> HashMap<String, List<u8>> {
     return v;
 }
+
 export fn id_option_map(v: Option<HashMap<String, u32>>) -> Option<HashMap<String, u32>> {
     return v;
 }
+
 export fn id_list_map(v: List<HashMap<String, u32>>) -> List<HashMap<String, u32>> {
     return v;
 }
@@ -272,12 +323,15 @@ export fn id_list_map(v: List<HashMap<String, u32>>) -> List<HashMap<String, u32
 export fn id_tuple_record(v: [Point, u32]) -> [Point, u32] {
     return v;
 }
+
 export fn id_tuple_option(v: [Option<u32>, u8]) -> [Option<u32>, u8] {
     return v;
 }
+
 export fn id_tuple_list(v: [List<String>, u32]) -> [List<String>, u32] {
     return v;
 }
+
 export fn id_list_tuple_record(v: List<[Point, u32]>) -> List<[Point, u32]> {
     return v;
 }
@@ -285,12 +339,15 @@ export fn id_list_tuple_record(v: List<[Point, u32]>) -> List<[Point, u32]> {
 // --- Flags nested in aggregates ---
 // Three labels lower to one CM byte, not the u32 the guest holds, and only a
 // composite reads a stride or an offset.
+
 export fn id_option_flags(v: Option<Perms>) -> Option<Perms> {
     return v;
 }
+
 export fn id_list_flags(v: List<Perms>) -> List<Perms> {
     return v;
 }
+
 export fn id_tuple_flags(v: [Perms, u32]) -> [Perms, u32] {
     return v;
 }
@@ -298,20 +355,25 @@ export fn id_tuple_flags(v: [Perms, u32]) -> [Perms, u32] {
 // --- Payload-less variant nested in aggregates ---
 // Only a composite reads a stride or an offset. `[Status, u8]` is the sharpest:
 // nothing in it forces padding, so a wider discriminant moves the second element.
+
 export fn id_payload_less_variant(v: Status) -> Status {
     return v;
 }
+
 export fn id_option_payload_less_variant(v: Option<Status>) -> Option<Status> {
     return v;
 }
+
 export fn id_list_payload_less_variant(v: List<Status>) -> List<Status> {
     return v;
 }
+
 export fn id_tuple_payload_less_variant(v: [Status, u8]) -> [Status, u8] {
     return v;
 }
 
 // --- Async handle types (CM `future` / `stream`) ---
+
 export fn id_future_bool(v: Future<bool>) -> Future<bool> with Future {
     let value = v.read();
     let [rx, tx] = Future::<bool>::new();
@@ -320,6 +382,7 @@ export fn id_future_bool(v: Future<bool>) -> Future<bool> with Future {
     }
     return rx;
 }
+
 export fn id_future_u8(v: Future<u8>) -> Future<u8> with Future {
     let value = v.read();
     let [rx, tx] = Future::<u8>::new();
@@ -328,6 +391,7 @@ export fn id_future_u8(v: Future<u8>) -> Future<u8> with Future {
     }
     return rx;
 }
+
 export fn id_future_u16(v: Future<u16>) -> Future<u16> with Future {
     let value = v.read();
     let [rx, tx] = Future::<u16>::new();
@@ -336,6 +400,7 @@ export fn id_future_u16(v: Future<u16>) -> Future<u16> with Future {
     }
     return rx;
 }
+
 export fn id_future_u32(v: Future<u32>) -> Future<u32> with Future {
     let value = v.read();
     let [rx, tx] = Future::<u32>::new();
@@ -344,6 +409,7 @@ export fn id_future_u32(v: Future<u32>) -> Future<u32> with Future {
     }
     return rx;
 }
+
 export fn id_future_u64(v: Future<u64>) -> Future<u64> with Future {
     let value = v.read();
     let [rx, tx] = Future::<u64>::new();
@@ -352,6 +418,7 @@ export fn id_future_u64(v: Future<u64>) -> Future<u64> with Future {
     }
     return rx;
 }
+
 export fn id_future_s8(v: Future<i8>) -> Future<i8> with Future {
     let value = v.read();
     let [rx, tx] = Future::<i8>::new();
@@ -360,6 +427,7 @@ export fn id_future_s8(v: Future<i8>) -> Future<i8> with Future {
     }
     return rx;
 }
+
 export fn id_future_s16(v: Future<i16>) -> Future<i16> with Future {
     let value = v.read();
     let [rx, tx] = Future::<i16>::new();
@@ -368,6 +436,7 @@ export fn id_future_s16(v: Future<i16>) -> Future<i16> with Future {
     }
     return rx;
 }
+
 export fn id_future_s32(v: Future<i32>) -> Future<i32> with Future {
     let value = v.read();
     let [rx, tx] = Future::<i32>::new();
@@ -376,6 +445,7 @@ export fn id_future_s32(v: Future<i32>) -> Future<i32> with Future {
     }
     return rx;
 }
+
 export fn id_future_s64(v: Future<i64>) -> Future<i64> with Future {
     let value = v.read();
     let [rx, tx] = Future::<i64>::new();
@@ -384,6 +454,7 @@ export fn id_future_s64(v: Future<i64>) -> Future<i64> with Future {
     }
     return rx;
 }
+
 export fn id_future_f32(v: Future<f32>) -> Future<f32> with Future {
     let value = v.read();
     let [rx, tx] = Future::<f32>::new();
@@ -392,6 +463,7 @@ export fn id_future_f32(v: Future<f32>) -> Future<f32> with Future {
     }
     return rx;
 }
+
 export fn id_future_f64(v: Future<f64>) -> Future<f64> with Future {
     let value = v.read();
     let [rx, tx] = Future::<f64>::new();
@@ -400,6 +472,7 @@ export fn id_future_f64(v: Future<f64>) -> Future<f64> with Future {
     }
     return rx;
 }
+
 export fn id_future_char(v: Future<char>) -> Future<char> with Future {
     let value = v.read();
     let [rx, tx] = Future::<char>::new();
@@ -414,6 +487,7 @@ export fn id_future_char(v: Future<char>) -> Future<char> with Future {
 // just the handle. A scalar future read completes synchronously via the CM
 // number-type guard, but an aggregate read blocks, so these are `async`: the
 // readable end is delivered with `task return` and the payload written after.
+
 export async fn id_future_string(v: Future<String>) -> Future<String> with Future {
     let value = v.read();
     let [rx, tx] = Future::<String>::new();
@@ -422,6 +496,7 @@ export async fn id_future_string(v: Future<String>) -> Future<String> with Futur
         tx.write(x);
     }
 }
+
 export async fn id_future_option(v: Future<Option<u32>>) -> Future<Option<u32>> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Option<u32>>::new();
@@ -430,6 +505,7 @@ export async fn id_future_option(v: Future<Option<u32>>) -> Future<Option<u32>> 
         tx.write(x);
     }
 }
+
 export async fn id_future_result(v: Future<Result<u32, String>>) -> Future<Result<u32, String>> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Result<u32, String>>::new();
@@ -438,8 +514,10 @@ export async fn id_future_result(v: Future<Result<u32, String>>) -> Future<Resul
         tx.write(x);
     }
 }
+
 // A unit Ok arm is also the WASI transmission shape; only a WASI error-code
 // on the Err side makes it one.
+
 export async fn id_future_result_err(v: Future<Result<(), String>>) -> Future<Result<(), String>> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Result<(), String>>::new();
@@ -448,6 +526,7 @@ export async fn id_future_result_err(v: Future<Result<(), String>>) -> Future<Re
         tx.write(x);
     }
 }
+
 export async fn id_future_list(v: Future<List<u32>>) -> Future<List<u32>> with Future {
     let value = v.read();
     let [rx, tx] = Future::<List<u32>>::new();
@@ -456,6 +535,7 @@ export async fn id_future_list(v: Future<List<u32>>) -> Future<List<u32>> with F
         tx.write(x);
     }
 }
+
 export async fn id_future_tuple(v: Future<[u32, String]>) -> Future<[u32, String]> with Future {
     let value = v.read();
     let [rx, tx] = Future::<[u32, String]>::new();
@@ -464,6 +544,7 @@ export async fn id_future_tuple(v: Future<[u32, String]>) -> Future<[u32, String
         tx.write(x);
     }
 }
+
 export async fn id_future_record(v: Future<Point>) -> Future<Point> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Point>::new();
@@ -472,7 +553,9 @@ export async fn id_future_record(v: Future<Point>) -> Future<Point> with Future 
         tx.write(x);
     }
 }
+
 // A newtype is a WIT type alias, so the payload is its base's (`f64`).
+
 export fn id_future_newtype(v: Future<Meters>) -> Future<Meters> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Meters>::new();
@@ -481,6 +564,7 @@ export fn id_future_newtype(v: Future<Meters>) -> Future<Meters> with Future {
     }
     return rx;
 }
+
 export async fn id_future_enum(v: Future<Color>) -> Future<Color> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Color>::new();
@@ -489,6 +573,7 @@ export async fn id_future_enum(v: Future<Color>) -> Future<Color> with Future {
         tx.write(x);
     }
 }
+
 export async fn id_future_variant(v: Future<Shape>) -> Future<Shape> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Shape>::new();
@@ -497,6 +582,7 @@ export async fn id_future_variant(v: Future<Shape>) -> Future<Shape> with Future
         tx.write(x);
     }
 }
+
 export async fn id_future_flags(v: Future<Perms>) -> Future<Perms> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Perms>::new();
@@ -507,6 +593,7 @@ export async fn id_future_flags(v: Future<Perms>) -> Future<Perms> with Future {
 }
 
 // `stream<u8>` pass-through: the readable end crosses the boundary unchanged.
+
 export fn id_stream_u8(v: Stream<u8>) -> Stream<u8> {
     return v;
 }
@@ -517,6 +604,7 @@ export fn id_stream_u8(v: Stream<u8>) -> Stream<u8> {
 // linear memory (lift on read, lower on write). `async` because both halves
 // block until the peer makes progress; the readable end is delivered with
 // `task return` and the copy loop runs after.
+
 export async fn id_stream_u32(mut v: Stream<u32>) -> Stream<u32> with Stream {
     let [rx, tx] = Stream::<u32>::new();
     task return rx;
@@ -531,6 +619,7 @@ export async fn id_stream_u32(mut v: Stream<u32>) -> Stream<u32> with Stream {
     v.drop();
     tx.drop();
 }
+
 export async fn id_stream_string(mut v: Stream<String>) -> Stream<String> with Stream {
     let [rx, tx] = Stream::<String>::new();
     task return rx;
@@ -545,6 +634,7 @@ export async fn id_stream_string(mut v: Stream<String>) -> Stream<String> with S
     v.drop();
     tx.drop();
 }
+
 export async fn id_stream_record(mut v: Stream<Point>) -> Stream<Point> with Stream {
     let [rx, tx] = Stream::<Point>::new();
     task return rx;
@@ -559,6 +649,7 @@ export async fn id_stream_record(mut v: Stream<Point>) -> Stream<Point> with Str
     v.drop();
     tx.drop();
 }
+
 export async fn id_stream_enum(mut v: Stream<Color>) -> Stream<Color> with Stream {
     let [rx, tx] = Stream::<Color>::new();
     task return rx;
@@ -573,6 +664,7 @@ export async fn id_stream_enum(mut v: Stream<Color>) -> Stream<Color> with Strea
     v.drop();
     tx.drop();
 }
+
 export async fn id_stream_variant(mut v: Stream<Shape>) -> Stream<Shape> with Stream {
     let [rx, tx] = Stream::<Shape>::new();
     task return rx;
@@ -587,7 +679,9 @@ export async fn id_stream_variant(mut v: Stream<Shape>) -> Stream<Shape> with St
     v.drop();
     tx.drop();
 }
+
 // The element whose CM width differs from its Wado one: checks the stride.
+
 export async fn id_stream_flags(mut v: Stream<Perms>) -> Stream<Perms> with Stream {
     let [rx, tx] = Stream::<Perms>::new();
     task return rx;
@@ -604,21 +698,27 @@ export async fn id_stream_flags(mut v: Stream<Perms>) -> Stream<Perms> with Stre
 }
 
 // Handles embedded in aggregates: lift/lower of a handle at a composite offset.
+
 export fn id_option_future(v: Option<Future<u32>>) -> Option<Future<u32>> {
     return v;
 }
+
 export fn id_result_future(v: Result<Future<u32>, String>) -> Result<Future<u32>, String> {
     return v;
 }
+
 export fn id_list_future(v: List<Future<u32>>) -> List<Future<u32>> {
     return v;
 }
+
 export fn id_list_stream(v: List<Stream<u8>>) -> List<Stream<u8>> {
     return v;
 }
+
 export fn id_tuple_future(v: [Future<u32>, u32]) -> [Future<u32>, u32] {
     return v;
 }
+
 export fn id_record_future(v: FutureCell) -> FutureCell {
     return v;
 }
@@ -626,6 +726,7 @@ export fn id_record_future(v: FutureCell) -> FutureCell {
 // --- Narrow scalars in the indirect params buffer ---
 // Five flat params put the call on the one-buffer path. There a scalar stored
 // wider than its CM size writes past its slot, and past the end.
+
 export async fn narrow_scalars_in_params_buffer(c: Color, o: Option<u8>, p: Perms, s: Status) -> u32 {
     let tag: u32 = match c {
         _::Red => 1,
@@ -643,6 +744,7 @@ export async fn narrow_scalars_in_params_buffer(c: Color, o: Option<u8>, p: Perm
 
 // Five flat params put the call on the one-buffer path, where the `map` is
 // stored as its `(ptr, count)` and what follows must land past both halves.
+
 export async fn map_in_params_buffer(m: HashMap<String, u32>, o: Option<u8>, tail: u8) -> u32 {
     let mut total: u32 = 0;
     for let [_, v] of m.entries() {
@@ -654,6 +756,7 @@ export async fn map_in_params_buffer(m: HashMap<String, u32>, o: Option<u8>, tai
 // Seventeen flat params put a sync call past the sixteen it passes directly,
 // so the caller writes them all to one buffer and passes its address. Each
 // param gets a band of its own, so one slot read wrong shows in the total.
+
 export fn past_flat_params(
     a: u8,
     b: u8,
@@ -679,6 +782,7 @@ export fn past_flat_params(
 }
 
 // Within four flat params an async call passes them directly, `Option` included.
+
 export async fn option_passed_flat(o: Option<u32>) -> u32 {
     task return o.unwrap_or(0) + 1;
 }
@@ -686,5 +790,6 @@ export async fn option_passed_flat(o: Option<u32>) -> u32 {
 // The empty test block makes `e2e.rs` accept this as a test-world fixture: it
 // confirms a library-shaped source compiles and instantiates under the test
 // world. The lift/lower round-trip lives in `cm_catalog.rs`.
+
 test "library shape compiles under the test world" {
 }

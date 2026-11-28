@@ -71,9 +71,9 @@ pub enum ZlibError {
     TruncatedTrailer,
     IsizeMismatch,
     OutputExceedsMax,
-    // The DEFLATE stream itself is malformed: a reserved block type (RFC 1951
-    // section 3.2.3, BTYPE=11), an invalid Huffman code, a back-reference past
-    // the start of the output, or a stream that ends before its final block.
+    /// The DEFLATE stream itself is malformed: a reserved block type (RFC 1951
+    /// section 3.2.3, BTYPE=11), an invalid Huffman code, a back-reference past
+    /// the start of the output, or a stream that ends before its final block.
     InvalidDeflateData,
 }
 
@@ -106,8 +106,8 @@ pub fn zlib_version() -> String {
     return "1.3.1.wado";
 }
 
-
 // Return codes
+
 pub global Z_OK: i32 = 0;
 pub global Z_STREAM_END: i32 = 1;
 
@@ -119,6 +119,7 @@ pub global Z_BUF_ERROR: i32 = -5;
 pub global Z_VERSION_ERROR: i32 = -6;
 
 // Flush modes
+
 pub global Z_NO_FLUSH: i32 = 0;
 pub global Z_PARTIAL_FLUSH: i32 = 1;
 pub global Z_SYNC_FLUSH: i32 = 2;
@@ -128,12 +129,14 @@ pub global Z_BLOCK: i32 = 5;
 pub global Z_TREES: i32 = 6;
 
 // Compression levels
+
 pub global Z_NO_COMPRESSION: i32 = 0;
 pub global Z_BEST_SPEED: i32 = 1;
 pub global Z_BEST_COMPRESSION: i32 = 9;
 pub global Z_DEFAULT_COMPRESSION: i32 = 6;
 
 // Compression strategies
+
 pub global Z_DEFAULT_STRATEGY: i32 = 0;
 pub global Z_FILTERED: i32 = 1;
 pub global Z_HUFFMAN_ONLY: i32 = 2;
@@ -141,16 +144,18 @@ pub global Z_RLE: i32 = 3;
 pub global Z_FIXED: i32 = 4;
 
 // Data types
+
 pub global Z_BINARY: i32 = 0;
 pub global Z_TEXT: i32 = 1;
 pub global Z_UNKNOWN: i32 = 2;
 
 // Compression method
+
 pub global Z_DEFLATED: i32 = 8;
 
 // Window size
-pub global MAX_WBITS: i32 = 15;
 
+pub global MAX_WBITS: i32 = 15;
 
 /// Computes an Adler-32 checksum over `buf[offset..<offset + len]`, starting from `adler`.
 pub fn adler32(adler: u32, buf: &ByteList, offset: i32, len: i32) -> u32 {
@@ -221,11 +226,13 @@ pub fn adler32(adler: u32, buf: &ByteList, offset: i32, len: i32) -> u32 {
 // The 16-byte blocks one run of `adler32_linear` sums in i32 lanes before
 // reducing. A lane summing earlier blocks' sums reaches 4 · 255 · n(n − 1) / 2,
 // which stays below 2^31 up to n = 2052.
+
 global ADLER_BLOCKS: i32 = 2048;
 
 // `adler32` over bytes in linear memory, a 16-byte block at a time. Where a
 // block starts with s1 = S, its byte k adds S + b_0 + … + b_k to s2, so the
 // block adds 16·S + Σ (16 − k)·b_k to it.
+
 fn adler32_linear(adler: u32, buf: &LinearArray<u8>, offset: i32, len: i32) -> u32
     contract 0 <= offset && 0 <= len <= buf.len() - offset
 {
@@ -286,6 +293,7 @@ test "adler32_linear agrees with adler32" {
 }
 
 // The four lanes of `v`, each non-negative, added.
+
 fn lane_sum(v: v128) -> u64 {
     return builtin::i32x4_extract_lane(0, v) as u64 + builtin::i32x4_extract_lane(1, v) as u64 + builtin::i32x4_extract_lane(
         2,
@@ -333,7 +341,6 @@ pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32 {
     return sum1 | sum2 << 16;
 }
 
-
 global CRC_TABLE: List<u32> = build_crc_table();
 
 fn build_crc_table() -> List<u32> {
@@ -373,6 +380,7 @@ pub fn crc32_init() -> u32 {
 }
 
 // Multiply two GF(2) polynomials (for CRC-32 combine)
+
 fn gf2_matrix_times(mat: &List<u32>, vec: u32) -> u32 {
     let mut result: u32 = 0;
     let mut v = vec;
@@ -443,7 +451,6 @@ pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
     return c1 ^ crc2;
 }
 
-
 /// Returns the maximum compressed size for a given source length.
 ///
 /// Uses the larger of the stored-block worst case and the classic
@@ -463,9 +470,9 @@ pub fn compress_bound(source_len: i32) -> i32 {
     return classic_bound;
 }
 
-
 // A decoding table entry in one i32, so the table is a flat GC array rather
 // than an array of references and a decode reads it with one unboxed load.
+
 fn code_pack(op: i32, bits: i32, val: i32) -> i32 {
     return op & 0xFF | (bits & 0xFF) << 8 | (val & 0xFFFF) << 16;
 }
@@ -482,8 +489,8 @@ fn code_val(entry: i32) -> i32 {
     return entry >> 16 & 0xFFFF;
 }
 
-
 // Code type constants
+
 global CODES_TYPE: i32 = 0;
 global LENS_TYPE: i32 = 1;
 global DISTS_TYPE: i32 = 2;
@@ -491,6 +498,7 @@ global DISTS_TYPE: i32 = 2;
 // The most entries a complete code can take: zlib's `enough` utility proves
 // 852 for 286 literal/length symbols under a 9-bit root table, and 592 for 30
 // distance symbols under a 6-bit one.
+
 global ENOUGH_LENS: i32 = 852;
 global ENOUGH_DISTS: i32 = 592;
 global ENOUGH: i32 = ENOUGH_LENS + ENOUGH_DISTS;
@@ -502,6 +510,7 @@ global STORED_MAX: i32 = 65535;  // largest DEFLATE stored block, bounded by the
 // 257..=285 map to lengths 3..=258 (LENGTH_BASE) plus 0..=5 extra bits
 // (LENGTH_EXTRA), and distance codes 0..=29 map to distances 1..=32768
 // (DIST_BASE) plus 0..=13 extra bits (DIST_EXTRA).
+
 global LENGTH_BASE: List<i32> = [
     3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258,
 ];
@@ -517,6 +526,7 @@ global DIST_EXTRA: List<i32> = [
 // Build a set of tables to decode the provided canonical Huffman code.
 // Returns [result, root_bits, table_offset_after]
 // result: 0=success, -1=invalid code, 1=not enough space
+
 fn inflate_table(
     codetype: i32,
     lens: &List<u16>,
@@ -754,22 +764,25 @@ fn inflate_table(
     return [0, root, table_start + used];
 }
 
-
 // Order in which the code-length code lengths are stored in a dynamic block
 // (RFC 1951 section 3.2.7): "(HCLEN + 4) x 3 bits: code lengths for the code
 // length alphabet given just above, in the order: 16, 17, 18, 0, 8, 7, ...".
+
 global INFLATE_ORDER: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
 affine struct InflateState {
     // input position, and where the input ends
+
     next: i32,
     end: i32,
 
     // bit buffer
+
     hold: u64,
     bits: i32,
 
     // code tables
+
     codes: LinearArray<i32>,
     lencode_off: i32,  // offset into codes for len/lit table
     distcode_off: i32,  // offset into codes for dist table
@@ -777,6 +790,7 @@ affine struct InflateState {
     distbits: i32,
 
     // code lengths, and inflate_table's scratch
+
     lens: List<u16>,
     work: List<u16>,
 }
@@ -839,6 +853,7 @@ impl InflateState {
     // Pulls input bytes until at least `n` bits are held. The whole stream is at
     // hand, so input that ends first is a stream cut short. The buffer holds 64
     // bits, and a pull adds up to 7 past `n`.
+
     fn need_bits(&mut self, input: &LinearArray<u8>, n: i32) -> Result<(), ZlibError>
         contract n <= 57
     {
@@ -873,6 +888,7 @@ impl InflateState {
     // time until the code's bits are all held. A lookup short of bits may land
     // on another code's entry, but only on one longer than the bits held, since
     // the code is prefix-free.
+
     fn decode(&mut self, input: &LinearArray<u8>, table: i32, root_bits: i32) -> Result<i32, ZlibError> {
         loop {
             let [here, n] = decode_entry(&self.codes, table, root_bits, self.hold);
@@ -886,6 +902,7 @@ impl InflateState {
 }
 
 // The input bytes one fast-loop iteration may read: one 8-byte refill.
+
 global FAST_INPUT_MIN: i32 = 8;
 
 fn low_bits(hold: u64, n: i32) -> i32 {
@@ -894,6 +911,7 @@ fn low_bits(hold: u64, n: i32) -> i32 {
 
 // The entry for the code at the bottom of `hold`, followed into its sub-table
 // where it has one, and the code's full length in bits.
+
 fn decode_entry(codes: &LinearArray<i32>, table: i32, root_bits: i32, hold: u64) -> [i32, i32] {
     // inflate_table fills every entry a root index or a sub-table index
     // reaches, within ENOUGH.
@@ -912,11 +930,13 @@ fn decode_entry(codes: &LinearArray<i32>, table: i32, root_bits: i32, hold: u64)
 
 // The room one decoded symbol may take: the longest match (RFC 1951 section
 // 3.2.5), and the 7 bytes an 8-byte copy writes past its end.
+
 global SYMBOL_ROOM: i32 = 258 + 7;
 
 // A decode's output, in linear memory: `len` bytes written, of at most `max`,
 // the stream being decoded from `start` on. The bytes past `len` are room the
 // next symbol writes into.
+
 affine struct Output {
     bytes: LinearArray<u8>,
     start: i32,
@@ -927,6 +947,7 @@ affine struct Output {
 impl Output {
     // A `max` within SYMBOL_ROOM of `i32::MAX` leaves no room an array can
     // hold past the last symbol.
+
     fn new(max: i32) -> Output
         contract max >= 0
     {
@@ -936,6 +957,7 @@ impl Output {
 
     // Grows the room past `len` to at least `n` bytes, doubling, so the output
     // copies each byte a bounded number of times.
+
     fn reserve(&mut self, n: i32) {
         if self.bytes.len() - self.len < n {
             builtin::cold_path();
@@ -945,6 +967,7 @@ impl Output {
     }
 
     // Needs room for one byte.
+
     fn literal(&mut self, literal: i32) -> Result<(), ZlibError> {
         if self.len == self.max {
             builtin::cold_path();
@@ -960,6 +983,7 @@ impl Output {
     // separate window is needed. A distance before the start of the stream is
     // invalid (RFC 1951 section 3.2.3: "a distance cannot refer past the
     // beginning of the output stream"), a gzip member's included.
+
     fn copy_match(&mut self, length: i32, dist: i32) -> Result<(), ZlibError> {
         if dist > self.len - self.start {
             builtin::cold_path();
@@ -1005,6 +1029,7 @@ impl Output {
 // only the whole bytes that fit; the rest of the word lands where the next
 // refill writes the same bytes again. True where the block ended, false where
 // the input ran low with the block still open.
+
 fn inflate_fast(state: &mut InflateState, input: &LinearArray<u8>, output: &mut Output) -> Result<bool, ZlibError> {
     let codes = &state.codes;
     let lencode_off = state.lencode_off;
@@ -1113,6 +1138,7 @@ fn inflate_raw_ex(
 
 // A stored block (RFC 1951 section 3.2.4): LEN then NLEN, the one's complement
 // of LEN, then LEN bytes copied from the input.
+
 fn inflate_stored(state: &mut InflateState, input: &LinearArray<u8>, output: &mut Output) -> Result<(), ZlibError> {
     state.drop_to_byte_boundary();
     state.need_bits(input, 32)?;
@@ -1142,6 +1168,7 @@ fn inflate_stored(state: &mut InflateState, input: &LinearArray<u8>, output: &mu
 
 // A dynamic block's header (RFC 1951 section 3.2.7), built into the
 // literal/length and distance tables.
+
 fn read_dynamic_tables(state: &mut InflateState, input: &LinearArray<u8>) -> Result<(), ZlibError> {
     // HLIT+257 literal/length codes, HDIST+1 distance codes, HCLEN+4 code
     // length codes. 286/30 are the largest valid counts; 286-287 and 30-31
@@ -1233,6 +1260,7 @@ fn read_dynamic_tables(state: &mut InflateState, input: &LinearArray<u8>) -> Res
 // A Huffman-coded block's literals and length/distance pairs, up to its
 // end-of-block code: `inflate_fast` while the input allows, then one code at a
 // time.
+
 fn inflate_codes(state: &mut InflateState, input: &LinearArray<u8>, output: &mut Output) -> Result<(), ZlibError> {
     loop {
         if state.end - state.next >= FAST_INPUT_MIN && inflate_fast(state, input, output)? {
@@ -1326,7 +1354,6 @@ pub fn inflate_zlib(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
     return Result::Ok(output.to_list());
 }
 
-
 /// Compresses data into raw DEFLATE stored blocks (no actual compression).
 pub fn deflate_stored(input: &ByteList) -> ByteList {
     let total = input.len();
@@ -1365,8 +1392,8 @@ pub fn deflate_stored(input: &ByteList) -> ByteList {
     return output;
 }
 
-
 // Bit-reverse a value of `len` bits
+
 internal fn bi_reverse(code: u32, len: i32) -> u32 {
     let mut res: u32 = 0;
     let mut c = code;
@@ -1385,6 +1412,7 @@ internal fn bi_reverse(code: u32, len: i32) -> u32 {
 
 // Bit writer for deflate output: a field goes least significant bit first
 // (RFC 1951 section 3.1.1), so a Huffman code is written bit-reversed.
+
 internal struct BitWriter {
     internal output: ByteList,
     buf: u64,
@@ -1429,6 +1457,7 @@ impl BitWriter {
 
 // A deflate encoding entry in one i32 — bit-reversed code, then its length — so
 // an encoding tree is a flat GC array rather than an array of references.
+
 fn enc_pack(code: i32, len: i32) -> i32 {
     return code & 0xFFFF | (len & 0xFF) << 16;
 }
@@ -1439,6 +1468,7 @@ fn enc_len(entry: i32) -> i32 {
 
 // Code lengths of the fixed literal/length and distance trees of RFC 1951
 // section 3.2.6. Both fixed trees and the cost of a fixed block read them here.
+
 fn build_fixed_lengths() -> [ByteList, ByteList] {
     let mut lit = ByteList::filled(288, 8);
     for let mut sym = 144; sym < 256; sym += 1 {
@@ -1462,6 +1492,7 @@ fn build_fixed_dtree() -> List<i32> {
 
 // Direct lookup table: length_codes[length - 3] = code index (0..=28)
 // Built using the zlib tr_static_init algorithm
+
 fn build_length_codes(extra_lbits: &List<i32>) -> ByteList {
     let mut table = ByteList::filled(256, 0);
     let mut length = 0;
@@ -1479,6 +1510,7 @@ fn build_length_codes(extra_lbits: &List<i32>) -> ByteList {
 // zlib-style distance code lookup table (512 entries)
 // First 256: direct lookup for dist-1 < 256
 // Next 256: shifted lookup for (dist-1) >> 7 when dist > 256
+
 fn build_dist_codes(extra_dbits: &List<i32>) -> ByteList {
     let mut table = ByteList::filled(512, 0);
     let mut dist = 0;
@@ -1503,12 +1535,14 @@ fn build_dist_codes(extra_dbits: &List<i32>) -> ByteList {
 }
 
 // 3-byte hash function for LZ77
+
 fn hash3(a: u8, b: u8, c: u8) -> i32 {
     return (a as i32 << 10 ^ b as i32 << 5 ^ c as i32) & 32767;
 }
 
 // hash3 is rolling — masking every step is the same as masking once, since a
 // byte shifted five never reaches bit 15 — so a position costs one load, not three.
+
 fn hash3_roll(h: i32, next: u8) -> i32 {
     return (h << 5 ^ next as i32) & 32767;
 }
@@ -1516,15 +1550,18 @@ fn hash3_roll(h: i32, next: u8) -> i32 {
 // The positions LZ77 looks back over (RFC 1951 section 2: "at most 32K input
 // bytes"), and the number of 3-byte hashes; a position's chain slot is it
 // modulo the window.
+
 global WINDOW: i32 = 32768;
 
 // The longest match DEFLATE codes (RFC 1951 section 3.2.5).
+
 global MAX_MATCH: i32 = 258;
 
 // LZ77's search over an input: the input in linear memory, with a 16-byte zero
 // pad so a `v128` compare reads past a match's end, and the hash chains. `head`
 // holds the latest position under each hash, and `prev` the position before
 // each one under the same hash; -1 ends a chain.
+
 affine struct Matcher {
     bytes: LinearArray<u8>,
     len: i32,
@@ -1548,6 +1585,7 @@ impl Matcher {
     }
 
     // The hash of the 3 bytes at `pos`.
+
     fn hash(&self, pos: i32) -> i32
         contract 0 <= pos < self.len - 2
     {
@@ -1555,6 +1593,7 @@ impl Matcher {
     }
 
     // Bucket `pos` under its hash `h`.
+
     fn insert(&mut self, pos: i32, h: i32) {
         unchecked self.prev.set(pos & WINDOW - 1, unchecked self.head.at(h));
         unchecked self.head.set(h, pos);
@@ -1564,6 +1603,7 @@ impl Matcher {
     // the hash `pos` was bucketed under. Starting at `pos` would set
     // `prev[pos]` to `pos` and strand every older candidate in that bucket
     // behind the self-link.
+
     fn insert_run(&mut self, pos: i32, h: i32, run: i32) {
         let limit = i32::min(run, self.len - pos - 2);
         let mut mh = h;
@@ -1577,6 +1617,7 @@ impl Matcher {
     // bucketed under its hash `h`, as [length, distance], stopping at one of
     // `nice_length`. Only a match longer than `best_len` counts; with none,
     // [best_len, 0].
+
     fn longest_match(&self, pos: i32, h: i32, best_len: i32, max_chain: i32, nice_length: i32) -> [i32, i32] {
         let mut best_len = best_len;
         let mut best_dist = 0;
@@ -1616,6 +1657,7 @@ impl Matcher {
 
     // The common run of the bytes at `a` and at `b`, capped at `max_len`,
     // compared 16 at a time.
+
     fn match_len(&self, a: i32, b: i32, max_len: i32) -> i32 {
         let mut n = 0;
         while n < max_len {
@@ -1702,8 +1744,8 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
     return bw.output;
 }
 
-
 // Huffman tree node for building optimal trees
+
 struct HuffNode {
     freq: i32,  // frequency count
     code: u16,  // assigned Huffman code
@@ -1714,6 +1756,7 @@ struct HuffNode {
 }
 
 // Deflate constants
+
 global L_CODES: i32 = 286;  // literal/length codes (256 literals + 1 EOB + 29 lengths)
 global D_CODES: i32 = 30;  // distance codes
 global BL_CODES: i32 = 19;  // bit-length codes
@@ -1722,6 +1765,7 @@ global MAX_BL_BITS: i32 = 7;  // max bits for bit-length codes
 
 // Build a Huffman tree from frequency counts
 // Returns code lengths in bl_count format
+
 fn build_huffman_tree(freqs: &List<i32>, max_sym: i32, max_bits: i32, bl_count: &mut List<i32>, lengths: &mut ByteList) {
     // frequency of each symbol
     // number of symbols
@@ -1984,6 +2028,7 @@ fn build_huffman_tree(freqs: &List<i32>, max_sym: i32, max_bits: i32, bl_count: 
 }
 
 // Generate canonical Huffman codes from code lengths
+
 fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<i32> {
     let mut bl_count: List<i32> = List::filled(max_bits + 1, 0);
     for let mut i = 0; i < max_sym; i += 1 {
@@ -2012,6 +2057,7 @@ fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<i3
 // Write a dynamic Huffman block
 // An LZ77 token in one i32 — symbol, then the match distance (0 for a literal).
 // One flat buffer instead of two, so a block costs one push and one load a token.
+
 fn token_pack(sym: i32, dist: i32) -> i32 {
     return sym & 0xFFFF | (dist & 0xFFFF) << 16;
 }
@@ -2025,6 +2071,7 @@ fn token_dist(token: i32) -> i32 {
 }
 
 // Symbol frequencies of a block, with EOB already counted.
+
 fn count_block_freqs(
     tokens: &List<i32>,
     sym_count: i32,
@@ -2054,6 +2101,7 @@ fn count_block_freqs(
 
 // Bits the symbol stream costs under the given code-length tables. The
 // frequencies hold the counts, so this sums over codes, never over tokens.
+
 fn encoded_data_bits(
     lit_freq: &List<i32>,
     dist_freq: &List<i32>,
@@ -2075,6 +2123,7 @@ fn encoded_data_bits(
 
 // Everything a dynamic block needs, derived once from the frequencies.
 // `write_dynamic_block` emits a plan; `deflate_raw` prices one.
+
 struct DynamicPlan {
     lit_tree: List<i32>,
     dist_tree: List<i32>,
@@ -2234,6 +2283,7 @@ fn plan_dynamic_block(lit_freq: &List<i32>, dist_freq: &mut List<i32>) -> Dynami
 }
 
 // Write the final block of a stream, with dynamic Huffman codes.
+
 fn write_dynamic_block(
     bw: &mut BitWriter,
     tokens: &List<i32>,
@@ -2280,6 +2330,7 @@ fn write_dynamic_block(
 }
 
 // Write the final block of a stream, with the fixed Huffman codes.
+
 fn write_fixed_block(
     bw: &mut BitWriter,
     tokens: &List<i32>,
@@ -2295,6 +2346,7 @@ fn write_fixed_block(
 }
 
 // Write a block's literals and <length, distance> pairs, then its end-of-block code.
+
 fn write_tokens(
     bw: &mut BitWriter,
     tokens: &List<i32>,
@@ -2333,12 +2385,14 @@ fn write_tokens(
 // The distance code for a distance of 1 to 32768 (RFC 1951 section 3.2.5).
 // `dist_codes_table` holds one entry per distance below 257 and one per 128
 // distances past it.
+
 fn dist_code(dist_codes_table: &ByteList, dist: i32) -> i32 {
     let dd = dist - 1;
     return if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
 }
 
 // Compression level configuration
+
 struct DeflateConfig {
     good_length: i32,  // reduce lazy search above this match length
     max_lazy: i32,  // do not perform lazy search above this match length
@@ -2579,8 +2633,8 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
     return bw.output;
 }
 
-
 // Wrap raw deflate data in zlib format
+
 fn zlib_wrap(input: &ByteList, deflated: &ByteList, level: i32) -> ByteList {
     let mut output = ByteList::with_capacity(deflated.len() + 6);
 
@@ -2626,6 +2680,7 @@ pub fn zlib_compress(
 }
 
 // Gzip header constants
+
 global GZIP_MAGIC1: u8 = 0x1F;
 global GZIP_MAGIC2: u8 = 0x8B;
 global GZIP_FTEXT: u8 = 1;
@@ -2636,6 +2691,7 @@ global GZIP_FCOMMENT: u8 = 16;
 
 // Parse the gzip member header (RFC 1952 section 2.3) at `start`, and the
 // position just past it.
+
 fn gzip_parse_header(input: &ByteList, start: i32) -> Result<[GzipHeader, i32], ZlibError> {
     // The fixed header is 10 bytes: ID1, ID2, CM, FLG, MTIME(4), XFL, OS.
     if start + 10 > input.len() {
@@ -2699,6 +2755,7 @@ fn gzip_parse_header(input: &ByteList, start: i32) -> Result<[GzipHeader, i32], 
 // as UTF-8 to match the bytes the compress side emits and to support
 // non-Latin-1 names. Invalid sequences are replaced with U+FFFD rather than
 // failing the parse, since these fields are best-effort metadata.
+
 fn read_header_string(input: &ByteList, pos: i32) -> [String, i32] {
     let mut end = pos;
     while end < input.len() && input[end] != 0 {
@@ -2769,7 +2826,6 @@ pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
     return Result::Ok(output.to_list());
 }
 
-
 /// Auto-detects the wrapper format (zlib or gzip) and decompresses, failing with
 /// `ZlibError::OutputExceedsMax` once the output would pass `max_output`.
 pub fn uncompress(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
@@ -2782,7 +2838,6 @@ pub fn uncompress(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteLi
     }
     return inflate_zlib(input, max_output);
 }
-
 
 /// A gzip header (RFC 1952) used by `gzip_compress` to set
 /// optional fields and by `inflate_get_gzip_header` to report them.
@@ -2977,8 +3032,8 @@ pub fn inflate_get_gzip_header(input: &ByteList) -> Result<GzipHeader, ZlibError
     return Result::Ok(header);
 }
 
-
 // Format selection for streaming API.
+
 pub global ZLIB_FORMAT: i32 = 0;
 pub global RAW_FORMAT: i32 = 1;
 pub global GZIP_FORMAT: i32 = 2;
@@ -3200,7 +3255,6 @@ impl InflateStream {
         return inflate_zlib(input, max_output);
     }
 }
-
 
 /// Finds the next DEFLATE sync point (`00 00 FF FF`) at or after `start`.
 ///
