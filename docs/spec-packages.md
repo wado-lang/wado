@@ -792,8 +792,8 @@ replaces it. A `new` that fails removes the directories it created.
 A package created under a workspace is a member of it. Where `members` does not
 already cover the package's directory, `init` adds the directory to `members`.
 The exception is a directory git ignores, such as scratch space: a package
-there stays out of the workspace. Only the path below the workspace root counts,
-so a workspace that itself sits in ignored space still takes members, and a
+there stays out of the workspace. A workspace that itself sits in ignored space
+takes every new package, since git reads no ignore rule inside it, and a
 directory `members` already covers stays a member, ignored or not.
 `wado workspace add <dir>` adds a package that is already there, ignored or not.
 

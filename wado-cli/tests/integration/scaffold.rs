@@ -321,8 +321,8 @@ fn new_in_a_git_ignored_directory_stays_out_of_the_workspace() {
     assert_eq!(read(&tmp.path().join("wado-workspace.toml")), ws);
 }
 
-/// Only the part of the path the workspace holds is asked of git: a workspace
-/// that itself sits in ignored scratch space still takes members.
+/// A workspace that itself sits in ignored scratch space still takes members:
+/// git reads no ignore rule inside it.
 #[test]
 fn new_joins_a_workspace_that_sits_in_a_git_ignored_directory() {
     let tmp = tempfile::tempdir().unwrap();

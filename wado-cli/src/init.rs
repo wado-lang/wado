@@ -215,8 +215,8 @@ pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit
                 joining: false,
                 root,
             }),
-            // Only what lies below the workspace root is asked: a workspace in
-            // ignored scratch space still takes members.
+            // Inside an ignored workspace git reads no ignore rule, so it cannot
+            // tell scratch space there from a member: every package joins.
             Some(_) if git::ignores(&dir)? && !git::ignores(&root)? => {
                 eprintln!(
                     "{} is ignored by git, so it does not join the workspace",
