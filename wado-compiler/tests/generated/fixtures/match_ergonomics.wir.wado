@@ -630,22 +630,22 @@ match rx { _ && *rx > 100 => \"large\", _ && *rx > 10 => \"medium\", _ => \"smal
 }
 
 fn "match_ergonomics.wado/$test_2_a__mut_scrutinee_writes_through_in_if_let"() {
-    let self_8: ref "core:prelude/list.wado//List<i32>";
-    let used_10: i32;
-    let $sroa_opt_value_16: ref null "match_ergonomics.wado//Hits";
-    if ref.is_null(local.tee $sroa_opt_value_16(struct.new "match_ergonomics.wado//Hits" { hits: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } })) == 0 {
-        if @unlikely(local.tee used_10(local.tee self_8($sroa_opt_value_16.hits).used) >= builtin::array_len(self_8.repr)) {
+    let self_7: ref "core:prelude/list.wado//List<i32>";
+    let used_9: i32;
+    let $sroa_opt_value_15: ref null "match_ergonomics.wado//Hits";
+    if ref.is_null(local.tee $sroa_opt_value_15(struct.new "match_ergonomics.wado//Hits" { hits: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } })) == 0 {
+        if @unlikely(local.tee used_9(local.tee self_7($sroa_opt_value_15.hits).used) >= builtin::array_len(self_7.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_8);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_7);
         }
-        builtin::array_set<i32>(self_8.repr, used_10, 2);
-        self_8.used = used_10 + 1;
+        builtin::array_set<i32>(self_7.repr, used_9, 2);
+        self_7.used = used_9 + 1;
     } else {
     }
-    if ref.is_null($sroa_opt_value_16) == 0 {
-        if @unlikely(local.tee used_10($sroa_opt_value_16.hits.used) != 2) {
+    if ref.is_null($sroa_opt_value_15) == 0 {
+        if @unlikely(local.tee used_9($sroa_opt_value_15.hits.used) != 2) {
             cold_path;
-            "match_ergonomics.wado/$test_2_a__mut_scrutinee_writes_through_in_if_let$cold0"(used_10);
+            "match_ergonomics.wado/$test_2_a__mut_scrutinee_writes_through_in_if_let$cold0"(used_9);
             unreachable;
         }
     } else {
@@ -653,29 +653,29 @@ fn "match_ergonomics.wado/$test_2_a__mut_scrutinee_writes_through_in_if_let"() {
 }
 
 fn "match_ergonomics.wado/$test_3_a__mut_scrutinee_writes_through_in_match"() {
-    let c_2: ref "match_ergonomics.wado//Hits";
-    let self_10: ref "core:prelude/list.wado//List<i32>";
-    let used_12: i32;
-    let $sroa_opt_value_19: ref null "match_ergonomics.wado//Hits";
-    if @unlikely(local.tee used_12((if @likely(ref.is_null(local.tee $sroa_opt_value_19(struct.new "match_ergonomics.wado//Hits" { hits: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(10), used: 1 } })) == 0) -> i32 {
-        if @unlikely(local.tee used_12(local.tee self_10(local.tee c_2(ref.as_non_null($sroa_opt_value_19)).hits).used) >= builtin::array_len(self_10.repr)) {
+    let c_1: ref "match_ergonomics.wado//Hits";
+    let self_9: ref "core:prelude/list.wado//List<i32>";
+    let used_11: i32;
+    let $sroa_opt_value_18: ref null "match_ergonomics.wado//Hits";
+    if @unlikely(local.tee used_11((if @likely(ref.is_null(local.tee $sroa_opt_value_18(struct.new "match_ergonomics.wado//Hits" { hits: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(10), used: 1 } })) == 0) -> i32 {
+        if @unlikely(local.tee used_11(local.tee self_9(local.tee c_1(ref.as_non_null($sroa_opt_value_18)).hits).used) >= builtin::array_len(self_9.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_10);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_9);
         }
-        builtin::array_set<i32>(self_10.repr, used_12, 20);
-        self_10.used = used_12 + 1;
-        c_2.hits.used;
+        builtin::array_set<i32>(self_9.repr, used_11, 20);
+        self_9.used = used_11 + 1;
+        c_1.hits.used;
     } else {
         unreachable;
     })) != 2) {
         cold_path;
-        "match_ergonomics.wado/$test_3_a__mut_scrutinee_writes_through_in_match$cold1"(used_12);
+        "match_ergonomics.wado/$test_3_a__mut_scrutinee_writes_through_in_match$cold1"(used_11);
         unreachable;
     }
-    if ref.is_null($sroa_opt_value_19) == 0 {
-        if @unlikely(local.tee used_12($sroa_opt_value_19.hits.used) != 2) {
+    if ref.is_null($sroa_opt_value_18) == 0 {
+        if @unlikely(local.tee used_11($sroa_opt_value_18.hits.used) != 2) {
             cold_path;
-            "match_ergonomics.wado/$test_3_a__mut_scrutinee_writes_through_in_match$cold0"(used_12);
+            "match_ergonomics.wado/$test_3_a__mut_scrutinee_writes_through_in_match$cold0"(used_11);
             unreachable;
         }
     } else {
@@ -738,9 +738,9 @@ fn "match_ergonomics.wado/$test_7_a_mut_binding_copies__a_string_and_a_list"() {
         break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $match_mut_lift_12("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "match_ergonomics.wado//$tmpl$d48748ffcad618c0" { h0: $match_mut_lift_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:148
+        "core:rt/panic"(local.tee $match_mut_lift_12("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "match_ergonomics.wado//$tmpl$d48748ffcad618c0" { h0: $match_mut_lift_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:146
 condition: s == \"hello world\"
-s: "), used: 132 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:148
+s: "), used: 132 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:146
 condition: s == \"hello world\"
 s: "), used: 132 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $match_mut_lift_12.used);
         unreachable;
@@ -787,9 +787,9 @@ s: "), used: 132 }, s1: struct.new "core:prelude/string.wado//String" { repr: ar
         break $inline_core_prelude_array_wado_seq_eq_u8__9: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $match_mut_lift_12("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "match_ergonomics.wado//$tmpl$d48748ffcad618c0" { h0: $match_mut_lift_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:151
+        "core:rt/panic"(local.tee $match_mut_lift_12("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "match_ergonomics.wado//$tmpl$d48748ffcad618c0" { h0: $match_mut_lift_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:149
 condition: orig == \"hello\"
-orig: "), used: 132 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:151
+orig: "), used: 132 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:149
 condition: orig == \"hello\"
 orig: "), used: 132 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $match_mut_lift_12.used);
         unreachable;
@@ -952,9 +952,9 @@ match ro { Some(x) => *x, null => 0, }: "), used: 41 }, s2: struct.new "core:pre
 
 fn "match_ergonomics.wado/$test_2_a__mut_scrutinee_writes_through_in_if_let$cold0"($v_0) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "match_ergonomics.wado//$tmpl$ebaa20f4a908b504" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a__mut_scrutinee_writes_through_in_if_let at match_ergonomics.wado:79
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "match_ergonomics.wado//$tmpl$ebaa20f4a908b504" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a__mut_scrutinee_writes_through_in_if_let at match_ergonomics.wado:78
 condition: c.hits.len() == 2
-c.hits.len(): "), used: 141 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a__mut_scrutinee_writes_through_in_if_let at match_ergonomics.wado:79
+c.hits.len(): "), used: 141 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a__mut_scrutinee_writes_through_in_if_let at match_ergonomics.wado:78
 condition: c.hits.len() == 2
 c.hits.len(): "), used: 141 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
     unreachable;
@@ -962,9 +962,9 @@ c.hits.len(): "), used: 141 }, s1: struct.new "core:prelude/string.wado//String"
 
 fn "match_ergonomics.wado/$test_3_a__mut_scrutinee_writes_through_in_match$cold0"($v_3) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "match_ergonomics.wado//$tmpl$ebaa20f4a908b504" { h0: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a__mut_scrutinee_writes_through_in_match at match_ergonomics.wado:95
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "match_ergonomics.wado//$tmpl$ebaa20f4a908b504" { h0: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a__mut_scrutinee_writes_through_in_match at match_ergonomics.wado:93
 condition: c.hits.len() == 2
-c.hits.len(): "), used: 140 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a__mut_scrutinee_writes_through_in_match at match_ergonomics.wado:95
+c.hits.len(): "), used: 140 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a__mut_scrutinee_writes_through_in_match at match_ergonomics.wado:93
 condition: c.hits.len() == 2
 c.hits.len(): "), used: 140 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
     unreachable;
@@ -972,9 +972,9 @@ c.hits.len(): "), used: 140 }, s1: struct.new "core:prelude/string.wado//String"
 
 fn "match_ergonomics.wado/$test_3_a__mut_scrutinee_writes_through_in_match$cold1"(val) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "match_ergonomics.wado//$tmpl$ebaa20f4a908b504" { h0: val, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a__mut_scrutinee_writes_through_in_match at match_ergonomics.wado:93
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "match_ergonomics.wado//$tmpl$ebaa20f4a908b504" { h0: val, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a__mut_scrutinee_writes_through_in_match at match_ergonomics.wado:91
 condition: val == 2
-val: "), used: 122 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a__mut_scrutinee_writes_through_in_match at match_ergonomics.wado:93
+val: "), used: 122 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a__mut_scrutinee_writes_through_in_match at match_ergonomics.wado:91
 condition: val == 2
 val: "), used: 122 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
     unreachable;
@@ -982,9 +982,9 @@ val: "), used: 122 }, s1: struct.new "core:prelude/string.wado//String" { repr: 
 
 fn "match_ergonomics.wado/$test_7_a_mut_binding_copies__a_string_and_a_list$cold0"($v_9) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "match_ergonomics.wado//$tmpl$ebaa20f4a908b504" { h0: $v_9, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:160
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "match_ergonomics.wado//$tmpl$ebaa20f4a908b504" { h0: $v_9, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:158
 condition: orig.len() == 3
-orig.len(): "), used: 138 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:160
+orig.len(): "), used: 138 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:158
 condition: orig.len() == 3
 orig.len(): "), used: 138 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
     unreachable;
@@ -992,9 +992,9 @@ orig.len(): "), used: 138 }, s1: struct.new "core:prelude/string.wado//String" {
 
 fn "match_ergonomics.wado/$test_7_a_mut_binding_copies__a_string_and_a_list$cold1"($v_6) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "match_ergonomics.wado//$tmpl$ebaa20f4a908b504" { h0: $v_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:157
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<match_ergonomics.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "match_ergonomics.wado//$tmpl$ebaa20f4a908b504" { h0: $v_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:155
 condition: arr.len() == 4
-arr.len(): "), used: 136 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:157
+arr.len(): "), used: 136 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_a_mut_binding_copies__a_string_and_a_list at match_ergonomics.wado:155
 condition: arr.len() == 4
 arr.len(): "), used: 136 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
     unreachable;
