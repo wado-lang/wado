@@ -39,6 +39,7 @@
 use { Level } from "core:log";
 use { Visibility, GrammarOption, NamedAction, LexerRule, RepeatKind, ActionSource, AltAction } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
+use { AltBinding } from "./attr_resolve.wado";
 use { sets_overlap } from "./token_kinds.wado";
 
 // ==========================================================================
@@ -517,6 +518,18 @@ pub variant LrRestBody {
 
 /// One left-recursive alternative, with the prefix self-reference
 /// stripped and replaced by precedence-climbing semantics.
+impl LrAlt {
+    /// `second_tokens` for `token`, which the suffix must start with.
+    pub fn second_token(&self, token: i32) -> &List<i32> {
+        for let i of 0..<self.suffix_first.len() {
+            if self.suffix_first[i] == token {
+                return &self.second_tokens[i];
+            }
+        }
+        panic("a second token is asked only for a token the suffix starts with");
+    }
+}
+
 pub struct LrAlt {
     /// Index of the alternative in the original rule body. Drives
     /// the `_lr_<idx>` suffix-helper function name.
@@ -549,6 +562,9 @@ pub struct LrAlt {
     /// `elements[1..]`). Drives the precedence-aware dispatch
     /// in the LR loop.
     pub suffix_first: List<i32>,
+    /// Per token of `suffix_first`, what the suffix can show second once it
+    /// starts with that token; empty where nothing can be enumerated.
+    pub second_tokens: List<List<i32>>,
     /// True for `<assoc=right>` alts; see `lr_trailing_prec`.
     pub right_associative: bool,
     /// FieldDecl for the leading self-reference that the LR rewrite
@@ -816,6 +832,9 @@ pub struct AltBody {
     /// The alternative's actions, positioned by its source element index: an
     /// LR suffix's ops start at element 1, past the stripped self-reference.
     pub actions: List<AltAction> = [],
+    /// What a rule's own alternative or LR suffix binds (`label_scope`);
+    /// empty on a group alternative, and where actions are not emitted.
+    pub label_scope: List<AltBinding> = [],
     /// Whether a group alternative derives empty; false on a rule's own.
     pub nullable: bool = false,
     /// A group alternative's `alt_match_rank`, the order a branch of several

@@ -1,0 +1,123 @@
+//! Which labels an alternative binds, and which of them it declares where it
+//! starts because a body may read one before it is bound (`LabelReach::Shared`).
+//! Lowering decides it from the surface alternative; emit declares what it says.
+
+use { AltAction, Element } from "./ir.wado";
+use { Op } from "./gir.wado";
+use { AltBinding, LabelReach } from "./attr_resolve.wado";
+use { body_names_binding, element_names_binding } from "./action_translate.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { PredicateSite, predicates_met_entering } from "./gate_conditions.wado";
+
+/// The bindings of an alternative whose `ops[i]` lowers `elements[first_element + i]`,
+/// `named` being the binding bases the rule's bodies name. Each binding a body
+/// may read before the label is bound is `Shared`, renamed apart from the rest.
+pub fn alt_label_scope(
+    elements: &List<Element>,
+    ops: &List<Op>,
+    actions: &List<AltAction>,
+    first_element: i32,
+    named: &List<String>,
+    site: &PredicateSite,
+    analysis: &mut GrammarAnalysis,
+) -> List<AltBinding>
+    contract elements.len() == first_element + ops.len()
+{
+    let mut sites: List<LabelSite> = [];
+    for let mut i = 0; i < ops.len(); i += 1 {
+        collect_label_sites(&ops[i], i, false, &mut sites);
+    }
+    let mut shared: List<AltBinding> = [];
+    for let label of &sites {
+        let b = &label.binding;
+        if shared.iter_ref().any(|s| s.binds(b.is_token, &b.base)) || !named.contains_str(&b.base) {
+            continue;
+        }
+        let same: List<&LabelSite> = sites.iter_ref().filter(|s| s.binding.binds(b.is_token, &b.base)).collect();
+        let read_first = actions
+            .iter_ref()
+            .any(|a| a.before_index - first_element <= label.at && body_names_binding(&a.source.text, &b.base))
+            || (0..<label.at).any(|j| element_names_binding(&elements[first_element + j], &b.base))
+            || predicates_met_entering(elements, actions, first_element + label.at, site, analysis)
+                .iter_ref()
+                .any(|m| m.1.rule_index == site.rule_index && body_names_binding(&m.0.source.text, &b.base));
+        assert b.is_token || same.iter_ref().all(|s| s.binding.ref_name == b.ref_name), "a rule label calls one rule (ANTLR4 error 75)";
+        if same.len() > 1 || same.iter_ref().any(|s| s.nested) || read_first {
+            shared.push(AltBinding { ..*b, reach: LabelReach::Shared, capture: b.field });
+        }
+    }
+    let mut bindings: List<AltBinding> = collect_alt_bindings(ops)
+        .into_iter()
+        .filter(|b| !shared.iter_ref().any(|s| s.binds(b.is_token, &b.base)))
+        .collect();
+    for let mut s of shared {
+        let first = s.field;
+        for let mut k = 2; bindings.iter_ref().any(|b| b.field == s.field); k += 1 {
+            s.field = `${first}_${k}`;
+        }
+        bindings.push(s);
+    }
+    return bindings;
+}
+
+/// The actual post-dedup bindings of an alt's top-level leaf ops, so the action
+/// translator resolves a `$ref` to its real local even when a token / rule
+/// field-name collision deduped it (`e_2`), and to the rule this alternative
+/// called when the same label names a different one elsewhere
+/// (`x=a # A | x=b # B`).
+fn collect_alt_bindings(ops: &List<Op>) -> List<AltBinding> {
+    let mut out: List<AltBinding> = [];
+    for let op of ops {
+        if let Some(b) = leaf_op_binding(op) {
+            out.push(b);
+        }
+    }
+    return out;
+}
+
+/// One place an alternative binds a label: the top-level element it sits in,
+/// and whether inside a group, an optional or a loop there.
+struct LabelSite {
+    binding: AltBinding,
+    at: i32,
+    nested: bool,
+}
+
+fn collect_label_sites(op: &Op, at: i32, nested: bool, out: &mut List<LabelSite>) {
+    if let Some(binding) = leaf_op_binding(op) {
+        out.push(LabelSite { binding, at, nested });
+        return;
+    }
+    match *op {
+        Repeat(r) => collect_label_sites(&r.body, at, true, out),
+        // A list label collects into a list of its own.
+        ListLabel(_) => {
+        },
+        Group(g) => {
+            for let alt of &g.alts {
+                for let inner of &alt.ops {
+                    collect_label_sites(inner, at, true, out);
+                }
+            }
+        },
+        Token(_) | Literal(_) | Excluded(_) | Wildcard(_) | RuleCall(_) => unreachable(),
+    }
+}
+
+fn leaf_op_binding(op: &Op) -> Option<AltBinding> {
+    return match *op {
+        Token(t) => Option::Some(AltBinding { is_token: true, base: t.dedup_base, field: t.field }),
+        Literal(l) => Option::Some(AltBinding { is_token: true, base: l.dedup_base, field: l.field }),
+        Excluded(e) => Option::Some(AltBinding { is_token: true, base: e.dedup_base, field: e.field }),
+        Wildcard(wop) => Option::Some(AltBinding { is_token: true, base: wop.dedup_base, field: wop.field }),
+        RuleCall(rc) => Option::Some(
+            AltBinding { is_token: false, base: rc.dedup_base, field: rc.field, ref_name: rc.target_name },
+        ),
+        Group(g) => if let TokenOnly(to) = &g.shape {
+            Option::Some(AltBinding { is_token: true, base: to.dedup_base, field: to.field });
+        } else {
+            null;
+        },
+        Repeat(_) | ListLabel(_) => null,
+    };
+}

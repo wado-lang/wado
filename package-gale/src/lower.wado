@@ -1388,6 +1388,10 @@ fn lower_lr_alt(
 
     // Suffix first-set drives the LR loop's per-iteration dispatch.
     let suffix_first = ctx.analysis.first_of_elements_from(&alt.elements, 1);
+    let second_tokens: List<List<i32>> = suffix_first
+        .iter_ref()
+        .map(|tk| lr_second_token(*tk, &alt.elements, &mut ctx.analysis))
+        .collect();
 
     // Lower the suffix (elements[1..]) as an AltBody / ScanBody.
     let suffix = lower_lr_alt_suffix(rule, alt_index, &case_name, &struct_name, ctx, alt_gc_starts);
@@ -1403,9 +1407,102 @@ fn lower_lr_alt(
         conflict_min: conflict_min,
         last_self_ref_idx: last_self_ref_idx,
         suffix_first: suffix_first,
+        second_tokens,
         right_associative: is_right_associative_alt(alt),
         prefix_self_ref: lr_prefix_field_decl(&alt.elements[0], &rule.name),
     };
+}
+
+/// What an LR alternative's suffix can show second once it starts with
+/// `shared_token`: the discriminator an overlap group's sub-dispatch branches
+/// on, measured on the carrier (invariant 11). Empty means "none", never
+/// "anything".
+fn lr_second_token(shared_token: i32, elements: &List<Element>, analysis: &mut GrammarAnalysis) -> List<i32> {
+    for let mut i = 1; i < elements.len(); i += 1 {
+        let elem = &elements[i];
+        let mut visiting: List<String> = [];
+        if !analysis.first_of_element(elem, &mut visiting).contains(&shared_token) {
+            continue;
+        }
+        // The shared token sits inside an optional (`K_NOT?`), so whatever
+        // follows stands at offset 1 — but only when the optional is exactly
+        // that token wide; a wider or repeatable one carries offset 1 itself.
+        if is_nullable(elem) {
+            if !optional_body_is_single_token(elem, analysis) || i + 1 >= elements.len() {
+                return [];
+            }
+            return analysis.first_of_elements_from(elements, i + 1);
+        }
+        if let Group(g) = elem {
+            return group_second_token(&g.alternatives, shared_token, elements, i, analysis);
+        }
+        return suffix_second_token(elements, i, analysis);
+    }
+    return [];
+}
+
+/// Whether a nullable carrier contributes exactly one token once taken: a `?`
+/// over a single token. A `*` can come round again, so it never does.
+fn optional_body_is_single_token(elem: &Element, analysis: &mut GrammarAnalysis) -> bool {
+    let mut visiting: List<String> = [];
+    return match elem {
+        Repeat(rep) => rep.kind matches { _::Optional } && analysis.element_is_single_token(&rep.element, &mut visiting),
+        _ => false,
+    };
+}
+
+/// `lr_second_token` for a group: the union over the alternatives that can
+/// start with `shared_token`, empty when one of them cannot be measured.
+fn group_second_token(
+    alts: &List<Alternative>,
+    shared_token: i32,
+    elements: &List<Element>,
+    group_index: i32,
+    analysis: &mut GrammarAnalysis,
+) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let alt of alts {
+        if alt.elements.is_empty() {
+            continue;
+        }
+        let mut visiting: List<String> = [];
+        if !analysis.first_of_element(&alt.elements[0], &mut visiting).contains(&shared_token) {
+            continue;
+        }
+        let inner = suffix_second_token(&alt.elements, 0, analysis);
+        if !inner.is_empty() {
+            dedup_append_arr(&mut out, &inner);
+            continue;
+        }
+        let mut single: List<String> = [];
+        if alt.elements.len() == 1 && analysis.element_is_single_token(&alt.elements[0], &mut single) {
+            let after = analysis.first_of_elements_from(elements, group_index + 1);
+            // Nothing follows the group, or what does cannot be enumerated —
+            // appending nothing would drop this alternative from the union.
+            if after.is_empty() {
+                return [];
+            }
+            dedup_append_arr(&mut out, &after);
+            continue;
+        }
+        return [];
+    }
+    return out;
+}
+
+/// The offset-1 set of `elements[start..]`, or empty when neither K-prefix walk
+/// reaches that depth. They halt at different shapes, so both are tried.
+fn suffix_second_token(elements: &List<Element>, start: i32, analysis: &mut GrammarAnalysis) -> List<i32> {
+    let mut visiting: List<String> = [];
+    let [deep, _] = analysis.deep_position_first_sets_from(elements, start, 2, &mut visiting);
+    if deep.len() >= 2 {
+        return deep[1];
+    }
+    let shallow = analysis.position_first_sets_from(elements, start, 2);
+    if shallow.len() >= 2 {
+        return shallow[1];
+    }
+    return [];
 }
 
 fn lower_lr_alt_suffix<S: AsStrSlice, S1: AsStrSlice>(
@@ -1474,6 +1571,7 @@ fn lower_lr_alt_suffix<S: AsStrSlice, S1: AsStrSlice>(
     }
 
     let fields = enumerate_alt_field_decls(&ops);
+    let label_scope = ctx.alt_label_scope(&alt.elements, &ops, &alt.actions, 1);
 
     return AltBody {
         alt_index: alt_index,
@@ -1483,6 +1581,7 @@ fn lower_lr_alt_suffix<S: AsStrSlice, S1: AsStrSlice>(
         fields: fields,
         prefix_self_ref_min_prec: 0,
         actions: alt.actions,
+        label_scope,
     };
 }
 
@@ -2940,6 +3039,7 @@ fn lower_alt_body(
     }
 
     let fields = enumerate_alt_field_decls(&ops);
+    let label_scope = ctx.alt_label_scope(&alt.elements, &ops, &alt.actions, 0);
 
     return AltBody {
         alt_index: idx,
@@ -2949,6 +3049,7 @@ fn lower_alt_body(
         fields,
         prefix_self_ref_min_prec: prefix_prec,
         actions: alt.actions,
+        label_scope,
         scannable: elements_scannable(&alt.elements, &mut ctx.analysis),
     };
 }

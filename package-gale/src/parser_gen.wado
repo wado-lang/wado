@@ -3,7 +3,7 @@
 //! Not here: scaffolding (`parser_runtime_gen`), actions (`action_gen`),
 //! token-set tables (`kind_set_gen`), naming leaves (`ir_shape`, `gen_util`).
 
-use { Grammar, ParserRule, Alternative, Element, RepeatKind, AltAction, ActionSource } from "./ir.wado";
+use { Grammar, ParserRule, Element, RepeatKind, AltAction, ActionSource } from "./ir.wado";
 use { general_group_field_name, gen_visibility_comment, rule_alts_labeled } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use {
@@ -24,7 +24,6 @@ use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM, VALS_LOCAL } from "./ide
 use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_name } from "./emit_context.wado";
 use { MetPredicate } from "./gate_conditions.wado";
-use { is_nullable } from "./grammar_analysis.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, GlobalSpec, wado } from "wado-lang:wadopoet";
 use { HashMap } from "core:collections";
 use {
@@ -90,8 +89,6 @@ use {
     rule_node_ref,
     rule_span_lo_ref,
     rule_span_hi_ref,
-    body_names_binding,
-    element_names_binding,
 } from "./action_translate.wado";
 
 use {
@@ -767,7 +764,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
                 }
                 w.line("return pos;");
             } else {
-                gen_scan_pick(w, rule, lowered_rule, ctx, fn_name);
+                gen_scan_pick(w, lowered_rule, ctx, fn_name);
             }
         },
     );
@@ -813,7 +810,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
         } else if non_lr_indices.len() == 1 {
             gen_scan_body_fn_tail(w, &atom_scan_alts[0], ctx);
         } else {
-            gen_scan_pick(w, rule, lowered_rule, ctx, &atom_name);
+            gen_scan_pick(w, lowered_rule, ctx, &atom_name);
         }
     });
     w.blank();
@@ -848,7 +845,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
         );
     }
     if mid_operand_gated {
-        gen_scan_lr_cut_walk(w, rule, lr_alts, lr_dispatch, ctx, fn_name, &atom_name, &f2);
+        gen_scan_lr_cut_walk(w, lr_alts, lr_dispatch, ctx, fn_name, &atom_name, &f2);
         return;
     }
     ctx.cursor.begin_ref_frame();
@@ -858,7 +855,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
         if atn_loop_dec >= 0 {
             gen_lr_suffix_dispatch_atn(w, fn_name, lr_alts, lr_dispatch, ctx, atn_loop_dec);
         } else {
-            gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx);
+            gen_lr_suffix_dispatch(w, fn_name, lr_alts, lr_dispatch, ctx);
         }
         w.line("return pos;");
     });
@@ -875,7 +872,6 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
 /// go on to a cut.
 fn gen_scan_lr_cut_walk<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
-    rule: &ParserRule,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     ctx: &mut EmitContext,
@@ -922,7 +918,7 @@ fn gen_scan_lr_cut_walk<S: AsStrSlice, S1: AsStrSlice>(
             w.line(`let mut lr_bound_gates: List<${SCAN_GATE_TYPE}> = [];`);
         }
         bind_lr_loop_cont(w);
-        gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx, true);
+        gen_lr_suffix_dispatch(w, fn_name, lr_alts, lr_dispatch, ctx, true);
         w.line("if lr_outer == 0 { return pos; }");
         w.begin("for let mut i = lr_bounds.len() - 1; i >= 0; i -= 1");
         if ctx.settings.emit_scan_gate() {
@@ -1266,7 +1262,6 @@ fn lr_site_is_parse(site: &LrOverlapSite) -> bool {
 fn gen_lr_suffix_dispatch<S: AsStrSlice>(
     w: &mut CodeWriter,
     fn_name: S,
-    rule: &ParserRule,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     ctx: &mut EmitContext,
@@ -1274,7 +1269,7 @@ fn gen_lr_suffix_dispatch<S: AsStrSlice>(
 ) {
     w.begin("loop");
     w.line("let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
-    emit_lr_group_chain(w, &scan_lr_site(fn_name), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
+    emit_lr_group_chain(w, &scan_lr_site(fn_name), lr_alts, lr_dispatch, ctx, mid_operand_gated);
     w.end();  // loop
 }
 
@@ -1389,7 +1384,6 @@ fn emit_lr_overlap_branch(
     w: &mut CodeWriter,
     site: &LrOverlapSite,
     lr: &LrAlt,
-    rule: &ParserRule,
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
     mid_operand_gated: bool,
@@ -1413,7 +1407,6 @@ fn emit_lr_overlap_branch(
             emit_lr_branch(
                 w,
                 lr,
-                rule,
                 b,
                 &site.scan_fn,
                 ctx,
@@ -1452,7 +1445,6 @@ fn lr_suffix_first_sets(lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData) -> 
 fn emit_lr_group_chain(
     w: &mut CodeWriter,
     site: &LrOverlapSite,
-    rule: &ParserRule,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     ctx: &mut EmitContext,
@@ -1466,12 +1458,11 @@ fn emit_lr_group_chain(
         open_chain_arm(w, i > 0, &ctx.admits_check_str(&admits_or_everything(&union_first), &site.kind_expr));
         if group.len() == 1 {
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[0]]];
-            emit_lr_overlap_branch(w, site, lr, rule, ctx, &mut nc, mid_operand_gated, &NO_PREBOUND, &union_first);
+            emit_lr_overlap_branch(w, site, lr, ctx, &mut nc, mid_operand_gated, &NO_PREBOUND, &union_first);
         } else {
             emit_lr_overlap(
                 w,
                 site,
-                rule,
                 lr_alts,
                 lr_dispatch,
                 group,
@@ -1492,7 +1483,6 @@ fn emit_lr_group_chain(
 fn emit_lr_overlap(
     w: &mut CodeWriter,
     site: &LrOverlapSite,
-    rule: &ParserRule,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     group: &List<i32>,
@@ -1526,7 +1516,7 @@ fn emit_lr_overlap(
         }
         chained = true;
         let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
-        emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &NO_PREBOUND, &unshared);
+        emit_lr_overlap_branch(w, site, lr, ctx, nc, mid_operand_gated, &NO_PREBOUND, &unshared);
         for let tk of &unshared {
             bits_set(&mut emitted, *tk);
         }
@@ -1559,8 +1549,7 @@ fn emit_lr_overlap(
                 seconds.push([] as List<i32>);
                 continue;
             }
-            let alt = lr_alts[lr_dispatch.valid_lr_alts[group[k]]].alt_index;
-            seconds.push(compute_lr_second_token(*shared_tk, &rule.alternatives[alt].elements, ctx));
+            seconds.push(*lr_alts[lr_dispatch.valid_lr_alts[group[k]]].second_token(*shared_tk));
         }
         // Compute the sub-conditions before emitting: each local they read is
         // only declared when one of them reads it.
@@ -1573,8 +1562,7 @@ fn emit_lr_overlap(
             plans.push([
                 k,
                 lr_sub_plan(
-                    *shared_tk,
-                    &rule.alternatives[alt].elements,
+                    &seconds[k],
                     &lr_scan_local(alt),
                     &site.second_expr,
                     lr_second_token_discriminates(k, group, *shared_tk, &seconds, suffix_first_sets),
@@ -1625,10 +1613,10 @@ fn emit_lr_overlap(
             let arm_token: List<i32> = [*shared_tk];
             if k == last_k {
                 if sub_first {
-                    emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &NO_PREBOUND, &arm_token);
+                    emit_lr_overlap_branch(w, site, lr, ctx, nc, mid_operand_gated, &NO_PREBOUND, &arm_token);
                 } else {
                     w.else_begin("else");
-                    emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &NO_PREBOUND, &arm_token);
+                    emit_lr_overlap_branch(w, site, lr, ctx, nc, mid_operand_gated, &NO_PREBOUND, &arm_token);
                     w.end();
                 }
             } else {
@@ -1639,7 +1627,6 @@ fn emit_lr_overlap(
                     w,
                     site,
                     lr,
-                    rule,
                     ctx,
                     nc,
                     mid_operand_gated,
@@ -1656,16 +1643,10 @@ fn emit_lr_overlap(
 
 /// The scan body of a multi-alt rule or LR atom: the alternative the parse
 /// would pick, scanned. A scan that chose differently would accept a different input.
-fn gen_scan_pick<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    lowered_rule: &Rule,
-    ctx: &mut EmitContext,
-    fn_name: S,
-) {
+fn gen_scan_pick<S: AsStrSlice>(w: &mut CodeWriter, lowered_rule: &Rule, ctx: &mut EmitContext, fn_name: S) {
     gen_scan_mark(w, ctx, "start");
     w.line("let mut pos = pos;");
-    gen_rule_pick(w, PickSide::Scan, rule, lowered_rule, ctx, fn_name);
+    gen_rule_pick(w, PickSide::Scan, lowered_rule, ctx, fn_name);
 }
 
 /// The scan function of every alternative a contested overlap group chooses
@@ -2960,7 +2941,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     let canonical = `_parse_${header.snake_name}`;
     let inner = `${canonical}__inner`;
     match *lowered_rule {
-        Simple(_) => gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, &inner),
+        Simple(_) => gen_parse_fn_simple_named(w, lowered_rule, ctx, &inner),
         MultiAlt(_) => gen_parse_fn_named(w, rule, lowered_rule, ctx, &inner),
         LeftRecursive(_) => {
             ctx.cursor.set_lr_continuation(lr_continuation_of(lowered_rule));
@@ -3097,17 +3078,11 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 /// `gen_parse_fn_named` lands here). `rule_alt_body` resolves the
 /// single AltBody whose `fields` drives the struct-literal field
 /// assignments emitted after the alt body.
-fn gen_parse_fn_simple_named<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    lowered_rule: &Rule,
-    ctx: &mut EmitContext,
-    fn_name: S,
-) {
+fn gen_parse_fn_simple_named<S: AsStrSlice>(w: &mut CodeWriter, lowered_rule: &Rule, ctx: &mut EmitContext, fn_name: S) {
     let header = rule_header(lowered_rule);
     gen_visibility_comment(w, &header.visibility);
     let body = rule_alt_body(lowered_rule, 0).unwrap();
-    emit_rule_inner_fn(w, header, ctx, fn_name, |w| gen_alt_body(w, rule, header, body, 0, &header.after_action, ctx));
+    emit_rule_inner_fn(w, header, ctx, fn_name, |w| gen_alt_body(w, header, body, 0, &header.after_action, ctx));
     w.blank();
 }
 
@@ -3251,15 +3226,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     }
                     f.set_prunable();
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
-                    emit_seeded_alt_fn(w, &mut f, ctx, |w| gen_alt_body(
-                        w,
-                        rule,
-                        header,
-                        body,
-                        alt_index,
-                        &NO_AFTER,
-                        ctx,
-                    ));
+                    emit_seeded_alt_fn(w, &mut f, ctx, |w| gen_alt_body(w, header, body, alt_index, &NO_AFTER, ctx));
                     w.blank();
 
                     // Emit the per-alt scan helper only when the dispatch
@@ -3285,7 +3252,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         add_min_prec_param(&mut f);
         emit_seeded_alt_fn(w, &mut f, ctx, |w| {
             gen_rule_entry_sync(w, ctx);
-            gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, ctx, fn_name);
+            gen_rule_pick(w, PickSide::Parse, lowered_rule, ctx, fn_name);
         });
         w.blank();
         ctx.cursor.set_lr_cont_in_atom(was_in_atom);
@@ -3319,7 +3286,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                 w.begin(if emits_vals { "vals = alt_done:" } else { "alt_done:" });
                 ctx.cursor.set_alt_exit_label(Option::Some("alt_done"));
             }
-            gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, ctx, fn_name);
+            gen_rule_pick(w, PickSide::Parse, lowered_rule, ctx, fn_name);
             if let Some(a) = &after {
                 ctx.cursor.set_alt_exit_label(null);
                 if emits_vals {
@@ -3366,7 +3333,6 @@ fn emit_trace_pick<S: AsStrSlice, S1: AsStrSlice>(
 /// Commit to the rule's alternative `alt_index` and emit its body in place.
 fn gen_picked_rule_alt(
     w: &mut CodeWriter,
-    rule: &ParserRule,
     lowered_rule: &Rule,
     alt_index: i32,
     ctx: &mut EmitContext,
@@ -3375,14 +3341,13 @@ fn gen_picked_rule_alt(
     let header = rule_header(lowered_rule);
     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
     gen_trace_pick(w, header, alt_index, ctx);
-    gen_alt_body(w, rule, header, body, alt_index, &NO_AFTER, ctx, proven_first);
+    gen_alt_body(w, header, body, alt_index, &NO_AFTER, ctx, proven_first);
 }
 
 /// The one rule-level alternative body, wherever the alternative is emitted:
 /// a single-alt rule, an overlap helper, or a direct dispatch arm.
 fn gen_alt_body(
     w: &mut CodeWriter,
-    rule: &ParserRule,
     header: &RuleHeader,
     body: &AltBody,
     alt_index: i32,
@@ -3394,9 +3359,8 @@ fn gen_alt_body(
     if header.alts_labeled() {
         w.line(`p.b.set_alt(${alt_index});`);
     }
-    let alt = &rule.alternatives[alt_index];
     let after = if ctx.settings.emit_actions { after_action } else { &NO_AFTER };
-    gen_alt_elements(w, &alt.elements, &body.ops, &alt.actions, ctx, proven_first, after);
+    gen_alt_elements(w, body, ctx, proven_first, after);
     emit_alt_exit(w, ctx);
 }
 
@@ -3405,7 +3369,6 @@ fn gen_alt_body(
 fn gen_rule_pick<S: AsStrSlice>(
     w: &mut CodeWriter,
     side: PickSide,
-    rule: &ParserRule,
     lowered_rule: &Rule,
     ctx: &mut EmitContext,
     fn_name: S,
@@ -3413,13 +3376,13 @@ fn gen_rule_pick<S: AsStrSlice>(
     contract side matches { _::Scan } == ctx.cursor.in_scan_fn(), "a pick is emitted into the function its side names"
 {
     if rule_decision(lowered_rule).has_overlaps() {
-        gen_multi_alt_body_alt(w, side, rule, lowered_rule, ctx, fn_name);
+        gen_multi_alt_body_alt(w, side, lowered_rule, ctx, fn_name);
     } else {
-        gen_multi_alt_body(w, side, rule, lowered_rule, ctx);
+        gen_multi_alt_body(w, side, lowered_rule, ctx);
     }
 }
 
-fn gen_multi_alt_body(w: &mut CodeWriter, side: PickSide, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut EmitContext) {
+fn gen_multi_alt_body(w: &mut CodeWriter, side: PickSide, lowered_rule: &Rule, ctx: &mut EmitContext) {
     let decision = rule_decision(lowered_rule);
     let non_lr_indices = &decision.non_lr_indices;
     let all_pos_sets = &decision.position_first_sets;
@@ -3450,7 +3413,7 @@ fn gen_multi_alt_body(w: &mut CodeWriter, side: PickSide, rule: &ParserRule, low
         for let i of &order {
             let first = &all_pos_sets[*i][0];
             let mut body = CodeWriter::with_capacity(256);
-            gen_pick_alt(&mut body, side, rule, lowered_rule, non_lr_indices[*i], ctx, first);
+            gen_pick_alt(&mut body, side, lowered_rule, non_lr_indices[*i], ctx, first);
             arms.push(DecisionBranch {
                 test: admits_kinds_of(first),
                 gate: and_gate(all_gate_conds[*i]),
@@ -3484,125 +3447,29 @@ fn gen_multi_alt_body(w: &mut CodeWriter, side: PickSide, rule: &ParserRule, low
             w.begin(`if ${gate}`);
         }
 
-        gen_pick_alt(w, side, rule, lowered_rule, alt_index, ctx, &proven_first);
+        gen_pick_alt(w, side, lowered_rule, alt_index, ctx, &proven_first);
         w.end();
     }
 
     emit_no_alternative(w, side, lowered_rule, ctx);
 }
 
-/// The actual post-dedup bindings of an alt's top-level leaf ops, so the action
-/// translator resolves a `$ref` to its real local even when a token / rule
-/// field-name collision deduped it (`e_2`), and to the rule this alternative
-/// called when the same label names a different one elsewhere
-/// (`x=a # A | x=b # B`).
-fn collect_alt_bindings(ops: &List<Op>) -> List<AltBinding> {
-    let mut out: List<AltBinding> = [];
-    for let op of ops {
-        if let Some(b) = leaf_op_binding(op) {
-            out.push(b);
-        }
-    }
-    return out;
-}
-
-fn leaf_op_binding(op: &Op) -> Option<AltBinding> {
-    return match *op {
-        Token(t) => Option::Some(AltBinding { is_token: true, base: t.dedup_base, field: t.field }),
-        Literal(l) => Option::Some(AltBinding { is_token: true, base: l.dedup_base, field: l.field }),
-        Excluded(e) => Option::Some(AltBinding { is_token: true, base: e.dedup_base, field: e.field }),
-        Wildcard(wop) => Option::Some(AltBinding { is_token: true, base: wop.dedup_base, field: wop.field }),
-        RuleCall(rc) => Option::Some(
-            AltBinding { is_token: false, base: rc.dedup_base, field: rc.field, ref_name: rc.target_name },
-        ),
-        Group(g) => if let TokenOnly(to) = &g.shape {
-            Option::Some(AltBinding { is_token: true, base: to.dedup_base, field: to.field });
-        } else {
-            null;
-        },
-        Repeat(_) | ListLabel(_) => null,
-    };
-}
-
-/// One place an alternative binds a label: the top-level element it sits in,
-/// and whether inside a group, an optional or a loop there.
-struct LabelSite {
-    binding: AltBinding,
-    at: i32,
-    nested: bool,
-}
-
-fn collect_label_sites(op: &Op, at: i32, nested: bool, out: &mut List<LabelSite>) {
-    if let Some(binding) = leaf_op_binding(op) {
-        out.push(LabelSite { binding, at, nested });
-        return;
-    }
-    match *op {
-        Repeat(r) => collect_label_sites(&r.body, at, true, out),
-        // A list label collects into a list of its own.
-        ListLabel(_) => {
-        },
-        Group(g) => {
-            for let alt of &g.alts {
-                for let inner of &alt.ops {
-                    collect_label_sites(inner, at, true, out);
-                }
-            }
-        },
-        Token(_) | Literal(_) | Excluded(_) | Wildcard(_) | RuleCall(_) => unreachable(),
-    }
-}
-
-/// Make the bindings of the alternative starting here current, declaring the
-/// local each shared label writes (`LabelReach::Shared`), and hand back the
-/// bindings to restore once it ends. `elements[first_element + i]` is `ops[i]`'s.
+/// Make `body`'s bindings current, declaring the local each shared label
+/// writes (`LabelReach::Shared`), and hand back the bindings to restore once
+/// it ends.
 fn enter_alt_label_scope(
     w: &mut CodeWriter,
-    elements: &List<Element>,
-    ops: &List<Op>,
-    actions: &List<AltAction>,
-    first_element: i32,
+    body: &AltBody,
     ctx: &mut EmitContext,
     left_operand: Option<String> = null,
-) -> List<AltBinding>
-    contract elements.len() == first_element + ops.len()
-{
+) -> List<AltBinding> {
     let outer = *ctx.cursor.alt_bindings();
     if !ctx.settings.emit_actions {
         return outer;
     }
-    let mut sites: List<LabelSite> = [];
-    for let mut i = 0; i < ops.len(); i += 1 {
-        collect_label_sites(&ops[i], i, false, &mut sites);
-    }
-    let mut shared: List<AltBinding> = [];
-    for let site of &sites {
-        let b = &site.binding;
-        if shared.iter_ref().any(|s| s.binds(b.is_token, &b.base)) || !ctx.names_binding(&b.base) {
+    for let s of &body.label_scope {
+        if !s.reach matches { _::Shared } {
             continue;
-        }
-        let same: List<&LabelSite> = sites.iter_ref().filter(|s| s.binding.binds(b.is_token, &b.base)).collect();
-        let read_first = actions
-            .iter_ref()
-            .any(|a| a.before_index - first_element <= site.at && body_names_binding(&a.source.text, &b.base))
-            || (0..<site.at).any(|j| element_names_binding(&elements[first_element + j], &b.base))
-            || ctx
-                .own_predicates_met_at(elements, actions, first_element + site.at)
-                .iter_ref()
-                .any(|a| body_names_binding(&a.source.text, &b.base));
-        assert b.is_token || same.iter_ref().all(|s| s.binding.ref_name == b.ref_name), "a rule label calls one rule (ANTLR4 error 75)";
-        if same.len() > 1 || same.iter_ref().any(|s| s.nested) || read_first {
-            shared.push(AltBinding { ..*b, reach: LabelReach::Shared, capture: b.field });
-        }
-    }
-    let mut bindings: List<AltBinding> = collect_alt_bindings(ops)
-        .into_iter()
-        .filter(|b| !shared.iter_ref().any(|s| s.binds(b.is_token, &b.base)))
-        .collect();
-    for let mut s of shared {
-        let first = s.field;
-        for let mut k = 2; bindings.iter_ref().any(|b| b.field == s.field); k += 1 {
-            s.field = `${first}_${k}`;
         }
         let holds_left_operand = !s.is_token && left_operand matches { Some(name) && name == s.base };
         let init = if holds_left_operand { `Option::Some(${s.base})` } else { unbound_label_value(s.is_token) };
@@ -3610,9 +3477,8 @@ fn enter_alt_label_scope(
         if holds_left_operand {
             capture_left_operand(w, &s.capture, ctx);
         }
-        bindings.push(s);
     }
-    ctx.cursor.set_alt_bindings(bindings);
+    ctx.cursor.set_alt_bindings(body.label_scope);
     return outer;
 }
 
@@ -3632,16 +3498,14 @@ fn capture_left_operand(w: &mut CodeWriter, field: &String, ctx: &EmitContext) {
 
 fn gen_alt_elements(
     w: &mut CodeWriter,
-    elements: &List<Element>,
-    ops: &List<Op>,
-    actions: &List<AltAction>,
+    body: &AltBody,
     ctx: &mut EmitContext,
     proven_first: &List<i32>,
     after_action: &Option<ActionSource>,
 ) {
-    let outer = enter_alt_label_scope(w, elements, ops, actions, 0, ctx);
+    let outer = enter_alt_label_scope(w, body, ctx);
     let mut name_counts: List<[String, i32]> = [];
-    gen_ops_with_actions(w, ops, actions, 0, ctx, &mut name_counts, proven_first);
+    gen_ops_with_actions(w, &body.ops, &body.actions, 0, ctx, &mut name_counts, proven_first);
     if let Some(a) = after_action {
         gen_prequel_in_scope(w, a, &ctx.current_rule_name(), false, ctx);
     }
@@ -4160,7 +4024,6 @@ fn gen_lr_fn<S: AsStrSlice>(
             emit_lr_group_chain(
                 w,
                 &parse_lr_site(&scan_fn, &rk, labeled, loop_dec),
-                rule,
                 lr_alts,
                 lr_dispatch,
                 ctx,
@@ -4235,7 +4098,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
                 `if ${ctx.scan_fn_of(&rule.snake_name)}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}) == p.pos { break; }`,
             );
         }
-        emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, &mut nc, &lr.suffix_first);
+        emit_lr_branch_body(w, lr, rk, labeled, ctx, &mut nc, &lr.suffix_first);
     }
     close_chain_with_break(w, valid.len());
     // Single-token insertion can complete a suffix without consuming.
@@ -4256,7 +4119,6 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
 fn emit_lr_branch<S: AsStrSlice>(
     w: &mut CodeWriter,
     lr: &LrAlt,
-    rule: &ParserRule,
     b: &LrParseBranch,
     scan_fn: S,
     ctx: &mut EmitContext,
@@ -4292,7 +4154,7 @@ fn emit_lr_branch<S: AsStrSlice>(
         w.line("break;");
         w.end();
     }
-    emit_lr_branch_body(w, lr, rule, &b.rk, b.labeled, ctx, nc, proven_first);
+    emit_lr_branch_body(w, lr, &b.rk, b.labeled, ctx, nc, proven_first);
     if b.checked_decision >= 0 {
         assert lr.loop_edge >= 0, "a suffix the loop takes is an edge of its decision";
         gen_lr_loop_check(w, b.checked_decision, ctx, LrCheckAt::IterationStart, lr.loop_edge);
@@ -4345,7 +4207,6 @@ fn lr_suffix_no_match(may_match_empty: bool) -> String {
 fn emit_lr_branch_body<S: AsStrSlice>(
     w: &mut CodeWriter,
     lr: &LrAlt,
-    rule: &ParserRule,
     rk: S,
     labeled: bool,
     ctx: &mut EmitContext,
@@ -4374,22 +4235,14 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     // stands at surface position `i + 1`. The alt-initial gate (`before == 0`)
     // is never reached here — it is an LR loop-entry decision, not a suffix
     // action.
-    let actions = &rule.alternatives[lr.alt_index].actions;
+    let actions = &lr.suffix.actions;
     let ops = &lr.suffix.ops;
     // The suffix ops give the right operand's binding; the stripped leading
     // self-ref (`$l`) falls back to `prefix_self_ref.name`, which is exactly
     // the `let {name} = _lr_acc;` bound above. A label the right operand
     // rebinds holds the left operand until then.
     let left_operand: Option<String> = if emits_vals { Option::Some(lr.prefix_self_ref.name) } else { null };
-    let outer = enter_alt_label_scope(
-        w,
-        &rule.alternatives[lr.alt_index].elements,
-        ops,
-        actions,
-        1,
-        ctx,
-        left_operand,
-    );
+    let outer = enter_alt_label_scope(w, &lr.suffix, ctx, left_operand);
     gen_ops_with_actions(w, ops, actions, 1, ctx, nc, proven_first);
     leave_after_labels(w, ctx);
     ctx.cursor.set_alt_bindings(outer);
@@ -7674,97 +7527,6 @@ fn group_all_scannable(sorted_group: &List<i32>, alts: &List<AltBody>) -> bool {
     return sorted_group.iter_ref().all(|idx| alts[*idx].scannable);
 }
 
-/// The discriminator an overlap group's sub-dispatch branches on, measured on
-/// the carrier (invariant 11). Empty means "none", never "anything".
-fn compute_lr_second_token(shared_token: i32, elements: &List<Element>, ctx: &mut EmitContext) -> List<i32> {
-    for let mut i = 1; i < elements.len(); i += 1 {
-        let elem = &elements[i];
-        let mut visiting: List<String> = [];
-        if !ctx.analysis.first_of_element(elem, &mut visiting).contains(&shared_token) {
-            continue;
-        }
-        // The shared token sits inside an optional (`K_NOT?`), so whatever
-        // follows stands at offset 1 — but only when the optional is exactly
-        // that token wide; a wider or repeatable one carries offset 1 itself.
-        if is_nullable(elem) {
-            if !optional_body_is_single_token(elem, ctx) || i + 1 >= elements.len() {
-                return [];
-            }
-            return ctx.analysis.first_of_elements_from(elements, i + 1);
-        }
-        if let Group(g) = elem {
-            return group_second_token(&g.alternatives, shared_token, elements, i, ctx);
-        }
-        return suffix_second_token(elements, i, ctx);
-    }
-    return [];
-}
-
-/// Whether a nullable carrier contributes exactly one token once taken: a `?`
-/// over a single token. A `*` can come round again, so it never does.
-fn optional_body_is_single_token(elem: &Element, ctx: &mut EmitContext) -> bool {
-    let mut visiting: List<String> = [];
-    return match elem {
-        Repeat(rep) => rep.kind matches { _::Optional }
-            && ctx.analysis.element_is_single_token(&rep.element, &mut visiting),
-        _ => false,
-    };
-}
-
-/// `compute_lr_second_token` for a group: the union over the alternatives that
-/// can start with `shared_token`, empty when one of them cannot be measured.
-fn group_second_token(
-    alts: &List<Alternative>,
-    shared_token: i32,
-    elements: &List<Element>,
-    group_index: i32,
-    ctx: &mut EmitContext,
-) -> List<i32> {
-    let mut out: List<i32> = [];
-    for let alt of alts {
-        if alt.elements.is_empty() {
-            continue;
-        }
-        let mut visiting: List<String> = [];
-        if !ctx.analysis.first_of_element(&alt.elements[0], &mut visiting).contains(&shared_token) {
-            continue;
-        }
-        let inner = suffix_second_token(&alt.elements, 0, ctx);
-        if !inner.is_empty() {
-            dedup_append_arr(&mut out, &inner);
-            continue;
-        }
-        let mut single: List<String> = [];
-        if alt.elements.len() == 1 && ctx.analysis.element_is_single_token(&alt.elements[0], &mut single) {
-            let after = ctx.analysis.first_of_elements_from(elements, group_index + 1);
-            // Nothing follows the group, or what does cannot be enumerated —
-            // appending nothing would drop this alternative from the union.
-            if after.is_empty() {
-                return [];
-            }
-            dedup_append_arr(&mut out, &after);
-            continue;
-        }
-        return [];
-    }
-    return out;
-}
-
-/// The offset-1 set of `elements[start..]`, or empty when neither K-prefix walk
-/// reaches that depth. They halt at different shapes, so both are tried.
-fn suffix_second_token(elements: &List<Element>, start: i32, ctx: &mut EmitContext) -> List<i32> {
-    let mut visiting: List<String> = [];
-    let [deep, _] = ctx.analysis.deep_position_first_sets_from(elements, start, 2, &mut visiting);
-    if deep.len() >= 2 {
-        return deep[1];
-    }
-    let shallow = ctx.analysis.position_first_sets_from(elements, start, 2);
-    if shallow.len() >= 2 {
-        return shallow[1];
-    }
-    return [];
-}
-
 /// Pick how a candidate separates itself, preferring the second token.
 ///
 /// `discriminates` is false when another candidate for the same leading token
@@ -7774,18 +7536,16 @@ fn suffix_second_token(elements: &List<Element>, start: i32, ctx: &mut EmitConte
 /// separates them, being the whole suffix, so it fails where the shorter
 /// candidate is the reading.
 fn lr_sub_plan<S1: AsStrSlice, S2: AsStrSlice>(
-    shared_token: i32,
-    elements: &List<Element>,
+    second: &List<i32>,
     scan_local: S1,
     accessor: S2,
     discriminates: bool,
     ctx: &mut EmitContext,
 ) -> LrSubPlan {
-    let second = compute_lr_second_token(shared_token, elements, ctx);
     if second.is_empty() || !discriminates {
         return LrSubPlan::Prebound(scan_local.to_string());
     }
-    return LrSubPlan::SecondToken(ctx.kind_check_str(&second, accessor));
+    return LrSubPlan::SecondToken(ctx.kind_check_str(second, accessor));
 }
 
 /// How a candidate's sub-dispatch tells itself from its peers.
@@ -8343,7 +8103,6 @@ fn collect_referenced_scan_alts(node: &RulePrediction, rule: &Rule, ctx: &EmitCo
 fn gen_multi_alt_body_alt<S: AsStrSlice>(
     w: &mut CodeWriter,
     side: PickSide,
-    rule: &ParserRule,
     lowered_rule: &Rule,
     ctx: &mut EmitContext,
     fn_name: S,
@@ -8388,7 +8147,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
                 &proven,
             );
         } else {
-            gen_pick_alt(w, side, rule, lowered_rule, non_lr_indices[group[0]], ctx, &proven);
+            gen_pick_alt(w, side, lowered_rule, non_lr_indices[group[0]], ctx, &proven);
         }
 
         w.end();
@@ -8398,7 +8157,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
     // lookahead nothing admits, leaving the caller to report it, as in a group.
     if let Some(alt_index) = decision.follow_admitted_nullable {
         w.begin("scope:");
-        gen_pick_alt(w, side, rule, lowered_rule, alt_index, ctx, &NO_KINDS);
+        gen_pick_alt(w, side, lowered_rule, alt_index, ctx, &NO_KINDS);
         w.end();
     }
     emit_no_alternative(w, side, lowered_rule, ctx);
@@ -8435,14 +8194,13 @@ fn emit_pick_kind_read(w: &mut CodeWriter, side: PickSide) {
 fn gen_pick_alt(
     w: &mut CodeWriter,
     side: PickSide,
-    rule: &ParserRule,
     lowered_rule: &Rule,
     alt_index: i32,
     ctx: &mut EmitContext,
     proven_first: &List<i32>,
 ) {
     match side {
-        _::Parse => gen_picked_rule_alt(w, rule, lowered_rule, alt_index, ctx, proven_first),
+        _::Parse => gen_picked_rule_alt(w, lowered_rule, alt_index, ctx, proven_first),
         _::Scan => {
             let body = rule_alt_scan_body(lowered_rule, alt_index).unwrap();
             if gen_scan_alt_in_place(w, alt_index, body, &known_at_start(proven_first), ctx) {
