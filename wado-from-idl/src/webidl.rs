@@ -1465,7 +1465,7 @@ impl Lowering<'_> {
             mut unions,
             ..
         } = named;
-        let mut values = IndexMap::new();
+        let mut values: IndexMap<String, Vec<String>> = IndexMap::new();
         for declared in &snapshot.enums {
             let name = to_upper_camel_case(&declared.name);
             if !enums.contains(&name) {
@@ -1516,6 +1516,21 @@ impl Lowering<'_> {
             }));
         }
         unions.sort_keys();
+        for union in unions.values() {
+            let mut seen = IndexSet::new();
+            for case in &union.cases {
+                if let WadoType::StringEnum(name) = &case.ty {
+                    for value in &values[name] {
+                        assert!(
+                            seen.insert(value),
+                            "a union's enums must share no value, or the glue cannot tell \
+                             which case the host means: `{value}` in {}",
+                            union.name
+                        );
+                    }
+                }
+            }
+        }
         for union in unions.into_values() {
             module.types.push(WadoTypeDef::Variant(WadoVariant {
                 cm_attr: Some(type_path(&union.name)),

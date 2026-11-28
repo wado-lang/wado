@@ -1815,6 +1815,25 @@ fn a_result_union_of_two_enums_takes_the_case_holding_the_value() {
 }
 
 #[test]
+#[should_panic(expected = "a union's enums must share no value")]
+fn a_union_of_two_enums_sharing_a_value_is_refused() {
+    let mut defs = chain();
+    defs.enums = vec![
+        string_enum("Presentation", &["openid4vp", "shared"]),
+        string_enum("Issuance", &["openid4vci", "shared"]),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[attribute(
+            "protocol",
+            &union(&[plain("Presentation"), plain("Issuance")], false),
+            true,
+        )],
+    ));
+    let _ = generate(&defs.build(), "test.json");
+}
+
+#[test]
 fn an_html_constructor_is_not_new() {
     let mut defs = chain();
     defs.interfaces.push(partial(
