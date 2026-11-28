@@ -1651,7 +1651,7 @@ fn single_bindings(scan: &BodyScan) -> IndexMap<u32, Operand> {
 /// copied. Only a callee reaching no safepoint qualifies inside a loop, so the
 /// splice brings its body alone and none of the spills a safepoint costs the
 /// loop ([`Reach::SoleOutsideLoops`] says what qualifies outside one, and
-/// [`Reach::SoleClosure`] what qualifies in one anyway). At `-O2`
+/// [`Basis::SoleClosure`] what qualifies in one anyway). At `-O2`
 /// this admits up to 120, which reaches the stdlib's UTF-8 codec helpers and
 /// the zlib match helpers that once carried an inline hint each. Priced with
 /// what each splices, a tagged template's one-site `sql` driver is 105.
@@ -1711,11 +1711,6 @@ enum Reach {
     /// spills nothing it did not already, where a loop would reload its
     /// references on every iteration.
     SoleOutsideLoops,
-    /// [`Reach::SoleOutsideLoops`] for a closure literal's `$call` body, which
-    /// a loop takes as well: spliced, its environment is a literal SROA splits
-    /// and its captures are loads LICM hoists. Admitting every such callee in a
-    /// loop spliced the derived deserializers' `next_field` and measured slower.
-    SoleClosure,
     Everywhere,
 }
 
@@ -1751,7 +1746,7 @@ impl Reach {
     /// loop depth decides.
     fn covers(self, spots: Spots) -> bool {
         match self {
-            Reach::Everywhere | Reach::Sole | Reach::SoleClosure => spots.any(),
+            Reach::Everywhere | Reach::Sole => spots.any(),
             Reach::SoleOutsideLoops => spots.outside_loops,
             Reach::Loops => spots.in_loop,
             Reach::Nowhere => false,
@@ -1850,7 +1845,9 @@ enum Basis {
         sole_and_loop_free: bool,
     },
     /// [`Basis::Safepoint`]'s one site for a closure literal's `$call` body,
-    /// in a loop too.
+    /// in a loop too: spliced, its environment is a literal SROA splits and its
+    /// captures are loads LICM hoists. Admitting every safepoint callee in a
+    /// loop spliced the derived deserializers' `next_field` and measured slower.
     SoleClosure,
     /// Under the payback bound: its one site, or its sites in loops.
     Payback {
@@ -1874,7 +1871,7 @@ impl Basis {
             Basis::Safepoint {
                 sole_and_loop_free: true,
             } => Reach::SoleOutsideLoops,
-            Basis::SoleClosure => Reach::SoleClosure,
+            Basis::SoleClosure => Reach::Sole,
             Basis::Payback { sole: true } => Reach::Sole,
             Basis::Payback { sole: false } => Reach::Loops,
         }
@@ -3994,19 +3991,17 @@ fn try_inline_call_expr(
             // until the loop converges: spliced, it becomes statements
             // `let_block_flatten` lays into the caller before the fold reaches
             // them. One still standing then is one the engine could not fold.
-            (Site::Plain, Reach::SoleOutsideLoops | Reach::SoleClosure) => sole_site(frame)
-                .or_else(|| {
-                    let left = candidates.fold_pending
-                        && folds_to_constant(
-                            caller,
-                            Operand::Expr(call_id),
-                            &IndexSet::default(),
-                            Some(candidates.ctfe_eligible),
-                        );
-                    frame.deferred |= left;
-                    left.then_some(Refusal::LeftToEngine)
-                }),
-            (Site::Loop, Reach::SoleClosure) => sole_site(frame),
+            (Site::Plain, Reach::SoleOutsideLoops) => sole_site(frame).or_else(|| {
+                let left = candidates.fold_pending
+                    && folds_to_constant(
+                        caller,
+                        Operand::Expr(call_id),
+                        &IndexSet::default(),
+                        Some(candidates.ctfe_eligible),
+                    );
+                frame.deferred |= left;
+                left.then_some(Refusal::LeftToEngine)
+            }),
             (Site::Loop, Reach::SoleOutsideLoops) => Some(Refusal::InLoop),
             (Site::Loop, Reach::Loops) => {
                 if frame.glue {
