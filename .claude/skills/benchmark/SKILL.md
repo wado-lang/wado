@@ -55,7 +55,7 @@ mise run on-task-started
 6. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
    `mise -C wasm-size ls` names Zig, and `moon version` names Moonbit.
 7. Compare every Wado row with the README's previous figure, and report the
-   ones that moved markedly. Investigate one only when the user asks
+   ones that moved by 5% or more. Investigate one only when the user asks
    ([PGO](#pgo) says how).
 
 ## PGO
