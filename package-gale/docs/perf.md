@@ -215,7 +215,7 @@ frames instead re-read every frame below the top with no memo, so
 `Performance/DropLoopEntryBranchInLRRule_4` grew exponentially with its nested
 `between … and` lines.
 
-The trees are those of the full-stack cache: `rust_corpus_check.wado --tree-hash` prints the same hash for every `.rs` file in the repository before
+The trees are those of the full-stack cache: `package-gale-rust/tools/corpus_check.wado --tree-hash` prints the same hash for every `.rs` file in the repository before
 and after. Dev host, `-O2`, one `wado run` of that tool:
 
 | Input                            | Before / after |
@@ -564,8 +564,8 @@ Found by reading generated code (2026-09), not yet measured on a benchmark:
   tokens (`# !` against `# [`) already decide it.
 - [ ] **`exact` parses Rust and TypeScript about twice as slowly as
   `longest` (2026-10).** One run each of
-  `package-gale/benchmark/{rust,typescript}` in ms/iter, under the modes then
-  named `never` and `always`:
+  `package-gale-rust/benchmark` and `package-gale/benchmark/typescript` in
+  ms/iter, under the modes then named `never` and `always`:
 
   | Grammar    | longest | exact |
   | ---------- | ------- | ----- |

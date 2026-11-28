@@ -1,20 +1,18 @@
-/// Driver test for the Rust grammar parser: items and expressions, plus
-/// negative tripwires. The repository-wide measure is
-/// `tools/rust_corpus_check.wado`; what belongs here is the shape a corpus
-/// failure narrowed to.
+/// The Rust parser on items and expressions, plus negative tripwires. The
+/// repository-wide measure is `tools/corpus_check.wado`; what belongs here is
+/// the shape a corpus failure narrowed to.
 ///
-/// The superClass predicates run through the base ports
-/// `tools/rust_corpus.wado` installs.
-use rust from "./grammars/RustLexer.g4"
+/// The superClass predicates run through the base ports `src/lib.wado`
+/// installs.
+use rust from "../assets/grammar/RustLexer.g4"
     with {
         generator: {
-            module: "../src/generator.wado",
-            inputs: ["./grammars/RustParser.g4"],
-            output_dir: "./generated/cst_rust",
+            module: "wado-lang:gale",
+            inputs: ["../assets/grammar/RustParser.g4"],
         },
     };
-use { normalize_tree } from "./support/tree_compare.wado";
-use { with_rust_bases } from "../tools/rust_corpus.wado";
+use { normalize_tree } from "wado-lang:gale";
+use { with_rust_bases } from "../src/lib.wado";
 
 fn rlex_tok<S: AsStrSlice>(input: S) -> rust::TokenStream {
     return with_rust_bases(|| rust::tokenize(input));
@@ -29,6 +27,11 @@ test "tokenize fn declaration" {
     assert tokens.len() >= 5, "expected at least 5 tokens";
     let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_FN", "expected KW_FN";
+}
+
+test "a tab and a form feed are whitespace" {
+    let result = rlex_prs("fn\tmain()\u{0C}{\n\tlet x = 1;\u{0B}\n}\n");
+    assert result.diagnostics.is_empty();
 }
 
 test "tokenize struct" {

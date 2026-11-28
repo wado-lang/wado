@@ -200,7 +200,7 @@ test "parse ANTLRv4Parser.g4" {
 }
 
 test "parse RustLexer.g4" {
-    let input = #include_str("../grammars/RustLexer.g4");
+    let input = #include_str("../../../package-gale-rust/assets/grammar/RustLexer.g4");
     let result = parse(input);
     if let Err(e) = result {
         panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
@@ -213,7 +213,7 @@ test "parse RustLexer.g4" {
 
 #[timeout(seconds = 30)]
 test "parse RustParser.g4" {
-    let input = #include_str("../grammars/RustParser.g4");
+    let input = #include_str("../../../package-gale-rust/assets/grammar/RustParser.g4");
     let result = parse(input);
     if let Err(e) = result {
         panic(`parse failed: ${e.message} at ${e.span.start}..${e.span.end}`);
@@ -312,8 +312,8 @@ test "merge TypeScript grammars" {
 
 #[timeout(seconds = 30)]
 test "merge Rust grammars" {
-    let lexer_g = parse(#include_str("../grammars/RustLexer.g4")).unwrap();
-    let parser_g = parse(#include_str("../grammars/RustParser.g4")).unwrap();
+    let lexer_g = parse(#include_str("../../../package-gale-rust/assets/grammar/RustLexer.g4")).unwrap();
+    let parser_g = parse(#include_str("../../../package-gale-rust/assets/grammar/RustParser.g4")).unwrap();
     let merged = merge_grammars([lexer_g, parser_g]);
     assert merged.name == "Rust";
     assert merged.lexer_rules.len() > 20;

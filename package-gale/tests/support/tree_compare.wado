@@ -1,36 +1,8 @@
 //! Text helpers for comparing a printed parse tree against an expected one.
-//! Test-only, so they are not part of the runtime a generated parser inlines;
-//! both are `String -> String` and touch no generated type.
+//! `normalize_tree` is the library's; dropping skip markers is for Gale's own
+//! tests alone.
 
-/// Collapse whitespace runs to single spaces and trim, so an expected tree can
-/// be written indented across lines. Whitespace inside double quotes is kept.
-pub fn normalize_tree<S: AsStrSlice>(s: S) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut in_string = false;
-    let mut space_pending = false;
-    for let c of s.chars() {
-        if in_string {
-            out.push(c);
-            if c == '"' {
-                in_string = false;
-            }
-        } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
-            if out.len() > 0 {
-                space_pending = true;
-            }
-        } else {
-            if space_pending {
-                out.push(' ');
-                space_pending = false;
-            }
-            if c == '"' {
-                in_string = true;
-            }
-            out.push(c);
-        }
-    }
-    return out;
-}
+pub use { normalize_tree } from "../../src/tree_text.wado";
 
 /// Drop Gale's `<skip …>` markers, leaving the skipped terminal bare — the
 /// shape ANTLR4's `Trees.toStringTree` prints. See "Skipped terminals in parse

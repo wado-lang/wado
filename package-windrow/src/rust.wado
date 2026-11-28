@@ -1,0 +1,199 @@
+//! Rust, read through Gale's Rust grammar.
+
+use {
+    parse_rust,
+    token_kind_name,
+    RK_INNER_ATTRIBUTE,
+    RK_OUTER_ATTRIBUTE,
+    RK_STATEMENTS,
+    TK_DOT,
+    TK_PATHSEP,
+    TK_LPAREN,
+    TK_NOT,
+    TK_KW_FN,
+} from "wado-lang:gale-rust";
+use { Tree, TokenClass } from "./tree.wado";
+use { Language, TestMark, classify } from "./language.wado";
+
+fn class_of(kind: i32) -> TokenClass {
+    let name = token_kind_name(kind);
+    if name == "NON_KEYWORD_IDENTIFIER" || name == "RAW_IDENTIFIER" || name == "LIFETIME_OR_LABEL" {
+        return TokenClass::Name;
+    }
+    if name.ends_with("_LITERAL") {
+        return TokenClass::Literal;
+    }
+    return TokenClass::Fixed;
+}
+
+/// `#[test]`, or a `cfg` that holds only under test, marks the item it is
+/// attached to; an inner `#![cfg(…)]` marks the whole file.
+fn marks_test(kind: i32, text: StrSlice) -> TestMark {
+    if kind != RK_OUTER_ATTRIBUTE as i32 && kind != RK_INNER_ATTRIBUTE as i32 {
+        return TestMark::None;
+    }
+    let mut compact = "";
+    for let c of without_string_values(text).chars() {
+        if !c.is_whitespace() {
+            compact.push(c);
+        }
+    }
+    let predicate = compact.trim_prefix("#!").trim_prefix("#");
+    if predicate == "[test]" {
+        return TestMark::Parent;
+    }
+    if let Some(inner) = predicate.strip_prefix("[cfg(")
+        && let Some(cfg) = inner.strip_suffix(")]")
+        && holds_only_under_test(cfg) {
+        return TestMark::Parent;
+    }
+    return TestMark::None;
+}
+
+/// `s` with each `= "…"` or `= r#"…"#` value emptied to `""`, so no character
+/// inside one reads as a delimiter or a predicate.
+fn without_string_values(s: StrSlice) -> String {
+    let mut out = "";
+    let mut kept = 0;
+    let mut i = 0;
+    while i < s.len() {
+        let mut j = i + 1;
+        if unchecked s.byte_at(i) != b'=' {
+            i = j;
+            continue;
+        }
+        while j < s.len() && (unchecked s.byte_at(j)).is_ascii_whitespace() {
+            j += 1;
+        }
+        let raw = j < s.len() && unchecked s.byte_at(j) == b'r';
+        let mut hashes = 0;
+        if raw {
+            j += 1;
+            while j < s.len() && unchecked s.byte_at(j) == b'#' {
+                hashes += 1;
+                j += 1;
+            }
+        }
+        if j >= s.len() || unchecked s.byte_at(j) != b'"' {
+            i = j;
+            continue;
+        }
+        out.push_str(s.slice(kept, i + 1));
+        out.push_str("\"\"");
+        j += 1;
+        loop {
+            assert j < s.len(), "a parsed string literal closes";
+            let b = unchecked s.byte_at(j);
+            if !raw && b == b'\\' {
+                j += 2;
+            } else if b == b'"' && closes_raw(s, j + 1, hashes) {
+                j += 1 + hashes;
+                break;
+            } else {
+                j += 1;
+            }
+        }
+        kept = j;
+        i = j;
+    }
+    out.push_str(s.slice(kept, s.len()));
+    return out;
+}
+
+fn closes_raw(s: StrSlice, from: i32, hashes: i32) -> bool {
+    if from + hashes > s.len() {
+        return false;
+    }
+    for let k of from..<from + hashes {
+        if unchecked s.byte_at(k) != b'#' {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Whether a `cfg` predicate implies `test`: `test` itself, an `all` one of
+/// whose terms does, or an `any` every term of which does. `not` holds outside
+/// tests too.
+fn holds_only_under_test(predicate: StrSlice) -> bool {
+    if predicate == "test" {
+        return true;
+    }
+    if let Some(terms) = arguments_of(predicate, "all") {
+        return terms.iter_ref().any(|t| holds_only_under_test(*t));
+    }
+    if let Some(terms) = arguments_of(predicate, "any") {
+        return !terms.is_empty() && terms.iter_ref().all(|t| holds_only_under_test(*t));
+    }
+    return false;
+}
+
+/// The comma-separated terms of `name(...)`, or `None` for any other predicate.
+fn arguments_of(predicate: StrSlice, name: String) -> Option<List<StrSlice>> {
+    let Some(inner) = predicate.strip_prefix(name) else {
+        return null;
+    };
+    let Some(open) = inner.strip_prefix("(") else {
+        return null;
+    };
+    let Some(terms) = open.strip_suffix(")") else {
+        return null;
+    };
+    let mut out: List<StrSlice> = [];
+    let mut depth = 0;
+    let mut start = 0;
+    for let mut i = 0; i <= terms.len(); i += 1 {
+        let b = if i < terms.len() { unchecked terms.byte_at(i) } else { b',' };
+        if b == b'(' {
+            depth += 1;
+        } else if b == b')' {
+            depth -= 1;
+        } else if b == b',' && depth == 0 {
+            if i > start {
+                out.push(terms.slice(start, i));
+            }
+            start = i + 1;
+        }
+    }
+    return Some(out);
+}
+
+/// The tree of a Rust file, or the first syntax error: recovery drops tokens,
+/// so a shape taken from a broken tree would hide what it dropped.
+pub fn read_rust(path: String, source: String) -> Result<Tree, String> {
+    let result = parse_rust(&source);
+    if result.diagnostics.len() > 0 {
+        return Result::Err(`${result.diagnostics[0].message}`);
+    }
+    let cst = &result.cst;
+    let toks = &result.tokens;
+    let mut raw = Tree { path, source };
+    for let mut i = 0; i < cst.row_count(); i += 1 {
+        match cst.tag[i] {
+            _::Open => {
+                let span = cst.span(i);
+                raw.open(cst.kind(i) as i32, span.start, span.end);
+            },
+            _::Close => raw.close(),
+            _::Tok => {
+                let t = cst.token_index(i);
+                let span = toks.span_at(t);
+                raw.token(toks.kind_at(t), TokenClass::Fixed, span.start, span.end);
+            },
+            _::Miss => {
+            },
+            _::Skip => {
+            },
+        }
+    }
+    let rust = Language {
+        class_of,
+        marks_test,
+        sequence: RK_STATEMENTS as i32,
+        declares: TK_KW_FN,
+        member: TK_DOT,
+        path: TK_PATHSEP,
+        calls: [TK_LPAREN, TK_NOT],
+    };
+    return Result::Ok(classify(&raw, &rust));
+}

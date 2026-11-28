@@ -1,0 +1,109 @@
+//! `windrow [--min-tokens N] [--similarity S] [--names] <path>…`: every `.rs`
+//! and `.wado` file under the paths, and the groups of nodes alike among them,
+//! largest first.
+
+use { is_source, read_source, find_similar, Tree, Measure } from "./lib.wado";
+use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens, WalkEntry } from "core:fs";
+use { HashSet } from "core:collections";
+
+/// Whether a walk descends into a directory: not a hidden one (`.git`), nor
+/// one a build writes (Cargo's `target/`, Kiln's `build/`), whose generated
+/// sources repeat themselves by construction.
+fn walks_into(entry: &WalkEntry) -> bool {
+    let name = fs::file_name(&entry.path).unwrap();
+    return !name.starts_with(".") && name != "target" && name != "build";
+}
+
+fn source_files(root: &String) -> List<String> with (Stderr, Preopens) {
+    let mut out: List<String> = [];
+    let root_type = match fs::metadata(root) {
+        Ok(meta) => meta.type,
+        Err(e) => {
+            eprintln(`error: ${e}`);
+            return out;
+        },
+    };
+    if !root_type matches { _::Directory } {
+        if is_source(root) {
+            out.push(*root);
+        }
+        return out;
+    }
+    let walk = match fs::walk_dir(root, walks_into) {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln(`error: ${e}`);
+            return out;
+        },
+    };
+    for let found of walk {
+        match found {
+            Ok(entry) => {
+                if entry.type matches { _::File } && is_source(&entry.path) {
+                    out.push(entry.path);
+                }
+            },
+            Err(e) => eprintln(`error: ${e}`),
+        }
+    }
+    return out;
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
+    let argv = args();
+    let mut min_tokens = 40;
+    let mut similarity = 0.8;
+    let mut measure = Measure::Shape;
+    let mut roots: List<String> = [];
+    for let mut i = 0; i < argv.len(); i += 1 {
+        if argv[i] == "--min-tokens" {
+            i += 1;
+            assert i < argv.len(), "--min-tokens takes a number";
+            min_tokens = i32::from_str(&argv[i]).expect("--min-tokens takes a number");
+        } else if argv[i] == "--names" {
+            measure = Measure::ShapeOrNames;
+        } else if argv[i] == "--similarity" {
+            i += 1;
+            assert i < argv.len(), "--similarity takes a number";
+            similarity = f64::from_str(&argv[i]).expect("--similarity takes a number");
+            assert 0.0 < similarity && similarity <= 1.0, "--similarity must be in (0, 1]";
+        } else {
+            roots.push(argv[i]);
+        }
+    }
+    assert !roots.is_empty(), "name the paths to scan";
+    let mut trees: List<Tree> = [];
+    // Roots may overlap, and a file read twice would be its own copy.
+    let mut seen = HashSet::<String>::new();
+    for let root of &roots {
+        for let path of source_files(root) {
+            if !seen.insert(fs::normalize(&path).expect("a walked path stays in the preopen")) {
+                continue;
+            }
+            let source = match fs::read_to_string(&path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln(`error: ${e}`);
+                    continue;
+                },
+            };
+            match read_source(path, source) {
+                Ok(tree) => trees.push(tree),
+                Err(message) => eprintln(`skipped ${path}: ${message}`),
+            }
+        }
+    }
+    let groups = find_similar(&trees, min_tokens, similarity, measure);
+    for let group of &groups {
+        println(`${group.tokens} tokens x ${group.sites.len()}, similarity ${group.similarity:.2}`);
+        for let site of &group.sites {
+            let tree = &trees[site.tree];
+            let first = tree.line_of(site.start(&trees));
+            let last = tree.line_of(site.end(&trees));
+            println(`  ${tree.path}:${first}-${last}`);
+        }
+    }
+    eprintln(`${trees.len()} files, ${groups.len()} groups`);
+}

@@ -1,0 +1,87 @@
+//! Lists, or holds to a baseline, the `crate::` / `super::` paths Rust files
+//! write outside a `use` item at the top of a module.
+
+use { find_inline_paths, InlinePath } from "../src/inline_paths.wado";
+use { collect_paths, ratchet } from "wado-lang:gale";
+use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { HashMap } from "core:collections";
+
+global BASELINE_PATH: String = "tools/rust-inline-paths.json";
+
+/// The inline paths `path` carries. A file that cannot be read or parsed lands
+/// in `failed`, never in a clean count.
+fn scan<S: AsStrSlice>(path: S, failed: &mut i32) -> List<InlinePath> with (Stderr, Preopens) {
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln(`error: ${e}`);
+            *failed += 1;
+            return [];
+        },
+    };
+    return match find_inline_paths(&source) {
+        Ok(hits) => hits,
+        Err(why) => {
+            eprintln(`error: ${path}: ${why}`);
+            *failed += 1;
+            return [];
+        },
+    };
+}
+
+/// File path to the number of inline paths it carries, omitting the clean ones.
+/// The baseline is serialized straight from this, so the walk is sorted.
+fn census(paths: &List<String>, failed: &mut i32) -> HashMap<String, i32> with (Stderr, Preopens) {
+    let mut sorted = *paths;
+    sorted.sort();
+    let mut counts = HashMap::<String, i32>::new();
+    for let path of &sorted {
+        let found = scan(path, failed).len();
+        if found > 0 {
+            counts[*path] = found;
+        }
+    }
+    return counts;
+}
+
+fn list_mode(paths: &List<String>) -> i32 with (Stdout, Stderr, Preopens) {
+    let mut found = 0;
+    let mut failed = 0;
+    for let path of paths {
+        for let hit of scan(path, &mut failed) {
+            println(`${*path}:${hit.line}:${hit.column}: ${hit.text}`);
+            found += 1;
+        }
+    }
+    println(`${found} inline paths`);
+    return if failed > 0 { 1 } else { 0 };
+}
+
+fn ratchet_mode(paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr, Preopens) {
+    let mut failed = 0;
+    let counts = census(paths, &mut failed);
+    if failed > 0 {
+        eprintln(`error: ${failed} of ${paths.len()} files could not be measured`);
+        return 1;
+    }
+    return ratchet(
+        BASELINE_PATH,
+        &counts,
+        update,
+        "inline `crate::` / `super::` paths",
+        "Import them with a `use` at the top of the module. Run `mise run list-rust-paths <file>` to list them.",
+    );
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
+    let argv = args();
+    let paths = collect_paths(&argv, ".rs", ["--update", "--check"]);
+    let update = argv.into_iter().any(|a| a == "--update");
+    let check = argv.into_iter().any(|a| a == "--check");
+    let status = if update || check { ratchet_mode(&paths, update) } else { list_mode(&paths) };
+    if status != 0 {
+        exit(status as u8);
+    }
+}

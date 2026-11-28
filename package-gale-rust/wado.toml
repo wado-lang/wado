@@ -1,0 +1,17 @@
+[package]
+name = "gale-rust"
+description = "Rust as a package: the grammars-v4 Rust grammar, and the parser Gale builds from it"
+repository-directory = "package-gale-rust"
+lib = "src/lib.wado"
+exports = ["assets/grammar/RustLexer.g4", "assets/grammar/RustParser.g4"]
+# version / repository / namespace / license / authors inherited from [workspace.package]
+
+[build-dependencies]
+"wado-lang:gale" = { path = "../package-gale" }
+
+[dependencies]
+"wado-lang:gale" = { path = "../package-gale" }
+
+[test]
+# `build/` holds Kiln intermediates; not source.
+exclude = ["build/**"]

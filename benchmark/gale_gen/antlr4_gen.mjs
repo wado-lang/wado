@@ -9,7 +9,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const GRAMMARS = resolve(here, '..', '..', 'package-gale', 'tests', 'grammars');
+const GRAMMARS = resolve(here, '..', '..', 'package-gale-rust', 'assets', 'grammar');
 const G4 = ['RustLexer.g4', 'RustParser.g4'];
 const HARNESS = join(here, 'Antlr4GenBench.java');
 const ANTLR_VERSION = '4.13.2';

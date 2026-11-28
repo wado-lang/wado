@@ -41,17 +41,7 @@ or `options: { trace: true }` in a Kiln `with { generator: ... }` block.
 
 ## The Rust Corpus Check
 
-`tools/rust_corpus_check.wado` parses a list of Rust files with the generated `RustParser.g4` parser and prints one `ok` / `ng` line each — path, diagnostic count, line, message, and the first diagnostic's rule stack — plus a summary on stderr. The stack is the part that carries information: recovery restarts at an item boundary, so most failures report the same `expected 'extern'` whatever went wrong inside, and only the stack names the rule. Repository-wide it is the one number that says whether a prediction change helped.
-
-```sh
-git ls-files '*.rs' > target/rs-corpus.txt
-wado run package-gale/tools/rust_corpus_check.wado -- --paths-from target/rs-corpus.txt
-```
-
-`--paths-from` reads one path per line, the only form that survives a path with a space.
-
-`--tree-hash` appends a hash of each file's tree to its line. Two runs whose outputs are identical built the same trees, which is the check for a change that must not move a prediction.
-
-Every `.rs` this repository tracks parses clean, so any `ng` line is a regression. Each failing file reports exactly one diagnostic — it dies once and recovery carries the rest — so the count is files, not errors.
-
-`tools/rust_inline_paths.wado`, which `mise run check-rust-paths` runs, is the parser's second consumer. It needs the same clean corpus, since a file it cannot parse is reported rather than counted. Both tools share `tools/rust_corpus.wado`, which holds the recognizer with its base ports installed.
+Repository-wide, the Rust corpus check is the one number that says whether a
+prediction change helped, and `--tree-hash` checks that a change moved no tree.
+[`package-gale-rust/docs/corpus-check.md`](../../package-gale-rust/docs/corpus-check.md)
+says how to run it.

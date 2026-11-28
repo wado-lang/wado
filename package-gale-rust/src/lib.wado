@@ -1,21 +1,28 @@
-//! The Rust recognizer with its base ports installed, for the tools here and
-//! the driver test.
+//! The Rust recognizer with its base ports installed: the one clause that
+//! generates it, for any package reading Rust.
 
-use rust from "../tests/grammars/RustLexer.g4"
+use rust from "../assets/grammar/RustLexer.g4"
     with {
         generator: {
-            module: "../src/generator.wado",
-            inputs: ["../tests/grammars/RustParser.g4"],
-            output_dir: "../tests/generated/cst_rust",
+            module: "wado-lang:gale",
+            inputs: ["../assets/grammar/RustParser.g4"],
         },
     };
-use { RustLexerBase, RustParserBase, LexerView, Parser } from "../tests/grammars/RustLexer.g4";
+use { RustLexerBase, RustParserBase, LexerView, Parser } from "../assets/grammar/RustLexer.g4";
+pub use {
+    token_kind_name,
+    RK_INNER_ATTRIBUTE,
+    RK_OUTER_ATTRIBUTE,
+    RK_STATEMENTS,
+    TK_DOT,
+    TK_PATHSEP,
+    TK_LPAREN,
+    TK_NOT,
+    TK_KW_FN,
+} from "../assets/grammar/RustLexer.g4";
 
-// A hand-written RustLexerBase port (the real base class is Java, outside the
-// .g4). Stateless: the predicates read only the match window.
-// `grammars/java/RustLexerBase.java` is its Java twin, which
-// `antlr4_oracle.wado --super` runs ANTLR4 against. Edit both or neither.
-
+/// The lexer base, ported from Java, as `tools/java/RustLexerBase.java` is.
+/// Stateless: the predicates read only the match window.
 struct RustBase {
 }
 
@@ -40,10 +47,9 @@ impl RustLexerBase for RustBase {
     }
 }
 
-// The parser base, likewise a port. The lexer emits `<` and `>` one character
-// at a time so nested generics close cleanly, so `shl` / `shr` reassemble a
-// shift only for a pair one start offset apart — what `NextLT` / `NextGT` ask.
-
+/// The parser base, likewise a port. The lexer emits `<` and `>` one character
+/// at a time so nested generics close cleanly, so `shl` / `shr` reassemble a
+/// shift only for a pair one start offset apart — what `NextLT` / `NextGT` ask.
 struct RustPBase {
 }
 
@@ -69,6 +75,12 @@ pub fn with_rust_bases<T>(recognize: fn() -> T with (RustLexerBase, RustParserBa
 /// Parses a whole Rust source file.
 pub fn parse_rust<S: AsStrSlice>(source: S) -> rust::ParseResult {
     return with_rust_bases(|| rust::parse(source));
+}
+
+/// The syntax errors in Rust `source`, one rendered message each; empty when
+/// it parses. The component's public entry point.
+export fn diagnose(source: String) -> List<String> {
+    return parse_rust(source).diagnostics.into_iter().map(|d| `${d}`).collect();
 }
 
 /// FNV-1a over every row of the tree: what it is, where it sits, and the
