@@ -186,11 +186,15 @@ impl Document {
             .collect())
     }
 
-    /// What `name` means at the file's top level, in each namespace: the
-    /// server's answer inside a function appended to the file, which binds
-    /// nothing of its own, and taken back once answered. A use the file
-    /// already makes would not do: a block's own `use` outranks the top level.
-    fn top_level_meaning(&self, client: &mut Client, name: &str) -> Result<Meaning, String> {
+    /// What `name` means at the file's top level, items apart from macros: the
+    /// server's answers inside a function appended to the file, which binds
+    /// nothing of its own, and taken back once answered. A use the file already
+    /// makes would not do: a block's own `use` outranks the top level.
+    ///
+    /// Where a name is a type, a value and a macro is no guide to which one
+    /// the server answers with: a name the item namespaces lack resolves to a
+    /// macro of that name. The hover's signature says what each answer is.
+    fn top_level_meaning(&self, client: &mut Client, name: &str) -> Result<Namespaces, String> {
         let separator = if self.text.ends_with('\n') { "" } else { "\n" };
         let probe = format!("fn rust_move_probe() {{ let _: {name}; {name}; {name}!(); }}\n");
         let line = self.text.matches('\n').count() + separator.len();
@@ -205,17 +209,27 @@ impl Document {
                 },
             }),
         );
-        let meaning = identifiers(&probe)
-            .into_iter()
-            .filter(|(_, word)| *word == name)
-            .map(|(column, _)| self.definitions(client, Position { line, column }))
-            .collect::<Result<Vec<Meaning>, String>>()
-            .map(|found| found.into_iter().flatten().collect());
+        let mut meaning = Namespaces::default();
+        let mut answer = Ok(());
+        for (column, _) in identifiers(&probe).into_iter().filter(|(_, w)| *w == name) {
+            let at = Position { line, column };
+            let found = self.definitions(client, at).and_then(|found| {
+                let hover = client.request(
+                    "textDocument/hover",
+                    json!({ "textDocument": { "uri": self.uri }, "position": at.to_lsp() }),
+                )?;
+                Ok((found, declares_macro(&hover)))
+            });
+            match found {
+                Ok((found, is_macro)) => meaning[usize::from(is_macro)].extend(found),
+                Err(e) => answer = Err(e),
+            }
+        }
         client.notify(
             "textDocument/didClose",
             &json!({ "textDocument": { "uri": self.uri } }),
         );
-        meaning
+        answer.map(|()| meaning)
     }
 
     /// What `binding` of one of its `use` items imports.
@@ -232,6 +246,30 @@ impl Document {
 /// What a name means where it is written: each declaration it resolves to, by
 /// file, line and column.
 type Meaning = BTreeSet<(String, usize, usize)>;
+
+/// What a name means as an item (a type or a value), and as a macro.
+type Namespaces = [Meaning; 2];
+
+/// Whether a hover the server answered names a macro: its signature, the
+/// paragraph after the path, is a `macro_rules!` or a `macro`.
+fn declares_macro(hover: &Value) -> bool {
+    let text = hover["contents"]["value"].as_str().unwrap_or_default();
+    text.split("\n\n").nth(1).is_some_and(|signature| {
+        signature
+            .split_whitespace()
+            .any(|word| word == "macro" || word == "macro_rules!")
+    })
+}
+
+/// How the destination binds a name the moved code reads.
+enum Binds {
+    /// What the moved code reads, or nothing that the moved code reads.
+    Same,
+    /// Nothing in a namespace the moved code reads it in.
+    Unbound,
+    /// Something else in a namespace the moved code reads it in.
+    Otherwise,
+}
 
 fn symbol_name(symbol: &Value) -> &str {
     symbol["name"]
@@ -279,25 +317,22 @@ fn find_symbol<'a>(
 /// Where an `impl` block's text starts and where its opening brace is.
 fn impl_header_range(document: &Document, block: &Value) -> Range<usize> {
     let start = document.offset(Position::from_lsp(&block["range"]["start"]));
-    let name_at = document.offset(name_position(block));
-    // A const argument (`impl Slot<{ 2 > 1 }>`) opens a brace inside the
-    // angle brackets, which an operator in it does not close, and the arrow
-    // of a function type closes none. A comment or a literal is no code.
-    let mut angles = 0usize;
-    let mut braces = 0usize;
-    let mut previous = ' ';
-    let brace = document.code[name_at..]
+    // The brace that closes the block pairs with the one that opens it: in
+    // code, unlike `<` and `>`, braces always balance, a const argument's
+    // (`impl Slot<{ 2 > 1 }>`) included.
+    let close = document.offset(Position::from_lsp(&block["range"]["end"])) - '}'.len_utf8();
+    assert_eq!(&document.code[close..=close], "}");
+    let mut depth = 0usize;
+    let brace = document.code[start..close]
         .char_indices()
+        .rev()
         .find_map(|(at, c)| {
             match c {
-                '{' if angles == 0 => return Some(name_at + at),
-                '{' => braces += 1,
-                '}' => braces -= 1,
-                '<' if braces == 0 => angles += 1,
-                '>' if braces == 0 && previous != '-' => angles -= 1,
+                '}' => depth += 1,
+                '{' if depth == 0 => return Some(start + at),
+                '{' => depth -= 1,
                 _ => {}
             }
-            previous = c;
             None
         })
         .expect("an impl block opens a brace");
@@ -540,25 +575,38 @@ struct Move {
 }
 
 impl Move {
-    /// What the destination's top level means by `name` once the items have
-    /// landed; `None` where it binds no such name.
-    fn destination_meaning(
+    /// How the destination's top level binds `name`, once the items have
+    /// landed, against what the top level of `source` binds it to: the moved
+    /// code reads it there, and in each namespace on its own.
+    fn destination_binds(
         &self,
         client: &mut Client,
+        source: &Document,
         name: &str,
-    ) -> Result<Option<Meaning>, String> {
+    ) -> Result<Binds, String> {
+        let here = source.top_level_meaning(client, name)?;
         // A top-level item that moves is the destination's own from here on.
         if let Some(item) = self
             .moved
             .iter()
             .find(|item| item.header.is_none() && item.name == name)
         {
-            let uri = self.sources[&item.source].uri.clone();
             let Position { line, column } = item.name_position;
-            return Ok(Some(Meaning::from([(uri, line, column)])));
+            let moved = (self.sources[&item.source].uri.clone(), line, column);
+            let read = here.iter().any(|meaning| meaning.contains(&moved));
+            return Ok(if read { Binds::Same } else { Binds::Otherwise });
         }
-        let meaning = self.destination.top_level_meaning(client, name)?;
-        Ok((!meaning.is_empty()).then_some(meaning))
+        let there = self.destination.top_level_meaning(client, name)?;
+        let read_in = || here.iter().zip(&there).filter(|(here, _)| !here.is_empty());
+        Ok(
+            if read_in().any(|(here, there)| !there.is_empty() && here != there) {
+                Binds::Otherwise
+            } else if read_in().any(|(_, there)| there.is_empty()) {
+                Binds::Unbound
+            } else {
+                Binds::Same
+            },
+        )
     }
 
     /// Reports `name`, which the moved code reads as one thing and the
@@ -766,9 +814,12 @@ impl Move {
                     Some(_) => {}
                     None if are_siblings(source, destination) => {
                         let here = Meaning::from([(source.uri.clone(), line, column)]);
-                        let same = match self.destination_meaning(client, name)? {
-                            None => fixes.import_from_sibling(destination, source, name, here),
-                            Some(there) => there == here,
+                        let same = match self.destination_binds(client, source, name)? {
+                            Binds::Unbound => {
+                                fixes.import_from_sibling(destination, source, name, here)
+                            }
+                            Binds::Same => true,
+                            Binds::Otherwise => false,
                         };
                         if !same {
                             self.report_rebinding(fixes, name, source);
@@ -802,13 +853,15 @@ impl Move {
                     if !mentioned.contains(binding.name.as_str()) {
                         continue;
                     }
-                    let here = source.imported(client, binding)?;
-                    if let Some(there) = self.destination_meaning(client, &binding.name)? {
-                        if there != here {
+                    match self.destination_binds(client, source, &binding.name)? {
+                        Binds::Unbound => {}
+                        Binds::Same => continue,
+                        Binds::Otherwise => {
                             self.report_rebinding(fixes, &binding.name, source);
+                            continue;
                         }
-                        continue;
                     }
+                    let here = source.imported(client, binding)?;
                     // `self` and a child module name the source file itself,
                     // and `super` the parent only a sibling shares.
                     let first = binding.first_segment();
@@ -1721,6 +1774,35 @@ fn helper(n: usize) -> i32 {
         .unwrap();
         let b = read(&dir, "src/b.rs");
         assert!(b.contains("impl Slot<{ (2 > 1) as usize + 1 }> {"), "{b}");
+    }
+
+    #[test]
+    fn a_shift_outside_angle_brackets_opens_no_header() {
+        let (_, report) = a_to_b(
+            "pub trait Size {\n    fn size(&self) -> usize;\n}\n\n\
+             impl Size for [u8; 4 >> 1] {\n    fn size(&self) -> usize {\n        2\n    }\n}\n\n\
+             pub fn compute(n: i32) -> i32 {\n    n + [0u8; 2].size() as i32\n}\n",
+            "",
+            "a::compute(1)",
+            &["probe::a::compute"],
+        );
+        assert!(report.contains("move "), "{report}");
+    }
+
+    #[test]
+    fn a_macro_of_the_same_name_is_another_namespace() {
+        let (dir, report) = a_to_b(
+            "pub fn compute(n: i32) -> i32 {\n    line(n)\n}\n\n\
+             pub fn line(n: i32) -> i32 {\n    n\n}\n",
+            "",
+            "a::compute(1); a::line(1)",
+            &["probe::a::compute"],
+        );
+        assert!(!report.contains("`line` means"), "{report}");
+        assert!(
+            read(&dir, "src/b.rs").contains("use super::a::line;"),
+            "{report}"
+        );
     }
 
     #[test]
