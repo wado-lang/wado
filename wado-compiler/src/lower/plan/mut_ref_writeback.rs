@@ -110,6 +110,13 @@ fn lends(stand_ins: &IndexSet<u32>, lent_locals: &IndexSet<u32>, expr: &TirExpr)
     }
 }
 
+/// The `&mut` of a stand-in `expr` yields, through the values it yields.
+fn lent_in(stand_ins: &IndexSet<u32>, lent_locals: &IndexSet<u32>, expr: &TirExpr) -> Option<Span> {
+    yielded(expr, &|expr| {
+        lends(stand_ins, lent_locals, expr).then_some(expr.span)
+    })
+}
+
 /// What `leaf` answers for `expr`, or for a value it yields through a block's
 /// tail or a branch.
 fn yielded(expr: &TirExpr, leaf: &dyn Fn(&TirExpr) -> Option<Span>) -> Option<Span> {
@@ -269,7 +276,7 @@ impl WriteBack<'_> {
     /// A `&mut` of a stand-in `expr` can yield, as
     /// [`Self::detached_in_value_position`] follows the value positions.
     fn lent_in_value_position(&self, expr: &TirExpr) -> Option<Span> {
-        yielded(expr, &|expr| self.lends_a_stand_in(expr).then_some(expr.span))
+        lent_in(&self.stand_ins, &self.lent_locals, expr)
     }
 
     /// Note that `local` holds a detached reference. Only a binding something
@@ -876,11 +883,7 @@ impl TirRefVisitor for PatternBindings<'_> {
                 {
                     self.stand_ins.insert(*local_index);
                 }
-                if yielded(value, &|expr| {
-                    lends(&self.stand_ins, &self.lent_locals, expr).then_some(expr.span)
-                })
-                .is_some()
-                {
+                if lent_in(&self.stand_ins, &self.lent_locals, value).is_some() {
                     self.lent_locals.insert(*local_index);
                 }
             }

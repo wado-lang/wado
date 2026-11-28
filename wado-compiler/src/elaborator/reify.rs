@@ -10221,7 +10221,8 @@ impl<'a> Reify<'a> {
         place: &TirExpr,
         ctx: &mut FunctionContext,
     ) -> Vec<TirMatchArm> {
-        let held_locals: IndexSet<u32> = held.iter().filter_map(|h| scoped_temp(&h.bound)).collect();
+        let held_locals: IndexSet<u32> =
+            held.iter().filter_map(|h| scoped_temp(&h.bound)).collect();
         let mut seen = 0;
         let alternatives = alternatives_holding(&arm.pattern, &held_locals, &mut seen);
         assert_eq!(seen, held.len(), "each held binding is one pattern binding");
