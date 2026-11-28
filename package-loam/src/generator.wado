@@ -61,6 +61,7 @@ export fn probe(content: Stream<u8>, type: Option<String>) -> Result<u64, KilnEr
 
 // A stream is outside drop elaboration, so every one is consumed or dropped
 // before the first return that could leave it open.
+
 export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Stream {
     let module = ModuleSpec::from_origin(&req.origin());
     let Some(runtime) = package_of(&req.module) else {

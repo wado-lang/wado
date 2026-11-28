@@ -13,6 +13,7 @@ use { render_lexer_dump } from "./lexer_dump.wado";
 // `grammars` is an optional variadic positional so the "no grammar files given"
 // check stays in `cmd_*` with its specific message; long options only.
 // `name_policy` lower-cases the wire tags (`gen` / `dump`).
+
 struct GenArgs {
     trace: bool = false,
     prediction: PredictionMode = PredictionMode::Exact,
@@ -23,6 +24,7 @@ struct GenArgs {
     #[wire(positional)]
     grammars: List<String> = [],
 }
+
 impl Deserialize for GenArgs;
 
 struct DumpArgs {
@@ -32,6 +34,7 @@ struct DumpArgs {
     #[wire(positional)]
     grammars: List<String> = [],
 }
+
 impl Deserialize for DumpArgs;
 
 #[wire(name_policy = "kebab-case")]
@@ -39,6 +42,7 @@ variant Command {
     Gen(GenArgs),
     Dump(DumpArgs),
 }
+
 impl Deserialize for Command;
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {

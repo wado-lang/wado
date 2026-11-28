@@ -44,7 +44,6 @@ test "parse with attributes" {
     assert_parses("<a href=\"url\">link</a>");
 }
 
-
 test "tree: simple tag" {
     assert_tree("<p>hello</p>", "
         (htmlDocument
@@ -104,6 +103,7 @@ test "tree: nested tags" {
 //      its own entry in the `tokens` array.
 //   2. The whitespace must appear in the next token's `leading_trivia`.
 //   3. The trivia Token's `channel` field must be 1 (HIDDEN), not 0.
+
 test "HIDDEN channel: TAG_WHITESPACE routed to trivia" {
     let tokens = html::tokenize("<p class=\"x\">");
     // No main-channel token may have kind TAG_WHITESPACE — HIDDEN tokens

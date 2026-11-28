@@ -253,6 +253,7 @@ fn fl_carve(block: u32, block_size: u32, size: u32) {
 // slack), and every block payload is unconditionally 16-byte aligned,
 // which satisfies every alignment `realloc` is called with (Component
 // Model alignments are all <= 8; the widest Wasm alignment, `v128`, is 16).
+
 #[allocator("freelist")]
 export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
     // The shared `heap_offset` global starts at 8; on first use, reserve

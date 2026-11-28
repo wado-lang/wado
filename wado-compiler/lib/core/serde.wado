@@ -84,8 +84,8 @@
 //! //   -> Config { host: "localhost", port: 0, timeout: 30 }
 //! ```
 
-
 // Not `core:log`: it imports `core:serde`, so the dependency runs one way.
+
 use { log_stderr } from "core:rt";
 
 #[compiler_item("serialize_error_kind")]
@@ -314,11 +314,8 @@ pub fn read_tag<D: Deserializer, S: AsStrSlice>(d: &mut D, key: S) -> Result<Str
 
 #[compiler_item("serialize_seq")]
 pub trait SerializeSeq with () {
-
-
     #[compiler_item("serialize_seq_element")]
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
-
 
     #[compiler_item("serialize_seq_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
@@ -332,8 +329,6 @@ pub trait SerializeMap with () {
 
 #[compiler_item("serialize_struct")]
 pub trait SerializeStruct with () {
-
-
     #[compiler_item("serialize_struct_field")]
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>;
 
@@ -343,16 +338,12 @@ pub trait SerializeStruct with () {
 
 #[compiler_item("serialize_variant")]
 pub trait SerializeVariant with () {
-
-
     #[compiler_item("serialize_variant_payload")]
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
-
 
     #[compiler_item("serialize_variant_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
 }
-
 
 #[compiler_item("serializer")]
 pub trait Serializer with () {
@@ -377,12 +368,14 @@ pub trait Serializer with () {
     fn is_human_readable(&self) -> bool {
         return true;
     }
+
     /// Tag the next value with a CBOR semantic tag (major type 6, RFC 8949
     /// §3.4). Formats with no tag concept ignore it; the default no-op means
     /// only tag-aware serializers (CBOR) need to implement it.
     fn serialize_tag(&mut self, _tag: u64) -> Result<(), SerializeError> {
         return Result::Ok(());
     }
+
     /// Serialize a byte string. Self-describing binary formats (CBOR) emit a
     /// native byte string; JSON emits base64. The default falls back to a
     /// sequence of `u8` (the historical `List<u8>` behaviour), so a format
@@ -397,17 +390,15 @@ pub trait Serializer with () {
         }
         return seq.end();
     }
-    fn serialize_null(&mut self) -> Result<(), SerializeError>;
 
+    fn serialize_null(&mut self) -> Result<(), SerializeError>;
 
     #[compiler_item("serializer_begin_seq")]
     fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>;
     fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError>;
 
-
     #[compiler_item("serializer_begin_struct")]
     fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<Self::StructSerializer, SerializeError>;
-
 
     #[compiler_item("serializer_serialize_unit_variant")]
     fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
@@ -416,7 +407,6 @@ pub trait Serializer with () {
         variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError>;
-
 
     #[compiler_item("serializer_begin_variant")]
     fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
@@ -427,20 +417,15 @@ pub trait Serializer with () {
     ) -> Result<Self::VariantSerializer, SerializeError>;
 }
 
-
 #[compiler_item("serialize")]
 pub affine trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
-
 #[compiler_item("deserialize_seq")]
 pub trait DeserializeSeq with () {
-
-
     #[compiler_item("deserialize_seq_next_element")]
     fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>;
-
 
     #[compiler_item("deserialize_seq_end")]
     fn end(&mut self) -> Result<(), DeserializeError>;
@@ -489,19 +474,14 @@ pub trait FieldSchema with () {
 
 #[compiler_item("deserialize_struct")]
 pub trait DeserializeStruct with () {
-
-
     #[compiler_item("deserialize_struct_next_field")]
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>;
-
 
     #[compiler_item("deserialize_struct_value")]
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>;
 
-
     #[compiler_item("deserialize_struct_skip")]
     fn skip(&mut self) -> Result<(), DeserializeError>;
-
 
     #[compiler_item("deserialize_struct_end")]
     fn end(&mut self) -> Result<(), DeserializeError>;
@@ -524,25 +504,19 @@ pub trait DeserializeStruct with () {
 
 #[compiler_item("deserialize_variant")]
 pub trait DeserializeVariant with () {
-
-
     #[compiler_item("deserialize_variant_variant_name")]
     fn variant_name(&mut self) -> Result<String, DeserializeError>;
 
-
     #[compiler_item("deserialize_variant_disc")]
     fn disc(&mut self) -> Result<i32, DeserializeError>;
-
 
     #[compiler_item("deserialize_variant_payload")]
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>;
     fn is_unit(&mut self) -> Result<bool, DeserializeError>;
 
-
     #[compiler_item("deserialize_variant_end")]
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
-
 
 pub trait Visitor with () {
     type Value;
@@ -556,21 +530,26 @@ pub trait Visitor with () {
     fn visit_i64(&mut self, v: i64) -> Result<Self::Value, DeserializeError> {
         return self.visit_f64(v as f64);
     }
+
     fn visit_u64(&mut self, v: u64) -> Result<Self::Value, DeserializeError> {
         return self.visit_f64(v as f64);
     }
+
     fn visit_i128(&mut self, v: i128) -> Result<Self::Value, DeserializeError> {
         return self.visit_f64(v as f64);
     }
+
     fn visit_u128(&mut self, v: u128) -> Result<Self::Value, DeserializeError> {
         return self.visit_f64(v as f64);
     }
+
     fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Self::Value, DeserializeError>;
     /// Byte-string visit (CBOR major type 2; JSON base64). Defaults to an
     /// `UnexpectedType` error so text-only visitors are unaffected.
     fn visit_bytes(&mut self, _v: ByteList) -> Result<Self::Value, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("unexpected byte string", -1));
     }
+
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Self::Value, DeserializeError>;
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Self::Value, DeserializeError>;
     /// Opaque passthrough for a format item the value model cannot represent
@@ -579,6 +558,7 @@ pub trait Visitor with () {
     fn visit_unknown(&mut self, _raw: ByteList) -> Result<Self::Value, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("unexpected opaque value", -1));
     }
+
     /// The CBOR `undefined` simple value (major 7, value 23). Distinct from
     /// `null`: a dynamic value model (`core:value`) keeps its own `Undefined`
     /// arm. The default collapses it to `null` so visitors that do not model
@@ -626,6 +606,7 @@ pub trait Deserializer with () {
             }
         }
     }
+
     fn is_null(&mut self) -> Result<bool, DeserializeError>;
 
     /// What this format does when the wire repeats a field or key.
@@ -633,15 +614,12 @@ pub trait Deserializer with () {
         return DuplicateFieldPolicy::Error;
     }
 
-
     #[compiler_item("deserializer_begin_seq")]
     fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError>;
     fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>;
 
-
     #[compiler_item("deserializer_begin_struct")]
     fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<Self::StructAccess, DeserializeError>;
-
 
     #[compiler_item("deserializer_begin_variant")]
     fn begin_variant<S: AsStrSlice>(
@@ -651,7 +629,6 @@ pub trait Deserializer with () {
     ) -> Result<Self::VariantAccess, DeserializeError>;
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>;
 }
-
 
 #[compiler_item("deserialize")]
 pub affine trait Deserialize with () {
@@ -667,7 +644,6 @@ pub affine trait Deserialize with () {
         return Result::Err(DeserializeError::eof(-1));
     }
 }
-
 
 impl Serialize for i8 {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
@@ -743,6 +719,7 @@ impl Serialize for f64 {
 
 // A half goes on the wire as the `f32` it widens to: no format here spells
 // binary16, and every half is exact in `f32`.
+
 impl Serialize for f16 {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return s.serialize_f32(f32::from(*self));
@@ -811,6 +788,7 @@ impl<T: Serialize> Serialize for List<T> {
 // sequence of integers. These explicit impls override the `List<u8>` /
 // `Array<u8>` / `Slice<u8>` sequence impls that the newtypes would
 // otherwise inherit.
+
 impl Serialize for ByteList {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return s.serialize_bytes(self.as_byte_slice());
@@ -828,7 +806,6 @@ impl Serialize for ByteSlice {
         return s.serialize_bytes(self.as_byte_slice());
     }
 }
-
 
 impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
@@ -1400,6 +1377,7 @@ impl<T: Deserialize> Deserialize for List<T> {
 
 // Byte buffer (owned, growable) deserializes from a byte string, overriding
 // the inherited `List<u8>` sequence impl.
+
 impl Deserialize for ByteList {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<ByteList, DeserializeError> {
         return d.deserialize_bytes();
@@ -1409,6 +1387,7 @@ impl Deserialize for ByteList {
 // Owned, fixed-length byte buffer. Deserializes from a byte string into an
 // `Array<u8>` whose length is the decoded byte count (a fixed-length array's
 // length is a runtime value, so there is no compile-time length to enforce).
+
 impl Deserialize for ByteArray {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<ByteArray, DeserializeError> {
         let bytes = d.deserialize_bytes()?;
@@ -2000,7 +1979,6 @@ impl<..T: Deserialize> Deserialize for [..T] {
         return Result::Ok(tuple);
     }
 }
-
 
 // ── Wire naming: the compiler exposes naming facts, casing lives here ──
 

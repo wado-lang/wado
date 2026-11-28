@@ -131,6 +131,7 @@ pub affine trait Backend: Graph with _ {
     fn recorder(&self) -> Recorder with () {
         return Recorder::new();
     }
+
     /// `recorded`, which [`Self::recorder`] recorded, compiled to run on
     /// this. `weights` are what its last parameters will be given, as
     /// [`Self::kept_weights`] kept them. `earlier` holds the programs this
@@ -159,6 +160,7 @@ pub affine trait Backend: Graph with _ {
     fn pool_slots(&self, kind: ElementKind, slot: &List<i32>) -> i32 with () {
         return i32::MAX / stored_bytes(kind, slot);
     }
+
     /// `pool`, which [`Self::pool`] made, with its slot `slot` holding `row`:
     /// one slice along the first axis, as a checkpoint stores it.
     fn written(&mut self, pool: &mut Any<Self>, slot: i32, row: HostWeight);
@@ -170,6 +172,7 @@ pub affine trait Backend: Graph with _ {
     fn experts_on_host(&mut self, _quantized: &Quantized, _pool: &Any<Self>) -> Option<&mut ExpertsOnHost> with () {
         return null;
     }
+
     /// The `count` weights a pass reads, `load(at)` the `at`th on the host,
     /// which the parameters `record` records take from its `first` on: each
     /// laid out from its stored bytes for the operations the recorded pass
@@ -307,11 +310,13 @@ pub affine trait Graph: Holds with _ {
     fn yielded<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return *x;
     }
+
     /// `branch`, the one the host took, whose results are its own: nothing it
     /// yields is a result of the region it is added to.
     fn taken<T>(&mut self, branch: fn() -> T with _) -> T with _ {
         return branch();
     }
+
     /// StableHLO's `while` over a count: `body` run `count` times, each given
     /// which run it is, from 0, and what the run before returned, the first
     /// `initial`, and what the last returned. `body` adds its operations through
@@ -330,12 +335,14 @@ pub affine trait Graph: Holds with _ {
         }
         return state;
     }
+
     /// What the host gives back at its step `step` of the pass, having read
     /// `read`: a value of each element and extents `given` lists.
     fn fetched(&mut self, step: i32, read: &List<Any<Self>>, given: &List<[ElementKind, List<i32>]>) -> List<Any<Self>> {
         // Only `Recorder` builds a pass that a host step reaches into.
         unreachable();
     }
+
     /// `x` with `axis` grown to `extent`, what it holds past its own extent
     /// unspecified: a cache moved to a larger capacity, whose attention reads
     /// none of those positions. Zeros, where the graph keeps no room there.
@@ -607,6 +614,7 @@ fn biased<affine G: Graph, E: Float, Axes, BiasAxes>(
 /// attention composite's decomposition.
 struct Heads {
 }
+
 struct Group {
 }
 
@@ -1314,6 +1322,7 @@ fn rows_axis(rows: Option<i32>, extents: &List<i32>, count: i32) -> i32 {
 /// axis it drops where they flatten a tensor into rows.
 struct Rows {
 }
+
 struct Row {
 }
 
@@ -2151,8 +2160,10 @@ impl<E: Float, R, Blocks, Z> PackedRow<E, R, Blocks, Z> {
 /// rank.
 struct Batch {
 }
+
 struct Feature {
 }
+
 struct Spatial {
 }
 

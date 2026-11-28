@@ -28,6 +28,7 @@ test "one segment yields its separator to the caller" {
 
 // The hit case. The loop must run once and yield only the second SEP; nothing
 // in `tree`'s own alternative separates the two, since both are `SEP`.
+
 test "two segments yield only the last separator" {
     assert_tree("a::b::*", "(start (tree (path a :: b) :: *))");
 }
@@ -39,6 +40,7 @@ test "the group arm proves the yield the same way the star does" {
 // The rejection case: no group follows, so the loop must keep every separator.
 // A repair that reads only "the caller could take a SEP" hands back the last
 // one here too, and `path` comes out a segment short.
+
 test "with no group to follow, the loop keeps every separator" {
     assert_tree("a::b::c", "(start (tree (path a :: b :: c)))");
 }

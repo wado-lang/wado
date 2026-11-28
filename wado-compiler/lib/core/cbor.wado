@@ -18,7 +18,6 @@
 //! The spec is vendored verbatim at `wado-compiler/ref/rfc8949.txt`; comments
 //! cite section numbers from it.
 
-
 use {
     Serialize,
     Deserialize,
@@ -51,6 +50,7 @@ test {
         x: i32,
         y: i32,
     }
+
     impl Serialize for Point;
     impl Deserialize for Point;
 
@@ -61,6 +61,7 @@ test {
 global SERIALIZE_BUFFER_CAPACITY: i32 = 64;
 
 // Major types (RFC 8949 §3): the high 3 bits of the initial byte.
+
 global MAJOR_UINT: u8 = 0;  // unsigned integer
 global MAJOR_NINT: u8 = 1;  // negative integer (encodes -1 - n)
 global MAJOR_BYTES: u8 = 2;  // byte string
@@ -73,6 +74,7 @@ global MAJOR_SIMPLE: u8 = 7;  // simple value / float
 // Additional-info codes in the low 5 bits of the initial byte (RFC 8949 §3).
 // Values < 24 carry the argument inline; 24..=27 announce a 1/2/4/8-byte
 // big-endian argument; 31 marks indefinite length (and, in major 7, the break).
+
 global AI_1BYTE: u8 = 24;
 global AI_2BYTE: u8 = 25;
 global AI_4BYTE: u8 = 26;
@@ -80,12 +82,14 @@ global AI_8BYTE: u8 = 27;
 global AI_INDEFINITE: u8 = 31;
 
 // Simple-value codes (major 7, additional info < 24 — RFC 8949 §3.3).
+
 global SIMPLE_FALSE: u8 = 20;
 global SIMPLE_TRUE: u8 = 21;
 global SIMPLE_NULL: u8 = 22;
 global SIMPLE_UNDEFINED: u8 = 23;
 
 // Initial bytes for the major-7 simple values and float heads.
+
 global INIT_FALSE: u8 = 0xf4;  // major 7, SIMPLE_FALSE
 global INIT_TRUE: u8 = 0xf5;  // major 7, SIMPLE_TRUE
 global INIT_NULL: u8 = 0xf6;  // major 7, SIMPLE_NULL
@@ -95,20 +99,24 @@ global INIT_F64: u8 = 0xfb;  // major 7, AI_8BYTE — binary64
 global BREAK: u8 = 0xff;  // major 7, AI_INDEFINITE — stop code for indefinite items
 
 // Tag numbers (RFC 8949 §3.4).
+
 global TAG_BIGNUM_POS: u64 = 2;  // §3.4.3 — unsigned bignum (byte-string magnitude)
 global TAG_BIGNUM_NEG: u64 = 3;  // §3.4.3 — negative bignum
 global TAG_UUID: u64 = 37;  // IANA CBOR tags — binary UUID
 global TAG_SELF_DESCRIBED: u64 = 55799;  // §3.4.6 — self-described CBOR marker
 
 // The quiet binary32 NaN — the single canonical NaN, the ladder's shortest.
+
 global CANONICAL_NAN_F32_BITS: u64 = 0x7fc00000;
 
 // Boundary magnitudes for the bignum / range checks, as u128.
+
 global U64_MAX_AS_U128: u128 = u64::MAX as u128;
 global I128_MAX_AS_U128: u128 = i128::MAX as u128;
 
 // Container type-mismatch diagnostics, referenced by `begin_container` so the
 // success path allocates no message (only the cold error path copies one).
+
 global MSG_EXPECTED_ARRAY: String = "expected array";
 global MSG_EXPECTED_MAP: String = "expected map";
 global MSG_EXPECTED_MAP_FOR_STRUCT: String = "expected map for struct";

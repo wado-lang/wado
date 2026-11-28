@@ -397,6 +397,7 @@ test "apply_case already_snake_case" {
 // Heck-parity contract: these vectors mirror
 // `serde_synth::tests::rename_all_edge_corpus_locks_heck_output` exactly, so the
 // library port and the compiler's `apply_rename_all` (heck) stay in lock-step.
+
 test "apply_case heck-parity edge corpus" {
     assert apply_case(CaseStyle::Snake, "userID") == "user_id";
     assert apply_case(CaseStyle::Snake, "HTTPStatus") == "http_status";
@@ -497,6 +498,7 @@ impl<A: DeserializeVariant> DeserializeVariant for ByDiscAccess<A> {
 }
 
 // A variant reaches only `begin_variant` and the payload's own read.
+
 #[coverage(off)]
 impl<D: Deserializer> Deserializer for ByDisc<D> {
     type SeqAccess = D::SeqAccess;
@@ -867,6 +869,7 @@ impl<V: Visitor> Visitor for FlakyVisitor<V> {
 }
 
 // `deserialize_bytes` is left to the trait's default, which reads a sequence.
+
 #[coverage(off)]
 impl<D: Deserializer> Deserializer for FlakyDe<D> {
     type SeqAccess = FlakySeq<D::SeqAccess>;
@@ -1060,6 +1063,7 @@ impl<A: SerializeVariant> SerializeVariant for FlakySerVariant<A> {
 }
 
 // `serialize_bytes` is left to the trait's default, which writes a sequence.
+
 #[coverage(off)]
 impl<S: Serializer> Serializer for FlakySer<S> {
     type SeqSerializer = FlakySerSeq<S::SeqSerializer>;

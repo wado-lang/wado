@@ -38,6 +38,7 @@ pub enum Alignment {
     #[compiler_item("alignment_right")]
     Right,
 }
+
 /// Formatter that writes directly into a referenced output buffer.
 /// The Formatter does not own its buffer; it writes into the caller's `&mut String`.
 /// This avoids intermediate allocations.
@@ -74,6 +75,7 @@ pub struct Formatter {
 // calling `Formatter::new`, so it repeats these sentinels as
 // `compiler_item::FormatterField`'s constants. The e2e fixture
 // `template_formatter_sentinels.wado` fails if the copies drift.
+
 impl Formatter {
     /// No width given: every padding path is a no-op.
     pub const NO_WIDTH: i32 = -1;
@@ -395,6 +397,7 @@ impl Formatter {
         self.write_str(close);
     }
 }
+
 // Defined here (not in string.wado) to avoid string.wado depending on format.wado,
 // which would cause codegen struct registration order issues.
 
@@ -490,6 +493,7 @@ impl Inspect for String {
 
 // A view renders as the text it views, so both traits render it where it lies.
 // Placed here for the same reason `impl Display for String` is.
+
 impl Display for StrSlice {
     pub fn fmt(&self, f: &mut Formatter) {
         pad_text(f, *self);

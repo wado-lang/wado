@@ -516,6 +516,7 @@ impl<K: Ord, V: RefMut> IndexRefMut<K> for TreeMap<K, V> {
 
 // `{ key: value, … }` as a `TreeMap<String, V>` — an array of pairs in source
 // order, last write wins (WEP 2026-08-24).
+
 impl<V> From<Array<[String, V]>> for TreeMap<String, V> {
     fn from(entries: Array<[String, V]>) -> TreeMap<String, V> {
         let mut map = TreeMap::<String, V>::new();
@@ -621,6 +622,7 @@ impl<T: Ord> IntoIterator for TreeSet<T> {
 }
 
 // `[e0, e1, …]` as a `TreeSet<T>`, last duplicate ignored (WEP 2026-08-24).
+
 impl<T: Ord> From<Array<T>> for TreeSet<T> {
     fn from(elements: Array<T>) -> TreeSet<T> {
         let mut set = TreeSet::<T>::new();

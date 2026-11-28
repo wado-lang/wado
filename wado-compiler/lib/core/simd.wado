@@ -92,7 +92,6 @@
 //! - **Q15 multiply:** `i16x8.relaxed_q15mulr_s`
 //! - **Dot product:** `i16x8.relaxed_dot_i8x16_i7x16_s`, `i32x4.relaxed_dot_i8x16_i7x16_add_s`
 
-
 #[synopsis]
 test {
     let a: i32x4 = [10, 2, 30, 4];
@@ -345,6 +344,7 @@ impl Shr<u32> for i8x16 {
 
 // A lane the literal does not write stays zero. `array_len` is a constant at
 // every literal site, so the guard folds away (WEP 2026-08-24).
+
 fn lane<T: Default>(lanes: &Array<T>, index: i32) -> T {
     if index < builtin::array_len(lanes) {
         return builtin::array_get_value(lanes, index);

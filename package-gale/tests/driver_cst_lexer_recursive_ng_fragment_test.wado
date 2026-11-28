@@ -33,6 +33,7 @@ test "a raw string with no hashes is one token" {
 
 // The hit case: the inner quotes are content, and the loop must run past them
 // to the `"` that the closing `#` follows.
+
 test "a quoted hash-delimited raw string is one token" {
     assert_kinds("r#\"a \"b\" c\"#", &["STR", "Eof"]);
 }
@@ -44,6 +45,7 @@ test "two hashes nest the same way" {
 // The rejection case: the loop stops at the FIRST `"` its own depth closes on,
 // not the last one in the input. A policy that simply ran the `.*?` to the
 // final `"#` would take these two as one token.
+
 test "two raw strings in a row stay two tokens" {
     assert_kinds("r#\"a\"# r#\"b\"#", &["STR", "STR", "Eof"]);
 }

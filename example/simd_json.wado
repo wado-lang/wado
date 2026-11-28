@@ -26,6 +26,7 @@ use { MonotonicClock } from "wasi:clocks";
 global INPUT_BYTES: i32 = 65536;
 
 // Scan `s[from..len)` for the first `"`, `\`, or non-ASCII byte; `len` if none.
+
 fn scan_scalar(s: &String, from: i32, len: i32) -> i32 {
     let mut i = from;
     while i < len {
@@ -40,11 +41,13 @@ fn scan_scalar(s: &String, from: i32, len: i32) -> i32 {
 
 // The three delimiter classes as one 16-bit mask. `bitmask` on `u8x16` takes
 // the high bit of each lane, which is the non-ASCII test itself.
+
 fn delimiters(c: &u8x16, quote: &u8x16, escape: &u8x16) -> i32 {
     return c.eq(quote).bitmask() | c.eq(escape).bitmask() | c.bitmask();
 }
 
 // `scan_scalar` over vectors gathered a byte at a time from the String.
+
 fn scan_gathered(s: &String, from: i32, len: i32) -> i32 {
     let quote = u8x16::splat(b'"' as i32);
     let escape = u8x16::splat(b'\\' as i32);
@@ -64,6 +67,7 @@ fn scan_gathered(s: &String, from: i32, len: i32) -> i32 {
 // vector. `from` need not be vector-aligned, so the lanes before it are masked
 // out of the first vector's answer. Every lane holds a real byte (`pack`
 // asserts it), so a hit is always below `len`.
+
 fn scan_packed(chunks: &Array<u8x16>, from: i32, len: i32) -> i32 {
     let quote = u8x16::splat(b'"' as i32);
     let escape = u8x16::splat(b'\\' as i32);
@@ -83,6 +87,7 @@ fn scan_packed(chunks: &Array<u8x16>, from: i32, len: i32) -> i32 {
 
 // A partial last vector would need `replace_lane`, whose const index Wado
 // cannot yet write, so the length has to come out even.
+
 fn pack(s: &String) -> Array<u8x16> {
     let len = s.len();
     assert len % 16 == 0, "pack needs a whole number of vectors";
@@ -98,6 +103,7 @@ fn pack(s: &String) -> Array<u8x16> {
 // What every byte-at-a-time consumer would pay under a packed `String`: a
 // vector load, a swizzle to bring the byte to lane 0, and a lane read, where
 // today it reads one `array.get_u`.
+
 fn byte_at_packed(chunks: &Array<u8x16>, i: i32) -> u8 {
     let v = chunks[i >> 4].swizzle(&u8x16::splat(i & 15));
     return v.extract_lane(0) as u8;
@@ -107,6 +113,7 @@ fn byte_at_packed(chunks: &Array<u8x16>, i: i32) -> u8 {
 // packed arm 18% and the scalar arm nothing, which is the difference being
 // measured. `count_runs` calls its parameter once per run and specializes
 // cleanly; once per byte, it does not.
+
 fn sum_bytes_scalar(s: &String, len: i32) -> i32 {
     let mut total = 0;
     let mut i = 0;
@@ -129,6 +136,7 @@ fn sum_bytes_packed(chunks: &Array<u8x16>, len: i32) -> i32 {
 
 // One scan per run, as `core:json` does: stop at the quote, step over it, scan
 // the next value. Returns the number of runs, so nothing here is dead.
+
 fn count_runs(len: i32, scan: fn(i32) -> i32) -> i32 {
     let mut runs = 0;
     let mut i = 0;

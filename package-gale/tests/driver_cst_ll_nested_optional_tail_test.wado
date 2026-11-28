@@ -24,6 +24,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 // Control: a single-token initializer leaves nothing for the scan to trip on.
+
 test "single-token initializer with else" {
     assert_tree("let x = 1 else { } ;", "(prog (stmt let x = (expr 1) else (block { }) ;))");
 }

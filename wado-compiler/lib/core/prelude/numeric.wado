@@ -1,6 +1,7 @@
 #![no_prelude]
 #![stdlib("core:prelude/numeric.wado")]
 //! The methods and trait impls of the integer and float primitives.
+
 //
 // This module intentionally does NOT depend on core:rt to keep the
 // dependency structure simple.
@@ -56,6 +57,7 @@ use {
 // `docs/wep-2026-01-10-wasm-import.md`. Names are remapped onto the
 // Wado-side identifiers used by the impl blocks below
 // (`libm_log` → `f64_ln`, etc.).
+
 use {
     libm_sin as f64_sin,
     libm_cos as f64_cos,
@@ -2593,6 +2595,7 @@ impl Ord for u64 {
 }
 
 // The operators carry the float order themselves, as they do an integer's.
+
 impl Ord for f32 {
     pub fn cmp(&self, other: &Self) -> Ordering {
         if *self < *other {
@@ -2666,6 +2669,7 @@ impl Hash for u64 {
 }
 
 // Widening is exact, so `f32` hashes as the `f64` it widens to.
+
 impl Hash for f32 {
     pub fn hash<H: Hasher>(&self, h: &mut H) {
         (*self as f64).hash(h);
@@ -2674,6 +2678,7 @@ impl Hash for f32 {
 
 // A float feeds its bits with every NaN made one and the two zeroes made one,
 // the values its `==` cannot tell apart.
+
 impl Hash for f64 {
     pub fn hash<H: Hasher>(&self, h: &mut H) {
         let bits = if self.is_nan() {
@@ -2752,96 +2757,115 @@ impl From<i8> for i16 {
         return value as i16;
     }
 }
+
 impl From<i8> for i32 {
     pub fn from(value: i8) -> i32 {
         return value as i32;
     }
 }
+
 impl From<i8> for i64 {
     pub fn from(value: i8) -> i64 {
         return value as i64;
     }
 }
+
 impl From<i16> for i32 {
     pub fn from(value: i16) -> i32 {
         return value as i32;
     }
 }
+
 impl From<i16> for i64 {
     pub fn from(value: i16) -> i64 {
         return value as i64;
     }
 }
+
 impl From<i32> for i64 {
     pub fn from(value: i32) -> i64 {
         return value as i64;
     }
 }
+
 impl From<u8> for u16 {
     pub fn from(value: u8) -> u16 {
         return value as u16;
     }
 }
+
 impl From<u8> for u32 {
     pub fn from(value: u8) -> u32 {
         return value as u32;
     }
 }
+
 impl From<u8> for u64 {
     pub fn from(value: u8) -> u64 {
         return value as u64;
     }
 }
+
 impl From<u8> for i16 {
     pub fn from(value: u8) -> i16 {
         return value as i16;
     }
 }
+
 impl From<u8> for i32 {
     pub fn from(value: u8) -> i32 {
         return value as i32;
     }
 }
+
 impl From<u8> for i64 {
     pub fn from(value: u8) -> i64 {
         return value as i64;
     }
 }
+
 impl From<u16> for u32 {
     pub fn from(value: u16) -> u32 {
         return value as u32;
     }
 }
+
 impl From<u16> for u64 {
     pub fn from(value: u16) -> u64 {
         return value as u64;
     }
 }
+
 impl From<u16> for i32 {
     pub fn from(value: u16) -> i32 {
         return value as i32;
     }
 }
+
 impl From<u16> for i64 {
     pub fn from(value: u16) -> i64 {
         return value as i64;
     }
 }
+
 impl From<u32> for u64 {
     pub fn from(value: u32) -> u64 {
         return value as u64;
     }
 }
+
 impl From<u32> for i64 {
     pub fn from(value: u32) -> i64 {
         return value as i64;
     }
 }
+
 impl From<f32> for f64 {
     pub fn from(value: f32) -> f64 {
         return value as f64;
     }
 }
+
 impl From<bool> for i32 {
     pub fn from(value: bool) -> i32 {
         if value {
