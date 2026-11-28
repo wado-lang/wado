@@ -13,7 +13,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{DeclaredHead, FqTraitName, FqTypeName, LocalMethodName, Receiver};
 use crate::tir;
-use crate::tir::{EffectRef, FunctionRef, TirEffectOp, TirTypeParam, TypeId};
+use crate::tir::{EffectRef, FunctionRef, ResolvedType, TirEffectOp, TirTypeParam, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -1251,7 +1251,7 @@ pub(crate) fn dispatched_on_cell(
         if *written == type_table.impl_receiver_key(link) {
             return true;
         }
-        if matches!(type_table.get(link), crate::tir::ResolvedType::Shared(_)) {
+        if matches!(type_table.get(link), ResolvedType::Shared(_)) {
             return false;
         }
         link = type_table

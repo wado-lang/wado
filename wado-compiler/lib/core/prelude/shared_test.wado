@@ -5,11 +5,10 @@ test "new holds its argument, and a copy is the same cell" {
     assert *a == 2;
 }
 
-test "== asks whether two cells are one" {
+test "== compares what two cells hold" {
     let a = Shared::new(1);
-    let b = a;
-    assert a == b;
-    assert a != Shared::new(1);
+    assert a == Shared::new(1);
+    assert a != Shared::new(2);
 }
 
 test "default holds the default of what it holds" {
