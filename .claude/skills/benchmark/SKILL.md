@@ -54,8 +54,9 @@ mise run on-task-started
    `gale-gen (Rust): 42786 bytes`, so compare each one with the log.
 6. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
    `mise -C wasm-size ls` names Zig, and `moon version` names Moonbit.
-7. Compare every Wado row with the README's previous figure, and attribute each
-   one that moved (see [PGO](#pgo)). Report those to the user.
+7. Compare every Wado row with the README's previous figure, and report the
+   ones that moved markedly. Investigate one only when the user asks
+   ([PGO](#pgo) says how).
 
 ## PGO
 
@@ -77,10 +78,10 @@ A profile can move a row through what the program allocates, because a change of
 allocation moves where collections land. `wado run --gc-log` shows that, and
 `microgpt` needs a new heap sweep when it happens.
 
-Two figures from different sessions can differ by noise alone, so attribute a
-Wado row that moved by an A/B in one session: the compiler that measured the
-README against this one, with `WADO_BIN` and `ab.ts` (see the `wado-performance`
-skill). If the verdict is `noise`, the row did not move. Otherwise read the
+Two figures from different sessions can differ by noise alone, so a row the
+user asks about is attributed by an A/B in one session: the compiler that
+measured the README against this one, with `WADO_BIN` and `ab.ts` (see the
+`wado-performance` skill). If the verdict is `noise`, the row did not move. Otherwise read the
 verdict on its `(no-pgo)` row. If that moved too, the compiler moved it apart
 from PGO. If not, PGO moved it: either the row's `pgo/` file, or how the compiler
 uses a profile, such as the thresholds in `pgo.rs` or the inliner's hot price.
