@@ -356,6 +356,84 @@ pub struct MultiAltRule {
     pub scan_alts: List<ScanBody>,
     /// Dispatch shape between the alternatives. Parse and scan share it.
     pub dispatch: MultiAltDispatch,
+    /// How emit chooses between the alternatives, parse and scan alike.
+    pub decision: RuleDecision,
+}
+
+/// A rule's choice among its non-LR alternatives, every input lower settles.
+/// A slot indexes `non_lr_indices`; the alternatives themselves are named by
+/// their surface index.
+pub struct RuleDecision {
+    pub non_lr_indices: List<i32>,
+    /// Each slot's first set, the rule's FOLLOW joined into a nullable one's.
+    pub first_sets: List<List<i32>>,
+    /// Each slot's class over `first_sets`, which an overlap group's arm tests.
+    pub classes: List<AltClass>,
+    /// The overlap partition, as lists of slots.
+    pub groups: List<List<i32>>,
+    /// The rule's exact FOLLOW, or empty where it is unknown, where an ended
+    /// atom runs on into an LR suffix, or where a gate selects instead.
+    pub end_follow: List<i32>,
+    /// Per group, the prediction tree choosing within it; `null` for one alone.
+    pub trees: List<Option<RulePrediction>>,
+    /// Each slot's first set at each position up to `MAX_LOOKAHEAD_DEPTH`,
+    /// which the choice reads where no group overlaps.
+    pub position_first_sets: List<List<List<i32>>>,
+    /// Per slot, whether no token of the alternative's own selects it
+    /// (`alt_class_tests_nothing`), the rule's FOLLOW left out.
+    pub selected_by_nothing: List<bool>,
+    /// The nullable alternative the rule's FOLLOW selects, which also matches
+    /// empty on a lookahead nothing admits.
+    pub follow_admitted_nullable: Option<i32>,
+}
+
+impl RuleDecision {
+    /// Whether some group holds more than one alternative.
+    pub fn has_overlaps(&self) -> bool {
+        return self.trees.iter_ref().any(|t| t matches { Some(_) });
+    }
+}
+
+/// One node of a contested group's prediction tree.
+pub variant RulePrediction {
+    /// The lookahead leaves one alternative.
+    Leaf(i32),
+    /// A terminal every alternative below shares.
+    Consume(RuleConsumeNode),
+    /// A token-led cascade.
+    Dispatch(RuleDispatchNode),
+    /// Static lookahead could not isolate one alternative.
+    Ambiguous(RuleAmbiguousNode),
+}
+
+pub struct RuleConsumeNode {
+    /// Whether the terminal really is every reachable alternative's element at
+    /// this position, so the dispatch below reads one token further.
+    pub reads_past: bool,
+    pub child: RulePrediction,
+}
+
+pub struct RuleDispatchNode {
+    /// How many tokens past what the tree consumed the cascade tests.
+    pub depth: i32,
+    pub branches: List<RuleBranchNode>,
+    /// The alternatives a tournament chooses between where no branch claims the
+    /// lookahead, in tournament order; empty where the branches are complete.
+    pub fallback: List<i32>,
+}
+
+pub struct RuleBranchNode {
+    pub tokens: List<i32>,
+    pub child: RulePrediction,
+}
+
+pub struct RuleAmbiguousNode {
+    pub alts: List<i32>,
+    /// `alts` in tournament order.
+    pub tournament: List<i32>,
+    /// Every alternative matches the same terminal sequence, so they tie and a
+    /// grammar-order predicate chain decides soundly.
+    pub interchangeable: bool,
 }
 
 /// Direct left-recursive rule. The atom holds the non-LR alternatives
@@ -735,16 +813,16 @@ pub struct AltBody {
     /// The precedence a prefix-LR alt's trailing operand climbs from, or 0.
     /// The one source for the parse call, its scan twin, and the ATN edge.
     pub prefix_self_ref_min_prec: i32,
-    /// A group alternative's actions, positioned by `ops` index; empty on a
-    /// rule's own alternative.
+    /// The alternative's actions, positioned by its source element index: an
+    /// LR suffix's ops start at element 1, past the stripped self-reference.
     pub actions: List<AltAction> = [],
     /// Whether a group alternative derives empty; false on a rule's own.
     pub nullable: bool = false,
     /// A group alternative's `alt_match_rank`, the order a branch of several
     /// emits them in.
     pub match_rank: [i32, i32] = [0, 0],
-    /// Whether a scan can measure every element of a group alternative, as a
-    /// tournament ranking it by scan length needs.
+    /// Whether a scan can measure every element of the alternative, as a
+    /// tournament ranking it by scan length needs; false on an LR suffix.
     pub scannable: bool = false,
 }
 
@@ -1488,6 +1566,15 @@ pub variant FieldKind {
 
 /// The rule header of either variant, by reference, so traversals don't repeat
 /// the match.
+/// The choice among a rule's alternatives; a `Simple` rule has none to make.
+pub fn rule_decision(rule: &Rule) -> &RuleDecision {
+    return match rule {
+        Simple(_) => panic("a single-alternative rule chooses no alternative"),
+        MultiAlt(m) => &m.decision,
+        LeftRecursive(l) => &l.atom.decision,
+    };
+}
+
 pub fn rule_header(rule: &Rule) -> &RuleHeader {
     return match rule {
         Simple(s) => &s.header,

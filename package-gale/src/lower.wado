@@ -75,6 +75,7 @@ use {
     general_group_alt_struct_name,
     is_storable_group,
     all_alts_are_single_token,
+    elements_match,
 } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use { sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
@@ -158,8 +159,23 @@ use {
     alt_class_first_set,
     alt_class_is_nullable,
     alt_class_is_open_ended,
+    alt_class_tests_nothing,
     lr_trailing_prec,
+    RuleDecision,
+    RulePrediction,
+    RuleConsumeNode,
+    RuleDispatchNode,
+    RuleBranchNode,
+    RuleAmbiguousNode,
 } from "./gir.wado";
+use {
+    PredictionNode,
+    PredictionDispatch,
+    ConsumeNode,
+    MAX_LOOKAHEAD_DEPTH,
+    build_group_prediction_tree,
+    prediction_collect_all_indices,
+} from "./prediction.wado";
 
 /// True when an element threads a `FollowArg` into a callee: a `RuleRef`, or
 /// a `Label` or `?` wrapping one. A loop's body continues into the loop, which
@@ -459,6 +475,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut LowerContext) -> MultiAltRu
         alts,
         scan_alts,
         dispatch: dispatch,
+        decision: lower_rule_decision(rule, all_indices, true, ctx),
     };
 }
 
@@ -1121,7 +1138,196 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut LowerC
         alts,
         scan_alts,
         dispatch: dispatch,
+        decision: lower_rule_decision(rule, *non_lr_indices, false, ctx),
     };
+}
+
+/// How `rule` chooses among `alt_indices`. Only a rule that is `multi_alt`
+/// reads its FOLLOW: an LR atom runs on into the suffix loop.
+fn lower_rule_decision(rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool, ctx: &mut LowerContext) -> RuleDecision {
+    let og = ctx.rule_overlap(rule, alt_indices, multi_alt);
+    let alts = &rule.alternatives;
+    let classes = alt_classes(&og.non_lr_indices, alts, rule_is_left_recursive(rule), &og.first_sets, &mut ctx.analysis);
+    let mut trees: List<Option<RulePrediction>> = [];
+    for let group of &og.groups {
+        if group.len() < 2 {
+            trees.push(null);
+            continue;
+        }
+        let tree = build_group_prediction_tree(
+            alts,
+            group,
+            &og.first_sets,
+            &og.non_lr_indices,
+            &mut ctx.analysis,
+            &og.end_follow,
+        );
+        trees.push(Option::Some(lower_prediction(&tree, alts, 0, &mut ctx.analysis)));
+    }
+    let position_first_sets = og.non_lr_indices
+        .iter_ref()
+        .map(|i| ctx.analysis.alt_position_first_sets(&alts[*i], MAX_LOOKAHEAD_DEPTH))
+        .collect();
+    let own_classes: List<AltClass> = og.non_lr_indices
+        .iter_ref()
+        .map(|i| alt_class_of(&alts[*i], &mut ctx.analysis))
+        .collect();
+    let mut follow_admitted_nullable: Option<i32> = null;
+    if !og.end_follow.is_empty() {
+        for let slot of 0..<own_classes.len() {
+            if alt_class_is_nullable(&own_classes[slot]) {
+                follow_admitted_nullable = Option::Some(og.non_lr_indices[slot]);
+                break;
+            }
+        }
+    }
+    return RuleDecision {
+        non_lr_indices: og.non_lr_indices,
+        first_sets: og.first_sets,
+        classes,
+        groups: og.groups,
+        end_follow: og.end_follow,
+        trees,
+        position_first_sets,
+        selected_by_nothing: own_classes.iter_ref().map(|c| alt_class_tests_nothing(c)).collect(),
+        follow_admitted_nullable,
+    };
+}
+
+/// `node`, reached past the `skip` terminals the tree consumed, with what emit
+/// would otherwise read off `alts` settled.
+fn lower_prediction(node: &PredictionNode, alts: &List<Alternative>, skip: i32, analysis: &mut GrammarAnalysis) -> RulePrediction {
+    return match node {
+        Leaf(idx) => RulePrediction::Leaf(*idx),
+        Consume(c) => {
+            let reads_past = consume_reads_past(c, alts, skip);
+            let next_skip = if reads_past { skip + 1 } else { skip };
+            RulePrediction::Consume(RuleConsumeNode { reads_past, child: lower_prediction(&c.child, alts, next_skip, analysis) });
+        },
+        Dispatch(d) => RulePrediction::Dispatch(RuleDispatchNode {
+            depth: d.depth,
+            branches: d.branches
+                .iter_ref()
+                .map(|b| RuleBranchNode { tokens: b.tokens, child: lower_prediction(&b.child, alts, skip, analysis) })
+                .collect(),
+            fallback: dispatch_fallback_indices(d, alts, analysis, skip),
+        }),
+        Ambiguous(a) => {
+            assert skip == 0, "a Consume leading to an Ambiguous node is stripped when the tree is built";
+            // Non-scannability's only source is a `RuleRef` to a name that is
+            // not a parser rule, which `ir.wado` rejects first.
+            assert a.alts.len() >= 2 && a.alts.iter_ref().all(|i| elements_scannable(&alts[*i].elements, analysis)),
+                "a tournament's candidates scan in full";
+            let mut tournament = a.alts.sorted();
+            sort_group_by_element_count(&mut tournament, alts);
+            RulePrediction::Ambiguous(RuleAmbiguousNode {
+                alts: a.alts,
+                tournament,
+                interchangeable: alts_interchangeable(&a.alts, alts),
+            });
+        },
+    };
+}
+
+/// Whether a `Consume` node's terminal really is every reachable alt's element
+/// at `skip`, and so whether the dispatch below reads one token further.
+fn consume_reads_past(c: &ConsumeNode, alts: &List<Alternative>, skip: i32) -> bool {
+    let mut node_alts: List<i32> = [];
+    prediction_collect_all_indices(&c.child, &mut node_alts);
+    if node_alts.is_empty() {
+        return false;
+    }
+    for let a of &node_alts {
+        if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The alts a `Dispatch` node's tournament fallback chooses between, in
+/// tournament order — empty when the node needs no fallback because its
+/// branches are provably complete or no tournament is available.
+fn dispatch_fallback_indices(
+    d: &PredictionDispatch,
+    alts: &List<Alternative>,
+    analysis: &mut GrammarAnalysis,
+    skip: i32,
+) -> List<i32> {
+    let mut indices: List<i32> = [];
+    for let branch of &d.branches {
+        prediction_collect_all_indices(&branch.child, &mut indices);
+    }
+    let mut sorted_indices = indices.sorted();
+    sort_group_by_element_count(&mut sorted_indices, alts);
+    if sorted_indices.len() < 2 || !sorted_indices.iter_ref().all(|i| elements_scannable(&alts[*i].elements, analysis)) {
+        return [];
+    }
+    if dispatch_claims_every_first_token(d, &sorted_indices, alts, analysis, skip) {
+        return [];
+    }
+    return sorted_indices;
+}
+
+/// Whether `d`'s branches name every token some alt in `indices` admits at
+/// element offset `skip`.
+///
+/// Provable only at depth 0, where no branching decision has been taken and
+/// the `Consume` steps crossed terminals every alt shares, so FIRST at `skip`
+/// is exact. It is not exact for an alt whose remainder there can match empty:
+/// that alt also admits whatever follows the rule at the call site, which no
+/// FIRST-derived branch set names (`a : X Y? | X Z` on `X`). Nor for one that
+/// reaches a `.` or `~X`, which admits every token.
+fn dispatch_claims_every_first_token(
+    d: &PredictionDispatch,
+    indices: &List<i32>,
+    alts: &List<Alternative>,
+    analysis: &mut GrammarAnalysis,
+    skip: i32,
+) -> bool {
+    if d.depth != 0 {
+        return false;
+    }
+    let mut claimed: List<i32> = [];
+    for let branch of &d.branches {
+        dedup_append_arr(&mut claimed, &branch.tokens);
+    }
+    for let idx of indices {
+        if analysis.tail_is_nullable_deep(&alts[*idx].elements, skip)
+            || analysis.elements_reach_open_end(&alts[*idx].elements, skip) {
+            return false;
+        }
+        for let tk of &analysis.first_of_elements_from(&alts[*idx].elements, skip) {
+            if !claimed.contains(tk) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/// Whether every alt in an overlap group matches the same terminal sequence, so
+/// they genuinely tie. Only then is the grammar-order predicate chain sound: a
+/// group whose alts differ in length or token must keep the length tournament,
+/// which the chain would misroute. A non-terminal element (`elements_match`
+/// compares only `TokenRef` / `Literal`) makes the group ineligible.
+fn alts_interchangeable(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
+    if amb_alts.is_empty() {
+        return false;
+    }
+    let first = &alts[amb_alts[0]].elements;
+    for let idx of amb_alts {
+        let els = &alts[*idx].elements;
+        if els.len() != first.len() {
+            return false;
+        }
+        for let mut i = 0; i < els.len(); i += 1 {
+            if !elements_match(&els[i], &first[i]) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 /// Lower a single LR alternative. Strips the leading self-ref and
@@ -1256,6 +1462,7 @@ fn lower_lr_alt_suffix<S: AsStrSlice, S1: AsStrSlice>(
         ops: ops,
         fields: fields,
         prefix_self_ref_min_prec: 0,
+        actions: alt.actions,
     };
 }
 
@@ -2721,6 +2928,8 @@ fn lower_alt_body(
         ops,
         fields,
         prefix_self_ref_min_prec: prefix_prec,
+        actions: alt.actions,
+        scannable: elements_scannable(&alt.elements, &mut ctx.analysis),
     };
 }
 
@@ -2808,6 +3017,14 @@ fn lower_op<S: AsStrSlice>(
     };
 }
 
+/// Whether a scan can measure every one of `elements`.
+fn elements_scannable(elements: &List<Element>, analysis: &mut GrammarAnalysis) -> bool {
+    return elements.iter_ref().all(|e| {
+        let mut visiting: List<String> = [];
+        return analysis.is_element_scannable(e, &mut visiting);
+    });
+}
+
 /// `op`, lowered from `g`, with `g`'s decision site, and each alternative
 /// carrying what emit would otherwise read off the surface alternative.
 fn with_surface_group(op: Op, g: &GroupElement, analysis: &mut GrammarAnalysis) -> Op {
@@ -2820,10 +3037,7 @@ fn with_surface_group(op: Op, g: &GroupElement, analysis: &mut GrammarAnalysis) 
         alt.actions = surface.actions;
         alt.nullable = analysis.tail_is_nullable_deep(&surface.elements, 0);
         alt.match_rank = alt_match_rank(surface, analysis);
-        alt.scannable = surface.elements.iter_ref().all(|e| {
-            let mut visiting: List<String> = [];
-            return analysis.is_element_scannable(e, &mut visiting);
-        });
+        alt.scannable = elements_scannable(&surface.elements, analysis);
         assert alt.ops.len() == surface.elements.len(), "a group alternative lowers one op per element";
         for let i of 0..<alt.ops.len() {
             if let Repeat(mut r) = alt.ops[i] {

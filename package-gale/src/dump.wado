@@ -10,11 +10,10 @@
 //! including the grammar-level hosts that own no rule.
 //!
 //! GIR carries the lowered shape decisions (Direct vs Tournament,
-//! repeat strategy, per-call-site FOLLOW args). The prediction-tree section is
-//! re-built from the surface grammar + `LowerContext` through the same
-//! canonical builder the parser emitter uses — that tree is computed at
-//! emit time, not stored on GIR, so reproducing it here keeps the dump
-//! faithful to "what emit sees".
+//! repeat strategy, per-call-site FOLLOW args, a rule's overlap groups). The
+//! prediction-tree section re-builds each group's tree from the surface
+//! grammar through the builder lowering uses, since GIR's tree keeps neither
+//! the consumed elements nor why a node stayed ambiguous.
 
 use {
     LoweredGrammar,
@@ -27,6 +26,8 @@ use {
     RepeatOp,
     RepeatStrategy,
     alt_class_first_set,
+    RuleDecision,
+    rule_decision,
     rule_header,
 } from "./gir.wado";
 use { Grammar, Element, RepeatKind } from "./ir.wado";
@@ -38,7 +39,6 @@ use {
     build_group_prediction_tree_from_order,
     group_prediction_order,
 } from "./prediction.wado";
-use { RuleOverlap } from "./rule_overlap.wado";
 use { build_atn_with, dump_atn } from "./atn.wado";
 
 /// The `--atn` report: the surface-IR ATN the runtime simulator walks, built
@@ -236,8 +236,8 @@ fn render_lr_loop_entry(out: &mut String, l: &LeftRecursiveRule, analysis: &Gram
 // Prediction tree
 // ==========================================================================
 
-/// Render each multi-alt overlap group's prediction tree inline, off the same
-/// partition (`rule_overlap_groups`) and the same tree builder the emit reads.
+/// Render each multi-alt overlap group's prediction tree inline, off the
+/// partition lowering decided and the tree builder it ran.
 fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut LowerContext) {
     let header = rule_header(rule);
     let surface = grammar.parser_rules.iter_ref().find(|r| r.name == header.name);
@@ -248,8 +248,10 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         },
     };
 
-    ctx.set_current_rule_index(ctx.analysis.rule_index_of(&header.name));
-    let RuleOverlap { non_lr_indices, first_sets, groups, end_follow, .. } = ctx.rule_overlap(surface, rule);
+    if rule matches { Simple(_) } {
+        return;
+    }
+    let RuleDecision { non_lr_indices, first_sets, groups, end_follow, .. } = *rule_decision(rule);
     if non_lr_indices.len() < 2 {
         return;
     }

@@ -1,9 +1,9 @@
 //! How a rule's non-LR alternatives group, and whether a group ends in a
-//! conflict only the simulator decides. Read by lowering (to mark the rules
-//! that ask the simulator), by the multi-alt emit, and by the dump.
+//! conflict only the simulator decides. Lowering reads it to mark the rules
+//! that ask the simulator and to decide each rule's choice.
 
 use { Alternative, ParserRule } from "./ir.wado";
-use { AltClass, Rule } from "./gir.wado";
+use { AltClass } from "./gir.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { RuleFollow } from "./follow_env.wado";
 use { alt_classes, compute_overlap_groups_of } from "./alt_grouping.wado";
@@ -12,7 +12,7 @@ use { dedup_append_arr } from "./list_util.wado";
 use { rule_is_left_recursive } from "./lr_util.wado";
 
 /// How a rule's non-LR alternatives group: the one answer the at-end conflict
-/// detection, the multi-alt emit and the dump all read, so none can drift.
+/// detection and the rule's decision both read, so neither can drift.
 pub struct RuleOverlap {
     pub non_lr_indices: List<i32>,
     pub first_sets: List<List<i32>>,
@@ -22,46 +22,12 @@ pub struct RuleOverlap {
     pub end_follow: List<i32>,
 }
 
-/// The indices of the alternatives a rule predicts among: all of them, less an
-/// LR rule's suffixes.
-fn non_lr_alt_indices(lowered_rule: &Rule) -> List<i32> {
-    let mut out: List<i32> = [];
-    match lowered_rule {
-        Simple(_) => {
-            out.push(0);
-        },
-        MultiAlt(m) => {
-            for let alt of &m.alts {
-                out.push(alt.alt_index);
-            }
-        },
-        LeftRecursive(l) => {
-            for let alt of &l.atom.alts {
-                out.push(alt.alt_index);
-            }
-        },
-    }
-    return out;
-}
-
-/// How `rule`'s non-LR alternatives group by what they start with. `meets_gate`
-/// answers for the site asking: prediction is predicate-blind, so a rule whose
-/// alternative meets a predicate decides without its FOLLOW, in the tournament
-/// or the simulator that weighs it.
-pub fn rule_overlap_groups(
-    rule: &ParserRule,
-    lowered_rule: &Rule,
-    analysis: &mut GrammarAnalysis,
-    follow: &RuleFollow,
-    meets_gate: fn(&Alternative) -> bool,
-) -> RuleOverlap {
-    let multi_alt = lowered_rule matches { MultiAlt(_) };
-    return overlap_groups_of(rule, non_lr_alt_indices(lowered_rule), multi_alt, analysis, follow, meets_gate);
-}
-
-/// `rule_overlap_groups` over the alternatives `non_lr_indices`, for a rule
-/// not lowered yet. Only a rule that is `multi_alt`, ending with the
-/// alternative, reads its FOLLOW: an LR atom runs on into the suffix loop.
+/// How `rule`'s alternatives `non_lr_indices` group by what they start with.
+/// `meets_gate` answers for the rule: prediction is predicate-blind, so a rule
+/// whose alternative meets a predicate decides without its FOLLOW, in the
+/// tournament or the simulator that weighs it. Only a rule that is
+/// `multi_alt`, ending with the alternative, reads its FOLLOW: an LR atom runs
+/// on into the suffix loop.
 pub fn overlap_groups_of(
     rule: &ParserRule,
     non_lr_indices: List<i32>,

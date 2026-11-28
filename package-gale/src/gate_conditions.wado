@@ -147,10 +147,18 @@ pub fn predicate_is_fn(a: &AltAction, settings: &GenSettings) -> bool {
 /// whether the IR carries a predicate would gate on a condition that is never
 /// written.
 pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &GrammarAnalysis, site: &PredicateSite) -> bool {
+    return actions_have_gate(&alt.actions, settings, analysis, site);
+}
+
+/// `alt_has_gate` over an alternative's actions alone.
+pub fn actions_have_gate(
+    actions: &List<AltAction>,
+    settings: &GenSettings,
+    analysis: &GrammarAnalysis,
+    site: &PredicateSite,
+) -> bool {
     return settings.emit_actions
-        && edge_gates(&alt.actions)
-            .iter_ref()
-            .any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
+        && edge_gates(actions).iter_ref().any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
 }
 
 /// Whether prediction entering `alt` meets a predicate that renders:

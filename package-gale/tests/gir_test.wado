@@ -54,6 +54,7 @@ use {
     FieldDecl,
     FieldKind,
     FollowArg,
+    RuleDecision,
     rule_header,
 } from "../src/gir.wado";
 use { Visibility, RepeatKind } from "../src/ir.wado";
@@ -82,6 +83,20 @@ fn empty_header<S: AsStrSlice>(name: S) -> RuleHeader {
         visibility: Visibility::Default,
         case_names: [],
         alt_labels: [],
+    };
+}
+
+fn single_alt_decision(idx: i32) -> RuleDecision {
+    return RuleDecision {
+        non_lr_indices: [idx],
+        first_sets: [[]],
+        classes: [AltClass::Nullable([])],
+        groups: [[0]],
+        end_follow: [],
+        trees: [null],
+        position_first_sets: [[]],
+        selected_by_nothing: [true],
+        follow_admitted_nullable: null,
     };
 }
 
@@ -488,12 +503,14 @@ test "rule_header reaches every Rule variant" {
         alts: [empty_alt_body(0)],
         scan_alts: [empty_scan_body()],
         dispatch: direct_single_alt(0),
+        decision: single_alt_decision(0),
     });
     let lr_atom = MultiAltRule {
         header: empty_header("c_atom"),
         alts: [empty_alt_body(0)],
         scan_alts: [empty_scan_body()],
         dispatch: direct_single_alt(0),
+        decision: single_alt_decision(0),
     };
     let lr = Rule::LeftRecursive(LeftRecursiveRule {
         header: empty_header("c"),

@@ -8,7 +8,6 @@ use {
     general_group_field_name,
     gen_visibility_comment,
     rule_alts_labeled,
-    elements_match,
 } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use {
@@ -30,33 +29,19 @@ use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from ".
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_name } from "./emit_context.wado";
 use { MetPredicate } from "./gate_conditions.wado";
 use { is_nullable } from "./grammar_analysis.wado";
-use { RuleOverlap } from "./rule_overlap.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, GlobalSpec, wado } from "wado-lang:wadopoet";
 use { HashMap } from "core:collections";
-use {
-    PredictionNode,
-    PredictionDispatch,
-    ConsumeNode,
-    build_group_prediction_tree,
-    prediction_collect_all_indices,
-    MAX_LOOKAHEAD_DEPTH,
-} from "./prediction.wado";
 use {
     AltBranch,
     DecisionBranch,
     decision_partition,
-    alt_class_of,
-    alt_classes,
     classes_union,
     fallback_last,
     group_branch_admits,
-    has_multi_alt_groups,
     is_decision_fallback,
     scan_decision_branches,
     sort_by_match_rank,
-    sort_group_by_element_count,
 } from "./alt_grouping.wado";
-use { rule_is_left_recursive } from "./lr_util.wado";
 use {
     Admits,
     admits_enumerated,
@@ -69,7 +54,6 @@ use {
     admits_tests_nothing,
     AltClass,
     alt_class_is_nullable,
-    alt_class_tests_nothing,
     LoweredGrammar,
     Rule,
     LrAlt,
@@ -95,8 +79,10 @@ use {
     ScanOptionalLookaheadElement,
     IterationDuties,
     rule_alt_body,
+    rule_decision,
     rule_header,
     RuleHeader,
+    RulePrediction,
     rule_alt_scan_body,
 } from "./gir.wado";
 
@@ -143,6 +129,7 @@ use {
     rule_call_ctx_field,
     rule_call_span_field,
     rule_has_attr_inits,
+    rule_alt_actions,
     rule_has_emittable_actions,
     rule_result_type_for,
     unbound_label_value,
@@ -722,14 +709,10 @@ fn gen_scan_function_named<S: AsStrSlice>(
         return;
     }
 
-    let multi_alt = if rule.alternatives.len() > 1 {
+    if rule.alternatives.len() > 1 {
         assert lowered_rule matches { MultiAlt(_) }, "gen_scan_function_named: lowering gives a multi-alt rule a MultiAlt body";
-        let og = ctx.rule_overlap(rule, lowered_rule);
-        gen_group_alt_scan_fns(w, rule, &og, lowered_rule, ctx);
-        Option::Some(og);
-    } else {
-        Option::<RuleOverlap>::None;
-    };
+        gen_group_alt_scan_fns(w, rule, lowered_rule, ctx);
+    }
 
     // Only a left-recursive rule climbs precedence, so only its `scan_X`
     // declares `min_prec`.
@@ -788,7 +771,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
                 }
                 w.line("return pos;");
             } else {
-                gen_scan_pick(w, rule, lowered_rule, &multi_alt.unwrap(), ctx, fn_name);
+                gen_scan_pick(w, rule, lowered_rule, ctx, fn_name);
             }
         },
     );
@@ -823,13 +806,9 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     let atom_name = `${fn_name}_atom`;
     let was_in_atom = ctx.cursor.set_lr_cont_in_atom(mid_operand_gated);
 
-    let atom_og = if non_lr_indices.len() > 1 {
-        let og = ctx.rule_overlap(rule, lowered_rule);
-        gen_group_alt_scan_fns(w, rule, &og, lowered_rule, ctx);
-        Option::Some(og);
-    } else {
-        Option::<RuleOverlap>::None;
-    };
+    if non_lr_indices.len() > 1 {
+        gen_group_alt_scan_fns(w, rule, lowered_rule, ctx);
+    }
 
     // scan_X_atom: the choice among the non-LR alternatives.
     emit_fn(w, ctx, &scan_fn_spec(&atom_name, ctx), |w| {
@@ -838,10 +817,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
         } else if non_lr_indices.len() == 1 {
             gen_scan_body_fn_tail(w, &atom_scan_alts[0], ctx);
         } else {
-            let Some(og) = &atom_og else {
-                panic("gen_scan_lr_functions: a multi-alt atom has its overlap groups");
-            };
-            gen_scan_pick(w, rule, lowered_rule, og, ctx, &atom_name);
+            gen_scan_pick(w, rule, lowered_rule, ctx, &atom_name);
         }
     });
     w.blank();
@@ -1688,30 +1664,24 @@ fn gen_scan_pick<S: AsStrSlice>(
     w: &mut CodeWriter,
     rule: &ParserRule,
     lowered_rule: &Rule,
-    og: &RuleOverlap,
     ctx: &mut EmitContext,
     fn_name: S,
 ) {
     gen_scan_mark(w, ctx, "start");
     w.line("let mut pos = pos;");
-    gen_rule_pick(w, PickSide::Scan, rule, lowered_rule, ctx, og, fn_name);
+    gen_rule_pick(w, PickSide::Scan, rule, lowered_rule, ctx, fn_name);
 }
 
 /// The scan function of every alternative a contested overlap group chooses
 /// between, emitted before the scan that calls them.
-fn gen_group_alt_scan_fns(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    og: &RuleOverlap,
-    lowered_rule: &Rule,
-    ctx: &mut EmitContext,
-) {
-    for let group of &og.groups {
+fn gen_group_alt_scan_fns(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut EmitContext) {
+    let decision = rule_decision(lowered_rule);
+    for let group of &decision.groups {
         if group.len() < 2 {
             continue;
         }
         for let gi of group {
-            ensure_alt_scan_fn(w, rule, lowered_rule, og.non_lr_indices[*gi], ctx);
+            ensure_alt_scan_fn(w, rule, lowered_rule, decision.non_lr_indices[*gi], ctx);
         }
     }
 }
@@ -3261,34 +3231,24 @@ fn gen_parse_fn_named<S: AsStrSlice>(
 
     gen_visibility_comment(w, &header.visibility);
 
-    let og = ctx.rule_overlap(rule, lowered_rule);
-    let has_overlaps = has_multi_alt_groups(&og.groups);
-
-    mark_gated_predicates(rule, has_overlaps, &og.groups, &og.first_sets, &og.non_lr_indices, &og.end_follow, ctx);
+    let decision = rule_decision(lowered_rule);
+    mark_gated_predicates(lowered_rule, ctx);
     let was_in_atom = ctx.cursor.set_lr_cont_in_atom(lr_mid_operand_gated(lowered_rule));
 
-    if has_overlaps {
+    if decision.has_overlaps() {
         // Pre-compute which alts' scan helpers the dispatch will call so the
         // emission loop can skip the dead ones (see `collect_referenced_scan_alts`).
         let mut referenced_scans: List<i32> = [];
-        for let group of &og.groups {
-            if group.len() > 1 {
-                let tree = build_group_prediction_tree(
-                    &rule.alternatives,
-                    group,
-                    &og.first_sets,
-                    &og.non_lr_indices,
-                    &mut ctx.analysis,
-                    &og.end_follow,
-                );
-                collect_referenced_scan_alts(&tree, &rule.alternatives, ctx, &mut referenced_scans);
+        for let tree of &decision.trees {
+            if let Some(tree) = tree {
+                collect_referenced_scan_alts(tree, lowered_rule, ctx, &mut referenced_scans);
             }
         }
 
-        for let group of &og.groups {
+        for let group of &decision.groups {
             if group.len() > 1 {
                 for let gi of group {
-                    let alt_index = og.non_lr_indices[*gi];
+                    let alt_index = decision.non_lr_indices[*gi];
                     let mut f = parse_fn_spec(`${fn_name}_alt_${alt_index}`, ctx, ctx.helpers_take_prec());
                     if ctx.current_rule_emits_vals() {
                         add_seeded_vals_param(&mut f, ctx);
@@ -3321,7 +3281,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         add_min_prec_param(&mut f);
         emit_seeded_alt_fn(w, &mut f, ctx, |w| {
             gen_rule_entry_sync(w, ctx);
-            gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, ctx, &og, fn_name);
+            gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, ctx, fn_name);
         });
         w.blank();
         ctx.cursor.set_lr_cont_in_atom(was_in_atom);
@@ -3355,7 +3315,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                 w.begin(if emits_vals { "vals = alt_done:" } else { "alt_done:" });
                 ctx.cursor.set_alt_exit_label(Option::Some("alt_done"));
             }
-            gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, ctx, &og, fn_name);
+            gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, ctx, fn_name);
             if let Some(a) = &after {
                 ctx.cursor.set_alt_exit_label(null);
                 if emits_vals {
@@ -3444,15 +3404,14 @@ fn gen_rule_pick<S: AsStrSlice>(
     rule: &ParserRule,
     lowered_rule: &Rule,
     ctx: &mut EmitContext,
-    og: &RuleOverlap,
     fn_name: S,
 )
     contract side matches { _::Scan } == ctx.cursor.in_scan_fn(), "a pick is emitted into the function its side names"
 {
-    if has_multi_alt_groups(&og.groups) {
-        gen_multi_alt_body_alt(w, side, rule, lowered_rule, ctx, og, fn_name);
+    if rule_decision(lowered_rule).has_overlaps() {
+        gen_multi_alt_body_alt(w, side, rule, lowered_rule, ctx, fn_name);
     } else {
-        gen_multi_alt_body(w, side, rule, lowered_rule, ctx, &og.non_lr_indices);
+        gen_multi_alt_body(w, side, rule, lowered_rule, ctx);
     }
 }
 
@@ -3462,30 +3421,25 @@ fn gen_multi_alt_body(
     rule: &ParserRule,
     lowered_rule: &Rule,
     ctx: &mut EmitContext,
-    non_lr_indices: &List<i32>,
 ) {
-    let max_k = MAX_LOOKAHEAD_DEPTH;
-    let mut all_pos_sets: List<List<List<i32>>> = [];
-    for let idx of non_lr_indices {
-        all_pos_sets.push(ctx.analysis.alt_position_first_sets(&rule.alternatives[*idx], max_k));
-    }
-    let depth = find_needed_depth(&all_pos_sets);
+    let decision = rule_decision(lowered_rule);
+    let non_lr_indices = &decision.non_lr_indices;
+    let all_pos_sets = &decision.position_first_sets;
+    let depth = find_needed_depth(all_pos_sets);
 
     emit_pick_kind_read(w, side);
 
     let mut untestable: List<bool> = [];
     let mut all_gate_conds: List<String> = [];
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
-        let alt = &rule.alternatives[non_lr_indices[i]];
         // An arm with no emitted condition is not one no lookahead can select:
         // `position_first_sets_from` also comes back empty for a deep-nullable
         // tail. What the alternative matches is `alt_class`'s to say.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
-        let selected_by_nothing = alt_class_tests_nothing(&alt_class_of(alt, &mut ctx.analysis));
         // Rendered once, before any arm: a Java predicate resolves through
         // `ctx.cursor.alt_bindings()`, which `gen_alt_elements` overwrites per arm.
-        all_gate_conds.push(side_gate(side, alt, ctx));
-        untestable.push(no_cond && selected_by_nothing && all_gate_conds[i].is_empty());
+        all_gate_conds.push(side_gate(side, lowered_rule, non_lr_indices[i], ctx));
+        untestable.push(no_cond && decision.selected_by_nothing[i] && all_gate_conds[i].is_empty());
     }
 
     let order = arms_fallback_last(&untestable);
@@ -7969,14 +7923,14 @@ fn gen_predicate_gated_pick<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     side: PickSide,
     amb_alts: &List<i32>,
-    alts: &List<Alternative>,
+    rule: &Rule,
     fn_name: S,
     ctx: &mut EmitContext,
     rule_display: S1,
 ) {
     let mut opened = false;
     for let idx of amb_alts.sorted() {
-        let cond = side_gate(side, &alts[idx], ctx);
+        let cond = side_gate(side, rule, idx, ctx);
         if cond.is_empty() {
             if opened {
                 w.else_begin("else");
@@ -8032,24 +7986,6 @@ fn emit_scan_side_tournament(w: &mut CodeWriter, indices: &List<i32>, ctx: &Emit
     }
 }
 
-/// Whether a `Consume` node's terminal really is every reachable alt's element
-/// at `skip`, and so whether the dispatch below reads one token further. Read by
-/// both the emitter and `collect_referenced_scan_alts`, whose `skip` bookkeeping
-/// has to match it.
-fn consume_reads_past(c: &ConsumeNode, alts: &List<Alternative>, skip: i32) -> bool {
-    let mut node_alts: List<i32> = [];
-    prediction_collect_all_indices(&c.child, &mut node_alts);
-    if node_alts.is_empty() {
-        return false;
-    }
-    for let a of &node_alts {
-        if skip >= alts[*a].elements.len() || !elements_match(&c.element, &alts[*a].elements[skip]) {
-            return false;
-        }
-    }
-    return true;
-}
-
 /// Emit lowering's `Tournament` dispatch over the per-alt
 /// `<fn_name>_scan_<idx>` helpers: scan every alt from the current position,
 /// parse the one reaching furthest, ties to the first grammar alt. Requires
@@ -8064,6 +8000,7 @@ fn consume_reads_past(c: &ConsumeNode, alts: &List<Alternative>, skip: i32) -> b
 fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     sorted_indices: &List<i32>,
+    rule: &Rule,
     fn_name: S,
     rule_display: S1,
     ctx: &mut EmitContext,
@@ -8073,9 +8010,10 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     // a gated tournament can end with nothing viable. `emit_index_pick_dispatch`
     // runs its last alternative untested, which holds only while some
     // alternative always matches.
-    let guard_pick = fall_through_on_no_match || !candidates_ungated(sorted_indices, ctx);
+    let guard_pick = fall_through_on_no_match
+        || sorted_indices.iter_ref().any(|idx| ctx.alt_has_gate(rule_alt_actions(rule, *idx)));
     let fallback = if guard_pick || ctx.settings.trace { -1 } else { sorted_indices[sorted_indices.len() - 1] };
-    emit_scan_tournament_winner(w, sorted_indices, &rule_display, ctx, fallback);
+    emit_scan_tournament_winner(w, sorted_indices, rule, &rule_display, ctx, fallback);
     if guard_pick {
         w.begin("if _sd_best_i >= 0");
     }
@@ -8085,18 +8023,13 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     }
 }
 
-/// Whether no candidate among `indices` carries an alt-initial gate.
-fn candidates_ungated(indices: &List<i32>, ctx: &EmitContext) -> bool {
-    let rule = ctx.current_rule();
-    return indices.iter_ref().all(|idx| !ctx.alt_has_gate(&rule.alternatives[*idx]));
-}
-
 /// The tournament's winner among `sorted_indices`, into `_sd_best_i`: -1 where
 /// no alternative scans. `fallback`, the alternative the pick commits to where
 /// none wins, scans only where another did: the pick is the same either way.
 fn emit_scan_tournament_winner<S: AsStrSlice>(
     w: &mut CodeWriter,
     sorted_indices: &List<i32>,
+    rule: &Rule,
     rule_display: S,
     ctx: &mut EmitContext,
     fallback: i32,
@@ -8119,7 +8052,7 @@ fn emit_scan_tournament_winner<S: AsStrSlice>(
         // here, where the parser is in scope, and score a refused alternative as
         // no match — otherwise the tournament picks by length an alternative the
         // parse then refuses outright.
-        let Some(gate) = tournament_gate(idx, ctx) else {
+        let Some(gate) = tournament_gate(rule, idx, ctx) else {
             w.call(scan);
             continue;
         };
@@ -8163,13 +8096,12 @@ fn gen_tournament_shadow<S: AsStrSlice>(
     decision: i32,
     sorted_indices: &List<i32>,
     numbers: &List<i32>,
-    alts: &List<Alternative>,
+    rule: &Rule,
     rule_display: S,
     ctx: &mut EmitContext,
 ) {
-    assert alts_all_scan_full(sorted_indices, alts, ctx), "every alternative reaching codegen scans in full";
     let mut lines = CodeWriter::with_capacity(512);
-    emit_scan_tournament_winner(&mut lines, sorted_indices, rule_display, ctx, -1);
+    emit_scan_tournament_winner(&mut lines, sorted_indices, rule, rule_display, ctx, -1);
     let winner = shadow_number("_sd_best_i", sorted_indices, numbers);
     lines.line(`${atn_shadow_call(decision, AtnPicker::Tournament, "p.pos", winner, "_atn_alt")};`);
     gen_shadow_block(w, "_atn_alt >= 0", lines, ctx);
@@ -8195,110 +8127,30 @@ fn gen_shadow_block<S: AsStrSlice>(w: &mut CodeWriter, guard: S, body: CodeWrite
     gen_kept_block(w, guard, &body, ctx.settings.emit_actions);
 }
 
-/// True when every alt in `indices` has a scan helper covering its whole body,
-/// so a successful scan guarantees the parse succeeds. The precondition for
-/// `emit_scan_tournament`.
-fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut EmitContext) -> bool {
-    for let idx of indices {
-        if !alt_scan_is_full(&alts[*idx].elements, ctx) {
-            return false;
-        }
-    }
-    return true;
-}
-
 /// The gate the tournament tests before alternative `idx`'s scan, or `null`
 /// where the scan call stands alone: the alternative has no gate, or its scan
 /// checks the gate itself. Either way its predicate is marked gated, so the
 /// body drops its inline guard; only a gate the tournament writes is rendered.
-fn tournament_gate(idx: i32, ctx: &mut EmitContext) -> Option<String> {
-    let rule = ctx.current_rule();
-    assert idx >= 0 && idx < rule.alternatives.len(), "tournament_gate: a tournament candidate is an alternative of the rule it belongs to";
-    let alt = &rule.alternatives[idx];
-    if !ctx.alt_has_gate(alt) {
+fn tournament_gate(rule: &Rule, idx: i32, ctx: &mut EmitContext) -> Option<String> {
+    let actions = rule_alt_actions(rule, idx);
+    if !ctx.alt_has_gate(actions) {
         return null;
     }
-    if alt_scan_checks_gate(idx, ctx) {
-        mark_alt_gate_answered(&alt.actions, ctx);
+    // The scan helper tests the gate itself, against a scan gate seeded from
+    // the parser's.
+    if !rule_alt_scan_body(rule, idx).unwrap().gate_cond.is_empty() {
+        mark_alt_gate_answered(actions, ctx);
         return null;
     }
-    return Option::Some(alt_gate_condition(&alt.actions, ctx));
-}
-
-/// Whether alternative `idx`'s scan helper tests its gate itself, against a
-/// scan gate seeded from the parser's.
-fn alt_scan_checks_gate(idx: i32, ctx: &EmitContext) -> bool {
-    let rule = ctx.current_rule();
-    return !ctx.alt_scan_gate_conditions(&rule.alternatives[idx]).is_empty();
-}
-
-/// The alts a `Dispatch` node's tournament fallback chooses between, in
-/// tournament order — empty when the node needs no fallback because its
-/// branches are provably complete or no tournament is available.
-fn dispatch_fallback_indices(
-    d: &PredictionDispatch,
-    alts: &List<Alternative>,
-    ctx: &mut EmitContext,
-    skip: i32,
-) -> List<i32> {
-    let mut indices: List<i32> = [];
-    for let branch of &d.branches {
-        prediction_collect_all_indices(&branch.child, &mut indices);
-    }
-    let mut sorted_indices = indices.sorted();
-    sort_group_by_element_count(&mut sorted_indices, alts);
-    if sorted_indices.len() < 2 || !alts_all_scan_full(&sorted_indices, alts, ctx) {
-        return [];
-    }
-    if dispatch_claims_every_first_token(d, &sorted_indices, alts, ctx, skip) {
-        return [];
-    }
-    return sorted_indices;
-}
-
-/// Whether `d`'s branches name every token some alt in `indices` admits at
-/// element offset `skip`.
-///
-/// Provable only at depth 0, where no branching decision has been taken and
-/// the `Consume` steps crossed terminals every alt shares, so FIRST at `skip`
-/// is exact. It is not exact for an alt whose remainder there can match empty:
-/// that alt also admits whatever follows the rule at the call site, which no
-/// FIRST-derived branch set names (`a : X Y? | X Z` on `X`). Nor for one that
-/// reaches a `.` or `~X`, which admits every token.
-fn dispatch_claims_every_first_token(
-    d: &PredictionDispatch,
-    indices: &List<i32>,
-    alts: &List<Alternative>,
-    ctx: &mut EmitContext,
-    skip: i32,
-) -> bool {
-    if d.depth != 0 {
-        return false;
-    }
-    let mut claimed: List<i32> = [];
-    for let branch of &d.branches {
-        dedup_append_arr(&mut claimed, &branch.tokens);
-    }
-    for let idx of indices {
-        if ctx.analysis.tail_is_nullable_deep(&alts[*idx].elements, skip)
-            || ctx.analysis.elements_reach_open_end(&alts[*idx].elements, skip) {
-            return false;
-        }
-        for let tk of &ctx.analysis.first_of_elements_from(&alts[*idx].elements, skip) {
-            if !claimed.contains(tk) {
-                return false;
-            }
-        }
-    }
-    return true;
+    return Option::Some(alt_gate_condition(actions, ctx));
 }
 
 fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     side: PickSide,
-    node: &PredictionNode,
+    node: &RulePrediction,
     fn_name: S,
-    alts: &List<Alternative>,
+    rule: &Rule,
     ctx: &mut EmitContext,
     skip: i32,
     rule_display: S1,
@@ -8309,7 +8161,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
         Leaf(idx) => {
             // Lookahead leaves one alternative viable; a false predicate on it
             // leaves none, so the pick falls through to no viable alternative.
-            let gate = side_gate(side, &alts[*idx], ctx);
+            let gate = side_gate(side, rule, *idx, ctx);
             if !gate.is_empty() {
                 w.begin(`if ${gate}`);
             }
@@ -8324,54 +8176,42 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
             // group need not contain alt 0; regression: ll_consume_group.g4). The
             // cursor stays put, so every exit — a pick or no viable alternative —
             // leaves from the decision's start.
-            let reads_past = consume_reads_past(c, alts, skip);
-            let next_skip = if reads_past { skip + 1 } else { skip };
-            gen_prediction_code_inner(w, side, &c.child, fn_name, alts, ctx, next_skip, rule_display, &NO_KINDS, read);
+            let next_skip = if c.reads_past { skip + 1 } else { skip };
+            gen_prediction_code_inner(w, side, &c.child, fn_name, rule, ctx, next_skip, rule_display, &NO_KINDS, read);
         },
         Ambiguous(a) => {
-            assert skip == 0, "a Consume leading to an Ambiguous node is stripped when the tree is built";
-            // Sort by element count for proper ordering (single RuleRef first, etc.)
-            let mut sorted_indices = a.alts.sorted();
-            sort_group_by_element_count(&mut sorted_indices, alts);
-            if ctx.settings.emit_actions && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
-                gen_predicate_gated_pick(w, side, &a.alts, alts, fn_name, ctx, rule_display);
+            let sorted_indices = &a.tournament;
+            if ambiguous_group_predicate_gated(a, rule, ctx) {
+                gen_predicate_gated_pick(w, side, &a.alts, rule, fn_name, ctx, rule_display);
                 return;
             }
-            if ctx.ambiguous_routes_via_atn(a) {
+            if ctx.ambiguous_routes_via_atn(&a.alts) {
                 let in_scan = side matches { _::Scan };
                 assert !in_scan || ctx.plan.needs_atn, "a scan picks through the ATN only where every scan takes its state by `&mut`";
-                let Some(numbers) = ctx.atn_body_alt_numbers(&sorted_indices) else {
+                let Some(numbers) = ctx.atn_body_alt_numbers(sorted_indices) else {
                     unreachable();
                 };
-                let rule = ctx.cursor.current_rule_index();
-                let met = *ctx.decisions.at_rule(rule);
-                let dec = ctx.plan.atn_rule_body_decision(rule);
+                let rule_index = ctx.cursor.current_rule_index();
+                let met = *ctx.decisions.at_rule(rule_index);
+                let dec = ctx.plan.atn_rule_body_decision(rule_index);
                 let gates = atn_decision_gates(&met, ctx, side matches { _::Scan });
                 w.line(`let _atn_alt = ${atn_gated_predict_call(dec, &gates, side, ctx)};`);
                 if side matches { _::Parse } && ctx.settings.prediction.verifies() {
-                    gen_tournament_shadow(w, dec, &sorted_indices, &numbers, alts, rule_display, ctx);
+                    gen_tournament_shadow(w, dec, sorted_indices, &numbers, rule, rule_display, ctx);
                 }
                 w.begin("if _atn_alt < 0");
                 emit_no_viable_pick(w, side, ctx);
                 w.end();
-                emit_index_pick_dispatch(w, side, "_atn_alt", &sorted_indices, fn_name, rule_display, ctx, &numbers);
+                emit_index_pick_dispatch(w, side, "_atn_alt", sorted_indices, fn_name, rule_display, ctx, &numbers);
                 return;
             }
-            // Every alternative reaching codegen scans in full:
-            // non-scannability's only source is a `RuleRef` to a name that
-            // is not a parser rule, which `ir.wado` rejects first. Assert
-            // that rather than keep the try-fail-retry lowerings only
-            // breaking it could reach.
-            assert sorted_indices.len() >= 2, "expected 2 or more";
-            let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
-            assert all_scan_full;
             match side {
-                _::Parse => emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx),
-                _::Scan => emit_scan_side_tournament(w, &sorted_indices, ctx, false),
+                _::Parse => emit_scan_tournament(w, sorted_indices, rule, fn_name, rule_display, ctx),
+                _::Scan => emit_scan_side_tournament(w, sorted_indices, ctx, false),
             }
         },
         Dispatch(d) => {
-            let fallback = dispatch_fallback_indices(d, alts, ctx, skip);
+            let fallback = &d.fallback;
             if d.depth == 0
                 && skip == 0
                 && d.branches.len() == 1
@@ -8382,7 +8222,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                     side,
                     &d.branches[0].child,
                     fn_name,
-                    alts,
+                    rule,
                     ctx,
                     skip,
                     rule_display,
@@ -8402,7 +8242,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                     side,
                     &branch.child,
                     fn_name,
-                    alts,
+                    rule,
                     ctx,
                     skip,
                     rule_display,
@@ -8424,13 +8264,14 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                 match side {
                     _::Parse => emit_scan_tournament(
                         w,
-                        &fallback,
+                        fallback,
+                        rule,
                         fn_name,
                         rule_display,
                         ctx,
                         /*fall_through_on_no_match=*/ true,
                     ),
-                    _::Scan => emit_scan_side_tournament(w, &fallback, ctx, true),
+                    _::Scan => emit_scan_side_tournament(w, fallback, ctx, true),
                 }
             }
             w.end();
@@ -8480,34 +8321,21 @@ fn dispatch_check_var(w: &mut CodeWriter, side: PickSide, skip: i32, depth: i32,
 /// node references a scan helper for its longest-match tournament / hybrid
 /// path, and a `Dispatch` node references one per alt of its tournament
 /// fallback. Only a pure `Leaf`/`Consume` tree leaves every helper dead.
-fn collect_referenced_scan_alts(
-    node: &PredictionNode,
-    alts: &List<Alternative>,
-    ctx: &mut EmitContext,
-    out: &mut List<i32>,
-    skip: i32 = 0,
-) {
-    match *node {
+fn collect_referenced_scan_alts(node: &RulePrediction, rule: &Rule, ctx: &EmitContext, out: &mut List<i32>) {
+    match node {
         Leaf(_) => {
         },
-        Consume(c) => {
-            let next_skip = if consume_reads_past(&c, alts, skip) { skip + 1 } else { skip };
-            collect_referenced_scan_alts(&c.child, alts, ctx, out, next_skip);
-        },
+        Consume(c) => collect_referenced_scan_alts(&c.child, rule, ctx, out),
         Dispatch(d) => {
             for let branch of &d.branches {
-                collect_referenced_scan_alts(&branch.child, alts, ctx, out, skip);
+                collect_referenced_scan_alts(&branch.child, rule, ctx, out);
             }
-            dedup_append_arr(out, &dispatch_fallback_indices(&d, alts, ctx, skip));
+            dedup_append_arr(out, &d.fallback);
         },
         Ambiguous(a) => {
-            if ctx.settings.emit_actions && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
-                return;
+            if !ambiguous_group_predicate_gated(a, rule, ctx) {
+                dedup_append_arr(out, &a.tournament);
             }
-            // The emit's tournament scans every alt, in this order.
-            let mut sorted_indices = a.alts.sorted();
-            sort_group_by_element_count(&mut sorted_indices, alts);
-            dedup_append_arr(out, &sorted_indices);
         },
     }
 }
@@ -8520,54 +8348,39 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
     rule: &ParserRule,
     lowered_rule: &Rule,
     ctx: &mut EmitContext,
-    og: &RuleOverlap,
     fn_name: S,
 ) {
-    let non_lr_indices = &og.non_lr_indices;
+    let decision = rule_decision(lowered_rule);
+    let non_lr_indices = &decision.non_lr_indices;
     emit_pick_kind_read(w, side);
 
     // The arms are independent `if`s that return, so an undecidable one goes
     // last or the alternatives after it are dead. The partition is over the
     // non-LR alternatives, so groups and verdicts are slots into
     // `non_lr_indices`.
-    let classes = alt_classes(
-        non_lr_indices,
-        &rule.alternatives,
-        rule_is_left_recursive(rule),
-        &og.first_sets,
-        &mut ctx.analysis,
-    );
     let mut admits: List<Admits> = [];
     let mut untestable: List<bool> = [];
-    for let group of &og.groups {
-        let ungated = group.len() != 1 || !side_has_gate(side, &rule.alternatives[non_lr_indices[group[0]]], ctx);
-        admits.push(group_branch_admits(group, &classes));
+    for let group of &decision.groups {
+        let ungated = group.len() != 1 || !side_has_gate(side, lowered_rule, non_lr_indices[group[0]], ctx);
+        admits.push(group_branch_admits(group, &decision.classes));
         untestable.push(admits_is_untestable(&admits[admits.len() - 1]) && ungated);
     }
 
     for let slot of &arms_fallback_last(&untestable) {
         let g = *slot;
-        let group = &og.groups[g];
+        let group = &decision.groups[g];
         let gate = if group.len() == 1 {
-            and_gate(side_gate(side, &rule.alternatives[non_lr_indices[group[0]]], ctx));
+            and_gate(side_gate(side, lowered_rule, non_lr_indices[group[0]], ctx));
         } else {
             String::new();
         };
         let proven = admits_kinds(&admits[g]);
         w.begin(`if ${ctx.admits_check_str(&admits[g], &DISPATCH_KIND_LOCAL)}${gate}`);
 
-        if group.len() == 1 {
-            gen_pick_alt(w, side, rule, lowered_rule, non_lr_indices[group[0]], ctx, &proven);
+        if let Some(tree) = &decision.trees[g] {
+            gen_prediction_code_inner(w, side, tree, fn_name, lowered_rule, ctx, 0, &rule_header(lowered_rule).name, &proven);
         } else {
-            let tree = build_group_prediction_tree(
-                &rule.alternatives,
-                group,
-                &og.first_sets,
-                non_lr_indices,
-                &mut ctx.analysis,
-                &og.end_follow,
-            );
-            gen_prediction_code_inner(w, side, &tree, fn_name, &rule.alternatives, ctx, 0, &rule.name, &proven);
+            gen_pick_alt(w, side, rule, lowered_rule, non_lr_indices[group[0]], ctx, &proven);
         }
 
         w.end();
@@ -8575,7 +8388,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
 
     // A nullable alternative the rule's FOLLOW selects still matches empty on a
     // lookahead nothing admits, leaving the caller to report it, as in a group.
-    if let Some(alt_index) = follow_admitted_nullable_alt(rule, non_lr_indices, &og.end_follow, ctx) {
+    if let Some(alt_index) = decision.follow_admitted_nullable {
         w.begin("scope:");
         gen_pick_alt(w, side, rule, lowered_rule, alt_index, ctx, &NO_KINDS);
         w.end();
@@ -8583,20 +8396,22 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
     emit_no_alternative(w, side, lowered_rule, ctx);
 }
 
-/// An alternative's gate as `side` evaluates it, or "" where it has none that
-/// side can. The parse's marks the predicate its condition names gated.
-fn side_gate(side: PickSide, alt: &Alternative, ctx: &mut EmitContext) -> String {
+/// The gate of `rule`'s alternative `idx` as `side` evaluates it, or "" where
+/// it has none that side can. The parse's marks the predicate its condition
+/// names gated.
+fn side_gate(side: PickSide, rule: &Rule, idx: i32, ctx: &mut EmitContext) -> String {
     return match side {
-        _::Parse => alt_gate_condition(&alt.actions, ctx),
-        _::Scan => ctx.alt_scan_gate_conditions(alt),
+        _::Parse => alt_gate_condition(rule_alt_actions(rule, idx), ctx),
+        _::Scan => rule_alt_scan_body(rule, idx).unwrap().gate_cond,
     };
 }
 
-/// Whether `side` tests a gate on `alt`, asked without registering it.
-fn side_has_gate(side: PickSide, alt: &Alternative, ctx: &EmitContext) -> bool {
+/// Whether `side` tests a gate on `rule`'s alternative `idx`, asked without
+/// registering it.
+fn side_has_gate(side: PickSide, rule: &Rule, idx: i32, ctx: &EmitContext) -> bool {
     return match side {
-        _::Parse => ctx.alt_has_gate(alt),
-        _::Scan => !ctx.alt_scan_gate_conditions(alt).is_empty(),
+        _::Parse => ctx.alt_has_gate(rule_alt_actions(rule, idx)),
+        _::Scan => !rule_alt_scan_body(rule, idx).unwrap().gate_cond.is_empty(),
     };
 }
 
@@ -8635,25 +8450,6 @@ fn emit_no_alternative(w: &mut CodeWriter, side: PickSide, lowered_rule: &Rule, 
         _::Parse => gen_error_fallback(w, rule_header(lowered_rule), ctx),
         _::Scan => w.line("return -1;"),
     }
-}
-
-/// The first alternative `admit_rule_follow_into_nullable` gave the rule's FOLLOW.
-fn follow_admitted_nullable_alt(
-    rule: &ParserRule,
-    non_lr_indices: &List<i32>,
-    end_follow: &List<i32>,
-    ctx: &mut EmitContext,
-) -> Option<i32> {
-    if end_follow.is_empty() {
-        return null;
-    }
-    for let idx of non_lr_indices {
-        let alt = &rule.alternatives[*idx];
-        if alt_class_is_nullable(&alt_class_of(alt, &mut ctx.analysis)) {
-            return Option::Some(*idx);
-        }
-    }
-    return null;
 }
 
 /// `_parse_<rule>` for a left-recursive rule whose surface body

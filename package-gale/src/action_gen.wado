@@ -5,7 +5,6 @@
 use {
     ActionSource,
     AltAction,
-    Alternative,
     AttrDecl,
     Grammar,
     ParserRule,
@@ -14,7 +13,19 @@ use {
     is_lexer_members,
 } from "./ir.wado";
 use { RuleAttrs, rule_attrs_table } from "./rule_attrs.wado";
-use { Diagnostics, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Op, RuleCallOp } from "./gir.wado";
+use {
+    Diagnostics,
+    DiagnosticKind,
+    DiagnosticOwner,
+    DiagnosticSite,
+    Op,
+    Rule,
+    RuleAmbiguousNode,
+    RuleCallOp,
+    RulePrediction,
+    rule_alt_body,
+    rule_decision,
+} from "./gir.wado";
 use { EmitContext } from "./emit_context.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleCaptures } from "./parser_plan.wado";
@@ -31,9 +42,7 @@ use {
 } from "./gate_conditions.wado";
 use { HashMap } from "core:collections";
 use { follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
-use { elements_match } from "./ir_shape.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, StructSpec } from "wado-lang:wadopoet";
-use { AmbiguousNode, PredictionNode, build_group_prediction_tree } from "./prediction.wado";
 use {
     RULE_START_TOK_LOCAL,
     field_in_vals,
@@ -660,41 +669,22 @@ pub fn alt_initial_gate_conditions(actions: &List<AltAction>, ctx: &mut EmitCont
     return conds;
 }
 
-/// Whether any alt in an `Ambiguous` overlap group carries a gateable
-/// alt-initial predicate.
-fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>, ctx: &EmitContext) -> bool {
-    return amb_alts.iter_ref().any(|idx| ctx.alt_has_gate(&alts[*idx]));
+/// The actions of alternative `idx` of `rule`.
+pub fn rule_alt_actions(rule: &Rule, idx: i32) -> &List<AltAction> {
+    return &rule_alt_body(rule, idx).unwrap().actions;
 }
 
-/// Whether every alt in an overlap group matches the same terminal sequence, so
-/// they genuinely tie. Only then is the grammar-order predicate chain sound: a
-/// group whose alts differ in length or token must keep the length tournament,
-/// which the chain would misroute. A non-terminal element (`elements_match`
-/// compares only `TokenRef` / `Literal`) makes the group ineligible.
-fn group_alts_interchangeable(amb_alts: &List<i32>, alts: &List<Alternative>) -> bool {
-    if amb_alts.is_empty() {
-        return false;
-    }
-    let first = &alts[amb_alts[0]].elements;
-    for let idx of amb_alts {
-        let els = &alts[*idx].elements;
-        if els.len() != first.len() {
-            return false;
-        }
-        for let mut i = 0; i < els.len(); i += 1 {
-            if !elements_match(&els[i], &first[i]) {
-                return false;
-            }
-        }
-    }
-    return true;
+/// Whether any of `rule`'s alternatives `alts` carries a gateable alt-initial
+/// predicate.
+fn any_alt_has_gate(alts: &List<i32>, rule: &Rule, ctx: &EmitContext) -> bool {
+    return alts.iter_ref().any(|idx| ctx.alt_has_gate(rule_alt_actions(rule, *idx)));
 }
 
 /// Whether an `Ambiguous` group is resolved by predicate-gated dispatch: it has
 /// a gateable predicate and its alts are interchangeable. The marking pass and
 /// every emit site key on this so the gated set and emitted conditions agree.
-pub fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alternative>, ctx: &EmitContext) -> bool {
-    return ambiguous_group_has_gate(amb_alts, alts, ctx) && group_alts_interchangeable(amb_alts, alts);
+pub fn ambiguous_group_predicate_gated(a: &RuleAmbiguousNode, rule: &Rule, ctx: &EmitContext) -> bool {
+    return a.interchangeable && any_alt_has_gate(&a.alts, rule, ctx);
 }
 
 /// Collect the alts the tree's picks gate: a gated `Leaf`, and every alt of a
@@ -703,22 +693,22 @@ pub fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alterna
 /// dispatches by the grammar-order predicate chain (interchangeable), or routes
 /// through the runtime ATN — where the simulator asks the predicates guarding
 /// the viable alternatives and closes the edges of the false ones instead.
-fn collect_gated_alts(node: &PredictionNode, alts: &List<Alternative>, ctx: &EmitContext, out: &mut List<i32>) {
-    match *node {
+fn collect_gated_alts(node: &RulePrediction, rule: &Rule, ctx: &EmitContext, out: &mut List<i32>) {
+    match node {
         Leaf(idx) => {
-            if ctx.alt_has_gate(&alts[idx]) {
-                out.push(idx);
+            if ctx.alt_has_gate(rule_alt_actions(rule, *idx)) {
+                out.push(*idx);
             }
         },
-        Consume(c) => collect_gated_alts(&c.child, alts, ctx, out),
+        Consume(c) => collect_gated_alts(&c.child, rule, ctx, out),
         Dispatch(d) => {
             for let branch of &d.branches {
-                collect_gated_alts(&branch.child, alts, ctx, out);
+                collect_gated_alts(&branch.child, rule, ctx, out);
             }
         },
         Ambiguous(a) => {
-            if ambiguous_group_predicate_gated(&a.alts, alts, ctx)
-                || ambiguous_group_atn_predicate_gated(&a, alts, ctx) {
+            if ambiguous_group_predicate_gated(a, rule, ctx)
+                || ctx.ambiguous_routes_via_atn(&a.alts) && any_alt_has_gate(&a.alts, rule, ctx) {
                 for let idx of &a.alts {
                     out.push(*idx);
                 }
@@ -727,53 +717,29 @@ fn collect_gated_alts(node: &PredictionNode, alts: &List<Alternative>, ctx: &Emi
     }
 }
 
-/// Whether an `Ambiguous` node routes through the runtime ATN *and* carries a
-/// gateable predicate — so the simulator asks its predicates rather than an
-/// inline dispatch chain.
-fn ambiguous_group_atn_predicate_gated(a: &AmbiguousNode, alts: &List<Alternative>, ctx: &EmitContext) -> bool {
-    return ctx.ambiguous_routes_via_atn(a) && ambiguous_group_has_gate(&a.alts, alts, ctx);
-}
-
 /// Record every alt-initial predicate a dispatch site will gate, so
 /// `gen_alt_actions_at` suppresses its in-body copy. Covers the `Direct`
 /// branch, the singleton overlap group, and a contested group's prediction
 /// tree (`collect_gated_alts`).
-pub fn mark_gated_predicates(
-    rule: &ParserRule,
-    has_overlaps: bool,
-    groups: &List<List<i32>>,
-    first_sets: &List<List<i32>>,
-    non_lr_indices: &List<i32>,
-    end_follow: &List<i32>,
-    ctx: &mut EmitContext,
-) {
+pub fn mark_gated_predicates(rule: &Rule, ctx: &mut EmitContext) {
     if !ctx.settings.emit_actions {
         return;
     }
-    if !has_overlaps {
-        for let idx of non_lr_indices {
-            mark_alt_gate_predicates(&rule.alternatives[*idx].actions, ctx);
-        }
-        return;
-    }
-    for let group of groups {
-        if group.len() == 1 {
-            mark_alt_gate_predicates(&rule.alternatives[non_lr_indices[group[0]]].actions, ctx);
-        } else {
-            let tree = build_group_prediction_tree(
-                &rule.alternatives,
-                group,
-                first_sets,
-                non_lr_indices,
-                &mut ctx.analysis,
-                end_follow,
-            );
-            let mut gated: List<i32> = [];
-            collect_gated_alts(&tree, &rule.alternatives, ctx, &mut gated);
-            for let idx of &gated {
-                mark_alt_gate_predicates(&rule.alternatives[*idx].actions, ctx);
+    let decision = rule_decision(rule);
+    let mut gated: List<i32> = [];
+    if decision.has_overlaps() {
+        for let g of 0..<decision.groups.len() {
+            if let Some(tree) = &decision.trees[g] {
+                collect_gated_alts(tree, rule, ctx, &mut gated);
+            } else {
+                gated.push(decision.non_lr_indices[decision.groups[g][0]]);
             }
         }
+    } else {
+        gated = decision.non_lr_indices;
+    }
+    for let idx of &gated {
+        mark_alt_gate_predicates(rule_alt_actions(rule, *idx), ctx);
     }
 }
 
