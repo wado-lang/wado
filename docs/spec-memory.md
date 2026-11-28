@@ -382,17 +382,16 @@ assert f() == g();
 
 ## Shared Cells
 
-A shared cell is a value that is one object under every copy, and that a `&`
-may write. Its type is `Shared<T>`, a prelude type the compiler knows.
+A shared cell is a reference that is one object under every copy, and that a
+`&` may write. Its type is `Shared<T>`, a prelude type the compiler knows.
 `Shared::new(value)` puts a value into a new cell, and nothing else makes one:
 no cell is taken from a variable or a field, so no cell aliases one.
 
 `*c` is the place the cell holds. It reads and writes whatever path reached
 `c`, a `&` included, and `c` needs no `mut`: the dereference of a cell starts
 [the path a write goes through](./spec-expressions.md#variable-mutability)
-again. A field access and a method call dereference a cell as they do a
-reference. A method the cell implements itself, such as `eq`, is the cell's;
-any other name is a method of what the cell holds.
+again. A field access, a method call, an index and a `for` loop dereference a
+cell as they do a `&mut`, so `for let x of c` is `for let x of &mut *c`.
 
 A copy of a cell is the same cell, so the deep copy of a value stops at one.
 `Shared::new(*c)` makes a separate cell. `T` is not affine: an affine value has
@@ -422,21 +421,22 @@ test "a copy of a cell is the same cell" {
 A cast makes no cell and unwraps none, so a cell never names a variable's
 storage and no `&mut` outlives the rules of one by coming out of a cell.
 
-What a cell implements follows from its copies being one object:
+What a cell implements follows from its being a reference whose copies are one
+object:
 
-| Trait                       | A `Shared<T>`                                             |
-| --------------------------- | --------------------------------------------------------- |
-| `Eq`                        | `==` asks whether two cells are one; `*a == *b` compares  |
-| `Ord`                       | not implemented: a cell has no order                      |
-| `Hash`                      | not implemented: identity has no address to hash          |
-| `Default`                   | where `T` is, as `Shared::new(T::default())`              |
-| `Inspect`                   | `${c:?}` writes what the cell holds, as `Shared(…)`       |
-| `Serialize` / `Deserialize` | not implemented: two holders of one cell would become two |
+| Trait                       | A `Shared<T>`                                              |
+| --------------------------- | ---------------------------------------------------------- |
+| `Eq`                        | where `T` is: `==` compares what the cells hold            |
+| `Ord`                       | not implemented, as for a reference                        |
+| `Hash`                      | not implemented, as for a reference                        |
+| `Default`                   | where `T` is, as `Shared::new(T::default())`               |
+| `Inspect`                   | `${c:?}` writes what the cell holds, as `Shared(…)`        |
+| `Serialize` / `Deserialize` | not implemented: two holders of one cell would become two  |
 
-So a struct holding a cell derives `Eq`, and derives none of `Hash`,
-`Serialize` and `Deserialize`. A type that wants one of them writes it. A hash
-it writes over what the cell holds agrees with `==`, since one cell holds one
-value. A write to the cell changes that hash, so a key holding a cell is not
+`ref_eq(a, b)` asks whether two cells are one. A struct holding a cell derives
+`Eq` over what its cells hold, and derives none of `Ord`, `Hash`, `Serialize`
+and `Deserialize`. A type that wants one of them writes it. A write to a cell
+changes a hash written over what it holds, so a key holding a cell is not
 written while a map holds it: a lookup would then miss an entry the map still
 has.
 

@@ -685,8 +685,8 @@ Key differences from Rust:
 
 ### Shared Cells
 
-A `Shared<T>` is one object under every copy, written through a `&` and without
-`mut`. See [the spec](./spec-memory.md#shared-cells).
+A `Shared<T>` is a reference that is one object under every copy, written
+through a `&` and without `mut`. See [the spec](./spec-memory.md#shared-cells).
 
 ```wado
 let hits = Shared::new(0);     // the only way to make a cell
@@ -695,9 +695,9 @@ let same = hits;               // a copy is the same cell
 assert *hits == 1;
 
 let p = Shared::new(Point { x: 1, y: 2 });
-p.x = 10;                      // fields and methods dereference
-hits == same;                  // true: `==` asks whether two cells are one
-*hits == *Shared::new(1);      // true: compare what they hold
+p.x = 10;                      // fields, methods, `[]` and `for` dereference
+hits == Shared::new(1);        // true: `==` compares what they hold
+ref_eq(hits, same);            // true: the two are one cell
 `${hits:?}`;                   // "Shared(1)"
 ```
 

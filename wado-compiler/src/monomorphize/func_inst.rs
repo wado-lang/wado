@@ -2039,6 +2039,7 @@ impl Monomorphizer {
                 // A type parameter bound to a reference dispatches to its
                 // pointee's impl, which takes the receiver with the layers the
                 // generic body wrote over the parameter, not the reference's too.
+                // A cell is a `Self` of its own, so its layers stay.
                 if type_param_trait_info.is_some()
                     && method_func
                         .method_info
@@ -2049,7 +2050,8 @@ impl Monomorphizer {
                         receiver,
                         TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, receiver.span),
                     );
-                    *receiver = deref_to_layers(substituted, written_layers, type_table);
+                    let own = type_table.ref_depth(type_table.peel_refs(substituted.type_id));
+                    *receiver = deref_to_layers(substituted, written_layers + own, type_table);
                 }
 
                 // Primitives use direct Wasm instructions, not trait methods.

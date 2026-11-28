@@ -162,8 +162,10 @@ fn check_at(
     if actual_is_ref && expected_is_ref {
         let actual_is_mut = type_table.is_mut_ref(actual);
         let expected_is_mut = type_table.is_mut_ref(expected);
-        // &mut T -> &T is ok; &T -> &mut T is not
-        if !actual_is_mut && expected_is_mut {
+        // &mut T -> &T is ok; &T -> &mut T is not. A cell passes for a `&T`,
+        // and only a cell for a cell.
+        let is_cell = |ty| matches!(type_table.get(ty), ResolvedType::Shared(_));
+        if !actual_is_mut && expected_is_mut || is_cell(expected) && !is_cell(actual) {
             return TypeCheckResult::Incompatible;
         }
         if actual_inner != expected_inner {
@@ -865,11 +867,12 @@ fn packs_named(layout: &[TupleSlot]) -> Vec<TypeParamId> {
     packs
 }
 
-/// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).
+/// Unwrap one layer of reference, a cell included, returning (`inner_type`,
+/// `was_ref`).
 fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
-    match type_table.get(type_id) {
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (*inner, true),
-        _ => (type_id, false),
+    match type_table.ref_pointee(type_id) {
+        Some(inner) => (inner, true),
+        None => (type_id, false),
     }
 }
 

@@ -18,10 +18,9 @@ impl<T> Shared<T> {
     }
 }
 
-/// Whether two cells are one. `*a == *b` compares what they hold.
-impl<T> Eq for Shared<T> {
+impl<T: Eq> Eq for Shared<T> {
     pub fn eq(&self, other: &Self) -> bool {
-        return builtin::ref_eq(*self, *other);
+        return **self == **other;
     }
 }
 

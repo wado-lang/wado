@@ -246,10 +246,12 @@ pub(super) fn unify(
         // References: unify through. `&mut T` where `&T` is expected is the
         // one direction assignability allows, so it must bind the same way —
         // otherwise `array_len(self)` inside a `&mut self` method leaves the
-        // element type unbound.
+        // element type unbound. A cell passes for a `&T` too.
         (
             ResolvedType::Ref(expected_inner),
-            ResolvedType::Ref(actual_inner) | ResolvedType::MutRef(actual_inner),
+            ResolvedType::Ref(actual_inner)
+            | ResolvedType::MutRef(actual_inner)
+            | ResolvedType::Shared(actual_inner),
         )
         | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
             unify(type_table, *expected_inner, *actual_inner, bindings);

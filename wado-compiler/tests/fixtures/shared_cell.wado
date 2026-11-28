@@ -56,13 +56,28 @@ test "new takes a copy of its argument" {
     assert c.x == 1;
 }
 
-test "== asks whether two cells are one" {
+test "== compares what two cells hold, and ref_eq whether they are one" {
     let a = Shared::new(1);
     let b = a;
     let c = Shared::new(1);
     assert a == b;
-    assert a != c;
-    assert *a == *c;
+    assert a == c;
+    assert a != Shared::new(2);
+    assert ref_eq(a, b);
+    assert !ref_eq(a, c);
+}
+
+test "an index and a for loop dereference a cell" {
+    let c = Shared::new([1, 2, 3] as List<i32>);
+    c[0] = 9;
+    assert c[0] == 9;
+    assert c.len() == 3;
+
+    let points = Shared::new([Point { x: 1, y: 2 }] as List<Point>);
+    for let p of points {
+        p.x += 10;
+    }
+    assert points[0].sum() == 13;
 }
 
 test "a field access and a method call dereference a cell" {
@@ -77,11 +92,11 @@ test "a field access and a method call dereference a cell" {
     assert p.sum() == 11;
 }
 
-test "a struct holding a cell compares its cells by identity" {
+test "a struct holding a cell compares what its cells hold" {
     let hits = Shared::new(0);
     let a = Counter { hits };
-    let b = Counter { hits };
-    let c = Counter { hits: Shared::new(0) };
+    let b = Counter { hits: Shared::new(0) };
+    let c = Counter { hits: Shared::new(1) };
     assert a == b;
     assert a != c;
 }

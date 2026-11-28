@@ -3178,6 +3178,15 @@ impl TypeTable {
         )
     }
 
+    /// The `&mut T` the cell `type_id` (a `Shared<T>` or a newtype over one)
+    /// is stored as, or `None` for any other type.
+    pub fn cell_mut_ref(&mut self, type_id: TypeId) -> Option<TypeId> {
+        match *self.get(self.representation_head(type_id)) {
+            ResolvedType::Shared(held) => Some(self.make_mut_ref(held)),
+            _ => None,
+        }
+    }
+
     /// Whether a cast of `source` to `target` turns a `&mut T` into the
     /// `Shared<T>` it is stored as: the step `Shared::new` is written with.
     #[must_use]
@@ -3198,14 +3207,13 @@ impl TypeTable {
             .unwrap_or(source)
     }
 
-    /// Peel through Ref/MutRef wrappers to get the underlying type.
+    /// What `type_id` points at through every `&` and `&mut`. A cell is a type
+    /// of its own here, as the receiver its own impls are written for.
     pub fn peel_refs(&self, mut type_id: TypeId) -> TypeId {
-        loop {
-            match self.get(type_id) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => type_id = *inner,
-                _ => return type_id,
-            }
+        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.get(type_id) {
+            type_id = *inner;
         }
+        type_id
     }
 
     /// Which reference `type_id` is, or `None` for a non-reference.
@@ -3243,10 +3251,13 @@ impl TypeTable {
         }
     }
 
-    /// The type the reference `type_id` points at.
+    /// The type the reference `type_id` points at. A cell is a reference to
+    /// what it holds.
     pub fn ref_pointee(&self, type_id: TypeId) -> Option<TypeId> {
         match self.get(type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) | ResolvedType::Shared(inner) => {
+                Some(*inner)
+            }
             _ => None,
         }
     }

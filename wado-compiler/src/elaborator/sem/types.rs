@@ -157,12 +157,6 @@ macro_rules! with_body_facts {
             /// by the call expression's [`AstId`]. See [`MethodDispatch`] for
             /// the data shape and the recording contract.
             ann_method_dispatch => method_dispatch: $crate::elaborator::sem::types::MethodDispatch,
-            /// The method calls on a cell that reach a method of what it holds,
-            /// keyed by the method call's [`AstId`], or the `CallExpr`'s for a
-            /// qualified call: the call was dispatched on the `&mut T` the
-            /// innermost of this many cells is stored as, and reify passes the
-            /// receiver as that.
-            ann_cell_receiver => cell_receivers: usize,
             /// Coercion decisions recorded for each expression that
             /// [`super::super::Elaborator::try_coerce`] adapted into its
             /// expected type, keyed by the source-expression's [`AstId`].
@@ -1219,7 +1213,8 @@ impl OperatorDispatch {
 }
 
 /// How many references the `Self` of the impl `func` belongs to holds over
-/// `receiver`'s pointee: none for a value's impl, one for `&X`'s, and every one
+/// `receiver`'s pointee: a value's impl none, but the ones a cell's own impl's
+/// `Self` is (the cell's and any its `T` holds), one for `&X`'s, and every one
 /// `receiver` holds for a blanket `&T`'s, whose `T` takes the rest.
 pub(crate) fn impl_self_layers(
     func: &FunctionRef,
@@ -1227,9 +1222,35 @@ pub(crate) fn impl_self_layers(
     type_table: &TypeTable,
 ) -> usize {
     match func.method_info.as_ref().map(|info| &info.receiver) {
-        None | Some(Receiver::Type(_)) => 0,
+        None => 0,
+        Some(Receiver::Type(_)) if dispatched_on_cell(func, receiver, type_table) => {
+            type_table.ref_depth(type_table.peel_refs(receiver))
+        }
+        Some(Receiver::Type(_)) => 0,
         Some(Receiver::RefTo(..)) => 1,
         Some(Receiver::Ref(_)) => type_table.ref_depth(receiver),
+    }
+}
+
+/// Whether `func` is an impl written for the cell `receiver` reaches, or for a
+/// newtype on the way down to it: the cell's own method rather than one of
+/// what it holds.
+pub(crate) fn dispatched_on_cell(func: &FunctionRef, receiver: TypeId, type_table: &TypeTable) -> bool {
+    let Some(written) = func.method_info.as_ref().map(|info| &info.receiver) else {
+        return false;
+    };
+    let mut link = type_table.peel_refs(receiver);
+    if !type_table.is_cell(link) {
+        return false;
+    }
+    loop {
+        if *written == type_table.impl_receiver_key(link) {
+            return true;
+        }
+        if matches!(type_table.get(link), crate::tir::ResolvedType::Shared(_)) {
+            return false;
+        }
+        link = type_table.link_below(link).expect("a cell's chain ends at it");
     }
 }
 

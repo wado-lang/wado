@@ -2695,6 +2695,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
         } else {
+            // A cell walks as the `&mut` it is stored as.
+            let iterable_type_id = {
+                let mut tt = self.tysys.type_table.borrow_mut();
+                tt.cell_mut_ref(iterable_type_id).unwrap_or(iterable_type_id)
+            };
             // Check that the iterable type implements IntoIterator
             let mut inner_type_id = iterable_type_id;
             while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =

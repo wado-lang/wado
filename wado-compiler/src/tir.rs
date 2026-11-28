@@ -638,16 +638,12 @@ pub fn wrapped_reference(expr: TirExpr, type_table: &TypeTable) -> TirExpr {
     expr
 }
 
-/// The `&mut T` the cell `expr` is stored as, read through any references to
-/// the cell and any newtype naming it. Erasure leaves the cast between one
-/// type.
-pub fn cell_reference(expr: TirExpr, type_table: &mut TypeTable) -> TirExpr {
-    let expr = deref_to_layers(expr, 0, type_table);
-    let cell = type_table.representation_head(expr.type_id);
-    let ResolvedType::Shared(held) = *type_table.get(cell) else {
-        unreachable!("the caller passes a cell");
+/// `expr` as the `&mut T` a cell is stored as where it is one, or itself.
+/// Erasure leaves the cast between one type.
+pub fn cell_as_mut_ref(expr: TirExpr, type_table: &mut TypeTable) -> TirExpr {
+    let Some(reference) = type_table.cell_mut_ref(expr.type_id) else {
+        return expr;
     };
-    let reference = type_table.make_mut_ref(held);
     let span = expr.span;
     TirExpr::new(
         TirExprKind::Cast {
@@ -659,12 +655,12 @@ pub fn cell_reference(expr: TirExpr, type_table: &mut TypeTable) -> TirExpr {
     )
 }
 
-/// `expr` read through every cell its references reach, as a field access
-/// reads it: each cell becomes the `&mut` it is stored as, until what that
-/// points at is no cell. `expr` itself where it reaches none.
+/// `expr` read through every cell its references reach: each becomes the
+/// `&mut` it is stored as, until what that points at is no cell.
 pub fn through_cells(mut expr: TirExpr, type_table: &mut TypeTable) -> TirExpr {
     while type_table.is_cell(type_table.peel_refs(expr.type_id)) {
-        expr = cell_reference(expr, type_table);
+        let cell = type_table.ref_depth(type_table.peel_refs(expr.type_id));
+        expr = cell_as_mut_ref(deref_to_layers(expr, cell, type_table), type_table);
     }
     expr
 }

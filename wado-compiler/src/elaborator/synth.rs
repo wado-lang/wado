@@ -289,8 +289,8 @@ fn condition_binding_names(condition: &ast::Condition) -> Vec<String> {
 }
 
 /// Whether an argument of type `arg` answers a parameter of type `param`,
-/// the reference conversion included: a `&mut T` argument answers a `&T`
-/// parameter, as [`unify`] binds it. A function answers what the argument's
+/// the reference conversion included: a `&mut T` or a cell argument answers a
+/// `&T` parameter, as [`unify`] binds it. A function answers what the argument's
 /// typecheck lets it fill, `fn` for `fn mut` and an open row included; one
 /// whose effects are still a variable answers every row of its shape.
 pub(super) fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
@@ -298,7 +298,7 @@ pub(super) fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
         return true;
     }
     match (tt.get(param), tt.get(arg)) {
-        (ResolvedType::Ref(p), ResolvedType::MutRef(a)) => p == a,
+        (ResolvedType::Ref(p), ResolvedType::MutRef(a) | ResolvedType::Shared(a)) => p == a,
         (ResolvedType::Function { .. }, ResolvedType::Function { .. }) => {
             check_assignable(arg, param, tt) != TypeCheckResult::Incompatible
         }

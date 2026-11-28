@@ -227,7 +227,7 @@ impl<T> Signal<T> {
 /// Two signals are equal when they are the same signal, whatever they hold.
 impl<T> Eq for Signal<T> {
     fn eq(&self, other: &Self) -> bool {
-        return self.cell == other.cell;
+        return ref_eq(self.cell, other.cell);
     }
 }
 
@@ -297,7 +297,7 @@ fn recompute<T: Eq>(state: Shared<MemoState<T>>) {
 /// Two memos are equal when they are the same memo.
 impl<T> Eq for Memo<T> {
     fn eq(&self, other: &Self) -> bool {
-        return self.state == other.state;
+        return ref_eq(self.state, other.state);
     }
 }
 

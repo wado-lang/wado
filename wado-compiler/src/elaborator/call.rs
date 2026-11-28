@@ -4245,9 +4245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call: &ast::CallExpr,
         args: &[TypeId],
     ) -> bool {
-        let is_ref = |this: &Self, t| {
-            RefKind::from_resolved(this.tysys.type_table.borrow().get(t)).is_some()
-        };
+        let is_ref = |this: &Self, t| this.tysys.type_table.borrow().ref_pointee(t).is_some();
         let mismatched: Vec<usize> = (0..param_types.len().min(args.len()))
             .filter(|&i| {
                 is_ref(self, param_types[i])

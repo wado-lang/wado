@@ -63,7 +63,7 @@ use crate::elaborator::sem::types::{
     BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIteratorInfo, FromCallFacts,
     ImplFacts, IndirectCallee, KeyValueCoercionFacts, ListViewConversion, LiteralCallee,
     LiteralFromCall, MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts,
-    StaticMethodDispatch, impl_self_layers, with_body_facts,
+    StaticMethodDispatch, dispatched_on_cell, impl_self_layers, with_body_facts,
 };
 use crate::elaborator::stmt::{
     RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
@@ -2911,11 +2911,8 @@ impl<'a> Reify<'a> {
                     return inner;
                 }
                 // A field is read through the one reference that is the
-                // struct's handle: every cell on the way is read as the
-                // reference it is stored as, any further layer is
-                // dereferenced to the handle, and a newtype over that
-                // reference is cast to it.
-                let inner = tir::through_cells(inner, &mut self.tysys.type_table.borrow_mut());
+                // struct's handle: any further layer is dereferenced to the
+                // handle, and a newtype over that reference is cast to it.
                 let inner = {
                     let tt = self.tysys.type_table.borrow();
                     let inner = if self.tysys.wraps_reference(tt.peel_refs(inner.type_id)) {
@@ -3570,6 +3567,7 @@ impl<'a> Reify<'a> {
         let label = minted_name("for_of", unique_id);
 
         let operand = self.reify_expr(&for_of.iterable, ctx, None);
+        let operand = tir::cell_as_mut_ref(operand, &mut self.tysys.type_table.borrow_mut());
         let iter_type = info.iter_type;
         let walked = match &info.start {
             Some(start) => {
@@ -4449,6 +4447,11 @@ impl<'a> Reify<'a> {
         } else {
             (left, right)
         };
+        let left = receiver_of_impl(
+            left,
+            &dispatch.function_ref,
+            &mut self.tysys.type_table.borrow_mut(),
+        );
         let self_layers = impl_self_layers(
             &dispatch.function_ref,
             left.type_id,
@@ -5466,7 +5469,6 @@ impl<'a> Reify<'a> {
         &self,
         args: &mut [CallArg],
         dispatch: &StaticMethodDispatch,
-        call: AstId,
         span: Span,
     ) {
         if !dispatch.self_in_args {
@@ -5480,18 +5482,7 @@ impl<'a> Reify<'a> {
             &mut receiver.expr,
             TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
         );
-        let spelled = self.read_through_cells(spelled, call);
         receiver.expr = to_layers_of(spelled, self_type, &self.tysys.type_table.borrow());
-    }
-
-    /// `receiver` read as the `&mut` the innermost of the cells the call
-    /// `call` was dispatched through is stored as, or itself where it was
-    /// dispatched on no cell.
-    fn read_through_cells(&self, mut receiver: TirExpr, call: AstId) -> TirExpr {
-        for _ in 0..self.ann_cell_receiver(call).unwrap_or(0) {
-            receiver = tir::cell_reference(receiver, &mut self.tysys.type_table.borrow_mut());
-        }
-        receiver
     }
 
     /// [`adjust_receiver_for_self_kind`] for a dispatched receiver. A
@@ -5523,6 +5514,7 @@ impl<'a> Reify<'a> {
         func: &FunctionRef,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        let receiver = receiver_of_impl(receiver, func, &mut self.tysys.type_table.borrow_mut());
         let self_layers = impl_self_layers(func, receiver.type_id, &self.tysys.type_table.borrow());
         self.adjust_receiver(receiver, self_kind, self_layers, ctx)
     }
@@ -7161,7 +7153,7 @@ impl<'a> Reify<'a> {
                 )
                 .map(|(a, is_mut)| CallArg::new(self.reify_expr(a, ctx, None), is_mut))
                 .collect();
-            self.adjust_receiver_in_args(&mut args, &dispatch, static_call.id, static_call.span);
+            self.adjust_receiver_in_args(&mut args, &dispatch, static_call.span);
 
             let prelude = self.reify_apply_param_defaults(
                 &mut args,
@@ -7642,7 +7634,7 @@ impl<'a> Reify<'a> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
-            self.adjust_receiver_in_args(&mut arg_exprs, &dispatch, call.id, span);
+            self.adjust_receiver_in_args(&mut arg_exprs, &dispatch, span);
             let prelude = self.reify_pad_dispatch_defaults(
                 &call.callee,
                 &mut arg_exprs,
@@ -7986,7 +7978,6 @@ impl<'a> Reify<'a> {
         // direct TIR shape. See WEP §"Synthetic call sites stay
         // annotation-free by design".
         let raw_receiver = self.reify_expr(&method_call.receiver, ctx, None);
-        let raw_receiver = self.read_through_cells(raw_receiver, method_call.id);
         if matches!(method_call.method.as_str(), "len" | "zip") {
             // Auto-deref through `&`/`&mut` so tuple `.len()` / `.zip()` work
             // on a reference receiver, like any other method (mirrors the
@@ -9882,6 +9873,16 @@ fn adjust_receiver_for_self_kind(
         return deref_to_layers(receiver, held, &tt);
     }
     to_layers_of(deref_to_layers(receiver, held - 1, &tt), target, &tt)
+}
+
+/// `receiver` as the receiver of `func`: read through its cells to the `&mut`
+/// of what they hold where `func` is a method of that, since the callee's
+/// `Self` is read from the receiver.
+fn receiver_of_impl(receiver: TirExpr, func: &FunctionRef, type_table: &mut TypeTable) -> TirExpr {
+    if dispatched_on_cell(func, receiver.type_id, type_table) {
+        return receiver;
+    }
+    tir::through_cells(receiver, type_table)
 }
 
 /// What a branch of a construct yielding `recorded` is reified against: the

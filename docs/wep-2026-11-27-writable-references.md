@@ -101,12 +101,13 @@ Only an expected type reborrows. `let b = a;` moves `a`, and
 `let b: &mut T = a;` reborrows it, as in Rust. Both are of a `T` that is
 `RefMut`: a scoped `&mut` binds to no variable.
 
-### A shared cell is its own type
+### A shared cell is a reference
 
 A value that is one object under every copy, and that a `&` may write, is a
-shared cell. A copy of a cell is the same cell. `&T` is read-only as deep as
-the first cell, and promises nothing past it, as `&R` already promises nothing
-about a resource ([Components](./spec-components.md)).
+shared cell. A cell is a reference: a copy of it is the same cell, and it
+dereferences wherever a `&mut` does. `&T` is read-only as deep as the first
+cell, and promises nothing past it, as `&R` already promises nothing about a
+resource ([Components](./spec-components.md)).
 
 `Signal<T>` holds a cell. A parser's `out: &mut String` stays a borrow, and
 the struct holding it becomes affine.
@@ -120,20 +121,20 @@ definition as `Array<T>` is: `pub type Shared<T>;`.
   one. No cell is taken from a variable or a field, so a `let mut` variable
   changes only through its name or a `&mut` written at a call.
 - `*c` is the place the cell holds. It reads and writes whatever path reached
-  `c`, a `&` included, and `c` needs no `mut`. A field access and a method call
-  dereference a cell as they do a reference.
+  `c`, a `&` included, and `c` needs no `mut`. A field access, a method call,
+  an index and a `for` loop dereference a cell as they do a `&mut`, so
+  `for let x of c` is `for let x of &mut *c`.
 - A copy of a cell is the same cell, so the deep copy of a value stops at one.
   `Shared::new(*c)` makes a separate cell.
-- `==` asks whether two cells are one. Two cells holding equal values are not
-  interchangeable, since a write to one leaves the other, and `*a == *b`
-  compares what they hold. So a struct holding a cell derives the `Eq` that
-  `Signal<T>` writes by hand today. A cell has no order, so it is not `Ord`.
-- A cell is not `Hash`: `==` is identity, and Wasm GC gives a reference no
-  address to hash. So a struct holding a cell derives no `Hash`. A type that
-  wants one writes it, hashing what it holds, as `StrSlice` writes its own over
-  the text it views. Such a hash agrees with `==`, since one cell holds one
-  value. A write to the cell changes it, so a key holding a cell is not written
-  while a map holds it: a lookup would then miss an entry the map still has.
+- `==` compares what two cells hold, as it does for two references, and
+  `ref_eq(a, b)` asks whether they are one. So a struct holding a cell compares
+  what its cells hold, and `Signal<T>`, which means identity, says so with
+  `ref_eq` in its own `Eq`.
+- A cell is neither `Ord` nor `Hash`, as a reference is neither. A type that
+  wants either writes it over what its cells hold, as `StrSlice` writes its own
+  `Hash` over the text it views. A write to the cell changes what such a hash
+  reads, so a key holding a cell is not written while a map holds it: a lookup
+  would then miss an entry the map still has.
 - `${c:?}` writes what the cell holds as `Shared(…)`. A cell is `Default`
   where `T` is, as `Shared::new(T::default())`.
 - A cell is not `Serialize` or `Deserialize`, and does not cross a component
@@ -156,7 +157,8 @@ where a `struct` would add an object in front of every in-place `T`.
 It is a name and not a keyword or a sigil. `shared` is already a variable name
 across the corpus, a keyword would need an expression form and its precedence,
 and every other compiler-known type (`List<T>`, `Option<T>`, `String`) is a
-name.
+name. A `&shared x` beside `&mut x` would also read as a reference to the place
+`x`, where `Shared::new(x)` moves the value into a cell of its own.
 
 ### A closure stays copyable, and `&T` stops at one
 
@@ -346,6 +348,8 @@ spare a call site. Each step leaves the tree building and its tests passing.
 - [x] Every cell written as a `&mut` moves to `Shared<T>`: `Signal<T>` in Rill,
   `ValueSerializer { out: &mut v }` in `core:value`, and each `&mut` to a
   type replaced on assignment that a variable, a value or a `return` holds.
+- [ ] A cell is a reference: an index and a `for` loop dereference it, `==`
+  compares what cells hold, and every `Eq` that means identity calls `ref_eq`.
 - [ ] The scoped forms store back from every place: a call argument and a
   receiver on an element, a pattern binding of a type replaced on
   assignment, and `for let v of &mut xs`.
@@ -373,9 +377,8 @@ Two items land with the step whose rule they serve:
 
 - Nothing detects a key holding a cell that is written while a map holds it.
   The lookup misses an entry the map still has.
-- A method name that both a cell and what it holds give is the cell's: `c.eq(&d)`
-  asks for identity where `T` has an `eq` of its own. Whether the cell's name
-  should win there is not decided.
+- `==` on a cell that reaches itself, directly or through other cells, never
+  returns: the comparison follows the cycle. Nothing detects one.
 - Two errors about a cell give advice that does not apply to one. An affine
   `T` is told `affine T` would admit it, and a cell under `<` is told to write
   `cmp` beside `eq`.
