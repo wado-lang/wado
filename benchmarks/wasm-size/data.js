@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795822862626,
+  "lastUpdate": 1795831452917,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -83129,6 +83129,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/adeea9fe09d792936a916714bf131d955a31a03d"
         },
         "date": 1795822861723,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1d41cc65ff93896c25c4b54644487cffd94ba2df",
+          "message": "Merge pull request #2784 from wado-lang/ccr-f0010f7e-dmdgyw\n\nfix(elaborator): a blanket's static types its call's arguments",
+          "timestamp": "2026-11-28T10:45:03+09:00",
+          "tree_id": "141673c36e3b275273d33fce5a3dd8bca432b5d7",
+          "url": "https://github.com/wado-lang/wado/commit/1d41cc65ff93896c25c4b54644487cffd94ba2df"
+        },
+        "date": 1795831451821,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
