@@ -77,6 +77,8 @@ test("the host answers identity, narrowing and a listener while `run` waits", as
   document.getElementById("div").spatialNavigationSearch = (dir) => {
     searched = dir;
   };
+  // Nor `hidden="until-found"`, whose `hidden` is a string.
+  Object.defineProperty(document.getElementById("div"), "hidden", { get: () => "until-found" });
 
   const { run } = await import(probe);
   const found = document.body.dataset;
@@ -91,6 +93,10 @@ test("the host answers identity, narrowing and a listener while `run` waits", as
   assert.equal(found.narrow, "true true false");
   // A `<div>`'s own interface is not declared, so it is named by `HTMLElement`.
   assert.equal(found.inspect, "HtmlInputElement HtmlElement");
+  assert.equal(
+    found.hidden,
+    'Option::Some(BoolOrF64OrString::AsBool(false)) Option::Some(BoolOrF64OrString::AsString("until-found"))',
+  );
   // The list the program set is the list it read back, object for object.
   assert.equal(found.labels, "2 true true");
   assert.equal(found.walk, "true true");

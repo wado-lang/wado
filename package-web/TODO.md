@@ -24,26 +24,26 @@ left before the slice can be everything:
 | ----------------------------------------------- | ----------- | ------- | --------- |
 | a callback in a result                          | 5           | 954     | 0         |
 | a type outside the slice                        | 2           | 282     | 2         |
-| a union                                         | 15          | 200     | 0         |
-| `any`                                           | 3           | 158     | 34        |
+| `any`                                           | 3           | 158     | 35        |
 | a buffer                                        | 15          | 172     | 5         |
 | a namespace member                              | 0           | 133     | 0         |
-| a dictionary                                    | 34          | 67      | 15        |
+| a dictionary                                    | 24          | 51      | 6         |
 | a special operation                             | 0           | 81      | 0         |
 | `object`                                        | 4           | 67      | 7         |
 | `[HTMLConstructor]`                             | 0           | 76      | 0         |
 | a redeclared inherited method                   | 0           | 56      | 0         |
+| an enum                                         | 19          | 24      | 0         |
 | an iteration declaration                        | 0           | 41      | 0         |
-| an enum                                         | 19          | 21      | 0         |
 | `Promise<…>`                                    | 0           | 32      | 1         |
 | a callback the glue cannot call                 | 0           | 13      | 5         |
 | `record<…>`                                     | 0           | 15      | 0         |
-| a list of a list, a nullable type or a callback | 4           | 7       | 1         |
+| a list of a list, a nullable type or a callback | 5           | 7       | 1         |
+| a union                                         | 1           | 8       | 0         |
 | a static attribute                              | 0           | 7       | 0         |
 | `ObservableArray<…>`                            | 0           | 4       | 0         |
 | `bigint`                                        | 0           | 2       | 0         |
 | `async_sequence<…>`                             | 0           | 1       | 0         |
-| Total                                           | 101         | 2389    | 70        |
+| Total                                           | 78          | 2184    | 62        |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
@@ -103,8 +103,9 @@ lower is then available to each interface the slice adds.
 - [x] Lower a union of two or more typable constituents to a `variant` where
   the guest supplies it, named after its typedef where it has one
   (`(Node or DOMString)`)
-- [ ] Lower such a union in a result, which takes telling the host's value
-  apart
+- [x] Lower such a union in a result, the glue telling the host's value apart
+  by the case whose test it passes
+- [x] `SurfaceDom` answers `hidden`, a union either way
 
 ### 4. Promises
 
@@ -155,9 +156,12 @@ lower is then available to each interface the slice adds.
   that leaves a constituent out.
 - A union's type changes as the slice grows: `set_attribute` takes a `String`
   until `TrustedHTML` joins the slice, and a variant from then on.
-- A dictionary's member is typed as a result is, so a callback or a union of
-  several types is left out of it even where the dictionary is only an
-  argument.
+- A dictionary's member is typed as a result is, so a callback is left out of
+  it even where the dictionary is only an argument.
+- An attribute whose union is there for its setter returns that union from its
+  getter too: once `TrustedHTML` joins the slice, `inner_html` returns a
+  variant whose case is always `AsString`, since the getter only ever returns a
+  string. The IDL does not tell such an attribute apart.
 - An optional member of a nullable type cannot be passed as `null`: its `None`
   is the member left out, for which the host reads the WebIDL default.
 - Two unions that differ take one name where a typedef's name is another

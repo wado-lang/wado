@@ -303,7 +303,7 @@ pub enum Cause {
     Generic(String),
     /// A list whose elements are lists, nullable or callbacks.
     ListElement,
-    /// A union of several expressible types, or one narrowed in a result.
+    /// A union narrowed in a result, or one of a callback and another type.
     Union,
     /// A callback in a result, as an event handler attribute is.
     CallbackResult,
@@ -1894,12 +1894,6 @@ impl Lowering<'_> {
                         return Err(Reason::new(
                             reasons[0].cause.clone(),
                             format!("union: {}", texts()),
-                        ));
-                    }
-                    n if flow == Flow::Out => {
-                        return Err(Reason::new(
-                            Cause::Union,
-                            format!("union of {n} expressible types in a result"),
                         ));
                     }
                     _ => return Ok(optional(union_of(expressible)?, nullable)),

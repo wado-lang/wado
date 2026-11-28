@@ -4,6 +4,7 @@
 use { HashMap } from "core:collections";
 use {
     AddEventListenerOptionsOrBool,
+    BoolOrF64OrString,
     BoolOrScrollIntoViewOptions,
     CharacterData,
     Document,
@@ -1522,6 +1523,30 @@ impl Element for SurfaceDom {
 
     fn set_aria_owns_elements(&mut self, this: &Element, value: Option<List<Element>>) {
         self.set_referenced_elements(*this, "aria-owns", value);
+        resume ();
+    }
+
+    ..trap
+}
+
+impl HtmlElement for SurfaceDom {
+    fn hidden(&mut self, this: &HtmlElement) -> Option<BoolOrF64OrString> {
+        let state = match self.own(*this).attributes.get("hidden") {
+            Some(value) && value.to_ascii_lowercase() == "until-found" => BoolOrF64OrString::AsString("until-found"),
+            Some(_) => BoolOrF64OrString::AsBool(true),
+            null => BoolOrF64OrString::AsBool(false),
+        };
+        resume Option::Some(state);
+    }
+
+    fn set_hidden(&mut self, this: &HtmlElement, value: Option<BoolOrF64OrString>) {
+        let written = match value {
+            Some(AsString(s)) && s.to_ascii_lowercase() == "until-found" => Option::Some("until-found"),
+            Some(AsBool(false)) | Some(AsString("")) | null => null,
+            Some(AsF64(n)) && n == 0.0 || n.is_nan() => null,
+            _ => Option::Some(""),
+        };
+        write_attribute(self.own(*this), "hidden", written);
         resume ();
     }
 

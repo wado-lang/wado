@@ -38,6 +38,11 @@ pub enum FullscreenNavigationUi {
     Hide,
 }
 
+#[cm("wado-lang:web/types#sanitizer-presets")]
+pub enum SanitizerPresets {
+    Default,
+}
+
 #[cm("wado-lang:web/types#scroll-behavior")]
 pub enum ScrollBehavior {
     Auto,
@@ -167,10 +172,72 @@ pub struct ImportNodeOptions {
     pub self_only: Option<bool> = null,
 }
 
+#[cm("wado-lang:web/types#parse-html-unsafe-options")]
+pub struct ParseHtmlUnsafeOptions {
+    #[cm("sanitizer")]
+    pub sanitizer: Option<SanitizerConfigOrSanitizerPresets> = null,
+}
+
 #[cm("wado-lang:web/types#pointer-lock-options")]
 pub struct PointerLockOptions {
     #[cm("unadjusted-movement")]
     pub unadjusted_movement: Option<bool> = null,
+}
+
+#[cm("wado-lang:web/types#sanitizer-attribute-namespace")]
+pub struct SanitizerAttributeNamespace {
+    #[cm("name")]
+    pub name: String,
+    #[cm("namespace")]
+    pub namespace: Option<String> = null,
+}
+
+#[cm("wado-lang:web/types#sanitizer-config")]
+pub struct SanitizerConfig {
+    #[cm("elements")]
+    pub elements: Option<List<SanitizerElementWithAttributes>> = null,
+    #[cm("remove-elements")]
+    pub remove_elements: Option<List<SanitizerElement>> = null,
+    #[cm("replace-with-children-elements")]
+    pub replace_with_children_elements: Option<List<SanitizerElement>> = null,
+    #[cm("processing-instructions")]
+    pub processing_instructions: Option<List<SanitizerPi>> = null,
+    #[cm("remove-processing-instructions")]
+    pub remove_processing_instructions: Option<List<SanitizerPi>> = null,
+    #[cm("attributes")]
+    pub attributes: Option<List<SanitizerAttribute>> = null,
+    #[cm("remove-attributes")]
+    pub remove_attributes: Option<List<SanitizerAttribute>> = null,
+    #[cm("comments")]
+    pub comments: Option<bool> = null,
+    #[cm("data-attributes")]
+    pub data_attributes: Option<bool> = null,
+}
+
+#[cm("wado-lang:web/types#sanitizer-element-namespace")]
+pub struct SanitizerElementNamespace {
+    #[cm("name")]
+    pub name: String,
+    #[cm("namespace")]
+    pub namespace: Option<String> = null,
+}
+
+#[cm("wado-lang:web/types#sanitizer-element-namespace-with-attributes")]
+pub struct SanitizerElementNamespaceWithAttributes {
+    #[cm("name")]
+    pub name: String,
+    #[cm("namespace")]
+    pub namespace: Option<String> = null,
+    #[cm("attributes")]
+    pub attributes: Option<List<SanitizerAttribute>> = null,
+    #[cm("remove-attributes")]
+    pub remove_attributes: Option<List<SanitizerAttribute>> = null,
+}
+
+#[cm("wado-lang:web/types#sanitizer-processing-instruction")]
+pub struct SanitizerProcessingInstruction {
+    #[cm("target")]
+    pub target: String,
 }
 
 #[cm("wado-lang:web/types#scroll-into-view-options")]
@@ -195,8 +262,16 @@ pub struct ScrollToOptions {
     pub top: Option<f64> = null,
 }
 
+#[cm("wado-lang:web/types#set-html-options")]
+pub struct SetHtmlOptions {
+    #[cm("sanitizer")]
+    pub sanitizer: Option<SanitizerConfigOrSanitizerPresets> = null,
+}
+
 #[cm("wado-lang:web/types#set-html-unsafe-options")]
 pub struct SetHtmlUnsafeOptions {
+    #[cm("sanitizer")]
+    pub sanitizer: Option<SanitizerConfigOrSanitizerPresets> = null,
     #[cm("run-scripts")]
     pub run_scripts: Option<bool> = null,
 }
@@ -258,6 +333,36 @@ pub variant EventListenerOptionsOrBool {
 pub variant NodeOrString {
     AsNode(Node),
     AsString(String),
+}
+
+#[cm("wado-lang:web/types#sanitizer-attribute")]
+pub variant SanitizerAttribute {
+    AsString(String),
+    AsSanitizerAttributeNamespace(SanitizerAttributeNamespace),
+}
+
+#[cm("wado-lang:web/types#sanitizer-config-or-sanitizer-presets")]
+pub variant SanitizerConfigOrSanitizerPresets {
+    AsSanitizerConfig(SanitizerConfig),
+    AsSanitizerPresets(SanitizerPresets),
+}
+
+#[cm("wado-lang:web/types#sanitizer-element")]
+pub variant SanitizerElement {
+    AsString(String),
+    AsSanitizerElementNamespace(SanitizerElementNamespace),
+}
+
+#[cm("wado-lang:web/types#sanitizer-element-with-attributes")]
+pub variant SanitizerElementWithAttributes {
+    AsString(String),
+    AsSanitizerElementNamespaceWithAttributes(SanitizerElementNamespaceWithAttributes),
+}
+
+#[cm("wado-lang:web/types#sanitizer-pi")]
+pub variant SanitizerPi {
+    AsString(String),
+    AsSanitizerProcessingInstruction(SanitizerProcessingInstruction),
 }
 
 #[cm("wado-lang:web/types#string-or-element-creation-options")]
@@ -716,8 +821,8 @@ pub resource Element extends Node {
     #[cm_params("self", "options")]
     async fn request_fullscreen(&self, options: Option<FullscreenOptions> = null) -> AsyncCall<Result<(), Rejection>>;
     #[cm("wado-lang:web/element#set-html")]
-    #[cm_params("self", "html")]
-    fn set_html(&self, html: String);
+    #[cm_params("self", "html", "options")]
+    fn set_html(&self, html: String, options: Option<SetHtmlOptions> = null);
     #[cm("wado-lang:web/element#set-html-unsafe")]
     #[cm_params("self", "html", "options")]
     fn set_html_unsafe(&self, html: String, options: Option<SetHtmlUnsafeOptions> = null);
@@ -1166,6 +1271,9 @@ pub resource HtmlElement extends Element {
     #[cm("wado-lang:web/html-element#set-dir")]
     #[cm_params("self", "value")]
     fn set_dir(&self, value: String);
+    #[cm("wado-lang:web/html-element#hidden")]
+    #[cm_params("self")]
+    fn hidden(&self) -> Option<BoolOrF64OrString>;
     #[cm("wado-lang:web/html-element#set-hidden")]
     #[cm_params("self", "value")]
     fn set_hidden(&self, value: Option<BoolOrF64OrString>);
@@ -1678,11 +1786,11 @@ pub resource Document extends Node {
     #[cm_params("self")]
     async fn exit_fullscreen(&self) -> AsyncCall<Result<(), Rejection>>;
     #[cm("wado-lang:web/document#parse-html-unsafe")]
-    #[cm_params("html")]
-    fn parse_html_unsafe(html: String) -> Document;
+    #[cm_params("html", "options")]
+    fn parse_html_unsafe(html: String, options: Option<ParseHtmlUnsafeOptions> = null) -> Document;
     #[cm("wado-lang:web/document#parse-html")]
-    #[cm_params("html")]
-    fn parse_html(html: String) -> Document;
+    #[cm_params("html", "options")]
+    fn parse_html(html: String, options: Option<SetHtmlOptions> = null) -> Document;
     #[cm("wado-lang:web/document#domain")]
     #[cm_params("self")]
     fn domain(&self) -> String;

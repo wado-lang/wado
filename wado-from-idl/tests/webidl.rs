@@ -1549,18 +1549,19 @@ fn a_union_collapses_only_where_the_guest_supplies_the_value() {
     );
     // `undefined` is the nullability marker, not a dropped constituent.
     assert!(code.contains("fn event(&self) -> Option<Node>;"), "{code}");
+    // Two constituents the slice types need no collapse either way.
+    assert!(code.contains("fn hidden(&self) -> BoolOrString;"), "{code}");
     assert_eq!(
         skipped,
         [
             "Element.inner_html: union narrowed in a result: `TrustedHTML` is outside the slice",
-            "Element.hidden: union of 2 expressible types in a result",
             "Element.script: union: `HTMLScriptElement` is outside the slice; `SVGScriptElement` is outside the slice",
         ]
     );
 }
 
 #[test]
-fn a_union_of_several_types_is_a_variant_the_guest_supplies() {
+fn a_union_of_several_types_is_a_variant_either_way() {
     let mut defs = chain();
     defs.typedefs = vec![typedef(
         "Position",
@@ -1631,6 +1632,22 @@ fn a_union_of_several_types_is_a_variant_the_guest_supplies() {
                 &union(&[plain("boolean"), plain("DOMString")], false),
                 false,
             ),
+            // The host's value tells its case apart: by its class, by being
+            // an array, by its primitive type, or else as a dictionary.
+            operation(
+                "closest",
+                &union(
+                    &[
+                        plain("Element"),
+                        plain("EventInit"),
+                        sequence("sequence", &plain("DOMString")),
+                        plain("double"),
+                    ],
+                    true,
+                ),
+                &[],
+                "",
+            ),
         ],
     ));
     let (code, skipped) = defs.generate();
@@ -1663,10 +1680,12 @@ fn a_union_of_several_types_is_a_variant_the_guest_supplies() {
         code.contains("fn set_hidden(&self, value: BoolOrString);"),
         "{code}"
     );
-    assert_eq!(
-        skipped,
-        ["Element.hidden: union of 2 expressible types in a result"]
+    assert!(code.contains("fn hidden(&self) -> BoolOrString;"), "{code}");
+    assert!(
+        code.contains("fn closest(&self) -> Option<ElementOrEventInitOrStringListOrF64>;"),
+        "{code}"
     );
+    assert_eq!(skipped, Vec::<String>::new());
 
     let glue = generate(&defs.build(), "test.json")
         .expect("the slice should transform")
@@ -1693,6 +1712,17 @@ fn a_union_of_several_types_is_a_variant_the_guest_supplies() {
         glue.contains("p0.hidden = (p1 === 0 ? (p2 !== 0) : $string(p2, p3));"),
         "{glue}"
     );
+    // A result's case is the one whose test the host's value passes, and a
+    // dictionary is what passes none; `Element`'s classes are `2..=2`.
+    let tested = [
+        "if ($within($value, 2, 2)) {\n            $view().setUint8($ret + 8, 0);",
+        "} else if (Array.isArray($value)) {\n            $view().setUint8($ret + 8, 2);",
+        "} else if (typeof $value === \"number\") {\n            $view().setUint8($ret + 8, 3);",
+        "} else {\n            $view().setUint8($ret + 8, 1);\n            if ($value.bubbles === null",
+    ];
+    for test in tested {
+        assert!(glue.contains(test), "{test}\n{glue}");
+    }
 }
 
 #[test]

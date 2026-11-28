@@ -2,7 +2,7 @@
 //! back from the attributes of `<body>`: identity, narrowing through more than
 //! one level of `extends`, the name `Inspect` writes, a list of handles each
 //! way, a callback's result, an overload, an enum each way, a dictionary, a
-//! union, a promise settled and rejected, a listener entered while `run` waits,
+//! union each way, a promise settled and rejected, a listener entered while `run` waits,
 //! which waits itself, and what the collector reclaims.
 
 use {
@@ -35,6 +35,12 @@ export fn run() with (Dom, MonotonicClock) {
     let narrowed = `${node matches { _: HtmlElement }} ${node matches { _: HtmlInputElement }}`;
     report("narrow", `${narrowed} ${other matches { _: HtmlInputElement }}`);
     report("inspect", `${node:?} ${other:?}`);
+
+    // A union in a result is the case the host's value is of: jsdom's `hidden`
+    // is a boolean, and the test makes the `<div>`'s a string.
+    if let field: HtmlElement = input && let block: HtmlElement = div {
+        report("hidden", `${field.hidden():?} ${block.hidden():?}`);
+    }
 
     // A list carries handles both ways, each as the index of a slot.
     div.set_aria_labelled_by_elements(Option::Some([input, div]));

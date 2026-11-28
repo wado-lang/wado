@@ -9,6 +9,8 @@
 
 use std::fmt::Write;
 
+use indexmap::IndexMap;
+use wado_compiler::ast::HandleClasses;
 use wado_compiler::component_model::flat_params_in_buffer;
 use wado_compiler::name::{
     ExternHostQuery, ExternSlotAccess, callback_export_name, cm_callback_func_name, cm_import_alias,
@@ -74,8 +76,9 @@ export function $glue() {
 
   // Each declared interface's prototype, to its class.
   let $classes;
-  // The class of the nearest ancestor of `object`'s interface that is declared.
-  const $classOf = (object) => {
+  // The class of the nearest ancestor of `object`'s interface that is
+  // declared, or `undefined` where none is.
+  const $nearestClass = (object) => {
     if ($classes === undefined) {
       $classes = new Map();
       for (const [name, cls] of $CLASSES) {
@@ -90,7 +93,22 @@ export function $glue() {
         return cls;
       }
     }
-    throw new TypeError(`${object} is an instance of no interface this package declares`);
+    return undefined;
+  };
+  const $classOf = (object) => {
+    const cls = $nearestClass(object);
+    if (cls === undefined) {
+      throw new TypeError(`${object} is an instance of no interface this package declares`);
+    }
+    return cls;
+  };
+  // Whether `value` is an object of the interface whose classes are `lo..=hi`.
+  const $within = (value, lo, hi) => {
+    if (Object(value) !== value) {
+      return false;
+    }
+    const cls = $nearestClass(value);
+    return cls !== undefined && lo <= cls && cls <= hi;
   };
 
   // What an `async` import answers: a promise of the function writing a
@@ -181,13 +199,18 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
     )
     .unwrap();
 
+    let classes: Classes = module
+        .resources
+        .iter()
+        .filter_map(|r| Some((r.name.as_str(), r.classes?)))
+        .collect();
     let functions = module
         .resources
         .iter()
         .flat_map(|r| &r.methods)
         .chain(module.interfaces.iter().flat_map(|i| &i.functions));
     for function in functions {
-        write_function(&mut out, function, &output.js[&function.cm_attr]);
+        write_function(&mut out, function, &output.js[&function.cm_attr], &classes);
     }
     out.push_str("    },\n  };\n}\n");
     out
@@ -224,7 +247,10 @@ fn cross_in_memory(params: &[WadoParam]) -> bool {
     flat_params_in_buffer(flat_params, false)
 }
 
-fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
+/// Each resource's classes, by its name.
+type Classes<'a> = IndexMap<&'a str, HandleClasses>;
+
+fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction, classes: &Classes) {
     assert!(
         reads_params(&function.params),
         "`{}` passes a closure through memory, which no shim reads",
@@ -276,7 +302,7 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
             )];
             if let Some(ok) = ok {
                 let mut written = Vec::new();
-                store(ok, "$ret", 0, "$value", &mut written);
+                store(ok, "$ret", 0, "$value", classes, &mut written);
                 lines.extend(written.into_iter().map(|line| format!("  {line}")));
             }
             lines.push("});".to_string());
@@ -291,7 +317,7 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
         Some(ty) => {
             flat.names.push("$ret".to_string());
             let mut lines = vec![format!("const $value = {value};")];
-            store(ty, "$ret", 0, "$value", &mut lines);
+            store(ty, "$ret", 0, "$value", classes, &mut lines);
             lines
         }
     };
@@ -774,8 +800,20 @@ fn load(ty: &WadoType, base: &str, offset: u32) -> String {
 }
 
 /// The statements writing the DOM's `value` of type `ty` at `base + offset`.
-fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<String>) {
+fn store(
+    ty: &WadoType,
+    base: &str,
+    offset: u32,
+    value: &str,
+    classes: &Classes,
+    lines: &mut Vec<String>,
+) {
     let at = place(base, offset);
+    let nested = |ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<String>| {
+        let mut inner = Vec::new();
+        store(ty, base, offset, value, classes, &mut inner);
+        lines.extend(inner.into_iter().map(|line| format!("  {line}")));
+    };
     match Shape::of(ty) {
         Shape::String => lines.push(format!("$putString({at}, {value});")),
         Shape::Option(inner) => {
@@ -784,9 +822,7 @@ fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<St
             lines.push(format!("  $view().setUint8({at}, 0);"));
             lines.push("} else {".to_string());
             lines.push(format!("  $view().setUint8({at}, 1);"));
-            let mut some = Vec::new();
-            store(inner, base, offset + align_to(1, align), value, &mut some);
-            lines.extend(some.into_iter().map(|line| format!("  {line}")));
+            nested(inner, base, offset + align_to(1, align), value, lines);
             lines.push("}".to_string());
         }
         Shape::Scalar(scalar) => lines.push(scalar.to_memory(&at, value)),
@@ -795,7 +831,14 @@ fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<St
             let (offsets, ..) = record_layout(field_types(fields));
             for (field, field_offset) in fields.iter().zip(offsets) {
                 let member = format!("{value}.{}", field.host_name);
-                store(&field.ty, base, offset + field_offset, &member, lines);
+                store(
+                    &field.ty,
+                    base,
+                    offset + field_offset,
+                    &member,
+                    classes,
+                    lines,
+                );
             }
         }
         Shape::List(elem) => {
@@ -803,15 +846,69 @@ fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<St
             lines.push(format!(
                 "$putList({at}, {value}, {size}, {align}, (at, item) => {{"
             ));
-            let mut items = Vec::new();
-            store(elem, "at", 0, "item", &mut items);
-            lines.extend(items.into_iter().map(|line| format!("  {line}")));
+            nested(elem, "at", 0, "item", lines);
             lines.push("});".to_string());
         }
-        Shape::Variant(_) | Shape::Callback(..) => {
-            unreachable!("the WebIDL frontend returns no {ty:?}")
+        Shape::Variant(cases) => {
+            let (payload, ..) = variant_layout(cases);
+            let case = |index: usize, case: &UnionCase, lines: &mut Vec<String>| {
+                lines.push(format!(
+                    "  {}",
+                    Scalar::U8.to_memory(&at, &index.to_string())
+                ));
+                nested(&case.ty, base, offset + payload, value, lines);
+            };
+            // WebIDL requires a union's constituents to be distinguishable, so
+            // at most one test takes the host's value. A dictionary has none:
+            // it is the object no other case takes.
+            let mut dictionary = None;
+            let mut keyword = "if";
+            for (index, union_case) in cases.iter().enumerate() {
+                let Some(test) = case_test(&union_case.ty, value, classes) else {
+                    assert!(
+                        dictionary.is_none(),
+                        "two dictionaries are indistinguishable"
+                    );
+                    dictionary = Some((index, union_case));
+                    continue;
+                };
+                lines.push(format!("{keyword} ({test}) {{"));
+                case(index, union_case, lines);
+                keyword = "} else if";
+            }
+            lines.push("} else {".to_string());
+            match dictionary {
+                Some((index, union_case)) => case(index, union_case, lines),
+                None => lines.push(format!(
+                    "  throw new TypeError(`${{{value}}} is no case of the union`);"
+                )),
+            }
+            lines.push("}".to_string());
         }
+        Shape::Callback(..) => unreachable!("the WebIDL frontend returns no {ty:?}"),
     }
+}
+
+/// The test that the host's `value` is of the union case `ty`, or `None` for
+/// a dictionary, which no test tells apart from any other object.
+fn case_test(ty: &WadoType, value: &str, classes: &Classes) -> Option<String> {
+    Some(match Shape::of(ty) {
+        Shape::Scalar(Scalar::Handle) => {
+            let WadoType::Named(name) = ty else {
+                unreachable!("a handle is a named resource")
+            };
+            let HandleClasses { lo, hi } = classes[name.as_str()];
+            format!("$within({value}, {lo}, {hi})")
+        }
+        Shape::Scalar(Scalar::Bool) => format!("typeof {value} === \"boolean\""),
+        Shape::Scalar(_) => format!("typeof {value} === \"number\""),
+        Shape::String | Shape::Enum(_) => format!("typeof {value} === \"string\""),
+        Shape::List(_) => format!("Array.isArray({value})"),
+        Shape::Record(_) => return None,
+        Shape::Option(_) | Shape::Variant(_) | Shape::Callback(..) => {
+            unreachable!("a union's case lowers to no {ty:?}")
+        }
+    })
 }
 
 impl Scalar {
