@@ -48,4 +48,5 @@ change, with a probe under `wado run -O2` timing each step with `wasi:clocks`
   faster here.
 - [ ] Run a review's searches at once. They read and never write, so nothing
   but the agent loop's blocking requests keeps them in turn, and a review now
-  takes about as long as its searches added up.
+  takes about as long as its steps added up. The reproducers write into one
+  tree, so running them at once also needs a tree each.
