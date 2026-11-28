@@ -16,8 +16,6 @@ use {
     peel_labels,
 } from "./ir.wado";
 use {
-    group_field_base_name,
-    single_alt_group_field_name,
     general_group_field_name,
     gen_visibility_comment,
     all_alts_are_single_token,
@@ -69,7 +67,7 @@ use {
     has_multi_alt_groups,
     is_decision_fallback,
     scan_decision_branches,
-    sort_group_by_mandatory_count_desc,
+    sort_by_match_rank,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
 use { rule_is_left_recursive } from "./lr_util.wado";
@@ -101,6 +99,7 @@ use {
     RepeatOp,
     OptionalShapeLookaheadStrategy,
     GroupOp,
+    SingleAltShape,
     TokenOnlyShape,
     ListLabelOp,
     ScanBody,
@@ -6021,8 +6020,9 @@ fn gen_group_shape(
 ) {
     match &g_op.shape {
         TokenOnly(to) => gen_consume_token_group_op(w, to, &to.kinds, ctx, name_counts, proven),
-        SingleAlt(_) => gen_consume_single_alt_group_op(
+        SingleAlt(sa) => gen_consume_single_alt_group_op(
             w,
+            sa,
             &g_op.alts[0],
             &g_elem.alternatives[0],
             ctx,
@@ -6080,6 +6080,7 @@ fn gen_consume_token_group_op(
 /// IR via `gen_elements_with_non_greedy`.
 fn gen_consume_single_alt_group_op(
     w: &mut CodeWriter,
+    shape: &SingleAltShape,
     body: &AltBody,
     alt: &Alternative,
     ctx: &mut EmitContext,
@@ -6087,7 +6088,7 @@ fn gen_consume_single_alt_group_op(
     outer_follow: &List<i32>,
     proven: &List<i32>,
 ) {
-    let _ = dedup_name(&single_alt_group_field_name(alt), name_counts);
+    let _ = dedup_name(&shape.dedup_base, name_counts);
     // Nested General-group emitters consume `GeneralShape.variant_type`
     // / `alt_struct_names` baked by `lower_single_alt_group` under
     // the SingleAlt's owner rule, so no walker-field swap is needed here.
@@ -8084,8 +8085,8 @@ fn gen_group_dispatch(
         assert entry matches { _::Guaranteed }, "gen_group_dispatch: a decided dispatch commits, so it has no arm left to report or break in";
         let mut order: List<i32> = [];
         for let b of branches {
-            let branch_order = branch_emit_order(&b.alts, alts, ctx);
-            assert b.alts.len() == 1 || group_all_scannable(&branch_order, alts, ctx);
+            let branch_order = branch_emit_order(&b.alts, g_op_alts);
+            assert b.alts.len() == 1 || group_all_scannable(&branch_order, g_op_alts);
             for let idx of branch_order {
                 order.push(idx);
             }
@@ -8230,10 +8231,10 @@ fn group_gate(group: &List<i32>, alts: &List<AltBody>, ctx: &mut EmitContext, an
 /// The order a branch emits its alternatives in: mandatory-heavy first, so the
 /// longer match of a shared prefix leads the chain. Emission order only — the
 /// tournament decides the winner by scan length.
-fn branch_emit_order(group: &List<i32>, alts: &List<Alternative>, ctx: &mut EmitContext) -> List<i32> {
+fn branch_emit_order(group: &List<i32>, alts: &List<AltBody>) -> List<i32> {
     let mut order = group.sorted();
     if order.len() > 1 {
-        sort_group_by_mandatory_count_desc(&mut order, alts, &mut ctx.analysis);
+        sort_by_match_rank(&mut order, &alts.iter_ref().map(|a| a.match_rank).collect());
     }
     return order;
 }
@@ -8267,11 +8268,11 @@ fn gen_group_branch_body(
     }
     // Alternatives sharing a first token are decided by the longest-match
     // tournament, mandatory-heavy first.
-    let sorted_group = branch_emit_order(group, alts, ctx);
+    let sorted_group = branch_emit_order(group, g_op_alts);
     if let Decides([dec, site, shadowed]) = atn {
         let var = gen_group_atn_pick(w, dec, site, ctx, name_counts);
         if shadowed {
-            assert group_all_scannable(&sorted_group, alts, ctx);
+            assert group_all_scannable(&sorted_group, g_op_alts);
             let mut lines = CodeWriter::with_capacity(512);
             let winner = gen_scan_winner_tournament(&mut lines, &sorted_group, g_op_scan_alts, ctx, name_counts, -1);
             gen_group_shadow(w, dec, &var, &winner, lines, ctx);
@@ -8290,7 +8291,7 @@ fn gen_group_branch_body(
         );
         return;
     }
-    assert group_all_scannable(&sorted_group, alts, ctx);
+    assert group_all_scannable(&sorted_group, g_op_alts);
     let refusable = sorted_group.iter_ref().any(|i| scan_body_is_gated(&g_op_scan_alts[*i]));
     let winner = gen_scan_winner_tournament(
         w,
@@ -8410,7 +8411,7 @@ fn gen_alt_group(
     atn: GroupAtn,
 ) {
     let [kind, field_base] = match &g_op.shape {
-        SimpleCst(_) => [GroupBranchKind::RuleRef, group_field_base_name(alts)],
+        SimpleCst(sc) => [GroupBranchKind::RuleRef, sc.dedup_base],
         General(gs) => [GroupBranchKind::General, general_group_field_name(gs.group_index)],
         TokenOnly(_) | SingleAlt(_) | _::Transparent => unreachable(),
     };
@@ -8462,19 +8463,10 @@ fn gen_general_alt_parse_and_store(
 
 /// Whether every alt in `sorted_group` can be measured by a scan: a tournament
 /// ranks by scan length, so an alt it cannot scan has no length to rank.
-fn group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut EmitContext) -> bool {
-    for let idx of sorted_group {
-        let alt = &alts[*idx];
-        // An empty alternative scans, to zero: `gen_scan_winner_round` measures
-        // it as epsilon, so it wins only where nothing longer does.
-        for let elem of &alt.elements {
-            let mut visiting: List<String> = [];
-            if !ctx.analysis.is_element_scannable(elem, &mut visiting) {
-                return false;
-            }
-        }
-    }
-    return true;
+fn group_all_scannable(sorted_group: &List<i32>, alts: &List<AltBody>) -> bool {
+    // An empty alternative scans, to zero: `gen_scan_winner_round` measures it
+    // as epsilon, so it wins only where nothing longer does.
+    return sorted_group.iter_ref().all(|idx| alts[*idx].scannable);
 }
 
 /// The discriminator an overlap group's sub-dispatch branches on, measured on

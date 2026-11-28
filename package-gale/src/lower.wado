@@ -50,6 +50,7 @@ use {
     alt_class_of,
     alt_classes,
     alt_classes_of,
+    alt_match_rank,
     compute_overlap_groups,
     compute_overlap_groups_of,
     decision_partition,
@@ -2808,6 +2809,11 @@ fn with_surface_group(op: Op, g: &GroupElement, analysis: &mut GrammarAnalysis) 
         let surface = &g.alternatives[alt.alt_index];
         alt.actions = surface.actions;
         alt.nullable = analysis.tail_is_nullable_deep(&surface.elements, 0);
+        alt.match_rank = alt_match_rank(surface, analysis);
+        alt.scannable = surface.elements.iter_ref().all(|e| {
+            let mut visiting: List<String> = [];
+            return analysis.is_element_scannable(e, &mut visiting);
+        });
     }
     return Op::Group(go);
 }
@@ -3106,7 +3112,8 @@ fn lower_single_alt_group<S: AsStrSlice>(
     // `lower_op` recursion.
 
     let struct_name = single_alt_group_type_name(alt);
-    let field = dedup_name(&single_alt_group_field_name(alt), name_counts);
+    let dedup_base = single_alt_group_field_name(alt);
+    let field = dedup_name(&dedup_base, name_counts);
 
     // Canonical owner for this single-alt struct: when the same body
     // appears in multiple rules CST emit deduplicates under the first
@@ -3142,9 +3149,10 @@ fn lower_single_alt_group<S: AsStrSlice>(
     let scan_body = alt_scan_body(alt, scan_elements, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::SingleAlt(SingleAltShape {
-            struct_name: struct_name,
-            field: field,
-            owner_rule: owner_rule,
+            struct_name,
+            field,
+            dedup_base,
+            owner_rule,
         }),
         alts: [body],
         scan_group: group_op_scan_group(&[scan_body], &[*alt], &null, ctx),
@@ -3246,7 +3254,8 @@ fn lower_simple_cst_group(
     outer_suffix: &List<Element>,
 ) -> Op {
     let type_name = group_variant_type_name(alts);
-    let field = dedup_name(&group_field_base_name(alts), name_counts);
+    let dedup_base = group_field_base_name(alts);
+    let field = dedup_name(&dedup_base, name_counts);
 
     let mut bodies: List<AltBody> = [];
     let mut scan_bodies: List<ScanBody> = [];
@@ -3271,7 +3280,7 @@ fn lower_simple_cst_group(
         site: DiagnosticSite::SimpleCstGroup,
     };
     return group_op(
-        GroupShape::SimpleCst(SimpleCstShape { type_name: type_name, field: field }),
+        GroupShape::SimpleCst(SimpleCstShape { type_name, field, dedup_base }),
         &owner,
         alts,
         bodies,

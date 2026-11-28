@@ -392,21 +392,23 @@ pub fn alt_sort_priority(alt: &Alternative) -> i32 {
     return ALT_PRIORITY_MULTI_RULE_REF_LED;
 }
 
-/// Sort `group` by `ll_match_length`, then `alt_sort_priority`, then source
-/// order, so the longer LL match among alts sharing a prefix is tried first.
+/// What `sort_by_match_rank` orders an alternative by: its `ll_match_length`,
+/// then its `alt_sort_priority`.
+pub fn alt_match_rank(alt: &Alternative, analysis: &mut GrammarAnalysis) -> [i32, i32] {
+    return [ll_match_length(alt, analysis), alt_sort_priority(alt)];
+}
+
+/// Sort `group` by each alternative's rank in `ranks`, then source order, so
+/// the longer LL match among alts sharing a prefix is tried first.
 /// `( a b | a )` sorts the two-element alt ahead on its mandatory `b`, and so
 /// does `( a b? | a )` where `b?` is first-exact; a nullable that is not falls
 /// to priority instead.
-pub fn sort_group_by_mandatory_count_desc(
-    group: &mut List<i32>,
-    alts: &List<Alternative>,
-    analysis: &mut GrammarAnalysis,
-) {
+pub fn sort_by_match_rank(group: &mut List<i32>, ranks: &List<[i32, i32]>) {
     let mut keyed: List<[i32, i32, i32]> = [];
     for let mut i = 0; i < group.len(); i += 1 {
         let idx = group[i];
-        let len = ll_match_length(&alts[idx], analysis);
-        keyed.push([len, alt_sort_priority(&alts[idx]), idx]);
+        let rank = ranks[idx];
+        keyed.push([rank.0, rank.1, idx]);
     }
     keyed.sort_by(|a: &[i32, i32, i32], b: &[i32, i32, i32]| {
         if a.0 != b.0 {
