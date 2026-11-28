@@ -100,11 +100,11 @@ pub fn emit_attr_inits(w: &mut CodeWriter, ctx: &mut EmitContext) {
     if !ctx.settings.emit_actions || !ctx.current_rule_emits_vals() {
         return;
     }
-    let rule = *ctx.current_rule_attrs();
+    let rule = ctx.current_rule_attrs();
     let outer = *ctx.cursor.alt_bindings();
-    ctx.cursor.set_alt_bindings(unmatched_bindings(&rule));
-    emit_decl_inits(w, &rule, &rule.returns_decls, ctx);
-    emit_decl_inits(w, &rule, &rule.locals_decls, ctx);
+    ctx.cursor.set_alt_bindings(unmatched_bindings(rule));
+    emit_decl_inits(w, rule, &rule.returns_decls, ctx);
+    emit_decl_inits(w, rule, &rule.locals_decls, ctx);
     ctx.cursor.set_alt_bindings(outer);
 }
 

@@ -1,7 +1,7 @@
 //! What an action body can name in one parser rule, settled from the surface
 //! rule once, so the translator and the action emit never walk it.
 
-use { ActionSource, AltAction, Alternative, AttrDecl, Element, ParserRule, push_alt_actions } from "./ir.wado";
+use { AltAction, Alternative, AttrDecl, Element, ParserRule, push_alt_actions } from "./ir.wado";
 use { rule_is_left_recursive } from "./lr_util.wado";
 use { HashMap } from "core:collections";
 
@@ -11,8 +11,6 @@ pub struct RuleAttrs {
     pub args: List<AttrDecl> = [],
     pub returns_decls: List<AttrDecl> = [],
     pub locals_decls: List<AttrDecl> = [],
-    pub init_action: Option<ActionSource> = null,
-    pub after_action: Option<ActionSource> = null,
     pub left_recursive: bool = false,
     pub env: AttrEnv = AttrEnv {},
     /// Every action and predicate body running in the rule's own frame: its
@@ -87,8 +85,6 @@ fn rule_attrs_of(rule: &ParserRule) -> RuleAttrs {
         args: rule.args,
         returns_decls: rule.returns_decls,
         locals_decls: rule.locals_decls,
-        init_action: rule.init_action,
-        after_action: rule.after_action,
         left_recursive: rule_is_left_recursive(rule),
         env: build_attr_env(rule),
         action_bodies,

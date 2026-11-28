@@ -3416,6 +3416,20 @@ A : 'a' ;
     assert got == "aa => (r a a)\na => error\n";
 }
 
+test "an optional's gate guard admits the empty alternative by its follow set" {
+    // The guard is the dispatch's own disjunction, so the follow set that selects
+    // the empty alternative admits it too.
+    let src = "grammar T;
+options { language = Wado; }
+r : ( {false}? A | B | )? A EOF ;
+A : 'a' ;
+B : 'b' ;
+";
+    assert unsupported_count(&gen(src)) == 0;
+    let got = parses(src, "r", ["a", "ba", "aa", "b"]);
+    assert got == "a => (r a)\nba => (r b a)\naa => error\nb => error\n";
+}
+
 test "a plain action on an empty alternative does not cost it its follow set" {
     // Only a gateable alt-initial predicate takes the decision away from the
     // lookahead; a plain action does not.
