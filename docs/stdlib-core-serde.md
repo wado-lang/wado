@@ -169,7 +169,10 @@ else the type's `name_policy` applies, else identity.
 
 `#[compiler_item("serialize_variant_end")]`
 
-### `pub trait Serializer with ()`
+### `pub trait Serializer: RefMut with ()`
+
+`RefMut`, as every serde state is, so one a call is handed can be held by
+another: an internally tagged case's serializer holds the outer one.
 
 #### `type SeqSerializer: SerializeSeq`
 
@@ -348,7 +351,7 @@ wrong case.
 
 `#[compiler_item("deserialize_variant_end")]`
 
-### `pub trait Visitor with ()`
+### `pub trait Visitor: RefMut with ()`
 
 #### `type Value`
 
@@ -394,7 +397,7 @@ The CBOR `undefined` simple value (major 7, value 23). Distinct from
 arm. The default collapses it to `null` so visitors that do not model
 the distinction (e.g. JSON) keep working.
 
-### `pub trait Deserializer with ()`
+### `pub trait Deserializer: RefMut with ()`
 
 #### `type SeqAccess: DeserializeSeq`
 

@@ -822,6 +822,7 @@ impl<V: Visitor> Visitor for FlakyVisitor<V> {
 
     // A wrapper cannot hold the `&mut A` past the call, so it holds `A` and
     // stores it back.
+
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<V::Value, DeserializeError> {
         let mut flaky = FlakySeq { inner: *seq };
         let visited = self.inner.visit_seq(&mut flaky);

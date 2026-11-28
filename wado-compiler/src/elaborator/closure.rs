@@ -315,11 +315,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (param, (_, type_id)) in closure.params.iter().zip(&params) {
             self.refuse_held_mut_ref(*type_id, Holder::Param, param.name_span);
         }
-        self.refuse_held_mut_ref(
-            return_type,
-            Holder::Held("a returned value"),
-            closure.span,
-        );
+        self.refuse_held_mut_ref(return_type, Holder::Held("a returned value"), closure.span);
 
         // Only the walk knows which `&mut`s reach a capture's own storage.
         for var_name in std::mem::take(&mut closure_ctx.mut_ref_captures) {
