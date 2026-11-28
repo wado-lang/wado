@@ -62,6 +62,7 @@ pub fn insert_write_backs(
             locals,
             detached_locals: IndexSet::default(),
             referenced_locals: func.address_taken_locals.clone(),
+            stand_ins: IndexSet::default(),
             ref_temps: Vec::new(),
             refused: None,
         };
@@ -120,6 +121,10 @@ struct WriteBack<'a> {
     detached_locals: IndexSet<u32>,
     /// Locals this body references somewhere, which a reference value may name.
     referenced_locals: IndexSet<u32>,
+    /// Mutable locals bound `Aliased` to a value of a replace type: each holds
+    /// a copy that stands in for storage elsewhere until its scope stores it
+    /// back, as `reify` reads a scoped `&mut xs[i]`.
+    stand_ins: IndexSet<u32>,
     ref_temps: Vec<u32>,
     /// The first detached reference with no write-back point, and why.
     refused: Option<(Span, String)>,
@@ -286,6 +291,7 @@ impl WriteBack<'_> {
             locals: std::mem::take(body_locals),
             detached_locals: IndexSet::default(),
             referenced_locals: address_taken_locals.clone(),
+            stand_ins: IndexSet::default(),
             ref_temps: Vec::new(),
             refused: None,
         };
@@ -325,6 +331,17 @@ impl WriteBack<'_> {
     /// the shape tests below only decide whether a write-back can be emitted.
     fn takes_a_detached_ref(&self, arg: &TirExpr) -> bool {
         self.detached_in_value_position(arg).is_some()
+    }
+
+    /// Whether `arg` is `&mut` of a [`Self::stand_ins`] local, which its scope
+    /// stores back once the call returns: a reference the callee keeps would
+    /// write a copy no store reaches.
+    fn lends_a_stand_in(&self, arg: &TirExpr) -> bool {
+        matches!(
+            &arg.kind,
+            TirExprKind::Unary { op: TirUnaryOp::MutRef, expr }
+                if matches!(expr.kind, TirExprKind::Local { index, .. } if self.stand_ins.contains(&index))
+        )
     }
 
     /// The place a detached `&mut` references, if `arg` is one. Of the places only
@@ -467,12 +484,12 @@ impl WriteBack<'_> {
         // until an argument is one of the few this pass has anything to say
         // about.
         let touched = match &call.kind {
-            TirExprKind::Call { args, .. } => {
-                args.iter().any(|arg| self.takes_a_detached_ref(&arg.expr))
-            }
-            TirExprKind::IndirectCall { args, .. } => {
-                args.iter().any(|arg| self.takes_a_detached_ref(arg))
-            }
+            TirExprKind::Call { args, .. } => args
+                .iter()
+                .any(|arg| self.takes_a_detached_ref(&arg.expr) || self.lends_a_stand_in(&arg.expr)),
+            TirExprKind::IndirectCall { args, .. } => args
+                .iter()
+                .any(|arg| self.takes_a_detached_ref(arg) || self.lends_a_stand_in(arg)),
             _ => return,
         };
         if !touched {
@@ -530,9 +547,10 @@ impl WriteBack<'_> {
             .iter()
             .enumerate()
             .map(|(position, arg)| {
-                self.takes_a_detached_ref(arg)
-                    && (escaping.contains(&u32::try_from(position).unwrap())
-                        || replaced.contains(&u32::try_from(position).unwrap()))
+                let position = u32::try_from(position).unwrap();
+                (self.takes_a_detached_ref(arg)
+                    && (escaping.contains(&position) || replaced.contains(&position)))
+                    || (self.lends_a_stand_in(arg) && escaping.contains(&position))
             })
             .collect();
         // Only a position the callee can replace has anything to store back.
@@ -824,10 +842,19 @@ impl TirOptVisitor for WriteBack<'_> {
             TirStmtKind::Let {
                 value: Some(value),
                 local_index,
+                is_mut,
+                storage,
+                type_id,
                 ..
             } => {
                 if let Some(place) = self.detached_in_value_position(value) {
                     self.hold_detached(*local_index, place, "a variable");
+                }
+                if *is_mut
+                    && *storage == LetStorage::Aliased
+                    && self.type_table.is_boxed_reference_target(*type_id)
+                {
+                    self.stand_ins.insert(*local_index);
                 }
             }
             TirStmtKind::Return { value: Some(value) } => {

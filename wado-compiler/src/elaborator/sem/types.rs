@@ -210,6 +210,9 @@ macro_rules! with_body_facts {
             /// variadic paths are tagged via [`DesugarKind`] alone and leave
             /// no entry here. See [`ForOfIteratorInfo`].
             ann_for_of_iterator => for_of_iterator: $crate::elaborator::sem::types::ForOfIteratorInfo,
+            /// For-of loops over `&mut` that walk by index, keyed by the
+            /// [`crate::ast::ForOfStmt`]'s [`AstId`]. See [`ForOfIndexWalk`].
+            ann_for_of_index_walk => for_of_index_walks: $crate::elaborator::sem::types::ForOfIndexWalk,
             /// Operator-dispatch decisions for binary / index expressions that
             /// the elaborator lowered to a trait method call. Keyed by the
             /// [`crate::ast::BinaryExpr`]'s or [`crate::ast::IndexExpr`]'s
@@ -599,12 +602,21 @@ impl BodyFacts {
             .chain(&self.index_assign_dispatch)
             .chain(&self.index_swap_dispatch)
             .filter_map(|(id, op)| Some((*id, op.method_def?)));
-        let iterators = self.for_of_iterator.iter().flat_map(|(id, info)| {
-            [info.start.as_ref().and_then(|s| s.def), info.next_def]
-                .into_iter()
-                .flatten()
-                .map(move |def| (*id, def))
-        });
+        let iterators = self
+            .for_of_iterator
+            .iter()
+            .flat_map(|(id, info)| {
+                [info.start.as_ref().and_then(|s| s.def), info.next_def]
+                    .into_iter()
+                    .flatten()
+                    .map(move |def| (*id, def))
+            })
+            .chain(self.for_of_index_walks.iter().flat_map(|(id, walk)| {
+                [walk.len.def, walk.read.method_def, walk.write.method_def]
+                    .into_iter()
+                    .flatten()
+                    .map(move |def| (*id, def))
+            }));
         let literals = self
             .literal_conversions
             .iter()
@@ -1291,8 +1303,21 @@ pub(crate) struct ForOfIteratorInfo {
     pub(crate) iter_type: TypeId,
 }
 
-/// The `IntoIterator::into_iter` or `ForOf::start` call a for-of loop opens
-/// with.
+/// A `for let v of &mut xs` that walks `xs` by index, its element read into a
+/// temp each turn and assigned back when the turn ends (WEP: Writable
+/// References).
+#[derive(Clone)]
+pub(crate) struct ForOfIndexWalk {
+    pub(crate) len: ForOfStart,
+    pub(crate) read: OperatorDispatch,
+    pub(crate) write: OperatorDispatch,
+    /// What the loop variable binds: `&mut` of the element.
+    pub(crate) item_type: TypeId,
+}
+
+/// A method call a for-of loop makes on what it walks: the
+/// `IntoIterator::into_iter` or `ForOf::start` it opens with, or the `len` an
+/// index walk reads.
 #[derive(Clone)]
 pub(crate) struct ForOfStart {
     /// The declaration dispatch chose.

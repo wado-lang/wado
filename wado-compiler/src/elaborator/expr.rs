@@ -28,7 +28,7 @@ use super::synth::{ArgClass, KeyedAccess};
 use super::typecheck::{
     MeetRules, Meetings, SlotFrame, TypeCheckResult, admits_condition, check_assignable, meetings,
 };
-use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
+use super::types::{CallableKind, FunctionContext, TypeError, VarRef, scoped_subscripts};
 use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{RangeExpr, Visibility};
@@ -751,12 +751,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Unary(unary) => self.resolve_unary(unary, ctx, expected_type),
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
             Expr::TupleComprehension(comp) => self.resolve_tuple_comprehension(comp, ctx),
-            Expr::Call(call) => self.resolve_call(call, ctx, expected_type),
+            Expr::Call(call) => {
+                let scoped = scoped_subscripts(None, &call.args).map(|i| i.id).collect();
+                let ctx = &mut ctx.scoping_subscripts(scoped);
+                let type_id = self.resolve_call(call, ctx, expected_type);
+                // A case holds its payload past the expression, so no point is
+                // late enough to store one back.
+                let constructs_case = self.sem.types.wrapped_cases.contains_key(&call.id)
+                    || matches!(&call.callee, Expr::Ident(ident)
+                        if self.sem.types.case_owners.contains_key(&ident.id));
+                if constructs_case {
+                    for index in scoped_subscripts(None, &call.args) {
+                        self.refuse_unscoped_element(index);
+                    }
+                }
+                type_id
+            }
             Expr::MethodCall(method_call) => {
-                self.resolve_method_call(method_call, ctx, expected_type)
+                let scoped = scoped_subscripts(Some(&method_call.receiver), &method_call.args)
+                    .map(|i| i.id)
+                    .collect();
+                self.resolve_method_call(
+                    method_call,
+                    &mut ctx.scoping_subscripts(scoped),
+                    expected_type,
+                )
             }
             Expr::StaticMethodCall(static_call) => {
-                self.resolve_static_method_call(static_call, ctx, expected_type)
+                let scoped = scoped_subscripts(None, &static_call.args)
+                    .map(|i| i.id)
+                    .collect();
+                self.resolve_static_method_call(
+                    static_call,
+                    &mut ctx.scoping_subscripts(scoped),
+                    expected_type,
+                )
             }
             Expr::FieldAccess(field_access) => {
                 self.resolve_field_access(field_access, ctx, expected_type)
@@ -2463,6 +2492,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Refuse `&mut index` where it outlives a call: its element is a copy the
+    /// container stores back only once the call that takes it returns.
+    pub(super) fn refuse_unscoped_element(&self, index: &ast::IndexExpr) {
+        // An element `index_ref` hands out is the container's own object, a
+        // detached one whose whole-value writes the lowering refuses.
+        let copied = self
+            .sem
+            .types
+            .operator_dispatch
+            .get(&index.id)
+            .and_then(|read| read.function_ref.method_info.as_ref())
+            .is_some_and(|method| method.method_name == "index_value");
+        if copied && self.sem.types.index_assign_dispatch.contains_key(&index.id) {
+            let _ = self.emit(TypeError::CannotMutate {
+                message: "a `&mut` to an element the container hands out as a copy lasts for \
+                          one call: pass it as an argument, or keep the element in a `Shared` cell"
+                    .to_string(),
+                span: index.span,
+            });
+        }
+    }
+
     /// Dispatch the subscript `id` on a struct-headed `receiver` by a key of
     /// `index_type` to the indexing impl `access` reaches.
     pub(super) fn dispatch_index(
@@ -2513,17 +2564,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .flatten()
                 });
+            // Any other route to a `&mut` element reads a copy, which only the
+            // container's `IndexAssign` stores back. A cell is the exception: a
+            // write through it reaches the one object every copy names.
+            let store_back = (access == IndexAccess::Mutable
+                && !matches!(index_trait_info, Some((_, "index_ref_mut"))))
+            .then(|| {
+                self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                    s.find_index_assign_trait_impl(t, Some(index_type))
+                })
+            })
+            .flatten();
+            if let Some((assign, _)) = &store_back
+                && !self.tysys.type_table.borrow().is_cell(assign.output_type)
+            {
+                self.record_index_assign(id, span, assign);
+            }
             if let Some(((trait_info, _), index_method)) = index_trait_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
                 if access == IndexAccess::Mutable && index_method == "index_ref" {
-                    let stores_back = self
-                        .index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
-                            s.find_index_assign_trait_impl(t, Some(index_type))
-                        })
-                        .is_some();
                     self.refuse_mut_element_of_read_only_view(
                         base_type_id,
-                        stores_back,
+                        store_back.is_some(),
                         trait_info.output_type,
                         span,
                     );
@@ -2569,6 +2631,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             if let Some((trait_info, _)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
+                if access == IndexAccess::Mutable {
+                    self.refuse_mut_element_of_read_only_view(
+                        base_type_id,
+                        store_back.is_some(),
+                        trait_info.output_type,
+                        span,
+                    );
+                }
 
                 let func = self.indexing_function_ref(&trait_info, "index_value", span);
 

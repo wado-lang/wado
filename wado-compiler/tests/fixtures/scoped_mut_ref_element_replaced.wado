@@ -1,0 +1,62 @@
+// A variant element taken as a call argument or a receiver is stored back once
+// the call returns, so a callee that replaces the whole value reaches the list:
+// through an inherent method, a trait method, a newtype container's `[]`, and a
+// callee that replaces through an alias of its parameter.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+impl Payload {
+    fn replace(&mut self) {
+        *self = Payload::Text(`xyz`);
+    }
+}
+
+trait Clear with () {
+    fn clear(&mut self);
+}
+
+impl Clear for Payload {
+    fn clear(&mut self) {
+        *self = Payload::Empty;
+    }
+}
+
+type Row = List<Payload>;
+
+#[inline("never")]
+fn replace_via_alias(p: &mut Payload) {
+    let q = p;
+    *q = Payload::Text(`alias`);
+}
+
+fn is_text(p: &Payload, text: String) -> bool {
+    return p matches { Text(t) && t == text };
+}
+
+test "an inherent method replaces a list element" {
+    let mut xs: List<Payload> = [Payload::Empty];
+    xs[0].replace();
+    assert is_text(&xs[0], "xyz");
+}
+
+test "a trait method replaces a list element" {
+    let mut xs: List<Payload> = [Payload::Text(`a`)];
+    xs[0].clear();
+    assert xs[0] matches { _::Empty };
+}
+
+test "a method replaces a newtype container's element" {
+    let items: List<Payload> = [Payload::Empty];
+    let mut row = items as Row;
+    row[0].replace();
+    assert is_text(&row[0], "xyz");
+}
+
+test "a callee replaces through an alias of its parameter" {
+    let mut xs: List<Payload> = [Payload::Empty];
+    replace_via_alias(&mut xs[0]);
+    assert is_text(&xs[0], "alias");
+}

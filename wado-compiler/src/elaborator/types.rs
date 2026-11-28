@@ -3709,6 +3709,9 @@ pub(super) struct FunctionContext {
     /// name a `&mut` place rather than a value read, so they take `IndexRefMut`
     /// like `&mut h[0]` does. Empty outside an assignment target.
     pub(super) mut_place_subscripts: IndexSet<AstId>,
+    /// The subscripts the call being resolved may take as a scoped `&mut`
+    /// ([`scoped_subscripts`]). Empty outside a call's arguments.
+    pub(super) scoped_subscripts: IndexSet<AstId>,
     /// Local slots bound as the index of an enclosing variadic `for let [i, v]
     /// of t.enumerate()`. Such a binding is a compile-time constant once the
     /// loop is unrolled, so it is the one non-literal a pack-typed tuple
@@ -3727,6 +3730,28 @@ pub(super) struct FunctionContext {
 /// A stretch of the walk with one `FunctionContext` field replaced. Derefs to
 /// the context, and puts the enclosing value back on drop.
 #[must_use]
+/// The subscripts a call with `receiver` and `args` may take as a scoped `&mut`
+/// (WEP: Writable References): a receiver `xs[i]`, and an argument `&mut xs[i]`.
+/// Whether one is depends on its element, which the subscript's resolution
+/// decides.
+pub(super) fn scoped_subscripts<'e>(
+    receiver: Option<&'e ast::Expr>,
+    args: &'e [ast::Expr],
+) -> impl Iterator<Item = &'e ast::IndexExpr> {
+    let receiver = match receiver {
+        Some(ast::Expr::Index(index)) => Some(&**index),
+        _ => None,
+    };
+    let args = args.iter().filter_map(|arg| match arg {
+        ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::MutRef => match &unary.expr {
+            ast::Expr::Index(index) => Some(&**index),
+            _ => None,
+        },
+        _ => None,
+    });
+    receiver.into_iter().chain(args)
+}
+
 pub(super) struct FieldFrame<'c, T: Default> {
     ctx: &'c mut FunctionContext,
     field: fn(&mut FunctionContext) -> &mut T,
@@ -3901,6 +3926,14 @@ impl FunctionContext {
         )
     }
 
+    /// A call's arguments, which may take `subscripts` as a scoped `&mut`.
+    pub(super) fn scoping_subscripts(
+        &mut self,
+        subscripts: IndexSet<AstId>,
+    ) -> FieldFrame<'_, IndexSet<AstId>> {
+        self.replacing(|ctx| &mut ctx.scoped_subscripts, subscripts)
+    }
+
     /// A variadic loop's body, where `index` is a constant subscript selecting
     /// the element of the walk the loop is.
     pub(super) fn enter_enumerate_body(
@@ -3970,6 +4003,7 @@ impl FunctionContext {
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),
             mut_place_subscripts: IndexSet::default(),
+            scoped_subscripts: IndexSet::default(),
             variadic_enumerate_indices: Vec::new(),
             pack_walks: 0,
         }
@@ -4058,6 +4092,7 @@ impl FunctionContext {
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),
             mut_place_subscripts: IndexSet::default(),
+            scoped_subscripts: IndexSet::default(),
             variadic_enumerate_indices: Vec::new(),
             // A walk inside the closure unrolls with the enclosing body, so
             // it nests in the walks around the closure.

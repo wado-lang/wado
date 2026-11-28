@@ -60,7 +60,7 @@ use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
-    BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIteratorInfo, FromCallFacts,
+    BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIndexWalk, ForOfIteratorInfo, FromCallFacts,
     ImplFacts, IndirectCallee, KeyValueCoercionFacts, ListViewConversion, LiteralCallee,
     LiteralFromCall, MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts,
     StaticMethodDispatch, dispatched_on_cell, impl_self_layers, with_body_facts,
@@ -69,7 +69,7 @@ use crate::elaborator::stmt::{
     RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
 };
 use crate::elaborator::trait_query::trait_sig_of_with;
-use crate::elaborator::types::{VarRef, newtype_member_owner};
+use crate::elaborator::types::{VarRef, newtype_member_owner, scoped_subscripts};
 use crate::elaborator::unchecked::Contracts;
 use crate::elaborator::util::{
     BoundValue, bound_value, constant_pattern_site, float_limit_pattern, literal_pattern,
@@ -92,8 +92,8 @@ use crate::pgo::MarkMap;
 use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, class_in, cold_path_stmt, handle_class, handle_eq,
-    marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
+    assign, bare_cast, binary, bool_lit, builtin_call, class_in, cold_path_stmt, handle_class,
+    handle_eq, i32_const, marker_stmt_mark, mut_ref_expr, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, ExitScope, SourceStmt, StructDef, TemplateId, TirEffectOp, TirField, TirImpl,
@@ -307,6 +307,16 @@ impl WritePlace {
     }
 }
 
+/// An element a call takes `&mut` of, read into `temp` ahead of the call and
+/// stored back after it (WEP: Writable References).
+pub(crate) struct ScopedElement {
+    temp: u32,
+    /// Binds the container's subscripts, the key and `temp`.
+    prefix: Vec<TirStmt>,
+    /// `container[key] = temp`.
+    store: TirStmt,
+}
+
 /// One reify-side power-assert capture slot. Independent from
 /// [`super::assert::Capture`] so the two walks don't share state.
 pub(super) struct ReifyAssertSlot {
@@ -513,6 +523,12 @@ pub(crate) struct Reify<'a> {
     /// the place skeleton (index calls, field / deref chain) stays inline and
     /// still writes back. Empty outside `reify_compound_assign`.
     pub(crate) compound_overrides: IndexMap<AstId, TirExpr>,
+    /// The subscripts the call being reified takes as a scoped `&mut`: an
+    /// argument `&mut xs[i]` or a `&mut self` receiver `xs[i]` whose element
+    /// the container hands out only as a copy.
+    pub(crate) scoped_subscripts: IndexSet<AstId>,
+    /// What [`Self::scoped_subscripts`] read so far, for the call to store back.
+    pub(crate) scoped_elements: Vec<ScopedElement>,
     /// Call site for location literals (`#file` / `#line` / `#function`) in a
     /// default-argument expression, which report the call site rather than the
     /// callee module reify swaps to for name resolution. Set only by the
@@ -663,6 +679,8 @@ impl<'a> Reify<'a> {
             tuple_overlay_visits: IndexMap::default(),
             emit_live,
             compound_overrides: IndexMap::default(),
+            scoped_subscripts: IndexSet::default(),
+            scoped_elements: Vec::new(),
             call_site_location: None,
             pending_local_structs: IndexMap::default(),
             pending_template_structs: Vec::new(),
@@ -2829,16 +2847,29 @@ impl<'a> Reify<'a> {
                     span,
                 )
             }
-            ast::Expr::MethodCall(method_call) => {
-                self.reify_method_call(method_call, ctx, recorded_type)
-            }
+            ast::Expr::MethodCall(method_call) => self.storing_back(
+                Some(&method_call.receiver),
+                &method_call.args,
+                ctx,
+                |this, ctx| this.reify_method_call(method_call, ctx, recorded_type),
+            ),
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             // The profile measured the author's `cold_path()` and marks its
             // region by what it found.
             ast::Expr::Call(call) if self.overridden(call.id) => {
                 TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, call.span)
             }
-            ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
+            ast::Expr::Call(call) => {
+                // A case holds its payload past the expression, so no point is
+                // late enough to store one back.
+                let constructs_case = self.ann_wrapped_case(call.id).is_some()
+                    || matches!(&call.callee, ast::Expr::Ident(ident)
+                        if self.ann_case_owner(ident.id).is_some());
+                let args: &[ast::Expr] = if constructs_case { &[] } else { &call.args };
+                self.storing_back(None, args, ctx, |this, ctx| {
+                    this.reify_call(call, ctx, recorded_type)
+                })
+            }
             ast::Expr::Match(match_expr) => self.reify_match_expr(
                 match_expr,
                 ctx,
@@ -2860,7 +2891,9 @@ impl<'a> Reify<'a> {
             ast::Expr::Index(index) => self.reify_index(index, ctx, recorded_type),
             ast::Expr::ComparisonChain(chain) => self.reify_comparison_chain(chain, ctx),
             ast::Expr::StaticMethodCall(static_call) => {
-                self.reify_static_method_call(static_call, ctx, recorded_type)
+                self.storing_back(None, &static_call.args, ctx, |this, ctx| {
+                    this.reify_static_method_call(static_call, ctx, recorded_type)
+                })
             }
             ast::Expr::LabeledBlock(lb) => {
                 let expected_type = branch_expectation(expected_type, recorded_type);
@@ -3534,6 +3567,9 @@ impl<'a> Reify<'a> {
                 TirStmt::new(TirStmtKind::Expr(iterable), for_of.span)
             }
             Some(DesugarKind::ForOfIterator) | None => {
+                if let Some(walk) = self.ann_for_of_index_walk(for_of.id) {
+                    return self.reify_index_walk(for_of, ctx, walk);
+                }
                 let Some(info) = self.ann_for_of_iterator(for_of.id) else {
                     return TirStmt::new(
                         TirStmtKind::Expr(TirExpr::new(
@@ -3688,6 +3724,177 @@ impl<'a> Reify<'a> {
             TirStmtKind::LabeledBlock {
                 label,
                 block: TirBlock::new(vec![iter_let, loop_tir], span),
+            },
+            span,
+        )
+    }
+
+    /// `for let v of &mut c` walked by index:
+    ///
+    /// ```text
+    /// $for_of: { let $c = &mut c; let mut $i = 0;
+    ///     loop { if !($i < $c.len()) break;
+    ///         let mut $t = $c[$i];
+    ///         $turn: { match &mut $t { v => body } }
+    ///         $c[$i] = $t; $i += 1; } }
+    /// ```
+    ///
+    /// `continue` breaks `$turn`, and every other jump out of the body
+    /// assigns `$t` back before it leaves.
+    fn reify_index_walk(
+        &mut self,
+        for_of: &ast::ForOfStmt,
+        ctx: &mut FunctionContext,
+        walk: ForOfIndexWalk,
+    ) -> TirStmt {
+        let span = for_of.span;
+        let mut frame = ctx.enter_loop();
+        let ctx = &mut *frame;
+        let label = minted_name("for_of", ctx.fresh_serial());
+        let mut head = Vec::new();
+        let operand = self.reify_expr(&for_of.iterable, ctx, None);
+        let operand = tir::cell_as_mut_ref(operand, &mut self.tysys.type_table.borrow_mut());
+        let container = bind_fresh(ctx, "walked", operand, &mut head);
+        let index_name = minted_name("index", ctx.fresh_serial());
+        let index_local = ctx.add_local(index_name.clone(), TypeTable::I32, true, None);
+        head.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: index_name.clone(),
+                local_index: index_local,
+                is_mut: true,
+                type_id: TypeTable::I32,
+                value: Some(i32_const(0)),
+                storage: LetStorage::Planned,
+            },
+            span,
+        ));
+        let index = TirExpr::new(
+            TirExprKind::Local {
+                index: index_local,
+                name: index_name,
+            },
+            TypeTable::I32,
+            span,
+        );
+        let ctx = &mut ctx.enter_label(label.clone());
+
+        let len_receiver =
+            self.adjust_receiver_for(container.clone(), walk.len.self_kind, &walk.len.func, ctx);
+        let len = build_tir_method_call(
+            len_receiver,
+            walk.len.func.clone(),
+            vec![],
+            vec![],
+            TypeTable::I32,
+            span,
+        );
+        let in_range = binary(TirBinaryOp::Lt, index.clone(), len, TypeTable::BOOL);
+        let mut turn = vec![break_unless(in_range, span, span)];
+
+        let element_type = walk.read.return_type;
+        let deref_type = self.tysys.index_deref_type(Some(element_type), &walk.read);
+        let read_receiver = self.adjust_operator_receiver(container.clone(), &walk.read, ctx);
+        let element = self.tysys.build_index_read_from_dispatch(
+            read_receiver,
+            index.clone(),
+            walk.read.clone(),
+            deref_type,
+            span,
+        );
+        let (temp, held) = bind_shared(ctx, "element", element, true, &mut turn);
+        ctx.address_taken_locals.insert(temp);
+        let store_receiver = self.adjust_operator_receiver(container, &walk.write, ctx);
+        let store = TirStmt::new(
+            TirStmtKind::Expr(
+                WritePlace::IndexAssign {
+                    receiver: store_receiver,
+                    index: Box::new(index.clone()),
+                    dispatch: Box::new(walk.write),
+                }
+                .write(held.clone(), span),
+            ),
+            span,
+        );
+
+        let turn_label = for_body_label(ctx.fresh_serial());
+        let (pattern, body) = {
+            let mut retarget =
+                ctx.pushing(|ctx| &mut ctx.for_continue_labels, turn_label.clone());
+            let mut labeled = retarget.enter_label(turn_label.clone());
+            let mut scope = labeled.enter_scope();
+            let pattern = self.reify_pattern(&for_of.binding, walk.item_type, span, &mut scope);
+            (pattern, self.reify_block(&for_of.body, &mut scope, None))
+        };
+        let lent = mut_ref_expr(held, walk.item_type, span);
+        let body_type = body.tail_expr().map_or(TypeTable::UNIT, |e| e.type_id);
+        let body = TirExpr::new(TirExprKind::Block(body), body_type, span);
+        // A `let` rather than a match arm binds the loop variable: the
+        // write-back pass refuses a pattern binding that holds a copied
+        // element past the reference, which the turn's store covers here.
+        let bound = match pattern {
+            TirPattern::Binding {
+                name,
+                local_index,
+                type_id,
+            } => vec![
+                TirStmt::new(
+                    TirStmtKind::Let {
+                        name,
+                        local_index,
+                        is_mut: for_of.is_mut,
+                        type_id,
+                        value: Some(lent),
+                        storage: LetStorage::Planned,
+                    },
+                    span,
+                ),
+                TirStmt::new(TirStmtKind::Expr(body), span),
+            ],
+            pattern => vec![TirStmt::new(
+                TirStmtKind::Expr(TirExpr::new(
+                    TirExprKind::Match {
+                        expr: Box::new(lent),
+                        arms: vec![TirMatchArm {
+                            pattern,
+                            guard: None,
+                            body,
+                            span,
+                            consumes: true,
+                        }],
+                    },
+                    body_type,
+                    span,
+                )),
+                span,
+            )],
+        };
+        let mut turn_block = TirBlock::new(bound, span);
+        store_at_exits(&mut turn_block, &turn_label, std::slice::from_ref(&store), ctx);
+        turn.push(TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label: turn_label,
+                block: turn_block,
+            },
+            span,
+        ));
+        turn.push(store);
+        turn.push(TirStmt::new(
+            TirStmtKind::Expr(assign(
+                index.clone(),
+                binary(TirBinaryOp::Add, index, i32_const(1), TypeTable::I32),
+            )),
+            span,
+        ));
+        head.push(TirStmt::new(
+            TirStmtKind::Loop {
+                body: TirBlock::new(turn, span),
+            },
+            span,
+        ));
+        TirStmt::new(
+            TirStmtKind::LabeledBlock {
+                label,
+                block: TirBlock::new(head, span),
             },
             span,
         )
@@ -6098,6 +6305,12 @@ impl<'a> Reify<'a> {
         // resolved Index / IndexValue method and `needs_deref`. Shared with the
         // compound-assign read via `build_index_read_from_dispatch`.
         if let Some(dispatch) = self.index_read_dispatch(index) {
+            if self.scoped_subscripts.contains(&index.id)
+                && let Some(assign) = self.ann_index_assign_dispatch(index.id)
+                && !self.is_affine_type(recorded_type)
+            {
+                return self.reify_scoped_element(index, receiver, dispatch, assign, recorded_type, ctx);
+            }
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             let deref_type = self.tysys.index_deref_type(Some(recorded_type), &dispatch);
             let receiver = self.adjust_operator_receiver(receiver, &dispatch, ctx);
@@ -6111,6 +6324,145 @@ impl<'a> Reify<'a> {
         // Match the recovery output with a Unit placeholder typed
         // as ERROR.
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, index.span)
+    }
+
+    /// Reify a call with `receiver` and `args`, storing back every element it
+    /// takes as a scoped `&mut`.
+    fn storing_back(
+        &mut self,
+        receiver: Option<&ast::Expr>,
+        args: &[ast::Expr],
+        ctx: &mut FunctionContext,
+        reify: impl FnOnce(&mut Self, &mut FunctionContext) -> TirExpr,
+    ) -> TirExpr {
+        let scoped: IndexSet<AstId> = scoped_subscripts(receiver, args)
+            .filter(|index| self.ann_index_assign_dispatch(index.id).is_some())
+            .map(|index| index.id)
+            .collect();
+        if scoped.is_empty() {
+            return reify(self, ctx);
+        }
+        let outer_subscripts = std::mem::replace(&mut self.scoped_subscripts, scoped);
+        let outer_elements = std::mem::take(&mut self.scoped_elements);
+        let call = reify(self, ctx);
+        self.scoped_subscripts = outer_subscripts;
+        let elements = std::mem::replace(&mut self.scoped_elements, outer_elements);
+        if elements.is_empty() {
+            return call;
+        }
+        self.store_back_after(call, elements, ctx)
+    }
+
+    /// `&mut container[index]` as a temp holding the element, which
+    /// [`Self::store_back_after`] stores back once the call returns.
+    fn reify_scoped_element(
+        &mut self,
+        index: &ast::IndexExpr,
+        container: TirExpr,
+        read: OperatorDispatch,
+        assign: OperatorDispatch,
+        element_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let span = index.span;
+        let mut prefix = Vec::new();
+        let container = self.bind_receiver_ahead(ctx, container, &mut prefix);
+        // Bound even where it is a local: a later argument may assign it.
+        let key = self.reify_expr(&index.index, ctx, None);
+        let key = if is_literal(&key) {
+            key
+        } else {
+            bind_fresh(ctx, "scoped_key", key, &mut prefix)
+        };
+        let deref_type = self.tysys.index_deref_type(Some(element_type), &read);
+        let read_receiver = self.adjust_operator_receiver(container.clone(), &read, ctx);
+        let element =
+            self.tysys
+                .build_index_read_from_dispatch(read_receiver, key.clone(), read, deref_type, span);
+        // A container handing out an element that is written in place lends
+        // it, so storing it back stores what is already there.
+        let (temp, held) = bind_shared(ctx, "scoped", element, true, &mut prefix);
+        ctx.address_taken_locals.insert(temp);
+        let store_receiver = self.adjust_operator_receiver(container, &assign, ctx);
+        let store = WritePlace::IndexAssign {
+            receiver: store_receiver,
+            index: Box::new(key),
+            dispatch: Box::new(assign),
+        }
+        .write(held.clone(), span);
+        self.scoped_elements.push(ScopedElement {
+            temp,
+            prefix,
+            store: TirStmt::new(TirStmtKind::Expr(store), span),
+        });
+        held
+    }
+
+    /// `{ ..; let r = call; stores; r }`: the arguments up to the last scoped
+    /// element bound in order ahead of the call, each element read where its
+    /// argument stands, and each stored back once the call returns.
+    fn store_back_after(
+        &mut self,
+        mut expr: TirExpr,
+        mut elements: Vec<ScopedElement>,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let call = innermost_call(&mut expr);
+        let mut prefix = Vec::new();
+        let (callee, args, has_receiver): (Option<&mut TirExpr>, Vec<&mut TirExpr>, bool) =
+            match &mut call.kind {
+                TirExprKind::Call { args, .. } => {
+                    let has_receiver = args.receiver().is_some();
+                    (None, args.iter_mut().map(|arg| &mut arg.expr).collect(), has_receiver)
+                }
+                TirExprKind::IndirectCall { callee, args } => {
+                    (Some(callee), args.iter_mut().collect(), false)
+                }
+                _ => unreachable!("only a call takes a scoped `&mut`"),
+            };
+        if let Some(callee) = callee {
+            let value = std::mem::replace(callee, unit_placeholder(callee.span));
+            *callee = Self::hoist_once(ctx, value, "scoped_callee", &mut prefix);
+        }
+        let last = args
+            .iter()
+            .rposition(|arg| scoped_temp(arg).is_some_and(|t| elements.iter().any(|e| e.temp == t)))
+            .expect("a scoped element is an argument of the call that read it");
+        for (position, arg) in args.into_iter().enumerate().take(last + 1) {
+            if let Some(temp) = scoped_temp(arg)
+                && let Some(at) = elements.iter().position(|e| e.temp == temp)
+            {
+                prefix.append(&mut elements[at].prefix);
+                continue;
+            }
+            let value = std::mem::replace(arg, unit_placeholder(arg.span));
+            *arg = if has_receiver && position == 0 {
+                self.bind_receiver_ahead(ctx, value, &mut prefix)
+            } else if is_mut_ref(&value) && self.tysys.is_source_place(&value) {
+                self.bind_subscripts_ahead(ctx, value, "scoped_arg_index", &mut prefix)
+            } else if is_literal(&value) {
+                value
+            } else {
+                let read = bind_fresh(ctx, "scoped_arg", value, &mut prefix);
+                self.handed_on(read)
+            };
+        }
+        assert!(
+            elements.iter().all(|e| e.prefix.is_empty()),
+            "every scoped element is an argument at or before the last"
+        );
+        let (span, type_id) = (call.span, call.type_id);
+        let returned = std::mem::replace(call, unit_placeholder(span));
+        let mut stmts = prefix;
+        if self.tysys.type_table.borrow().is_never(type_id) {
+            stmts.push(TirStmt::new(TirStmtKind::Expr(returned), span));
+        } else {
+            let result = bind_fresh(ctx, "scoped_result", returned, &mut stmts);
+            stmts.extend(elements.into_iter().map(|e| e.store));
+            stmts.push(TirStmt::new(TirStmtKind::Expr(self.handed_on(result)), span));
+        }
+        *call = TirExpr::new(TirExprKind::Block(TirBlock::new(stmts, span)), type_id, span);
+        expr
     }
 
     /// Reify a closure expression from the capture analysis in
@@ -10101,6 +10453,96 @@ fn bind_to_local(
     TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
 }
 
+/// [`bind_to_local`] under a name minted from `what`.
+fn bind_fresh(
+    ctx: &mut FunctionContext,
+    what: &str,
+    value: TirExpr,
+    stmts: &mut Vec<TirStmt>,
+) -> TirExpr {
+    let name = minted_name(what, ctx.fresh_serial());
+    bind_to_local(ctx, name, value, stmts)
+}
+
+/// [`bind_to_local`] for a binding that shares the storage `value` names.
+fn bind_shared(
+    ctx: &mut FunctionContext,
+    what: &str,
+    value: TirExpr,
+    is_mut: bool,
+    stmts: &mut Vec<TirStmt>,
+) -> (u32, TirExpr) {
+    let (type_id, span) = (value.type_id, value.span);
+    let name = minted_name(what, ctx.fresh_serial());
+    let index = ctx.add_local(name.clone(), type_id, is_mut, None);
+    stmts.push(TirStmt::new(
+        TirStmtKind::Let {
+            name: name.clone(),
+            local_index: index,
+            value: Some(value),
+            is_mut,
+            type_id,
+            storage: LetStorage::Aliased,
+        },
+        span,
+    ));
+    (index, TirExpr::new(TirExprKind::Local { index, name }, type_id, span))
+}
+
+/// A value no statement ahead of it can change.
+fn is_literal(expr: &TirExpr) -> bool {
+    matches!(
+        expr.kind,
+        TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::Unit
+            | TirExprKind::Null
+    )
+}
+
+fn unit_placeholder(span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span)
+}
+
+/// The local an argument names, through the references a receiver takes and
+/// the ones it auto-derefs.
+fn scoped_temp(arg: &TirExpr) -> Option<u32> {
+    match &arg.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
+            expr,
+        } => scoped_temp(expr),
+        _ => None,
+    }
+}
+
+/// The call `expr` ends in, under the blocks that bind its defaults ahead.
+fn innermost_call(expr: &mut TirExpr) -> &mut TirExpr {
+    let ends_in_value = matches!(
+        &expr.kind,
+        TirExprKind::Block(block)
+            if matches!(block.stmts.last().map(|s| &s.kind), Some(TirStmtKind::Expr(_)))
+    );
+    if !ends_in_value {
+        return expr;
+    }
+    let TirExprKind::Block(block) = &mut expr.kind else {
+        unreachable!()
+    };
+    let Some(TirStmt {
+        kind: TirStmtKind::Expr(tail),
+        ..
+    }) = block.stmts.last_mut()
+    else {
+        unreachable!()
+    };
+    innermost_call(tail)
+}
+
 /// `if $contract_clause() { check }`: one `contract` clause, marked for
 /// `lower::contract_checks` to copy to each call.
 fn contract_check(check: TirStmt, span: Span) -> TirStmt {
@@ -10454,6 +10896,86 @@ fn breaks_out(body: &TirBlock) -> bool {
     };
     finder.visit_block(body);
     finder.found
+}
+
+/// Put `stores` ahead of every jump out of `block`, the body of the labeled
+/// block `label`: a `return`, and a `break` / `continue` past every loop and
+/// label entered inside it. A value the jump carries is bound first, so it is
+/// read before the stores run. A closure's jumps are its own.
+fn store_at_exits(block: &mut TirBlock, label: &str, stores: &[TirStmt], ctx: &mut FunctionContext) {
+    let mut walker = ExitStores {
+        scope: ExitScope::default(),
+        stores,
+        ctx,
+    };
+    walker.scope.enter_label(label);
+    walker.visit_block(block);
+}
+
+struct ExitStores<'s, 'c> {
+    scope: ExitScope,
+    stores: &'s [TirStmt],
+    ctx: &'c mut FunctionContext,
+}
+
+impl TirMutVisitor for ExitStores<'_, '_> {
+    fn visit_block(&mut self, block: &mut TirBlock) {
+        let mut at = 0;
+        while at < block.stmts.len() {
+            self.visit_stmt(&mut block.stmts[at]);
+            if self.scope.exits(&block.stmts[at].kind) {
+                let mut ahead = Vec::new();
+                if let TirStmtKind::Return { value: Some(value) }
+                | TirStmtKind::Break {
+                    value: Some(value), ..
+                } = &mut block.stmts[at].kind
+                {
+                    let carried = std::mem::replace(value, unit_placeholder(value.span));
+                    *value = bind_fresh(self.ctx, "exit_value", carried, &mut ahead);
+                }
+                ahead.extend(self.stores.iter().cloned());
+                let inserted = ahead.len();
+                block.stmts.splice(at..at, ahead);
+                at += inserted;
+            }
+            at += 1;
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        match &mut stmt.kind {
+            TirStmtKind::Loop { .. } | TirStmtKind::VariadicForOf { .. } => {
+                self.scope.enter_loop();
+                self.walk_stmt(stmt);
+                self.scope.leave_loop();
+            }
+            TirStmtKind::LabeledBlock { label, block } => {
+                self.scope.enter_label(label);
+                self.visit_block(block);
+                self.scope.leave_label();
+            }
+            TirStmtKind::Let { .. }
+            | TirStmtKind::Expr(_)
+            | TirStmtKind::Return { .. }
+            | TirStmtKind::TaskReturn { .. }
+            | TirStmtKind::If { .. }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue
+            | TirStmtKind::LetDestructure { .. } => self.walk_stmt(stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            TirExprKind::Closure { .. } => {}
+            TirExprKind::LabeledBlock { label, block, .. } => {
+                self.scope.enter_label(label);
+                self.visit_block(block);
+                self.scope.leave_label();
+            }
+            _ => self.walk_expr(expr),
+        }
+    }
 }
 
 struct ExitFinder {

@@ -61,8 +61,8 @@ export fn run() with Stdout {
     println(`${h.p:?}`);
 
     // The element receiver aliases the element rather than copying it, so the
-    // payload write lands. A replacing method on one is refused —
-    // variant_element_mut_self_receiver_rejected.
+    // payload write lands. A replacing method on one is stored back —
+    // scoped_mut_ref_element_replaced.
     let mut xs: List<P> = [P::A(Cell { v: builtin::black_box(1) })];
     xs[0].touch();
     println(`${xs[0]:?}`);

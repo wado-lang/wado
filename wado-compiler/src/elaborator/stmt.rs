@@ -28,7 +28,9 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
-use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo, ForOfStart};
+use crate::elaborator::sem::types::{
+    BodyFacts, DesugarKind, ForOfIndexWalk, ForOfIteratorInfo, ForOfStart, OperatorDispatch,
+};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
@@ -2701,6 +2703,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 tt.cell_mut_ref(iterable_type_id)
                     .unwrap_or(iterable_type_id)
             };
+            if !is_enumerate && let Some(walk) = self.index_walk(iterable_type_id, for_of.span, ctx)
+            {
+                self.record_desugar(for_of.id, DesugarKind::ForOfIterator);
+                let item_type = walk.item_type;
+                self.sem
+                    .types
+                    .for_of_index_walks
+                    .insert(for_of.id, walk);
+                let mut scope = ctx.enter_scope();
+                self.resolve_let_pattern(
+                    &for_of.binding,
+                    item_type,
+                    for_of.is_mut,
+                    for_of.span,
+                    BindingSite::ForOf,
+                    &mut scope,
+                );
+                self.resolve_block(&for_of.body, &mut scope, None);
+                return;
+            }
             // Check that the iterable type implements IntoIterator
             let mut inner_type_id = iterable_type_id;
             while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
@@ -2944,39 +2966,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let label = minted_name("for_of", unique_id);
 
         let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
-        // An `IntoIterator` or `ForOf` written for the reference itself says
-        // what a walk of it is, and answers first as a reference's own impl
-        // always does. A newtype inherits its base's, a link at a time.
-        let reference_states = |item: CompilerItem| {
-            let tt = self.tysys.type_table.borrow();
-            let walk_trait = self
-                .tysys
-                .compiler_trait(item)
-                .and_then(|fq| fq.canonical());
-            tt.ref_kind(into_iter_receiver_type)
-                .zip(tt.ref_pointee(into_iter_receiver_type))
-                .zip(walk_trait)
-                .is_some_and(|((kind, referent), trait_)| {
-                    std::iter::successors(Some(referent), |&link| match tt.get(link) {
-                        ResolvedType::Newtype { base_type, .. } => Some(*base_type),
-                        _ => None,
-                    })
-                    .map(|link| tt.fq_type_name(link))
-                    .filter(|name| name.binder_name().is_none())
-                    .any(|name| {
-                        self.tysys
-                            .trait_env
-                            .methodful_impls_by_receiver(
-                                &Receiver::RefTo(kind, name.head_only()),
-                                trait_,
-                            )
-                            .any(|entry| tt.impl_reaches_instance(entry, into_iter_receiver_type))
-                    })
-                })
-        };
-        let reference_starts_its_walk = reference_states(CompilerItem::ForOf);
-        let reference_states_its_walk =
-            reference_starts_its_walk || reference_states(CompilerItem::IntoIterator);
+        let reference_starts_its_walk =
+            self.reference_states(into_iter_receiver_type, CompilerItem::ForOf);
+        let reference_states_its_walk = reference_starts_its_walk
+            || self.reference_states(into_iter_receiver_type, CompilerItem::IntoIterator);
         // An iterator that is a reference advances what it points to, so the
         // loop walks it as it stands: `into_iter` and `start` reach the
         // referent, and would walk a copy of it or move it out. An iterator
@@ -3134,30 +3127,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => TypeTable::ERROR,
         };
 
-        if let ResolvedType::MutRef(elem) = self.tysys.type_table.borrow().get(item_type).clone() {
-            let elem_resolved = self.tysys.type_table.borrow().get(elem).clone();
-            let elem_name = self.tysys.type_table.borrow().name(elem);
-            if matches!(elem_resolved, ResolvedType::TypeParam { .. }) {
-                let _ = self.emit(TypeError::CannotMutate {
-                    message: format!(
-                        "cannot iterate `&mut` over a list of generic type `{elem_name}`: the \
-                         element type is not known to support in-place mutation. Constrain it to \
-                         a concrete in-place type, or assign by index (`xs[i] = ...`)"
-                    ),
-                    span,
-                });
-            } else if self.is_replace_on_assign_element(elem) {
-                let _ = self.emit(TypeError::CannotMutate {
-                    message: format!(
-                        "cannot iterate `&mut` over a list of `{elem_name}`: a write through \
-                         `&mut {elem_name}` would be lost (no in-place interior). Assign by index \
-                         instead, e.g. `xs[i] = ...`"
-                    ),
-                    span,
-                });
-            }
-        }
-
         // WEP 2026-05-26: record the iterator-path
         // dispatch decision so reify can re-emit the synthetic
         // `into_iter()` / `next()` calls without re-dispatching. Only
@@ -3200,19 +3169,121 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_block(&for_of.body, &mut scope, None);
     }
 
-    /// Conservative superset of `boxing.rs`'s boxed set (also names flags /
-    /// resource / newtype): a type with no sound `&mut` element write-back.
-    fn is_replace_on_assign_element(&self, type_id: TypeId) -> bool {
-        match self.tysys.type_table.borrow().get(type_id).clone() {
-            ResolvedType::Primitive(_) => true,
-            ResolvedType::Enum { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::Flags { .. }
-            | ResolvedType::Function { .. }
-            | ResolvedType::Resource { .. } => true,
-            ResolvedType::Newtype { base_type, .. } => self.is_replace_on_assign_element(base_type),
-            _ => false,
+    /// Whether an `IntoIterator` or `ForOf` (`item`) written for the reference
+    /// `operand` itself says what a walk of it is. It answers first, as a
+    /// reference's own impl always does. A newtype inherits its base's, a link
+    /// at a time.
+    fn reference_states(&self, operand: TypeId, item: CompilerItem) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        let walk_trait = self
+            .tysys
+            .compiler_trait(item)
+            .and_then(|fq| fq.canonical());
+        tt.ref_kind(operand)
+            .zip(tt.ref_pointee(operand))
+            .zip(walk_trait)
+            .is_some_and(|((kind, referent), trait_)| {
+                std::iter::successors(Some(referent), |&link| match tt.get(link) {
+                    ResolvedType::Newtype { base_type, .. } => Some(*base_type),
+                    _ => None,
+                })
+                .map(|link| tt.fq_type_name(link))
+                .filter(|name| name.binder_name().is_none())
+                .any(|name| {
+                    self.tysys
+                        .trait_env
+                        .methodful_impls_by_receiver(&Receiver::RefTo(kind, name.head_only()), trait_)
+                        .any(|entry| tt.impl_reaches_instance(entry, operand))
+                })
+            })
+    }
+
+    /// The walk `for let v of &mut c` takes by index where `&mut c` states no
+    /// walk of its own and `c` reads and assigns its elements at an `i32`:
+    /// each element held for one turn and assigned back as the turn ends, so
+    /// a write through `v` reaches `c` whatever the element's type (WEP:
+    /// Writable References).
+    fn index_walk(
+        &mut self,
+        operand: TypeId,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> Option<ForOfIndexWalk> {
+        let ResolvedType::MutRef(container) = *self.tysys.type_table.borrow().get(operand) else {
+            return None;
+        };
+        let states_its_walk = [CompilerItem::IntoIterator, CompilerItem::ForOf]
+            .into_iter()
+            .any(|item| {
+                self.reference_states(operand, item)
+                    && self.tysys.compiler_trait(item).is_some_and(|trait_| {
+                        self.tysys
+                            .type_implements_trait(&self.annotate_ctx, operand, &trait_)
+                    })
+            });
+        let sequence = self.tysys.compiler_trait(CompilerItem::Sequence)?;
+        if states_its_walk
+            || !self
+                .tysys
+                .type_implements_trait(&self.annotate_ctx, container, &sequence)
+        {
+            return None;
         }
+        let lookup = self.tysys.newtype_base_lookup(container);
+        let (read, _) = self.index_lookup_or_newtype_base(container, lookup, |s, t| {
+            s.find_index_value_trait_impl(t, Some(TypeTable::I32))
+        })?;
+        let (write, _) = self.index_lookup_or_newtype_base(container, lookup, |s, t| {
+            s.find_index_assign_trait_impl(t, Some(TypeTable::I32))
+        })?;
+        let len = self
+            .resolve_method_call_with(
+                MethodCallInput {
+                    receiver: operand,
+                    receiver_ast: None,
+                    method_name: "len",
+                    method_id: None,
+                    call_id: None,
+                    defaults_site: None,
+                    type_args: vec![],
+                    args: &[],
+                    expected_type: None,
+                    span,
+                    required_trait: self.tysys.required_compiler_trait(CompilerItem::Sequence),
+                },
+                ctx,
+            )
+            .dispatch?;
+        let read_func = self.indexing_function_ref(&read, "index_value", span);
+        let write_func = self.indexing_function_ref(&write, "index_assign", span);
+        Some(ForOfIndexWalk {
+            len: ForOfStart {
+                def: len.method_def,
+                func: len.func,
+                self_kind: len.self_kind,
+            },
+            read: OperatorDispatch {
+                function_ref: read_func,
+                method_def: Some(read.method_def),
+                self_kind: read.self_kind,
+                arg_ref_wraps: vec![false],
+                return_type: read.output_type,
+                needs_deref: false,
+            },
+            write: OperatorDispatch {
+                function_ref: write_func,
+                method_def: Some(write.method_def),
+                self_kind: write.self_kind,
+                arg_ref_wraps: vec![false, false],
+                return_type: TypeTable::UNIT,
+                needs_deref: false,
+            },
+            item_type: self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_mut_ref(read.output_type),
+        })
     }
 
     /// Report a `break` or `continue` written in a for-of the compiler expands:

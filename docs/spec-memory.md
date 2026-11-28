@@ -307,14 +307,10 @@ under `stale_reference`.
 
 > Not yet implemented: a `&mut` of a local of such a type is an ordinary
 > reference, which a variable holds and a function returns. A `&mut` of a
-> field or an element is an error for a primitive, `enum`, `flags`, `fn` or
-> reference, a `&mut self` receiver's included, and so is
-> `for let v of &mut xs` over such elements. A `variant` field or element
-> admits `&mut`, and a mutation of its payload lands. A call argument or a
-> receiver on a `variant` field stores back as stated. Replacing a `variant`
-> whole through a `&mut` of an element, through one a variable holds, or
-> through a pattern binding is an error. No other form stores back, and none of
-> the errors above is reported.
+> field, or of a `variant` element, that a variable holds or a callee keeps is
+> an error only where something replaces the value through it. A pattern
+> binding of such a type is an error, a `variant`'s whole binding where it is
+> replaced. None of the errors in the list above is reported.
 
 Rationale: [WEP: Writable References](./wep-2026-11-27-writable-references.md).
 

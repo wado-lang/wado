@@ -103,17 +103,9 @@ enum OwedBounds {
 }
 
 /// The values [`TypeSystem::is_replace_on_assign_place_type`] answers for, which
-/// every refused `&mut` into a larger value names.
+/// a refused `&mut` pattern binding names.
 pub(super) const REPLACE_ON_ASSIGN_TYPE: &str =
     "a replace-on-assign type (primitive, enum, flags, fn, reference, extern handle)";
-
-/// Shared so the explicit `&mut x.f` and the implicit `&mut self` say
-/// the same thing about the same refusal.
-pub(super) fn replace_on_assign_place() -> String {
-    format!(
-        "a field or element of {REPLACE_ON_ASSIGN_TYPE}; use the containing value's reference directly"
-    )
-}
 
 /// Lightweight reference to an impl block: its identity, resolving to the
 /// block's digested [`ImplHeader`] via [`impl_header`]. Dispatch cannot reach
@@ -2309,23 +2301,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let _ = self.emit(TypeError::CannotMutate {
                 message: format!(
                     "cannot call `&mut self` method `{method_name}` on immutable '{binding}'"
-                ),
-                span,
-            });
-        }
-
-        // `operators.rs` refuses the explicit `&mut x.f`; the implicit `&mut`
-        // receiver must match it. A field holding a reference hands the method
-        // its referent, which the write reaches.
-        if receiver_ast
-            .is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)))
-            && self.reference_mutability(receiver).is_none()
-            && self.tysys.is_replace_on_assign_place_type(receiver)
-        {
-            let _ = self.emit(TypeError::CannotMutate {
-                message: format!(
-                    "cannot call `&mut self` method `{method_name}` on {}",
-                    replace_on_assign_place()
                 ),
                 span,
             });
@@ -4610,10 +4585,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `xs[i]` hands its element over as a copy because `IndexRefMut`
-    /// declines it — a `variant`, whose reference is a detached box (WEP
-    /// 2026-01-20's `RefMut` marker) — while `IndexRef` still aliases it. A
-    /// `&mut self` receiver has to be the alias: the copy takes the mutation
-    /// and is thrown away.
+    /// declines it: an element replaced on assignment (WEP 2026-01-20's
+    /// `RefMut` marker). A `&mut self` receiver has to be the scoped `&mut`
+    /// the store back follows; a plain copy takes the mutation and is thrown
+    /// away.
     ///
     /// Asked only where [`Self::try_resolve_index_mut_method_call`] declines,
     /// which owns every element a `&mut` does write through.
@@ -4628,18 +4603,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(index_type) = self.index_key_at(index_expr, base_type_id, ctx) else {
             return false;
         };
-        // The same two lookups `resolve_index` makes for a `&mut` subscript,
-        // newtype base included, so the answer is the route it will take.
+        // The lookup `resolve_index` makes for a `&mut` subscript, newtype base
+        // included, so the answer is the route it will take.
         let lookup_type_id = self.tysys.newtype_base_lookup(base_type_id);
-        let ref_mut = self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+        self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
             s.find_index_mut_trait_impl_as_ref(t, Some(index_type))
-        });
-        ref_mut.is_none()
-            && self
-                .index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
-                    s.find_index_trait_impl(t, Some(index_type))
-                })
-                .is_some()
+        })
+        .is_none()
     }
 
     /// The result type of a `&mut self` method call on `xs[i]`, resolved

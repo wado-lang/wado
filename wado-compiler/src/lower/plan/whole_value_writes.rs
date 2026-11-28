@@ -372,6 +372,11 @@ impl TirRefVisitor for WriteWalker<'_> {
                 } = &target.kind
                 {
                     self.record(operand);
+                    // What `p` holds may name other storage, but `*p = v`
+                    // replaces through `p` itself all the same.
+                    if let TirExprKind::Local { index, .. } = operand.kind {
+                        self.grew |= self.found.insert(index);
+                    }
                 } else if let Some(local) = target_local(target) {
                     self.hold(local, value);
                 }

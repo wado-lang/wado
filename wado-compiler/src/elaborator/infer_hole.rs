@@ -1929,6 +1929,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for f in facts.for_of_iterator.values_mut() {
             sub_for_of(tt, f, subst);
         }
+        for walk in facts.for_of_index_walks.values_mut() {
+            walk.item_type = sub(tt, walk.item_type, subst);
+            sub_monomorph(tt, &mut walk.len.func, subst);
+            sub_operator_dispatch(tt, &mut walk.read, subst);
+            sub_operator_dispatch(tt, &mut walk.write, subst);
+        }
         for cc in facts.closure_captures.values_mut() {
             sub_closure_captures(tt, cc, subst);
         }

@@ -1,0 +1,18 @@
+// A `&mut` to an element the container hands out as a copy has no point to be
+// stored back at outside the call that takes it.
+
+fn hold(xs: &mut List<i32>) {
+    let r = &mut xs[0];
+    *r = 2;
+}
+
+test "unreachable" {
+    let mut xs: List<i32> = [1];
+    hold(&mut xs);
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": ":5:18: analysis error: a `&mut` to an element the container hands out as a copy lasts for one call"
+}

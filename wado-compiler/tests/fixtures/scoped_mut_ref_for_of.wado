@@ -1,0 +1,108 @@
+// `for let v of &mut xs` over elements replaced on assignment walks `xs` by
+// index: each turn holds the element and assigns it back when the turn ends,
+// by falling through, `continue`, `break`, `return` or a labeled `break`.
+
+enum Color {
+    Red,
+    Green,
+}
+
+variant Shape {
+    Circle(i32),
+    Square(i32),
+}
+
+fn bump_all(xs: &mut List<i32>) {
+    for let v of xs {
+        *v += 1;
+    }
+}
+
+fn first_over(xs: &mut List<i32>, limit: i32) -> i32 {
+    for let v of xs {
+        *v *= 10;
+        if *v > limit {
+            return *v;
+        }
+    }
+    return -1;
+}
+
+fn square_all<T: Mul<Output = T>>(xs: &mut List<T>) {
+    for let x of xs {
+        *x = *x * *x;
+    }
+}
+
+test "primitives" {
+    let mut xs: List<i32> = [1, 2, 3];
+    for let v of &mut xs {
+        *v *= 2;
+    }
+    assert xs == [2, 4, 6];
+    bump_all(&mut xs);
+    assert xs == [3, 5, 7];
+}
+
+test "continue and break store the turn back" {
+    let mut xs: List<i32> = [1, 2, 3, 4, 5];
+    for let v of &mut xs {
+        *v += 100;
+        if *v == 102 {
+            continue;
+        }
+        if *v == 104 {
+            break;
+        }
+        *v += 1000;
+    }
+    assert xs == [1101, 102, 1103, 104, 5];
+}
+
+test "return stores the turn back" {
+    let mut xs: List<i32> = [1, 2, 3];
+    assert first_over(&mut xs, 15) == 20;
+    assert xs == [10, 20, 3];
+}
+
+test "a labeled break out of nested walks" {
+    let mut grid: List<List<i32>> = [[1, 2], [3, 4]];
+    out: {
+        for let row of &mut grid {
+            for let v of row {
+                *v += 10;
+                if *v == 13 {
+                    break out;
+                }
+            }
+        }
+    }
+    assert grid == [[11, 12], [13, 4]];
+}
+
+test "options, enums and variants" {
+    let mut os: List<Option<i32>> = [Some(1), null];
+    for let o of &mut os {
+        *o = match *o {
+            Some(n) => Some(n * 2),
+            null => Some(0),
+        };
+    }
+    assert os == [Some(2), Some(0)];
+    let mut cs: List<Color> = [Color::Red, Color::Red];
+    for let c of &mut cs {
+        *c = Color::Green;
+    }
+    assert cs == [Color::Green, Color::Green];
+    let mut shapes: List<Shape> = [Shape::Circle(1)];
+    for let s of &mut shapes {
+        *s = Shape::Square(9);
+    }
+    assert shapes[0] matches { Square(9) };
+}
+
+test "a generic element" {
+    let mut xs: List<i32> = [2, 3];
+    square_all(&mut xs);
+    assert xs == [4, 9];
+}

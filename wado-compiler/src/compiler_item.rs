@@ -328,6 +328,8 @@ pub enum CompilerItem {
     IndexAssign,
     /// What `[c[i], c[j]] = [c[j], c[i]]` dispatches to.
     IndexSwap,
+    /// What `for let v of &mut xs` walks by index, its `len` bounding the walk.
+    Sequence,
     /// The traits an operator dispatches to. The compiler picks each by
     /// construction, so they are items and not spellings a user trait of
     /// the same name could answer for.
@@ -898,6 +900,7 @@ impl CompilerItem {
         Self::IndexRefMut,
         Self::IndexAssign,
         Self::IndexSwap,
+        Self::Sequence,
         Self::Add,
         Self::Sub,
         Self::Mul,
@@ -1192,6 +1195,7 @@ impl CompilerItem {
             Self::IndexRefMut => "index_ref_mut",
             Self::IndexAssign => "index_assign",
             Self::IndexSwap => "index_swap",
+            Self::Sequence => "sequence",
             Self::Add => "add",
             Self::Sub => "sub",
             Self::Mul => "mul",
@@ -1523,6 +1527,7 @@ impl CompilerItem {
             | Self::IndexRefMut
             | Self::IndexAssign
             | Self::IndexSwap
+            | Self::Sequence
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
@@ -1880,6 +1885,7 @@ impl CompilerItem {
             | Self::IndexRefMut
             | Self::IndexAssign
             | Self::IndexSwap
+            | Self::Sequence
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord

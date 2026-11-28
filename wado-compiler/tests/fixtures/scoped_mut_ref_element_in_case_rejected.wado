@@ -1,0 +1,17 @@
+// A case holds its payload past the expression that builds it, so it is no
+// call to store an element back after.
+
+fn held(xs: &mut List<i32>) -> Option<&mut i32> {
+    return Some(&mut xs[0]);
+}
+
+test "unreachable" {
+    let mut xs: List<i32> = [1];
+    let _ = held(&mut xs);
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": ":5:22: analysis error: a `&mut` to an element the container hands out as a copy lasts for one call"
+}

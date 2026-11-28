@@ -19,7 +19,6 @@ use super::coercion::{
 };
 use super::control_flow::break_values;
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
-use super::method_lookup::replace_on_assign_place;
 use super::pending_selection::{PendingOp, PendingOperator};
 use super::scope::ScopedBound;
 use super::synth::KeyedAccess;
@@ -1052,7 +1051,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the accessor's signature rather than upgrading a `&` reference.
         let expr_type = match (&unary.op, &unary.expr) {
             (UnaryOp::MutRef, ast::Expr::Index(index)) => {
-                self.resolve_index_access(index, ctx, IndexAccess::Mutable)
+                let type_id = self.resolve_index_access(index, ctx, IndexAccess::Mutable);
+                if !ctx.scoped_subscripts.contains(&index.id) {
+                    self.refuse_unscoped_element(index);
+                }
+                type_id
             }
             (UnaryOp::Ref, ast::Expr::Index(index)) => {
                 self.resolve_index_access(index, ctx, IndexAccess::Shared)
@@ -1083,17 +1086,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else if let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx) {
                 let _ = self.emit(TypeError::CannotMutate {
                     message: format!("cannot take &mut of immutable variable '{binding}'"),
-                    span: unary.span,
-                });
-            }
-            if matches!(&unary.expr, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
-                && self.tysys.is_replace_on_assign_place_type(expr_type)
-            {
-                let _ = self.emit(TypeError::CannotMutate {
-                    message: format!(
-                        "cannot take a mutable reference to {}",
-                        replace_on_assign_place()
-                    ),
                     span: unary.span,
                 });
             }
@@ -1854,9 +1846,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Record the `IndexAssign` dispatch of the subscript `id`, so reify
-    /// replays `arr.index_assign(idx, value)` for `arr[i] = v` and
-    /// `arr[i] OP= v`.
-    fn record_index_assign(&mut self, id: ast::AstId, span: Span, trait_info: &IndexingTraitInfo) {
+    /// replays `arr.index_assign(idx, value)` for `arr[i] = v`, `arr[i] OP= v`,
+    /// and the store back of a scoped `&mut arr[i]`.
+    pub(super) fn record_index_assign(
+        &mut self,
+        id: ast::AstId,
+        span: Span,
+        trait_info: &IndexingTraitInfo,
+    ) {
         let func = self.indexing_function_ref(trait_info, "index_assign", span);
         self.record_index_assign_dispatch(
             id,

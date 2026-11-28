@@ -1,0 +1,129 @@
+// A `&mut` to a field or element of a type replaced on assignment lasts for the
+// call that takes it: the value is copied in before the call and stored back
+// after it (WEP: Writable References).
+use { HashMap } from "core:collections";
+
+struct Holder {
+    n: i32,
+    o: Option<i32>,
+    e: Side,
+    r: &i32,
+}
+
+enum Side {
+    Left,
+    Right,
+}
+
+type Budget = i32;
+
+impl Budget {
+    fn spend(&mut self) {
+        *self -= 1;
+    }
+}
+
+fn bump(x: &mut i32) {
+    *x += 1;
+}
+
+fn fill(x: &mut Option<i32>) {
+    *x = Some(5);
+}
+
+fn flip(side: &mut Side) {
+    *side = Side::Right;
+}
+
+fn rebind(r: &mut &i32, to: &i32) {
+    *r = to;
+}
+
+fn one() -> i32 {
+    return 1;
+}
+
+fn swap(slot: &mut fn() -> i32) {
+    *slot = one;
+}
+
+fn step(i: &mut i32) -> i32 {
+    *i += 1;
+    return *i;
+}
+
+fn add_both(a: i32, x: &mut i32, b: i32) -> i32 {
+    *x += a + b;
+    return *x;
+}
+
+fn first<T>(xs: &mut List<T>, f: fn(&mut T)) {
+    f(&mut xs[0]);
+}
+
+test "a field" {
+    let a = 1;
+    let b = 2;
+    let mut h = Holder { n: 1, o: null, e: Side::Left, r: &a };
+    bump(&mut h.n);
+    fill(&mut h.o);
+    flip(&mut h.e);
+    rebind(&mut h.r, &b);
+    assert h.n == 2 && h.o == Some(5) && h.e == Side::Right && *h.r == 2;
+}
+
+test "an element" {
+    let mut xs: List<i32> = [1, 2, 3];
+    bump(&mut xs[1]);
+    assert xs == [1, 3, 3] as List<i32>;
+    let mut os: List<Option<i32>> = [null];
+    fill(&mut os[0]);
+    assert os[0] == Some(5);
+    let mut fns: List<fn() -> i32> = [|| 0];
+    swap(&mut fns[0]);
+    assert fns[0]() == 1;
+}
+
+test "a field of an element, and an element of an element" {
+    let a = 0;
+    let mut hs: List<Holder> = [Holder { n: 1, o: null, e: Side::Left, r: &a }];
+    bump(&mut hs[0].n);
+    assert hs[0].n == 2;
+    let mut xss: List<List<i32>> = [[1], [2]];
+    bump(&mut xss[1][0]);
+    assert xss[1][0] == 3;
+}
+
+test "a map's value" {
+    let mut m = { a: 1 } as HashMap<String, i32>;
+    bump(&mut m["a"]);
+    assert m["a"] == 2;
+}
+
+test "a receiver" {
+    let a = 0;
+    let mut h = Holder { n: 1, o: Some(3), e: Side::Left, r: &a };
+    assert h.o.take() == Some(3) && h.o == null;
+    let mut os: List<Option<i32>> = [Some(4)];
+    assert os[0].take() == Some(4) && os[0] == null;
+    let mut budgets: List<Budget> = [5];
+    budgets[0].spend();
+    assert budgets[0] as i32 == 4;
+}
+
+test "the arguments around one evaluate in order" {
+    let mut xs: List<i32> = [10, 20];
+    let mut i = 0;
+    let r = add_both(step(&mut i), &mut xs[i], step(&mut i));
+    assert r == 23 && xs == [10, 23] as List<i32>;
+}
+
+test "a generic body takes every element" {
+    let mut xs: List<i32> = [1];
+    first(&mut xs, |x| *x += 1);
+    assert xs[0] == 2;
+    let a = 0;
+    let mut hs: List<Holder> = [Holder { n: 1, o: null, e: Side::Left, r: &a }];
+    first(&mut hs, |h| h.n += 1);
+    assert hs[0].n == 2;
+}

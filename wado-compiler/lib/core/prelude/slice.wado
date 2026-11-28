@@ -30,6 +30,7 @@ use { panic } from "core:rt";
 /// those two, so no default constructs a `Slice`. Methods needing an `Elem`
 /// bound (`contains`, `binary_search`, …) cannot live here — an associated
 /// type carries no bound — and stay bounded inherent impls.
+#[compiler_item("sequence")]
 pub trait Sequence with () {
     type Elem;
 
@@ -353,7 +354,7 @@ impl<T> SliceRefMutIter<T> {
     }
 }
 
-impl<T> Iterator for SliceRefMutIter<T> {
+impl<T: RefMut> Iterator for SliceRefMutIter<T> {
     type Item = &mut T;
 
     fn next(&mut self) -> Option<Self::Item> {
