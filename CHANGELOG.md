@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.41](https://github.com/wado-lang/wado/compare/v0.0.40...v0.0.41) - 2026-11-28
+
+- refactor(gale): one emit walker that decides from the GIR alone by @gfx in https://github.com/wado-lang/wado/pull/2791
+- feat(cli): create packages and workspaces with `wado new` and `wado workspace` by @gfx in https://github.com/wado-lang/wado/pull/2792
+- feat(format): one blank line between declarations, and only doc comments that document something by @gfx in https://github.com/wado-lang/wado/pull/2793
+- docs: point package creation at `wado new` by @gfx in https://github.com/wado-lang/wado/pull/2796
+- feat(windrow): find code that repeats one shape across Rust and Wado by @gfx in https://github.com/wado-lang/wado/pull/2797
+- fix(sandbox): hold no host file open while a child confines itself by @gfx in https://github.com/wado-lang/wado/pull/2798
+
 ## [v0.0.40](https://github.com/wado-lang/wado/compare/v0.0.39...v0.0.40) - 2026-11-28
 
 - docs: state only the current pattern-binding rule by @gfx in https://github.com/wado-lang/wado/pull/2711
