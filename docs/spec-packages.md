@@ -786,7 +786,8 @@ A new package is laid out as
 [the standard package layout](./spec-package-standard.md) says. It declares the
 library world unless `--cli` asks for the command world alone. Its name is its
 directory's unless `--name` gives one. A file of the layout that is already
-there is kept.
+there is kept, except that an existing `wado.toml` is refused unless `--force`
+replaces it. A `new` that fails removes the directories it created.
 
 A package created under a workspace is a member of it. Where `members` does not
 already cover the package's directory, `init` adds the directory to `members`.
