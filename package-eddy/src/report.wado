@@ -14,8 +14,9 @@ use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { Call } from "./agent.wado";
 use { ask_json, shaped, Credential, Usage } from "./anthropic.wado";
+use { numbered, shows } from "./diff.wado";
 use { git, try_git } from "./git.wado";
-use { Repro, Reviewed, Submission, Told } from "./review.wado";
+use { Finding, Repro, Reviewed, Submission, Told } from "./review.wado";
 use { checkout_at, reset_snapshot, Worktree } from "./snapshot.wado";
 use { Ran, RunInput, Runner, Workspace, WriteInput, RUN_TIMEOUT } from "./tools.wado";
 
@@ -51,11 +52,68 @@ struct Answer {
     findings: List<Placed>,
 }
 
+/// Reports `reviewed`, a review of `change` in the tree at `w` checked out at
+/// `commit`, by its steps: each reproduction that reports a finding, in the
+/// tree as its reproducer left it, or a review with no reproductions whole,
+/// and then the review keeps as findings only those a test reproduced again
+/// alone, where `w` can run one. A step that fails to report is named in the
+/// error and the others are still reported.
+/// What `model` took is added to `spent`.
+pub fn report_all(
+    credential: &mut Credential,
+    model: String,
+    change: &Submission,
+    w: &Workspace,
+    commit: &String,
+    reviewed: &mut Reviewed,
+    spent: &mut Usage,
+) -> Result<(), String> with (Client, Preopens, Process, MonotonicClock) {
+    let mut errors: List<String> = [];
+    let mut reported: List<Finding> = [];
+    if reviewed.reproductions.is_empty() {
+        replay(w, commit, &reviewed.calls);
+        if let Err(e) = report(credential, model, change, w, commit, reviewed, spent) {
+            errors.push(e);
+        }
+        reported = reviewed.findings;
+    }
+    for let i of 0..<reviewed.reproductions.len() {
+        let tried = &mut reviewed.reproductions[i];
+        if tried.findings.is_empty() {
+            continue;
+        }
+        replay(w, commit, &tried.calls);
+        if let Err(e) = report(credential, model, change, w, commit, tried, spent) {
+            errors.push(`reproduction ${i + 1}: ${e}`);
+        }
+        reported.extend(&tried.findings);
+    }
+    if w.runner matches { Some(_) } {
+        reset_snapshot(&w.repo, &w.root, commit);
+        reported = reported.into_iter().filter(|f| f.repro matches { Some(r) && r.verified }).collect();
+    }
+    reviewed.findings = reported;
+    return if errors.is_empty() { Ok(()) } else { Err(errors.join("; ")) };
+}
+
+/// The tree at `w`, reset to `commit`, with the files `calls` wrote.
+fn replay(w: &Workspace, commit: &String, calls: &List<Call>) with (Preopens, Process) {
+    if w.runner matches { null } {
+        return;
+    }
+    reset_snapshot(&w.repo, &w.root, commit);
+    for let c of calls {
+        if c.name == "Write" && !c.is_error {
+            w.call(&c.name, &c.input).unwrap();
+        }
+    }
+}
+
 /// Gives each finding of `reviewed`, a review of `change` in the tree at `w`
 /// checked out at `commit`, its line and its reproduction, as `model` draws
 /// them from what the reviewer did. A reproduction is then tried alone, where
 /// `w` can run one. What `model` took is added to `spent`.
-pub fn report(
+fn report(
     credential: &mut Credential,
     model: String,
     change: &Submission,
@@ -116,7 +174,7 @@ fn request(change: &Submission, reviewed: &Reviewed) -> String {
     let mut told: List<Told> = [];
     let mut files: List<String> = [];
     for let f of &reviewed.findings {
-        told.push(Told { file: f.file, summary: f.summary, detail: f.detail });
+        told.push(f.told());
         files.push(f.file);
     }
     let shown = numbered(&change.diff, &files);
@@ -153,62 +211,6 @@ fn calls_shown(calls: &List<Call>) -> String {
         }
     }
     return out;
-}
-
-/// The parts of `diff` for `files`, each line of the new side led by its
-/// number in the file. A reader cannot count lines from a hunk header
-/// reliably, and a model less so.
-fn numbered(diff: &String, files: &List<String>) -> String {
-    let [mut out, mut wanted, mut n] = ["", false, 0];
-    for let l of diff.lines() {
-        if l.starts_with("diff --git ") {
-            wanted = false;
-        } else if let Some(path) = l.strip_prefix("+++ b/") {
-            wanted = files.contains_str(path);
-            if wanted {
-                out.push_str(`${l}\n`);
-            }
-        } else if !wanted {
-            continue;
-        } else if let Some(hunk) = l.strip_prefix("@@ ") {
-            n = new_side(hunk.to_string())[0];
-            out.push_str(`${l}\n`);
-        } else if l.starts_with("+") || l.starts_with(" ") {
-            out.push_str(`${n:>6} ${l}\n`);
-            n += 1;
-        } else {
-            // A line the old side alone has, or git's note that a side ends
-            // without a newline.
-            out.push_str(`       ${l}\n`);
-        }
-    }
-    return out;
-}
-
-/// Whether `diff` shows `line` of `file` as the change leaves it, as a line
-/// it adds or one of a hunk's context.
-fn shows(diff: &String, file: &String, line: i32) -> bool {
-    let mut in_file = false;
-    for let l of diff.lines() {
-        if let Some(path) = l.strip_prefix("+++ ") {
-            in_file = path == `b/${*file}`;
-        } else if in_file && let Some(hunk) = l.strip_prefix("@@ ") {
-            let [start, count] = new_side(hunk.to_string());
-            if start <= line && line < start + count {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-/// The first line and the line count of the new side of a hunk header's
-/// ranges, `-a,b +c,d @@ …`. A count left out is 1.
-fn new_side(ranges: String) -> [i32, i32] {
-    let new = ranges.split(" ").collect()[1];
-    let numbers: List<String> = new.trim_prefix("+").split(",").map(|n| n.to_string()).collect();
-    let count = if numbers.len() > 1 { i32::from_str(&numbers[1]).unwrap() } else { 1 };
-    return [i32::from_str(&numbers[0]).unwrap(), count];
 }
 
 /// What the tree at `w` changed in `paths` since `commit`, new files included.
@@ -275,59 +277,6 @@ test "a finding is reproduced only by a run that fails and prints what was expec
     assert !reproduced(&failed, &"another message");
     assert !reproduced(&failed, &"");
     assert !reproduced(&Ran { succeeded: true, report: "left == right" }, &"left == right");
-}
-
-test "the reporter reads a diff's new lines numbered, and a line it places must be one of them" {
-    let diff = "diff --git a/src/a.rs b/src/a.rs
---- a/src/a.rs
-+++ b/src/a.rs
-@@ -10,3 +12,4 @@ fn f() {
- context
--gone
-+added
-@@ -40 +43 @@
--old
-+new
-diff --git a/src/b.rs b/src/b.rs
---- a/src/b.rs
-+++ b/src/b.rs
-@@ -1,2 +1,2 @@
- kept
-";
-    assert shows(&diff, &"src/a.rs", 12) && shows(&diff, &"src/a.rs", 15) && shows(&diff, &"src/a.rs", 43);
-    assert !shows(&diff, &"src/a.rs", 11) && !shows(&diff, &"src/a.rs", 16) && !shows(&diff, &"src/a.rs", 0);
-    assert shows(&diff, &"src/b.rs", 2) && !shows(&diff, &"src/b.rs", 12);
-    assert !shows(&diff, &"src/c.rs", 1);
-
-    assert numbered(&diff, &["src/c.rs"]) == "";
-    assert numbered(&diff, &["src/a.rs"]) == "+++ b/src/a.rs
-@@ -10,3 +12,4 @@ fn f() {
-    12  context
-       -gone
-    13 +added
-@@ -40 +43 @@
-       -old
-    43 +new
-";
-}
-
-test "git's marker of a missing final newline is not a line of the file" {
-    let diff = "diff --git a/f b/f
---- a/f
-+++ b/f
-@@ -1 +1,2 @@
--a
-\\ No newline at end of file
-+a
-+b
-";
-    assert numbered(&diff, &["f"]) == "+++ b/f
-@@ -1 +1,2 @@
-       -a
-       \\ No newline at end of file
-     1 +a
-     2 +b
-";
 }
 
 test "the reporter reads what the reviewer wrote and ran, not what was refused" {

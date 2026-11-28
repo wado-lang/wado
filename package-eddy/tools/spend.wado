@@ -1,0 +1,45 @@
+//! Says where a review spent, from what it recorded: an Eddy record of one
+//! review (`reviews/<head>/*.json`), or an evaluation file `baseline.wado`
+//! wrote, one review per run. `src/spend.wado` says how the cost is split.
+//!
+//! ```sh
+//! wado run package-eddy/tools/spend.wado -- scratchpad/wiki/reviews/<head>/<review>.json
+//! ```
+
+use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { from_string } from "core:json";
+use { Baseline } from "./eval.wado";
+use { Reviewed } from "../src/review.wado";
+use { spend_report, spends } from "../src/spend.wado";
+
+/// The part of an Eddy record this reads.
+struct Record {
+    reviewer: String,
+    result: Reviewed,
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
+    let arguments = args();
+    assert arguments.len() == 1, "usage: spend.wado <record or evaluation file>";
+    let text = fs::read_to_string(&arguments[0]).unwrap();
+    if let Ok(b) = from_string::<Baseline, &String>(&text) {
+        for let e of &b.entries {
+            for let [i, r] of e.runs.into_iter().enumerate() {
+                println(`#${e.fix} run ${i + 1}`);
+                report(&b.reviewer, &r.review());
+            }
+        }
+        return;
+    }
+    let record = from_string::<Record, &String>(&text).unwrap();
+    report(&record.reviewer, &record.result);
+}
+
+fn report(model: &String, r: &Reviewed) with (Stdout, Stderr) {
+    match spends(model, r) {
+        Some(s) => println(spend_report(&s)),
+        null => eprintln(`${*model} has no listed price`),
+    }
+}

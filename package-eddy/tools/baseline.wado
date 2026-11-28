@@ -14,8 +14,12 @@
 //! tree with `cargo` into `scratchpad/eddy-target`; each run starts from the
 //! tree as checked out. Run needs the tree's toolchain installed and its crates
 //! fetched, since a child cannot write `~/.cargo` or `~/.rustup`.
-//! `-D only=<fix>` reviews that entry alone, and keeps what the output file
-//! holds for the others.
+//! `-D reviewers=<n>` (20) searches at most that many batches of the units
+//! the culprit touched before the triage, as `review` does. With `run`, the
+//! reporter `-D reporter=<model>` (`claude-haiku-5-5`) then reports each
+//! reproduction as `main.wado` does, and the findings graded are those
+//! reproduced alone; the candidates are graded too. `-D only=<fix>` reviews that entry alone, and keeps what the output
+//! file holds for the others.
 //!
 //! Run it from the repository root. The reviewer is a build input:
 //! `CLAUDE_MODEL` in the environment, or `-D CLAUDE_MODEL=...`.
@@ -49,7 +53,8 @@ use {
 } from "./eval.wado";
 use { ask_json, Credential, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
-use { review, Submission } from "../src/review.wado";
+use { report_all } from "../src/report.wado";
+use { review, Finding, Submission, MAX_REVIEWERS } from "../src/review.wado";
 use { hold_tree, Tree, home_runner, with_mise_tools, reset_snapshot, index } from "../src/snapshot.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
@@ -59,6 +64,11 @@ global CLAUDE_MODEL: String = "claude-opus-5-5";
 
 #[param(name = "grader")]
 global GRADER: String = "claude-opus-5-5";
+
+/// The model that places and cuts each finding's reproduction, as `--reporter`
+/// does for `main.wado`.
+#[param(name = "reporter")]
+global REPORTER: String = "claude-haiku-5-5";
 
 #[param(name = "runs")]
 global RUNS: i32 = 3;
@@ -82,6 +92,9 @@ global ONLY: i32 = 0;
 /// The `wado` that indexes the Wado source of each tree.
 #[param(name = "wado")]
 global WADO: String = "target/debug/wado";
+
+#[param(name = "reviewers")]
+global REVIEWERS: i32 = MAX_REVIEWERS;
 
 #[param(name = "max_turns")]
 global MAX_TURNS: i32 = 40;
@@ -112,9 +125,11 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client, MonotonicC
     let mut out = Baseline {
         reviewer: CLAUDE_MODEL,
         grader: GRADER,
+        reporter: if RUN { REPORTER } else { "" },
         tools: TOOLS,
         symbols: SYMBOLS,
         run: RUN,
+        reviewers: REVIEWERS,
         max_turns: MAX_TURNS,
         effort: if TOOLS { EFFORT } else { "" },
         diff_limit: LIMIT,
@@ -140,7 +155,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client, MonotonicC
         out.entries.push(entry);
     }
     let tree: Option<Tree> = if TOOLS { Some(hold_tree().unwrap()) } else { null };
-    let [mut reviewing, mut grading] = [Usage {}, Usage {}];
+    let [mut reviewing, mut reporting, mut grading] = [Usage {}, Usage {}, Usage {}];
     for let i of 0..<out.entries.len() {
         if out.entries[i].runs.len() >= RUNS || ONLY != 0 && out.entries[i].fix != ONLY {
             continue;
@@ -165,12 +180,16 @@ ${fix_diff}
         } else {
             null;
         };
+        if RUN && let Some(w) = &ws {
+            w.prebuild(&changed_paths(&culprit.sha));
+        }
         while out.entries[i].runs.len() < RUNS {
             if RUN && let Some(w) = &ws {
                 reset_snapshot(&w.repo, &w.root, &culprit.sha);
             }
-            let graded = review_once(&mut credential, &review_prompt, &known, &ws, &mut grading);
-            reviewing.add(&graded.usage.unwrap_or(Usage {}));
+            let graded = review_once(&mut credential, &review_prompt, &culprit.sha, &known, &ws, &mut grading);
+            reviewing.add(&graded.review().spent());
+            reporting.add(&graded.report_usage.unwrap_or(Usage {}));
             out.entries[i].runs.push(graded);
             // Written after every run, so a run that dies keeps what it paid for.
             fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
@@ -182,6 +201,7 @@ ${fix_diff}
     // Of the runs made now; a run an earlier invocation left is not paid again.
     eprintln(cost_summary(&[
         [CLAUDE_MODEL, reviewing],
+        [REPORTER, reporting],
         [GRADER, grading],
     ]));
 }
@@ -221,29 +241,72 @@ fn judged_defect(judged: &Judged, fix: i32) -> String {
 fn review_once(
     credential: &mut Credential,
     review_prompt: &Submission,
+    commit: &String,
     known: &String,
     ws: &Option<Workspace>,
     grading: &mut Usage,
 ) -> Run with (Client, Preopens, Process, MonotonicClock) {
-    let r = review(credential, CLAUDE_MODEL, review_prompt, ws, MAX_TURNS, EFFORT);
-    let mut reviewed = Run { findings: r.findings, turns: r.turns, calls: r.calls, usage: r.usage, error: r.error };
+    let mut r = review(credential, CLAUDE_MODEL, review_prompt, ws, commit, REVIEWERS, MAX_TURNS, EFFORT);
+    let mut report_usage = Usage {};
+    let report_error: Option<String> = match ws {
+        Some(w) && r.error matches { null } => match report_all(
+            credential,
+            REPORTER,
+            review_prompt,
+            w,
+            commit,
+            &mut r,
+            &mut report_usage,
+        ) {
+            Ok(_) => null,
+            Err(e) => Some(e),
+        },
+        _ => null,
+    };
+    let mut reviewed = Run {
+        ..Run::of(r),
+        report_usage: Some(report_usage),
+        report_error,
+    };
+    // A report that failed leaves findings unreported, which would grade as
+    // a miss.
+    if reviewed.error matches { null } && let Some(e) = &reviewed.report_error {
+        reviewed.error = Some(`the report failed: ${*e}`);
+    }
     if reviewed.error matches { Some(_) } {
         return reviewed;
     }
-    let grade_prompt = `${*known}
-
-<findings>
-${to_string(&reviewed.findings).unwrap()}
-</findings>`;
-    match ask_json::<Grade>(credential, GRADER, GRADE, grade_prompt, 16_000, grading) {
-        Ok(g) && g.hit && !(0 <= g.finding < reviewed.findings.len()) => reviewed.error = Some(
-            `the grader's hit names finding ${g.finding} of ${reviewed.findings.len()}`,
-        ),
-
+    match grade_of(credential, known, &reviewed.findings, grading) {
         Ok(g) => reviewed.grade = Some(g),
         Err(e) => reviewed.error = Some(e),
     }
+    if !reviewed.reproductions.is_empty() {
+        match grade_of(credential, known, &reviewed.candidates, grading) {
+            Ok(g) => reviewed.candidate_grade = Some(g),
+            Err(e) => reviewed.error = Some(e),
+        }
+    }
     return reviewed;
+}
+
+/// Whether one of `findings` names the `known` defect, as the grader answers.
+/// What it took is added to `grading`.
+fn grade_of(
+    credential: &mut Credential,
+    known: &String,
+    findings: &List<Finding>,
+    grading: &mut Usage,
+) -> Result<Grade, String> with (Client, MonotonicClock) {
+    let grade_prompt = `${*known}
+
+<findings>
+${to_string(findings).unwrap()}
+</findings>`;
+    let g = ask_json::<Grade>(credential, GRADER, GRADE, grade_prompt, 16_000, grading)?;
+    if g.hit && !(0 <= g.finding < findings.len()) {
+        return Err(`the grader's hit names finding ${g.finding} of ${findings.len()}`);
+    }
+    return Ok(g);
 }
 
 /// The entries an earlier run with these settings left at `path`, by fix. A
@@ -259,27 +322,34 @@ fn earlier_entries(path: &String) -> HashMap<i32, Entry> with Preopens {
         || earlier.tools != TOOLS
         || earlier.symbols != SYMBOLS
         || earlier.run != RUN
+        || RUN && earlier.reporter != REPORTER
+        || earlier.reviewers != REVIEWERS
         || earlier.diff_limit != LIMIT
         || TOOLS && (earlier.max_turns != MAX_TURNS || earlier.effort != EFFORT) {
         assert ONLY == 0, `only= keeps the other entries of ${*path}, so it must hold runs with these settings`;
         return by_fix;
     }
+    // A run that failed measured nothing, so it is made again.
     for let e of earlier.entries {
-        by_fix[e.fix] = e;
+        by_fix[e.fix] = Entry { ..e, runs: e.runs.into_iter().filter(|r| r.error matches { null }).collect() };
     }
     return by_fix;
 }
 
 fn report(out: &Baseline) with Stderr {
-    let [mut hits, mut graded, mut any_hit, mut findings] = [0, 0, 0, 0];
+    let [mut hits, mut graded, mut any_hit, mut findings, mut candidate_hits, mut candidates] = [0, 0, 0, 0, 0, 0];
     for let e of &out.entries {
         let mut hits_here = 0;
         for let r of &e.runs {
             if let Some(g) = &r.grade {
                 graded += 1;
                 findings += r.findings.len();
+                candidates += r.candidates.len();
                 if g.hit {
                     hits_here += 1;
+                }
+                if r.candidate_grade matches { Some(c) && c.hit } {
+                    candidate_hits += 1;
                 }
             }
         }
@@ -290,6 +360,6 @@ fn report(out: &Baseline) with Stderr {
         eprintln(`#${e.fix}: ${hits_here}/${e.runs.len()}`);
     }
     eprintln(
-        `hits: ${hits}/${graded} runs; entries hit at least once: ${any_hit}/${out.entries.len()}; findings: ${findings}`,
+        `hits: ${hits}/${graded} runs; entries hit at least once: ${any_hit}/${out.entries.len()}; findings: ${findings}; candidates: ${candidates}, a hit among them in ${candidate_hits} runs`,
     );
 }

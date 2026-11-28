@@ -3,7 +3,7 @@
 
 use { Method } from "wasi:http";
 use { Client } from "wasi:http";
-use { MonotonicClock } from "wasi:clocks";
+use { Duration, MonotonicClock } from "wasi:clocks";
 use { HashMap, HashSet } from "core:collections";
 use { to_bytes, from_bytes, from_string } from "core:json";
 use { Serialize, SerializeError, Serializer, Deserialize } from "core:serde";
@@ -323,8 +323,22 @@ pub fn converse(
     return post::<Turn>(credential, to_bytes(&request).unwrap());
 }
 
+/// How many times a request the API could not serve for now is sent again.
+global RETRIES: i32 = 4;
+
+/// The wait before the first retry, in nanoseconds; each later one doubles it.
+global RETRY_WAIT: u64 = 5_000_000_000;
+
+/// Whether `status` says the API could not serve a request for now: rate
+/// limited, overloaded, or failing on its side.
+fn is_transient(status: u16) -> bool {
+    return status == 429 || status == 529 || 500 <= status <= 504;
+}
+
 /// A request refused for its key is sent once more with a renewed one, where
-/// the credential can renew it.
+/// the credential can renew it. One the API could not serve for now is sent
+/// again after a wait, up to `RETRIES` times: a step of a review that fails
+/// throws away what the steps before it paid for.
 fn post<T: Deserialize>(
     credential: &mut Credential,
     request: ByteSlice,
@@ -333,6 +347,7 @@ fn post<T: Deserialize>(
         headers: { "anthropic-version": "2023-06-01", "content-type": "application/json" },
     }).unwrap();
     let mut renewed = false;
+    let mut retried = 0;
     loop {
         let mut res = client
             .request("/v1/messages", {
@@ -346,6 +361,11 @@ fn post<T: Deserialize>(
             continue;
         }
         let body = res.bytes().map_err(|e| `${e}`)?;
+        if is_transient(res.status) && retried < RETRIES {
+            MonotonicClock::wait_for((RETRY_WAIT << retried as u64) as Duration).wait();
+            retried += 1;
+            continue;
+        }
         if res.status != 200 {
             return Err(`HTTP ${res.status}: ${String::from_utf8_lossy(body)}`);
         }

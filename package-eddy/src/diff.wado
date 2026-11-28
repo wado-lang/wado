@@ -1,0 +1,200 @@
+//! Reading a unified diff by the lines the change leaves.
+
+/// What one line of a unified diff is. A line inside a hunk is read by its
+/// first character alone, so a removed line that reads `--- x` or an added one
+/// that reads `+++ b/x` is a line of the file, not a header.
+pub variant DiffLine {
+    /// `diff --git …`, which starts a file's part.
+    Start,
+    /// `+++ b/<path>`: the path of the file the part's hunks change.
+    File(String),
+    /// `+++ /dev/null`: the file the change deleted, by the path the part's
+    /// `--- a/<path>` gave it.
+    Deleted(String),
+    /// A hunk header: its new side's first line and its line count.
+    Hunk([i32, i32]),
+    Added,
+    Removed,
+    Context,
+    /// A header line before the hunks, or git's note that a side ends without
+    /// a newline.
+    Other,
+}
+
+/// Each line of `diff`, with what it is.
+pub fn diff_lines(diff: &String) -> List<[String, DiffLine]> {
+    let mut out: List<[String, DiffLine]> = [];
+    let mut in_hunk = false;
+    let mut old_path = "";
+    for let l of diff.lines() {
+        let line = l.to_string();
+        let kind = if l.starts_with("diff --git ") {
+            in_hunk = false;
+            DiffLine::Start;
+        } else if let Some(hunk) = l.strip_prefix("@@ ") {
+            in_hunk = true;
+            DiffLine::Hunk(new_side(hunk.to_string()));
+        } else if !in_hunk && let Some(path) = l.strip_prefix("--- a/") {
+            old_path = path.to_string();
+            DiffLine::Other;
+        } else if !in_hunk && l == "+++ /dev/null" {
+            DiffLine::Deleted(old_path);
+        } else if !in_hunk && let Some(path) = l.strip_prefix("+++ b/") {
+            DiffLine::File(path.to_string());
+        } else if !in_hunk || l.starts_with("\\") {
+            DiffLine::Other;
+        } else if l.starts_with("+") {
+            DiffLine::Added;
+        } else if l.starts_with("-") {
+            DiffLine::Removed;
+        } else {
+            DiffLine::Context;
+        };
+        out.push([line, kind]);
+    }
+    return out;
+}
+
+/// The paths of the files `diff` changes and leaves in place.
+pub fn diff_files(diff: &String) -> List<String> {
+    let mut out: List<String> = [];
+    for let [_, kind] of diff_lines(diff) {
+        if let _::File(path) = kind {
+            out.push(path);
+        }
+    }
+    return out;
+}
+
+/// The parts of `diff` for `files`, each line of the new side led by its
+/// number in the file. A reader cannot count lines from a hunk header
+/// reliably, and a model less so.
+pub fn numbered(diff: &String, files: &List<String>) -> String {
+    let [mut out, mut wanted, mut n] = ["", false, 0];
+    for let [l, kind] of diff_lines(diff) {
+        match kind {
+            _::Start => wanted = false,
+            _::File(path) | _::Deleted(path) => {
+                wanted = files.contains_str(&path);
+                if wanted {
+                    out.push_str(`${l}\n`);
+                }
+            },
+            _ && !wanted => {
+            },
+            _::Hunk([start, _]) => {
+                n = start;
+                out.push_str(`${l}\n`);
+            },
+            _::Added | _::Context => {
+                out.push_str(`${n:>6} ${l}\n`);
+                n += 1;
+            },
+            _::Removed | _::Other => out.push_str(`       ${l}\n`),
+        }
+    }
+    return out;
+}
+
+/// Whether `diff` shows `line` of `file` as the change leaves it, as a line
+/// it adds or one of a hunk's context.
+pub fn shows(diff: &String, file: &String, line: i32) -> bool {
+    let mut in_file = false;
+    for let [_, kind] of diff_lines(diff) {
+        match kind {
+            _::Start | _::Deleted(_) => in_file = false,
+            _::File(path) => in_file = path == *file,
+            _::Hunk([start, count]) && in_file && start <= line && line < start + count => {
+                return true;
+            },
+            _ => {
+            },
+        }
+    }
+    return false;
+}
+
+/// The first line and the line count of the new side of a hunk header's
+/// ranges, `-a,b +c,d @@ …`. A count left out is 1.
+fn new_side(ranges: String) -> [i32, i32] {
+    let new = ranges.split(" ").collect()[1];
+    let numbers: List<String> = new.trim_prefix("+").split(",").map(|n| n.to_string()).collect();
+    let count = if numbers.len() > 1 { i32::from_str(&numbers[1]).unwrap() } else { 1 };
+    return [i32::from_str(&numbers[0]).unwrap(), count];
+}
+
+test "a diff's new lines are numbered, and a line placed must be one of them" {
+    let diff = "diff --git a/src/a.rs b/src/a.rs
+--- a/src/a.rs
++++ b/src/a.rs
+@@ -10,3 +12,4 @@ fn f() {
+ context
+-gone
++added
+@@ -40 +43 @@
+-old
++new
+diff --git a/src/b.rs b/src/b.rs
+--- a/src/b.rs
++++ b/src/b.rs
+@@ -1,2 +1,2 @@
+ kept
+";
+    assert shows(&diff, &"src/a.rs", 12) && shows(&diff, &"src/a.rs", 15) && shows(&diff, &"src/a.rs", 43);
+    assert !shows(&diff, &"src/a.rs", 11) && !shows(&diff, &"src/a.rs", 16) && !shows(&diff, &"src/a.rs", 0);
+    assert shows(&diff, &"src/b.rs", 2) && !shows(&diff, &"src/b.rs", 12);
+    assert !shows(&diff, &"src/c.rs", 1);
+
+    assert numbered(&diff, &["src/c.rs"]) == "";
+    assert numbered(&diff, &["src/a.rs"]) == "+++ b/src/a.rs
+@@ -10,3 +12,4 @@ fn f() {
+    12  context
+       -gone
+    13 +added
+@@ -40 +43 @@
+       -old
+    43 +new
+";
+    assert diff_files(&diff) == ["src/a.rs", "src/b.rs"];
+}
+
+test "git's marker of a missing final newline is not a line of the file" {
+    let diff = "diff --git a/f b/f
+--- a/f
++++ b/f
+@@ -1 +1,2 @@
+-a
+\\ No newline at end of file
++a
++b
+";
+    assert numbered(&diff, &["f"]) == "+++ b/f
+@@ -1 +1,2 @@
+       -a
+       \\ No newline at end of file
+     1 +a
+     2 +b
+";
+}
+
+test "inside a hunk a line is a line of the file, whatever header it reads as" {
+    let diff = "diff --git a/f b/f
+--- a/f
++++ b/f
+@@ -1,2 +1,2 @@
+--- a/g
+-++ b/g
+++++ b/g
+diff --git a/old b/old
+--- a/old
++++ /dev/null
+@@ -1 +0,0 @@
+-x
+";
+    let kinds: List<DiffLine> = diff_lines(&diff).into_iter().map(|l| l[1]).collect();
+    assert kinds[4] == DiffLine::Removed && kinds[5] == DiffLine::Removed && kinds[6] == DiffLine::Added;
+    assert kinds[9] == DiffLine::Deleted("old");
+    assert diff_files(&diff) == ["f"];
+    assert numbered(&diff, &["g"]) == "";
+    assert numbered(&diff, &["old"]).ends_with("@@ -1 +0,0 @@\n       -x\n");
+}

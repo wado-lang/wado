@@ -1,5 +1,14 @@
 # Eddy TODO
 
+## Recall
+
+- [ ] Find #1697's defect: `gen_repeat_body` decides an Optional with a plain
+  first-set check and ignores the lowered strategy. Two searches read the
+  function whole and twenty candidates were kept, thirteen of them reproduced,
+  and none named it, so what is left to change is the prompt or the model,
+  not what is read. #1204, #1915 and #2310 were not measured with the same
+  settings.
+
 ## Performance
 
 The symbol tools cost each evaluation entry an index of its tree before the
@@ -46,3 +55,7 @@ change, with a probe under `wado run -O2` timing each step with `wasi:clocks`
 - [ ] Reuse an entry's indexes across evaluation runs instead of rebuilding
   them with each snapshot. `rust-analyzer scip` dominates and cannot be made
   faster here.
+- [ ] Run a review's searches at once. They read and never write, so nothing
+  but the agent loop's blocking requests keeps them in turn, and a review now
+  takes about as long as its steps added up. The reproducers write into one
+  tree, so running them at once also needs a tree each.

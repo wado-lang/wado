@@ -1,30 +1,84 @@
-//! One review of a change: a model reads its diff, and the tree it leaves
-//! where a workspace gives one, and reports the defects it introduces. The
-//! reviewer is asked for nothing else: what a report needs beyond a finding's
-//! words is drawn from it afterwards, in `report.wado`.
+//! One review of a change, in three steps. Reviewers each search a batch of
+//! the definitions the change touched, read whole from the tree it leaves
+//! (`units.wado`), or the diff where no workspace gives a tree. They run
+//! nothing and report candidates, a defect the change left in place among
+//! them. One call merges the candidates that
+//! name one defect and keeps the most severe. Then, where the workspace runs
+//! code, a reproducer tries each kept candidate with a test, and only one a run
+//! shows is a finding. The reviewers are asked for nothing else: what a report
+//! needs beyond a finding's words is drawn from it afterwards, in
+//! `report.wado`.
+//!
+//! Reading settles nothing: a finding nobody reproduced costs whoever reads it
+//! the reproduction it skipped, so a run decides each candidate, and each
+//! candidate gets runs of its own rather than the leftovers of the first.
 
+use { HashMap } from "core:collections";
+use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { to_string } from "core:json";
 use { Process } from "core:process";
+use { Deserialize } from "core:serde";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
+use { JsonSchema } from "wado-lang:jade";
 use { ask_json, shaped, Credential, Format, Usage } from "./anthropic.wado";
-use { run_agent, Call, Request } from "./agent.wado";
+use { run_agent, Call, Request, Task } from "./agent.wado";
+use { diff_files, numbered } from "./diff.wado";
+use { reset_snapshot } from "./snapshot.wado";
 use { empty_index } from "./symbols.wado";
 use { Runner, Workspace } from "./tools.wado";
+use { units, Unit, MAX_UNIT_BYTES } from "./units.wado";
 
-global REVIEW: String = #"You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
-Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.
-Report at most 10 findings, the most severe first. An empty list is a valid answer."#;
+global ROLE: String = "You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
+Report defects: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.";
 
-global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your reply is the findings: write none until you have finished with the tools.";
+/// The most findings one search answers with.
+global MAX_FINDINGS: i32 = 10;
+
+/// The most candidates the triage keeps, and so a review tries to reproduce.
+/// A reproduction costs a tenth of a search or less, and with ten kept most
+/// of the candidates of twenty searches were never tried.
+global MAX_KEPT: i32 = 20;
+
+global ANSWER: String = `Report at most ${MAX_FINDINGS} findings, the most severe first. An empty list is a valid answer.`;
+
+global KEEP: String = `Keep at most ${MAX_KEPT}, the most severe first. An empty list is a valid answer.`;
+
+global SEARCH: String = "Several reviewers search this change, each a part of the code it touched, and a later step tries to reproduce what they report. Your part follows. Review its logic as it stands now: report every defect in it, whether this change brought it in or left it in place, one you are not sure of included, and say in its detail what would show it. Lines marked + are what the change added, and lines marked - what it removed. Look at:
+- each branch, boundary and error path, conversions, sizes and indices, and the result on the inputs its own tests do not try;
+- what must agree with it elsewhere: each caller of what changed, each invariant or contract it moved, and what must match it by text, such as a generated file, its generator, a spec example or a test's expectation;
+- state and time: what is cached, shared or kept between calls and goes stale, the order things happen in, a resource left open or released twice, hangs, and input from outside the program that it trusts;
+- the toolchain as its users see it: a Wado program the compiler accepts that it should reject or rejects that it should accept, code it generates wrong, a diagnostic missed or misplaced, and a command or option that behaves otherwise than its documentation says.
+You run nothing.";
+
+global TRIAGE: String = "Reviewers searched this change, each a part of the code it touched, reading without running anything, and reported the CANDIDATES below. Two may name the same defect, and some are wrong.
+Merge the candidates that name one defect into one, worded as the clearest of them and holding what each adds. Do not judge whether a candidate is right: a later step tries each with a test, and only one a run shows is reported. Leave out only a candidate that names no wrong behaviour, such as one on style, naming or documentation.";
+
+global REPRODUCE: String = "A reviewer reported the CANDIDATE after the diff from reading the code the change touched, without running anything; the defect may be one the change left in place. Settle it with a run: write a test that asserts the right behaviour, so that it fails now and would pass once the defect is fixed, and run it. Reading settles nothing either way: a candidate the code seems to make certain is still one to run, and so is one it seems to refute.
+A defect that depends on timing, such as a race with another process, is reproduced by making the interleaving happen in the test, for example by deleting a file between the two steps the race separates, never by running it again in the hope of hitting it.
+Answer reproduced true only when a run failed showing the defect, and give the defect as that run showed it. Answer false when a run passed where the candidate says it fails, or when no run showed the defect.";
+
+global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you answer, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Write your answer only once you have finished with the tools.";
 
 global SYMBOL_READING: String = "FindSymbol and FindReferences answer from the compiler's index of the Rust and Wado code: use them to find a definition and the uses of a function, type or field, and Grep for other text.";
 
-global RUNNING: String = "You can also run the code: Write a test or a small program into the tree, and build and run it with Run, which runs cargo and the other programs it names.
-Before you report a finding, reproduce it: write a test that asserts the right behaviour, so that it fails now and would pass once the defect is fixed, and run it. A finding you are already sure of from reading is still one to reproduce, since reading can be wrong either way. A suspicion a run refutes is one to drop.
-A defect that depends on timing, such as a race with another process, is reproduced by making the interleaving happen in the test, for example by deleting a file between the two steps the race separates, never by running it again in the hope of hitting it.
-Give each finding at most three runs. One that does not reproduce by then is reported only if the code makes it certain, saying in its detail that it was not reproduced and why.";
+global RUNNING: String = "You can also run the code: Write a test or a small program into the tree, and build and run it with Run, which runs cargo and the other programs it names.";
+
+/// The Runs one reproducer has; it also gets one turn more per run.
+global RUNS_PER_FINDING: i32 = 3;
+
+/// How many reviewers search a change at most, each a batch of units. The
+/// units past what they hold, the least changed, go unread.
+pub global MAX_REVIEWERS: i32 = 20;
+
+/// The most bytes of units one search reads, about 7k tokens. A search given
+/// 15k tokens read the function a known defect lay in and named another.
+global BATCH_BYTES: i32 = MAX_UNIT_BYTES;
+
+/// How many of the most changed units two searches read, each in its own
+/// batch, so that a defect one search reads past the other may name.
+global READ_TWICE: i32 = 10;
 
 pub struct Finding {
     pub file: String,
@@ -36,6 +90,13 @@ pub struct Finding {
     pub line: i32 = 0,
     /// Absent where no test of the reviewer's was found to reproduce it.
     pub repro: Option<Repro> = null,
+}
+
+impl Finding {
+    /// The finding in its reviewer's words alone.
+    internal fn told(&self) -> Told {
+        return Told { file: self.file, summary: self.summary, detail: self.detail };
+    }
 }
 
 /// What shows a finding: `git apply` the patch to the reviewed commit and run
@@ -51,8 +112,10 @@ pub struct Repro {
     pub output: String,
 }
 
-/// What one review reported and what it took. A review that failed keeps what
-/// it spent before the error.
+/// What one step of a review reported and what it took. A whole review is
+/// its triage, with the searches before it and the reproductions after; a
+/// record written before the steps split holds one reviewer. A step that
+/// failed keeps what it spent before the error.
 pub struct Reviewed {
     pub findings: List<Finding> = [],
     pub turns: i32 = 0,
@@ -61,6 +124,85 @@ pub struct Reviewed {
     /// Each request of an agent's review, in order.
     pub requests: List<Request> = [],
     pub error: Option<String> = null,
+    /// What a search read: its batch of units, or `diff`, or in a record
+    /// written before units its focus; empty elsewhere.
+    pub focus: String = "",
+    /// The searches whose candidates the triage read.
+    pub searches: List<Reviewed> = [],
+    /// What the triage kept, or the one candidate a reproduction tried.
+    pub candidates: List<Finding> = [],
+    /// Why the triage's call failed, which leaves the candidates as the
+    /// searches found them, in their order.
+    pub triage_error: Option<String> = null,
+    /// One per candidate kept, where the workspace runs code. Its findings
+    /// are the candidate as a run showed it, or none.
+    pub reproductions: List<Reviewed> = [],
+}
+
+impl Reviewed {
+    /// What this step and the steps it holds took.
+    pub fn spent(&self) -> Usage {
+        let mut total = self.usage.unwrap_or(Usage {});
+        for let s of self.steps() {
+            total.add(&s.spent());
+        }
+        return total;
+    }
+
+    pub fn total_turns(&self) -> i32 {
+        let mut total = self.turns;
+        for let s of self.steps() {
+            total += s.total_turns();
+        }
+        return total;
+    }
+
+    /// What did not finish, as a sentence for each kind of step: a review that
+    /// reports less than it would have must say so.
+    pub fn failures(&self) -> List<String> {
+        let mut out: List<String> = [];
+        if let Some(s) = failed("searches", &self.searches) {
+            out.push(s);
+        }
+        if let Some(e) = &self.triage_error {
+            out.push(`The triage failed, so the first candidates the searches found were kept: ${*e}`);
+        }
+        if let Some(s) = failed("reproductions", &self.reproductions) {
+            out.push(s);
+        }
+        return out;
+    }
+
+    fn steps(&self) -> List<&Reviewed> {
+        let mut steps: List<&Reviewed> = [];
+        for let s of &self.searches {
+            steps.push(s);
+        }
+        for let r of &self.reproductions {
+            steps.push(r);
+        }
+        return steps;
+    }
+}
+
+/// Whether there were `steps` and each failed: a review whose steps of one
+/// kind all failed has nothing to report, and fails itself.
+fn every_failed(steps: &List<Reviewed>) -> bool {
+    return !steps.is_empty() && steps.into_iter().all(|s| s.error matches { Some(_) });
+}
+
+/// How many of `steps` failed and why the first did, or none where none did.
+fn failed(kind: String, steps: &List<Reviewed>) -> Option<String> {
+    let mut errors: List<String> = [];
+    for let s of steps {
+        if let Some(e) = &s.error {
+            errors.push(*e);
+        }
+    }
+    if errors.is_empty() {
+        return null;
+    }
+    return Some(`${errors.len()} of ${steps.len()} ${kind} failed, the first with: ${errors[0]}`);
 }
 
 /// What a reviewer says of one defect.
@@ -73,16 +215,39 @@ internal struct Told {
     internal detail: String,
 }
 
+impl Told {
+    fn finding(&self) -> Finding {
+        return Finding { file: self.file, summary: self.summary, detail: self.detail };
+    }
+}
+
+/// What a step answers, as the findings it reports.
+trait Answered with () {
+    fn findings(&self) -> List<Finding>;
+}
+
 struct Answer {
     findings: List<Told>,
 }
 
-impl Answer {
+impl Answered for Answer {
     fn findings(&self) -> List<Finding> {
-        return self.findings
-            .into_iter()
-            .map(|t| Finding { file: t.file, summary: t.summary, detail: t.detail })
-            .collect();
+        return self.findings.into_iter().map(|t| t.finding()).collect();
+    }
+}
+
+/// What a reproducer answers of the candidate it tried.
+struct Verdict {
+    /// Whether a run failed showing the defect.
+    reproduced: bool,
+    /// The defect as the run showed it, which may be worded otherwise than the
+    /// candidate.
+    defect: Told,
+}
+
+impl Answered for Verdict {
+    fn findings(&self) -> List<Finding> {
+        return if self.reproduced { [self.defect.finding()] } else { [] };
     }
 }
 
@@ -101,27 +266,238 @@ impl Submission {
 ${self.diff}
 </diff>`;
     }
+
+    /// What a search of `batch` is asked: what the change is, and then the
+    /// units it reads.
+    fn searched_in(&self, batch: &List<Unit>) -> Task {
+        let mut own = "";
+        for let u of batch {
+            own.push_str(`<unit file="${u.file}" lines="${u.start}-${u.end}" name="${u.name}">\n${u.text}</unit>\n`);
+        }
+        return Task { shared: self.heading, own };
+    }
+
+    /// What the triage is asked: what the change is and the candidates, in
+    /// their reviewers' words. The diff is left out, since it judges nothing.
+    fn triaged_from(&self, candidates: &List<Finding>) -> String {
+        return `${self.heading}
+
+${candidates_shown("candidates", candidates)}`;
+    }
+
+    /// What a reproducer of `candidate` is asked: the diff of its file, with
+    /// its lines numbered, or the whole diff where its file is not in it, and
+    /// then the candidate. Reproducers of one file share the diff in the
+    /// cache.
+    fn reproduced_from(&self, candidate: &Finding) -> Task {
+        let shown = numbered(&self.diff, &[candidate.file]);
+        let diff = if shown.is_empty() { self.diff } else { shown };
+        return Task {
+            shared: `${self.heading}
+
+<diff>
+${diff}
+</diff>`,
+            own: candidates_shown("candidate", &[*candidate]),
+        };
+    }
 }
 
-/// What a reviewer reading `w` is told: the task, and each kind of tool `w`
-/// offers.
-fn instructions(w: &Workspace) -> String {
-    let mut system = `${REVIEW}\n${READING}`;
+fn candidates_shown(tag: String, candidates: &List<Finding>) -> String {
+    let told: List<Told> = candidates.into_iter().map(|f| f.told()).collect();
+    return `<${tag}>
+${to_string(&told).unwrap()}
+</${tag}>`;
+}
+
+/// What a reviewer with `ws` is told of each kind of tool it offers.
+fn tools_told(ws: &Option<Workspace>) -> String {
+    let Some(w) = ws else {
+        return "";
+    };
+    let mut told = `\n${READING}`;
     if w.symbols matches { Some(_) } {
-        system.push_str(`\n${SYMBOL_READING}`);
+        told.push_str(`\n${SYMBOL_READING}`);
     }
     if w.runner matches { Some(_) } {
-        system.push_str(`\n${RUNNING}`);
+        told.push_str(`\n${RUNNING}`);
     }
-    return system;
+    return told;
 }
 
-/// `model`'s review of `change`, in one call, or by an agent that reads `ws`
-/// for up to `max_turns` turns at `effort` with every tool `ws` offers.
+/// What every search is told, which they share in the cache.
+fn searching(ws: &Option<Workspace>) -> String {
+    return `${ROLE}\n${SEARCH}\n${ANSWER}${tools_told(ws)}`;
+}
+
+fn reproducing(ws: &Option<Workspace>) -> String {
+    return `${ROLE}\n${REPRODUCE}${tools_told(ws)}`;
+}
+
+/// `model`'s review of `change`, in the tree at `ws` checked out at `commit`:
+/// up to `reviewers` searches, each a batch of the units the change touched,
+/// the triage of what they found, and a reproducer per candidate it keeps
+/// where `ws` runs code. Each search and reproducer reads `ws` for up to
+/// `max_turns` turns at `effort`; only a reproducer writes and runs. Without
+/// a workspace one search reads the diff, in one call.
 pub fn review(
     credential: &mut Credential,
     model: String,
     change: &Submission,
+    ws: &Option<Workspace>,
+    commit: &String,
+    reviewers: i32,
+    max_turns: i32,
+    effort: String,
+) -> Reviewed with (Client, Preopens, Process, MonotonicClock) {
+    assert 1 <= reviewers <= MAX_REVIEWERS;
+    let reading: Option<Workspace> = match ws {
+        Some(w) => Some(Workspace { ..*w, runner: null }),
+        null => null,
+    };
+    let parts: List<List<Unit>> = match &reading {
+        Some(w) => batches(&units(&change.diff, &sources(w, &change.diff)), reviewers),
+        null => [],
+    };
+    let mut tasks: List<[String, Task]> = [];
+    for let [i, b] of parts.into_iter().enumerate() {
+        tasks.push([`batch ${i + 1}: ${names_of(&b)}`, change.searched_in(&b)]);
+    }
+    if tasks.is_empty() {
+        tasks.push([
+            "diff",
+            Task { shared: change.task() },
+        ]);
+    }
+    // A search that fails spent what it spent; the others still search.
+    let mut searches: List<Reviewed> = [];
+    let mut candidates: List<Finding> = [];
+    for let [focus, task] of tasks {
+        let mut search = ask::<Answer>(credential, model, searching(&reading), &task, &reading, max_turns, effort);
+        search.focus = focus;
+        candidates.extend(&search.findings);
+        searches.push(search);
+    }
+    if candidates.is_empty() {
+        let error = if every_failed(&searches) { failed("searches", &searches) } else { null };
+        return Reviewed { searches, error };
+    }
+    let mut triage = triaged(credential, model, change, &candidates);
+    triage.searches = searches;
+    triage.candidates.truncate(MAX_KEPT);
+    let [w, runner] = match ws {
+        Some(w) && w.runner matches { Some(_) } => [w, w.runner.unwrap()],
+        _ => {
+            triage.findings = triage.candidates;
+            return triage;
+        },
+    };
+    let reproducer: Option<Workspace> = Some(Workspace {
+        ..*w,
+        runner: Some(Runner { ..runner, runs: RUNS_PER_FINDING }),
+    });
+    for let candidate of &triage.candidates {
+        reset_snapshot(&w.repo, &w.root, commit);
+        let mut tried = ask::<Verdict>(
+            credential,
+            model,
+            reproducing(&reproducer),
+            &change.reproduced_from(candidate),
+            &reproducer,
+            max_turns + RUNS_PER_FINDING,
+            effort,
+        );
+        tried.candidates = [*candidate];
+        triage.findings.extend(&tried.findings);
+        triage.reproductions.push(tried);
+    }
+    if every_failed(&triage.reproductions) {
+        triage.error = failed("reproductions", &triage.reproductions);
+    }
+    return triage;
+}
+
+/// The text of each file `diff` shows, as the tree at `w` holds it; a file the
+/// change deleted has none.
+fn sources(w: &Workspace, diff: &String) -> HashMap<String, String> with Preopens {
+    let mut out = HashMap::<String, String>::new();
+    for let path of diff_files(diff) {
+        if let Ok(text) = fs::read_to_string(fs::join(&w.root, &path)) {
+            out[path] = text;
+        }
+    }
+    return out;
+}
+
+/// `ranked`, in their order, packed into at most `most` batches of up to
+/// `BATCH_BYTES` each: a unit goes into the first batch it fits that does not
+/// hold it already, so the most changed are read and the least changed are
+/// left out. The first `READ_TWICE` are placed twice.
+fn batches(ranked: &List<Unit>, most: i32) -> List<List<Unit>> {
+    let twice = i32::min(READ_TWICE, ranked.len());
+    let mut order: List<i32> = (0..<twice).collect();
+    order.extend(&(0..<ranked.len()).collect());
+    let mut held: List<List<i32>> = [];
+    let mut sizes: List<i32> = [];
+    for let k of order {
+        let n = ranked[k].text.len();
+        assert n <= BATCH_BYTES, "a unit must fit in a batch";
+        let mut placed = false;
+        for let i of 0..<held.len() {
+            if sizes[i] + n <= BATCH_BYTES && !held[i].contains(&k) {
+                held[i].push(k);
+                sizes[i] += n;
+                placed = true;
+                break;
+            }
+        }
+        if !placed && held.len() < most {
+            held.push([k]);
+            sizes.push(n);
+        }
+    }
+    return held.into_iter().map(|ks| ks.into_iter().map(|k| ranked[k]).collect()).collect();
+}
+
+/// What a batch reads, as `file name` for each unit, for the record.
+fn names_of(batch: &List<Unit>) -> String {
+    let names: List<String> = batch.into_iter().map(|u| `${u.file}:${u.start} ${u.name}`).collect();
+    return names.join(", ");
+}
+
+/// The `candidates` merged and ordered by `model` in one call, kept in the
+/// returned step's `candidates`; where the call fails, as they came.
+fn triaged(
+    credential: &mut Credential,
+    model: String,
+    change: &Submission,
+    candidates: &List<Finding>,
+) -> Reviewed with (Client, MonotonicClock) {
+    let mut usage = Usage {};
+    let system = `${ROLE}\n${TRIAGE}\n${KEEP}`;
+    return match ask_json::<Answer>(credential, model, system, change.triaged_from(candidates), 32_000, &mut usage) {
+        Ok(a) => Reviewed {
+            turns: 1,
+            candidates: a.findings(),
+            usage: Some(usage),
+        },
+        Err(e) => Reviewed {
+            turns: 1,
+            candidates: *candidates,
+            triage_error: Some(e),
+            usage: Some(usage),
+        },
+    };
+}
+
+/// `model`'s findings on `task` as `system` asks for them, answered as a `T`:
+/// in one call, or by an agent that reads `ws` for up to `max_turns` turns at
+/// `effort` with every tool `ws` offers.
+fn ask<T: Deserialize + JsonSchema + Answered>(
+    credential: &mut Credential,
+    model: String,
+    system: String,
+    task: &Task,
     ws: &Option<Workspace>,
     max_turns: i32,
     effort: String,
@@ -129,7 +505,7 @@ pub fn review(
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
         let mut usage = Usage {};
-        return match ask_json::<Answer>(credential, model, REVIEW, change.task(), 32_000, &mut usage) {
+        return match ask_json::<T>(credential, model, system, task.text(), 32_000, &mut usage) {
             Ok(a) => Reviewed {
                 findings: a.findings(),
                 usage: Some(usage),
@@ -140,17 +516,7 @@ pub fn review(
             },
         };
     };
-    let agent = run_agent(
-        credential,
-        model,
-        instructions(w),
-        change.task(),
-        w,
-        max_turns,
-        32_000,
-        effort,
-        Format::of::<Answer>(),
-    );
+    let agent = run_agent(credential, model, system, task, w, max_turns, 32_000, effort, Format::of::<T>());
     let mut reviewed = Reviewed {
         turns: agent.turns,
         calls: agent.calls,
@@ -158,7 +524,7 @@ pub fn review(
         requests: agent.requests,
     };
     match agent.answer {
-        Ok(answer) => match shaped::<Answer>(&answer) {
+        Ok(answer) => match shaped::<T>(&answer) {
             Ok(a) => reviewed.findings = a.findings(),
             Err(e) => reviewed.error = Some(e),
         },
@@ -175,27 +541,122 @@ test "an answer is read whole, and a brace in its text is text" {
     assert shaped::<Answer>(&"No defects. {\"findings\": []}").unwrap_err().starts_with("unparsed: ");
 }
 
+test "a reproducer's verdict is a finding only when a run showed it" {
+    let defect = Told { file: "a.rs", summary: "s", detail: "d" };
+    assert Verdict { reproduced: true, defect }.findings()[0].summary == "s";
+    assert Verdict { reproduced: false, defect }.findings().is_empty();
+}
+
 test "a reviewer is told of the tools its workspace offers, and no others" {
-    let reading = instructions(&Workspace { root: "src" });
+    let reading = searching(&Some(Workspace { root: "src" }));
     assert reading.contains("Read, Grep and Glob");
-    assert !reading.contains("FindSymbol") && !reading.contains("reproduce it");
+    assert !reading.contains("FindSymbol") && !reading.contains("Write a test");
+    assert !searching(&null).contains("Read, Grep and Glob");
 
     let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
-    let running = instructions(&Workspace {
+    let running = reproducing(&Some(Workspace {
         root: "src",
         symbols: Some(empty_index()),
         runner: Some(runner),
-    });
-    assert running.contains("FindSymbol") && running.contains("reproduce it");
+    }));
+    assert running.contains("FindSymbol") && running.contains("Write a test");
 }
 
 test "a reviewer is asked for a finding's words and nothing a report adds" {
     let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
-    let told = instructions(&Workspace { root: "src", runner: Some(runner) });
-    assert !told.contains(#""line""#) && !told.contains(#""repro""#) && !told.contains(#""paths""#);
-    let format = to_string(&Format::of::<Answer>()).unwrap();
-    assert format.contains(#""description":"Why it is wrong, and when it goes wrong.""#);
-    assert !format.contains(#""line""#) && !format.contains(#""repro""#) && !format.contains(#""paths""#);
+    let ws: Option<Workspace> = Some(Workspace { root: "src", runner: Some(runner) });
+    for let told of [
+        reproducing(&ws),
+        searching(&ws),
+        TRIAGE,
+    ] {
+        assert !told.contains(#""line""#) && !told.contains(#""repro""#) && !told.contains(#""paths""#);
+    }
+    for let format of [
+        to_string(&Format::of::<Answer>()).unwrap(),
+        to_string(&Format::of::<Verdict>()).unwrap(),
+    ] {
+        assert format.contains(#""description":"Why it is wrong, and when it goes wrong.""#);
+        assert !format.contains(#""line""#) && !format.contains(#""repro""#) && !format.contains(#""paths""#);
+    }
+}
+
+test "the units are packed into batches the most changed first, and those past the last batch go unread" {
+    let unit = |name: String, bytes: i32| Unit { file: "f.rs", name, start: 1, end: 2, changed: 1, text: "x".repeat(
+        bytes,
+    ) };
+    let mut all: List<Unit> = [unit("a", BATCH_BYTES - 10)];
+    for let i of 1..<READ_TWICE {
+        all.push(unit(`t${i}`, 1));
+    }
+    all.push(unit("b", 20));
+    all.push(unit("c", 5));
+    all.push(unit("d", BATCH_BYTES));
+    let found = batches(&all, 3);
+    assert found.len() == 3;
+    // The most changed are each read twice, never twice in one batch, and the
+    // rest go where they fit: `d` fits nowhere.
+    assert found[0].len() == READ_TWICE && found[1].len() == READ_TWICE && found[1][0].name == "a";
+    assert names_of(&found[2]) == "f.rs:1 b, f.rs:1 c";
+    let task = Submission { heading: "PULL REQUEST #1: t", diff: "+a" }.searched_in(&found[0]);
+    assert task.shared == "PULL REQUEST #1: t"
+        && task.own.starts_with("<unit file=\"f.rs\" lines=\"1-2\" name=\"a\">\nx");
+}
+
+test "a reproducer reads its candidate's file of the diff, or all of it where the file is not in it" {
+    let diff = "diff --git a/a.rs b/a.rs
+--- a/a.rs
++++ b/a.rs
+@@ -1 +1 @@
+-x
++y
+diff --git a/b.rs b/b.rs
+--- a/b.rs
++++ b/b.rs
+@@ -1 +1 @@
+-p
++q
+";
+    let change = Submission { heading: "PULL REQUEST #1: t", diff };
+    let in_a = change.reproduced_from(&Finding { file: "a.rs", summary: "s", detail: "d" });
+    assert in_a.shared.contains("     1 +y") && !in_a.shared.contains("+q");
+    assert in_a.own.starts_with("<candidate>\n[{\"file\":\"a.rs\"");
+    let elsewhere = change.reproduced_from(&Finding { file: "c.rs", summary: "s", detail: "d" });
+    assert elsewhere.shared == change.task();
+    assert !change
+        .triaged_from(&[
+            Finding { file: "a.rs", summary: "s", detail: "d" },
+        ])
+        .contains("<diff>");
+}
+
+test "a review says what did not finish, a sentence for each kind of step" {
+    let refused = Reviewed { error: Some("HTTP 400") };
+    let r = Reviewed {
+        searches: [Reviewed {}, refused],
+        triage_error: Some("stopped on max_tokens"),
+        reproductions: [Reviewed {}],
+    };
+    assert r.failures() == [
+        "1 of 2 searches failed, the first with: HTTP 400",
+        "The triage failed, so the first candidates the searches found were kept: stopped on max_tokens",
+    ];
+    assert every_failed(&[refused]) && !every_failed(&[]) && !every_failed(&r.searches);
+}
+
+test "the review's cost and turns add its searches' and its reproductions'" {
+    let r = Reviewed {
+        turns: 2,
+        usage: Some(Usage { input_tokens: 10 }),
+        searches: [
+            Reviewed { turns: 3, usage: Some(Usage { input_tokens: 5 }) },
+            Reviewed { turns: 1 },
+        ],
+        reproductions: [
+            Reviewed { turns: 4, usage: Some(Usage { input_tokens: 7 }) },
+        ],
+    };
+    assert r.total_turns() == 10 && r.spent().input_tokens == 22;
 }
 
 test "a change is its heading and then its diff" {

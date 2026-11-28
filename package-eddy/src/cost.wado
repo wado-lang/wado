@@ -2,7 +2,7 @@
 //! own API: <https://platform.claude.com/docs/en/about-claude/pricing>.
 
 use { HashMap } from "core:collections";
-use { Usage } from "./anthropic.wado";
+use { Usage, LONG_PROMPT } from "./anthropic.wado";
 
 /// US dollars per million tokens.
 struct Price {
@@ -41,9 +41,33 @@ fn price(model: &String, long_prompt: bool) -> Option<Price> {
 
 /// What `usage` of `model` costs, or `null` for a model with no listed price.
 pub fn cost_usd(model: &String, usage: &Usage) -> Option<f64> {
-    let Some(short_price) = price(model, false) else {
-        return null;
-    };
+    return Some(charges_of(model, usage)?.total());
+}
+
+/// What tokens of each kind cost, in US dollars.
+pub struct Charges {
+    pub input: f64 = 0.0,
+    pub output: f64 = 0.0,
+    pub write: f64 = 0.0,
+    pub read: f64 = 0.0,
+}
+
+impl Charges {
+    pub fn total(&self) -> f64 {
+        return self.input + self.output + self.write + self.read;
+    }
+}
+
+/// What each kind of token `request`, the usage of one request, took of
+/// `model` cost, or `null` for a model with no listed price.
+pub fn charges(model: &String, request: &Usage) -> Option<Charges> {
+    assert request.long_prompts matches { null }, "the usage must be of one request";
+    let prompt = request.input_tokens + request.cache_creation_input_tokens + request.cache_read_input_tokens;
+    return Some(at(&price(model, prompt > LONG_PROMPT)?, request));
+}
+
+/// What each kind of token of `usage`, a sum over requests, cost.
+pub fn charges_of(model: &String, usage: &Usage) -> Option<Charges> {
     let long = usage.long_prompts.unwrap_or(Usage {});
     let short = Usage {
         input_tokens: usage.input_tokens - long.input_tokens,
@@ -51,12 +75,24 @@ pub fn cost_usd(model: &String, usage: &Usage) -> Option<f64> {
         cache_creation_input_tokens: usage.cache_creation_input_tokens - long.cache_creation_input_tokens,
         cache_read_input_tokens: usage.cache_read_input_tokens - long.cache_read_input_tokens,
     };
-    return Some(at(&short_price, &short) + at(&price(model, true).unwrap(), &long));
+    let s = at(&price(model, false)?, &short);
+    let l = at(&price(model, true).unwrap(), &long);
+    return Some(Charges {
+        input: s.input + l.input,
+        output: s.output + l.output,
+        write: s.write + l.write,
+        read: s.read + l.read,
+    });
 }
 
-fn at(p: &Price, u: &Usage) -> f64 {
-    let dollars_for_a_million = u.input_tokens as f64 * p.input + u.output_tokens as f64 * p.output + u.cache_creation_input_tokens as f64 * p.input * CACHE_WRITE + u.cache_read_input_tokens as f64 * p.cache_read;
-    return dollars_for_a_million / 1_000_000.0;
+fn at(p: &Price, u: &Usage) -> Charges {
+    let per = |tokens: i64, dollars: f64| tokens as f64 * dollars / 1_000_000.0;
+    return Charges {
+        input: per(u.input_tokens, p.input),
+        output: per(u.output_tokens, p.output),
+        write: per(u.cache_creation_input_tokens, p.input * CACHE_WRITE),
+        read: per(u.cache_read_input_tokens, p.cache_read),
+    };
 }
 
 /// One line saying what `spent`, each model beside what it took, cost: the
@@ -107,6 +143,21 @@ test "a long prompt is priced apart where the model prices it so" {
     assert f64::abs(haiku - 0.145) < 1e-9;
     let opus = cost_usd(&"claude-opus-5-5", &sum).unwrap();
     assert f64::abs(opus - 1.8) < 1e-9;
+}
+
+test "a request's charges are its cost, kind by kind" {
+    let one = Usage {
+        input_tokens: 1_000_000,
+        output_tokens: 100_000,
+        cache_creation_input_tokens: 200_000,
+        cache_read_input_tokens: 10_000_000,
+    };
+    let c = charges(&"claude-opus-5-5", &one).unwrap();
+    assert c.input == 4.0 && c.output == 2.0 && c.write == 1.0 && c.read == 2.0;
+    let short = charges(&"claude-haiku-5-5", &Usage { input_tokens: 50_000 }).unwrap();
+    let long = charges(&"claude-haiku-5-5", &Usage { input_tokens: 50_000, cache_read_input_tokens: LONG_PROMPT }).unwrap();
+    assert f64::abs(short.input - 0.005) < 1e-12 && f64::abs(long.input - 0.025) < 1e-12;
+    assert charges(&"claude-next", &one) matches { null };
 }
 
 test "a summary gives the total and each model's share" {

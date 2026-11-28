@@ -1,17 +1,22 @@
 //! Eddy's CLI: reviews what a branch changes, prints the findings as JSON, and
 //! adds the review to the record of its head commit.
 //!
-//! The reviewer reads the diff from the merge base of `--base` (`origin/main`)
-//! to `--head` (`HEAD`), and a checkout of the head under `scratchpad/`,
-//! through Read, Grep and Glob. It also writes tests into that checkout and
-//! runs them through Write and Run: with `cargo`, and where `mise` is set up,
-//! with it and each tool it installed for the project. That needs
-//! `--process-read` on the `cargo` and `rustup` homes, and for `mise` on its
-//! binary and its data directory; `--no-run` reviews by reading alone.
+//! Up to `--reviewers` (20) reviewers each search a batch of the definitions
+//! the change from the merge base of `--base` (`origin/main`) to `--head`
+//! (`HEAD`) touched, read whole from a checkout of the head under
+//! `scratchpad/`, which they read further through Read, Grep and Glob. One
+//! call merges what they found and keeps the most severe. A reproducer per
+//! candidate kept then writes a test into that checkout and runs it through
+//! Write and Run, with `cargo`, and where `mise` is set up, with it and each
+//! tool it installed for the project. That needs `--process-read` on the
+//! `cargo` and `rustup` homes, and for `mise` on its binary and its data
+//! directory; `--no-run` reports the candidates unreproduced.
 //!
-//! A second model, `--reporter` (`claude-haiku-5-5`), then reads what the
-//! reviewer did and gives each finding its line and the test that reproduced
-//! it, which is tried again alone before the finding carries it.
+//! A second model, `--reporter` (`claude-haiku-5-5`), then reads what each
+//! reproducer did and gives its finding its line and the test that reproduced
+//! it, which is tried again alone. Only a finding that test reproduces alone
+//! is reported, whether the change brought it in or left it in place; the
+//! record keeps the rest.
 //! `--report-again` reports the last recorded review of the head once more,
 //! with no new review, to try another reporter on the same findings.
 //!
@@ -49,8 +54,9 @@ use { git, try_git, paths_between, diff_between } from "./git.wado";
 use { Credential, Usage } from "./anthropic.wado";
 use { comment, finding_id, review_comment } from "./comment.wado";
 use { cost_summary } from "./cost.wado";
-use { report } from "./report.wado";
-use { review, Submission, Finding, Reviewed } from "./review.wado";
+use { report_all } from "./report.wado";
+use { spend_report, spends } from "./spend.wado";
+use { review, Submission, Finding, Reviewed, MAX_REVIEWERS } from "./review.wado";
 use { hold_tree, home_runner, with_mise_tools } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
 
@@ -60,7 +66,7 @@ global CLAUDE_MODEL: String = "claude-opus-5-5";
 #[param(name = "diff_limit")]
 global LIMIT: i32 = 2_000_000;
 
-global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--reporter <model>] [--report-again] [--max-turns <n>] [--effort <level>] [--reviews <dir>] [--out <dir>]";
+global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--reporter <model>] [--report-again] [--reviewers <n>] [--max-turns <n>] [--effort <level>] [--reviews <dir>] [--out <dir>]";
 
 struct Options {
     base: String = "origin/main",
@@ -68,6 +74,7 @@ struct Options {
     no_run: bool = false,
     reporter: String = "claude-haiku-5-5",
     report_again: bool = false,
+    reviewers: i32 = MAX_REVIEWERS,
     max_turns: i32 = 40,
     effort: String = "medium",
     reviews: String = "scratchpad/wiki/reviews",
@@ -84,6 +91,9 @@ struct Attempt {
     /// Empty in a record written before a second model reported.
     reporter: String = "",
     run: bool,
+    /// 0 in a record written before reviews were split: one reviewer searched
+    /// and reproduced alone.
+    reviewers: i32 = 0,
     max_turns: i32,
     /// Empty in a record written before it was sent: the API's default.
     effort: String = "",
@@ -105,6 +115,9 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Clie
     if options.max_turns < 1 {
         fail(`--max-turns must be at least 1\n${USAGE}`);
     }
+    if !(1 <= options.reviewers <= MAX_REVIEWERS) {
+        fail(`--reviewers must be from 1 to ${MAX_REVIEWERS}\n${USAGE}`);
+    }
     let mut credential = match Credential::from_env() {
         Ok(credential) => credential,
         Err(e) => fail(e),
@@ -122,7 +135,8 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Clie
         fail(`${e}`);
     }
     let earlier: Option<Attempt> = if options.report_again { Some(last_attempt(&records)) } else { null };
-    let diff = match diff_between(&base, &head, &paths_between(&base, &head), "branch", LIMIT) {
+    let changed = paths_between(&base, &head);
+    let diff = match diff_between(&base, &head, &changed, "branch", LIMIT) {
         Ok(diff) => diff,
         Err(e) => fail(e),
     };
@@ -143,21 +157,44 @@ ${commits.trim()}`;
     let w = Workspace { root, runner };
     let change = Submission { heading, diff };
     let mut result = if let Some(earlier) = &earlier {
-        reviewed_again(&w, &earlier.result);
+        reviewed_again(&earlier.result);
     } else {
-        review(&mut credential, CLAUDE_MODEL, &change, &Some(w), options.max_turns, options.effort);
+        if w.runner matches { Some(_) } {
+            w.prebuild(&changed);
+        }
+        review(
+            &mut credential,
+            CLAUDE_MODEL,
+            &change,
+            &Some(w),
+            &head,
+            options.reviewers,
+            options.max_turns,
+            options.effort,
+        );
     };
-    // A report that fails leaves the findings as the reviewer worded them.
     let mut report_usage = Usage {};
     let report_error: Option<String> = match &result.error {
         Some(_) => null,
-        null => match report(&mut credential, options.reporter, &change, &w, &head, &mut result, &mut report_usage) {
+        null => match report_all(
+            &mut credential,
+            options.reporter,
+            &change,
+            &w,
+            &head,
+            &mut result,
+            &mut report_usage,
+        ) {
             Ok(_) => null,
             Err(e) => Some(e),
         },
     };
+    let mut incomplete = result.failures();
     if let Some(e) = &report_error {
-        eprintln(`eddy: the findings are not placed or reproduced: ${*e}`);
+        incomplete.push(`The findings are not placed or reproduced: ${*e}`);
+    }
+    for let s of &incomplete {
+        eprintln(`eddy: ${*s}`);
     }
 
     let attempt = Attempt {
@@ -165,6 +202,10 @@ ${commits.trim()}`;
         reviewer: CLAUDE_MODEL,
         reporter: options.reporter,
         run: !options.no_run,
+        reviewers: match &earlier {
+            Some(e) => e.reviewers,
+            null => options.reviewers,
+        },
         max_turns: options.max_turns,
         effort: options.effort,
         result,
@@ -175,20 +216,26 @@ ${commits.trim()}`;
     // ever add files. The name sorts by when the review ended.
     let path = fs::join(&records, `${Instant::now().epoch_milliseconds()}-${token_hex(4)}.json`);
     fs::write(&path, &to_bytes_pretty(&attempt).unwrap()).unwrap();
-    eprintln(`recorded in ${path}: ${result.turns} turns, ${result.calls.len()} tool calls`);
+    let reported = if options.no_run { "reported unreproduced" } else { "reproduced alone" };
+    eprintln(
+        `recorded in ${path}: ${result.searches.len()} searches, ${result.candidates.len()} candidates kept, ${result.reproductions.len()} tried, ${result.findings.len()} ${reported}, ${result.total_turns()} turns`,
+    );
     // Computed here rather than recorded: a price changes, and the tokens a
     // review took do not.
     let cost = cost_summary(&[
-        [CLAUDE_MODEL, result.usage.unwrap_or(Usage {})],
+        [CLAUDE_MODEL, result.spent()],
         [options.reporter, report_usage],
     ]);
     eprintln(cost);
+    if let Some(s) = spends(&CLAUDE_MODEL, &result) {
+        eprintln(spend_report(&s));
+    }
 
     let dir = fs::join(&options.out, &head);
     write_findings(&dir, &head, &result.findings);
     fs::write(
         fs::join(&dir, "review.md"),
-        &review_comment(&result.findings, &head, &cost, &result.error, &report_error),
+        &review_comment(&result.findings, &head, &cost, &result.error, &incomplete),
     ).unwrap();
     if let Some(e) = &result.error {
         fail(*e);
@@ -214,25 +261,28 @@ fn last_attempt(records: &String) -> Attempt with (Stderr, Exit, Preopens) {
     };
 }
 
-/// `earlier`, a recorded review, as its reviewer left it: the findings in its
-/// words, and in the fresh tree at `w` the files it wrote. Reporting it again
-/// tries another reporter on one review, where a second review would find
-/// other things.
-fn reviewed_again(w: &Workspace, earlier: &Reviewed) -> Reviewed with (Preopens, Process) {
-    let mut again = *earlier;
-    // The earlier attempt holds what the review took; this one took nothing.
+/// `earlier`, a recorded review, as its reviewers left it: the findings in
+/// their words, before any was placed or reproduced. Reporting it again tries
+/// another reporter on one review, where a second review would find other
+/// things.
+fn reviewed_again(earlier: &Reviewed) -> Reviewed {
+    let mut again = unreported(earlier);
+    again.searches = [];
+    for let r of &mut again.reproductions {
+        *r = unreported(r);
+    }
+    return again;
+}
+
+/// `step` with nothing a report added, and nothing spent: the earlier attempt
+/// holds what the review took.
+fn unreported(step: &Reviewed) -> Reviewed {
+    let mut again = *step;
     again.usage = null;
     again.requests = [];
     for let f of &mut again.findings {
         f.line = 0;
         f.repro = null;
-    }
-    if w.runner matches { Some(_) } {
-        for let c of &again.calls {
-            if c.name == "Write" && !c.is_error {
-                w.call(&c.name, &c.input).unwrap();
-            }
-        }
     }
     return again;
 }

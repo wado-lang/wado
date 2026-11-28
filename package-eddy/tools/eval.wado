@@ -3,9 +3,9 @@
 
 use { Process } from "core:process";
 use { Usage } from "../src/anthropic.wado";
-use { Call } from "../src/agent.wado";
+use { Call, Request } from "../src/agent.wado";
 use { git, paths_between, diff_between } from "../src/git.wado";
-use { Finding } from "../src/review.wado";
+use { Finding, Reviewed } from "../src/review.wado";
 
 /// One pull request, as the merge commit that landed it on `main` records it.
 pub struct Merge {
@@ -93,12 +93,16 @@ pub struct Checked {
 pub struct Baseline {
     pub reviewer: String,
     pub grader: String,
+    /// Empty in a file written before a reporter reported its runs.
+    pub reporter: String = "",
     pub tools: bool = false,
     pub symbols: bool = false,
     pub run: bool = false,
 
     // The defaults are what the files written before these were recorded ran.
 
+    /// 0: one reviewer searched and reproduced alone, before reviews were split.
+    pub reviewers: i32 = 0,
     pub max_turns: i32 = 40,
     /// Empty where none was sent: the API's default.
     pub effort: String = "",
@@ -113,14 +117,63 @@ pub struct Entry {
     pub runs: List<Run>,
 }
 
-/// One review of an entry's culprit.
+/// One review of an entry's culprit, as `Reviewed` holds one: the turns,
+/// calls, usage and requests are the triage's, or in a file written before
+/// reviews were split the only reviewer's.
 pub struct Run {
+    /// What the review reports: where it reproduced candidates, only those a
+    /// test reproduced again alone.
     pub findings: List<Finding> = [],
+    pub searches: List<Reviewed> = [],
+    pub candidates: List<Finding> = [],
+    pub triage_error: Option<String> = null,
+    pub reproductions: List<Reviewed> = [],
     pub turns: i32 = 0,
     pub calls: List<Call> = [],
     pub usage: Option<Usage> = null,
+    /// Empty in a file written before they were kept.
+    pub requests: List<Request> = [],
+    /// What the reporter took, and why it failed where it did.
+    pub report_usage: Option<Usage> = null,
+    pub report_error: Option<String> = null,
     pub grade: Option<Grade> = null,
+    /// The grade of the candidates, which says whether the searches found the
+    /// defect where the findings miss it.
+    pub candidate_grade: Option<Grade> = null,
     pub error: Option<String> = null,
+}
+
+impl Run {
+    pub fn of(r: Reviewed) -> Run {
+        return Run {
+            findings: r.findings,
+            searches: r.searches,
+            candidates: r.candidates,
+            triage_error: r.triage_error,
+            reproductions: r.reproductions,
+            turns: r.turns,
+            calls: r.calls,
+            usage: r.usage,
+            requests: r.requests,
+            error: r.error,
+        };
+    }
+
+    /// The review as `review` returned it.
+    pub fn review(&self) -> Reviewed {
+        return Reviewed {
+            findings: self.findings,
+            turns: self.turns,
+            calls: self.calls,
+            usage: self.usage,
+            requests: self.requests,
+            error: self.error,
+            searches: self.searches,
+            candidates: self.candidates,
+            triage_error: self.triage_error,
+            reproductions: self.reproductions,
+        };
+    }
 }
 
 pub struct Grade {

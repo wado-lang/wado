@@ -4,7 +4,7 @@ Eddy is a code review bot written in Wado. It runs on the Anthropic API for
 now; later, models from several providers will review a change together,
 exchanging opinions.
 
-What runs today is one reviewer over one branch, from the command line; the
+What runs today is one model over one branch, from the command line; the
 rest of the pipeline [the design notes](./docs/design.md) describe is not
 implemented yet.
 
@@ -13,12 +13,38 @@ implemented yet.
 From the repository root, with `CLAUDE_API_KEY` set and the branch committed:
 
 ```sh
-mise run eddy-review             # the reviewer reads, writes tests and runs them
-mise run eddy-review --no-run    # it reads the diff and the tree, and runs nothing
+mise run eddy-review             # the reviewers read; a reproducer per candidate writes a test and runs it
+mise run eddy-review --no-run    # the candidates are reported unreproduced
 ```
 
-The findings go to stdout as JSON. A finding the reviewer reproduced carries
-its `repro`:
+A review takes three steps:
+
+1. Search. Eddy cuts the change into units: each definition it touched, read
+   whole from the head with the lines it added and removed marked, and the
+   functions it calls in the same file. The code comes before the tests and
+   the most changed first. Up to `--reviewers` reviewers (20) each read a
+   batch of about 7k tokens of them, and the units past the last batch go
+   unread. The ten most changed units are read twice, in two batches. Each
+   reviewer reviews the logic as it stands, so a defect the change left in
+   place is a candidate too. They run nothing and report candidates, the
+   uncertain ones included. `tools/units.wado` prints the units of a merge.
+2. Triage. One call merges the candidates that name one defect and keeps the
+   twenty most severe. It reads the candidates alone, not the diff, and judges
+   none of them right or wrong. Where the call fails, the first twenty as the
+   searches found them go on.
+3. Reproduce. A reproducer per candidate kept reads the diff of the
+   candidate's file and has three runs to show it with a test. Reading settles
+   nothing: a candidate no run shows is not reported. Before the review Eddy
+   builds the tests of each package the change touches and the `wado` binary.
+   A Run that builds for longer than the API keeps its cache would otherwise
+   have the whole conversation written to the cache again.
+
+The steps run one after another, so a review takes longer than a single
+reviewer would.
+
+The findings go to stdout as JSON. Each carries its `repro`, and only a finding
+whose test reproduced it again alone is reported; the record keeps the others.
+Under `--no-run` the candidates are reported unreproduced. A `repro` holds:
 
 - `patch` is the test it wrote, as a diff against the reviewed commit.
 - `run` is the command that runs it: `cargo`, `mise` for a task of the
@@ -42,17 +68,18 @@ Each finding is also written under `scratchpad/eddy/<head>/`, numbered from 1:
   out the reviewed commit, applies the patch and runs the test, so a reader
   with the repository alone reproduces it.
 - `review.md` is one comment for the whole review: a table of the findings and
-  what the review cost, then each finding's comment folded. It is written when
-  the review fails too, with the error.
+  what the review cost, then each finding's comment folded. It names each kind
+  of step that did not finish, and it is written when the review fails too,
+  with the error. A review fails when every search or every reproduction did.
 
 A finding's `line` is a line the diff shows, which is where a pull request
 takes a comment on a line, or 0.
 
-The reviewer is asked for none of this. Its instructions hold the review
-alone: what to look for, and to reproduce a finding with a test that asserts
-the right behaviour. A second, smaller model (`--reporter`, Claude Haiku 5.5)
-then reads the findings, the files the reviewer wrote and the runs it made,
-and names each finding's line, its test and the run that failed. Anything
+The reviewers are asked for none of this. Their instructions hold the review
+alone: what to look for, and for a reproducer, to show a candidate with a test
+that asserts the right behaviour. A second, smaller model (`--reporter`, Claude Haiku 5.5)
+then reads each reproducer's finding, the files it wrote and the runs it made,
+and names the finding's line, its test and the run that failed. Anything
 about how a finding is reported goes into that second prompt, so it cannot
 cost the review its attention. `--report-again` reports the last recorded
 review of a commit once more, which tries another reporter on the same
@@ -76,6 +103,17 @@ The record holds the tokens each model took, not the dollars: `src/cost.wado`
 prices them at Anthropic's list prices when the line is printed, so a price
 that changes is corrected in one table. A model the table does not list is
 named as unpriced, and the total is then a lower bound.
+
+The lines after it say where the money went: each reviewer's cost, split
+into its output, its prompt, and the results of each tool it called. A
+result is charged for its cache write and for every later turn that reads it
+back, so a large result read early shows as the expensive one.
+`tools/spend.wado` prints the same for a recorded review or an evaluation
+file:
+
+```sh
+wado run package-eddy/tools/spend.wado -- scratchpad/wiki/reviews/<head>/<review>.json
+```
 
 In a Claude Code session the `eddy` skill runs
 the review and hands the findings to `code-review-response`.
