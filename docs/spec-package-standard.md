@@ -2,7 +2,7 @@
 
 Every package keeps each kind of file in the same place, so a reader, a tool or
 an agent finds it without learning the package first. `wado new` lays a package
-out this way; [Tools](./spec-packages.md#tools) says what it writes.
+out this way ([Tools](./spec-packages.md#tools)).
 
 ## The Root
 

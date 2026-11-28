@@ -8,10 +8,8 @@ description: "Where a Wado package keeps each kind of file: the root files, docs
 [`docs/spec-package-standard.md`](../../../docs/spec-package-standard.md) is
 the standard. Read it first. This skill adds what it asks of an agent.
 
-- Create a package with `wado new`, never by hand. In this repository that is
-  `wado new package-foo --name foo`: it writes the required root files, `src/`
-  and `tests/`, and adds `package-foo` to the root workspace's `members`. Then
-  add the package to the Repository Map in the root `AGENTS.md`.
+- Create a package with `wado new`, never by hand; the `wado-cli` skill says
+  how. Then add the package to the Repository Map in the root `AGENTS.md`.
 - Ask the user before creating a directory the standard does not name. Once
   approved, the package's `AGENTS.md` says what it holds.
 - A file that moves takes every reference to it along: `use` and

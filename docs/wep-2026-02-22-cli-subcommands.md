@@ -216,9 +216,9 @@ Consistency TODOs (do not implement piecemeal — land them together in Phase 3)
 - [ ] Add `--locked` / `--offline` / `--frozen` to every graph-reading tier:
   resolve (`update`, `add`, `remove`, `fetch`), orchestrator (`build`),
   driver (`run`, `serve`, `test`, `publish`, `exec`), and analyze (`check`,
-  `doc`, `wit`, `dump`, `query`). Reject them on the primitives (`compile`,
-  `format`, `init`, `new`, `workspace`, `syntax`, `lsp`) so the flag surface
-  stays honest.
+  `doc`, `wit`, `dump`, `query`). Reject them on the commands that resolve
+  nothing (`compile`, `format`, `init`, `new`, `workspace`, `syntax`, `lsp`)
+  so the flag surface stays honest.
 - [ ] `publish` must verify against a full, fresh lock before uploading (a stale
   or partial lock is an error, like `cargo publish`'s verification build).
 - [ ] `exec` consumes the same resolved graph (lock + cache) as the other
@@ -229,10 +229,10 @@ Consistency TODOs (do not implement piecemeal — land them together in Phase 3)
 ### `wado init`, `wado new` and `wado workspace`
 
 `wado init` lays out a package in the current directory, in
-[the standard layout](./spec-package-standard.md). `wado new <dir>` is
-`mkdir -p <dir> && cd <dir> && wado init`. `wado workspace init | new | add`
-creates a workspace and adds an existing package to its `members`. None of
-them prompts: a flag gives what the directory and the workspace do not.
+[the standard layout](./spec-package-standard.md). `wado new <dir>` creates the
+directory and runs `init` there. `wado workspace init | new | add` creates a
+workspace and adds an existing package to its `members`. None of them prompts:
+a flag gives what the directory and the workspace do not.
 
 ```sh
 wado new geo --namespace acme      # a library, named after its directory
@@ -241,9 +241,9 @@ wado workspace new tools --namespace acme
 ```
 
 `wado workspace` is a family of its own because it edits `wado-workspace.toml`;
-a command on one member, such as `publish`, stays top-level. A package created
-under a workspace joins its `members`, unless git ignores its directory.
-[Tools](./spec-packages.md#tools) holds the rules.
+a command on one member, such as `publish`, stays top-level.
+[Tools](./spec-packages.md#tools) holds the rules, workspace membership among
+them.
 
 ### `wado add`
 
