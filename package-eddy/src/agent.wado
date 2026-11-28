@@ -33,6 +33,11 @@ pub struct Call {
     pub is_error: bool,
     /// What the call returned, where `Workspace::observes` keeps it.
     pub output: Option<String> = null,
+    /// The turn that made it, from 1; 0 in a record written before it was
+    /// kept.
+    pub turn: i32 = 0,
+    /// The length of what it returned, in bytes.
+    pub bytes: i32 = 0,
 }
 
 struct TextBlock {
@@ -121,7 +126,7 @@ pub fn run_agent(
                 Err(e) => [e, true],
             };
             let output: Option<String> = if ws.observes(&name) && !is_error { Some(content) } else { null };
-            calls.push(Call { name, input: b.input, is_error, output });
+            calls.push(Call { name, input: b.input, is_error, output, turn: turns, bytes: content.len() });
             results.push(message(&ToolResult { tool_use_id: b.id.unwrap(), content, is_error }));
         }
         if turns + 1 == max_turns {

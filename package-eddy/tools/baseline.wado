@@ -50,7 +50,7 @@ use {
 } from "./eval.wado";
 use { ask_json, Credential, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
-use { review, Finding, Submission, MAX_REVIEWERS } from "../src/review.wado";
+use { review, Submission, MAX_REVIEWERS } from "../src/review.wado";
 use { hold_tree, Tree, home_runner, with_mise_tools, reset_snapshot, index } from "../src/snapshot.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
@@ -175,7 +175,7 @@ ${fix_diff}
                 reset_snapshot(&w.repo, &w.root, &culprit.sha);
             }
             let graded = review_once(&mut credential, &review_prompt, &known, &ws, &mut grading);
-            reviewing.add(&graded.usage.unwrap_or(Usage {}));
+            reviewing.add(&graded.review().spent());
             out.entries[i].runs.push(graded);
             // Written after every run, so a run that dies keeps what it paid for.
             fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
@@ -231,16 +231,13 @@ fn review_once(
     grading: &mut Usage,
 ) -> Run with (Client, Preopens, Process, MonotonicClock) {
     let r = review(credential, CLAUDE_MODEL, review_prompt, ws, REVIEWERS, MAX_TURNS, EFFORT);
-    let mut candidates: List<Finding> = [];
-    for let s of &r.searches {
-        candidates.extend(&s.findings);
-    }
     let mut reviewed = Run {
         findings: r.findings,
-        candidates,
-        turns: r.total_turns(),
+        searches: r.searches,
+        turns: r.turns,
         calls: r.calls,
-        usage: Some(r.spent()),
+        usage: r.usage,
+        requests: r.requests,
         error: r.error,
     };
     if reviewed.error matches { Some(_) } {

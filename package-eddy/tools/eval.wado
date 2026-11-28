@@ -3,9 +3,9 @@
 
 use { Process } from "core:process";
 use { Usage } from "../src/anthropic.wado";
-use { Call } from "../src/agent.wado";
+use { Call, Request } from "../src/agent.wado";
 use { git, paths_between, diff_between } from "../src/git.wado";
-use { Finding } from "../src/review.wado";
+use { Finding, Reviewed } from "../src/review.wado";
 
 /// One pull request, as the merge commit that landed it on `main` records it.
 pub struct Merge {
@@ -113,16 +113,35 @@ pub struct Entry {
     pub runs: List<Run>,
 }
 
-/// One review of an entry's culprit.
+/// One review of an entry's culprit. The turns, calls, usage and requests are
+/// the confirming reviewer's, or the only reviewer's in a file written before
+/// reviews were split.
 pub struct Run {
     pub findings: List<Finding> = [],
-    /// What the searches reported before one reviewer confirmed it.
-    pub candidates: List<Finding> = [],
+    /// The searches whose candidates one reviewer confirmed.
+    pub searches: List<Reviewed> = [],
     pub turns: i32 = 0,
     pub calls: List<Call> = [],
     pub usage: Option<Usage> = null,
+    /// Empty in a file written before they were kept.
+    pub requests: List<Request> = [],
     pub grade: Option<Grade> = null,
     pub error: Option<String> = null,
+}
+
+impl Run {
+    /// The review as `review` returned it.
+    pub fn review(&self) -> Reviewed {
+        return Reviewed {
+            findings: self.findings,
+            turns: self.turns,
+            calls: self.calls,
+            usage: self.usage,
+            requests: self.requests,
+            error: self.error,
+            searches: self.searches,
+        };
+    }
 }
 
 pub struct Grade {

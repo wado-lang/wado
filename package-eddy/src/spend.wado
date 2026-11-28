@@ -1,0 +1,203 @@
+//! Where a review's money went: each reviewer's cost, split into what it
+//! wrote (its output), the prompt it was given, and the results of each tool
+//! it called.
+//!
+//! Every request writes to the cache what the turn before it added and reads
+//! back everything earlier. What a turn added is charged to that turn's calls,
+//! in proportion to the bytes each returned. Each later read is split over
+//! the additions it read, in proportion to their tokens. So a large result
+//! read early costs once to write and again on every turn after it, and the
+//! parts add up to the review's cost exactly.
+
+use { HashMap } from "core:collections";
+use { Value } from "core:value";
+use { Call, Request } from "./agent.wado";
+use { Usage } from "./anthropic.wado";
+use { charges, charges_of, cost_usd } from "./cost.wado";
+use { Reviewed } from "./review.wado";
+
+/// What one reviewer spent, in US dollars, by part: `output`, `prompt`, a
+/// tool's name, and `reply` for a turn that called nothing. A record that
+/// kept no requests splits only into output, writes and reads.
+pub struct Spend {
+    pub reviewer: String,
+    pub turns: i32,
+    pub parts: HashMap<String, f64>,
+}
+
+impl Spend {
+    pub fn total(&self) -> f64 {
+        let mut sum = 0.0;
+        for let [_, dollars] of self.parts.entries() {
+            sum += *dollars;
+        }
+        return sum;
+    }
+
+    fn charge(&mut self, part: &String, dollars: f64) {
+        self.parts[*part] = self.parts.get(*part).unwrap_or(0.0) + dollars;
+    }
+}
+
+/// What each reviewer of `reviewed`, all on `model`, spent: each search, then
+/// the reviewer that confirmed them. `null` for a model with no listed price.
+pub fn spends(model: &String, reviewed: &Reviewed) -> Option<List<Spend>> {
+    let mut out: List<Spend> = [];
+    for let s of &reviewed.searches {
+        out.push(spend(model, &`search ${s.focus}`, s)?);
+    }
+    let name = if reviewed.searches.is_empty() { "review" } else { "confirm" };
+    out.push(spend(model, &name, reviewed)?);
+    return Some(out);
+}
+
+fn spend(model: &String, name: &String, r: &Reviewed) -> Option<Spend> {
+    let mut s = Spend { reviewer: *name, turns: r.turns, parts: HashMap::<String, f64>::new() };
+    if r.requests.is_empty() {
+        if let Some(usage) = &r.usage {
+            let c = charges_of(model, usage)?;
+            s.charge(&"output", c.output);
+            s.charge(&"unattributed writes", c.input + c.write);
+            s.charge(&"unattributed reads", c.read);
+        }
+        return Some(s);
+    }
+    // The tokens each request added to the conversation, and what each costs
+    // in all: its write, and its share of every later read.
+    let mut added: List<f64> = [];
+    let mut dollars: List<f64> = [];
+    for let [j, req] of r.requests.into_iter().enumerate() {
+        let c = charges(model, &req.usage)?;
+        s.charge(&"output", c.output);
+        let earlier = sum(&added);
+        if earlier == 0.0 {
+            s.charge(&"prompt", c.read);
+        } else {
+            for let k of 0..<j {
+                dollars[k] += c.read * added[k] / earlier;
+            }
+        }
+        added.push((req.usage.input_tokens + req.usage.cache_creation_input_tokens) as f64);
+        dollars.push(c.input + c.write);
+    }
+    s.charge(&"prompt", dollars[0]);
+    for let turn of 1..<dollars.len() {
+        charge_turn(&mut s, &r.calls, turn, dollars[turn]);
+    }
+    return Some(s);
+}
+
+/// Charges `dollars`, what turn `turn` added, to its calls by the bytes each
+/// returned.
+fn charge_turn(s: &mut Spend, calls: &List<Call>, turn: i32, dollars: f64) {
+    let mut bytes = 0;
+    for let c of calls {
+        if c.turn == turn {
+            bytes += c.bytes;
+        }
+    }
+    if bytes == 0 {
+        s.charge(&"reply", dollars);
+        return;
+    }
+    for let c of calls {
+        if c.turn == turn {
+            s.charge(&c.name, dollars * c.bytes as f64 / bytes as f64);
+        }
+    }
+}
+
+fn sum(xs: &List<f64>) -> f64 {
+    let mut total = 0.0;
+    for let x of xs {
+        total += *x;
+    }
+    return total;
+}
+
+/// `spends` as lines: the total, then each reviewer with its turns and its
+/// parts, the dearest first.
+pub fn spend_report(spends: &List<Spend>) -> String {
+    let mut all = 0.0;
+    for let s of spends {
+        all += s.total();
+    }
+    let mut out = `spend: $${all:.4}`;
+    for let s of spends {
+        let mut parts: List<[String, f64]> = [];
+        for let [part, dollars] of s.parts.entries() {
+            parts.push([*part, *dollars]);
+        }
+        parts.sort_by(|a, b| b[1].cmp(&a[1]));
+        let shown: List<String> = parts.into_iter().map(|p| `${p[0]} $${p[1]:.4}`).collect();
+        out.push_str(`\n  ${s.reviewer}: $${s.total():.4} in ${s.turns} turns (${shown.join(", ")})`);
+    }
+    return out;
+}
+
+test "a review's spend adds up to its cost, and a result is charged for every read after it" {
+    // 1M prompt tokens; the first turn's Read adds 1M, the second's Grep 2M.
+    let requests: List<Request> = [
+        Request {
+            started: 0.0,
+            usage: Usage { cache_creation_input_tokens: 1_000_000, output_tokens: 100_000 },
+        },
+        Request {
+            started: 1.0,
+            usage: Usage {
+                cache_creation_input_tokens: 1_000_000,
+                cache_read_input_tokens: 1_000_000,
+                output_tokens: 100_000,
+            },
+        },
+        Request {
+            started: 2.0,
+            usage: Usage {
+                cache_creation_input_tokens: 2_000_000,
+                cache_read_input_tokens: 2_000_000,
+                output_tokens: 100_000,
+            },
+        },
+    ];
+    let calls: List<Call> = [
+        Call { name: "Read", input: Value::Null, is_error: false, turn: 1, bytes: 10 },
+        Call { name: "Grep", input: Value::Null, is_error: false, turn: 2, bytes: 30 },
+        Call { name: "Read", input: Value::Null, is_error: false, turn: 2, bytes: 10 },
+    ];
+    let mut usage = Usage {};
+    for let r of &requests {
+        usage.add_request(&r.usage);
+    }
+    let r = Reviewed { turns: 3, requests, calls, usage: Some(usage) };
+    let s = spend(&"claude-opus-5-5", &"review", &r).unwrap();
+    // Writes cost $5 a million, reads $0.20, output $20.
+    assert f64::abs(s.total() - cost_usd(&"claude-opus-5-5", &usage).unwrap()) < 1e-9;
+    assert f64::abs(s.parts["output"] - 6.0) < 1e-9;
+    // The prompt: written once ($5), read in full by the second request
+    // ($0.20) and as half of the third's ($0.20).
+    assert f64::abs(s.parts["prompt"] - 5.4) < 1e-9;
+    // Turn 2's $10 write goes 3:1 to Grep and Read; turn 1's Read is written
+    // ($5) and read as half of the third request ($0.20).
+    assert f64::abs(s.parts["Grep"] - 7.5) < 1e-9;
+    assert f64::abs(s.parts["Read"] - 7.7) < 1e-9;
+}
+
+test "a record that kept no requests is spent by kind of token alone" {
+    let r = Reviewed { turns: 2, usage: Some(Usage { output_tokens: 1_000_000, cache_read_input_tokens: 5_000_000 }) };
+    let s = spend(&"claude-opus-5-5", &"review", &r).unwrap();
+    assert s.parts["output"] == 20.0 && s.parts["unattributed reads"] == 1.0 && s.parts["unattributed writes"] == 0.0;
+    assert spends(&"claude-next", &r) matches { null };
+}
+
+test "a split review is spent search by search, then by the reviewer that confirmed them" {
+    let one = Reviewed { turns: 1, usage: Some(Usage { output_tokens: 1_000_000 }) };
+    let r = Reviewed {
+        ..one,
+        searches: [
+            Reviewed { ..one, focus: "code" },
+        ],
+    };
+    let report = spend_report(&spends(&"claude-opus-5-5", &r).unwrap());
+    assert report.starts_with("spend: $40.0000\n  search code: $20.0000 in 1 turns (output $20.0000, ");
+    assert report.contains("\n  confirm: $20.0000 in 1 turns (output $20.0000, ");
+}

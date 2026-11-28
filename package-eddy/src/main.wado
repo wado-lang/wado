@@ -51,6 +51,7 @@ use { Credential, Usage } from "./anthropic.wado";
 use { comment, finding_id, review_comment } from "./comment.wado";
 use { cost_summary } from "./cost.wado";
 use { report } from "./report.wado";
+use { spend_report, spends } from "./spend.wado";
 use { review, Submission, Finding, Reviewed, MAX_REVIEWERS } from "./review.wado";
 use { hold_tree, home_runner, with_mise_tools } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
@@ -196,6 +197,9 @@ ${commits.trim()}`;
         [options.reporter, report_usage],
     ]);
     eprintln(cost);
+    if let Some(s) = spends(&CLAUDE_MODEL, &result) {
+        eprintln(spend_report(&s));
+    }
 
     let dir = fs::join(&options.out, &head);
     write_findings(&dir, &head, &result.findings);

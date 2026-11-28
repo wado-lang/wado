@@ -91,6 +91,17 @@ prices them at Anthropic's list prices when the line is printed, so a price
 that changes is corrected in one table. A model the table does not list is
 named as unpriced, and the total is then a lower bound.
 
+The lines after it say where the money went: each reviewer's cost, split
+into its output, its prompt, and the results of each tool it called. A
+result is charged for its cache write and for every later turn that reads it
+back, so a large result read early shows as the expensive one.
+`tools/spend.wado` prints the same for a recorded review or an evaluation
+file:
+
+```sh
+wado run package-eddy/tools/spend.wado -- scratchpad/wiki/reviews/<head>/<review>.json
+```
+
 In a Claude Code session the `eddy` skill runs
 the review and hands the findings to `code-review-response`.
 
