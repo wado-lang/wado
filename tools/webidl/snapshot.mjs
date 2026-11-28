@@ -31,6 +31,22 @@ const SLICE = [
   "Window",
   "NodeIterator",
   "TreeWalker",
+  "Comment",
+  "DocumentFragment",
+  "NodeList",
+  "HTMLCollection",
+  "DOMTokenList",
+  "CSSStyleDeclaration",
+  "CSSStyleProperties",
+  "DOMRectReadOnly",
+  "DOMRect",
+  "HTMLCanvasElement",
+  "CanvasRenderingContext2D",
+  "CanvasGradient",
+  "CanvasPattern",
+  "Path2D",
+  "TextMetrics",
+  "ImageData",
 ];
 
 const [out, mode] = process.argv.slice(2);

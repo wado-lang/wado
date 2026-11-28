@@ -26,6 +26,7 @@ use { render_dump, render_dump_json } from "./dump.wado";
 
 // `--type` and `--options` are the `with` clause's words, so a use site reads
 // as the command line that reproduces it.
+
 struct GenArgs {
     type: Option<String> = null,
     /// A JSON file holding the `generator.options` a use site writes.
@@ -41,6 +42,7 @@ struct GenArgs {
     #[wire(positional)]
     files: List<String> = [],
 }
+
 impl Deserialize for GenArgs;
 
 struct DumpArgs {
@@ -51,6 +53,7 @@ struct DumpArgs {
     #[wire(positional)]
     files: List<String> = [],
 }
+
 impl Deserialize for DumpArgs;
 
 #[wire(name_policy = "kebab-case")]
@@ -58,6 +61,7 @@ variant Command {
     Gen(GenArgs),
     Dump(DumpArgs),
 }
+
 impl Deserialize for Command;
 
 global USAGE: String = "Usage: loam gen --type <type> [--options <options.json>] [--checkpoint <file.safetensors>]... [--index <index.json>] [--runtime <spec>] [--output <file>] <file>

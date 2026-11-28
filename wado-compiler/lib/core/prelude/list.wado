@@ -55,6 +55,7 @@ pub struct List<affine T> {
 
 // What reads no element by value, so an affine element reaches it too
 // (WEP: Affine Types).
+
 impl<affine T> List<T> {
     #[compiler_item("list_with_capacity")]
     pub fn with_capacity(capacity: i32) -> List<T> {
@@ -250,6 +251,7 @@ impl<affine T> List<T> {
 }
 
 // What copies an element, so a copyable one only.
+
 impl<T> List<T> {
     /// A list of `n` copies of `element`.
     pub fn filled(n: i32, element: T) -> List<T> {
@@ -498,6 +500,7 @@ impl<T> List<T> {
 }
 
 // Sorting only moves elements, so it takes an affine one.
+
 impl<affine T> List<T> {
     /// In-place sort with comparator. Stable, O(n log n) worst case. `cmp` is
     /// handed references as `iter_ref` hands them out: a `Ref` element in
@@ -681,6 +684,7 @@ impl<T> FromIterator for List<T> {
 
 // `[e0, e1, …]` as a `List<T>`: the literal is the backing array already, so
 // the list is its spine over it (WEP 2026-08-24).
+
 impl<affine T> From<Array<T>> for List<T> {
     fn from(elements: Array<T>) -> List<T> {
         let used = builtin::array_len(&elements);

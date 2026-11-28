@@ -504,6 +504,7 @@ impl<K: Hash, V: RefMut> IndexRefMut<K> for HashMap<K, V> {
 
 // `{ key: value, … }` as a `HashMap<String, V>` under the host's seed, last
 // write wins (WEP 2026-08-24).
+
 impl<V> From<Array<[String, V]>> for HashMap<String, V> {
     fn from(entries: Array<[String, V]>) -> HashMap<String, V> {
         let mut map = HashMap::<String, V>::new();
@@ -609,6 +610,7 @@ impl<T: Hash> IntoIterator for HashSet<T> {
 
 // `[e0, e1, …]` as a `HashSet<T>` under the host's seed, last duplicate
 // ignored (WEP 2026-08-24).
+
 impl<T: Hash> From<Array<T>> for HashSet<T> {
     fn from(elements: Array<T>) -> HashSet<T> {
         let mut set = HashSet::<T>::new();

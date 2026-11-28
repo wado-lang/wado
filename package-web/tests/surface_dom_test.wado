@@ -1,6 +1,7 @@
 use {
     AddEventListenerOptions,
     AddEventListenerOptionsOrBool,
+    BoolOrF64OrString,
     Document,
     DocumentReadyState,
     DocumentVisibilityState,
@@ -27,6 +28,7 @@ test "a callback interface holds its constants" {
 }
 
 // <body><div><p></p><span>hi</span></div><em></em></body>, by tag name.
+
 fn traversal_tree(doc: Document) -> Node with Dom {
     let body = doc.body().unwrap();
     let div = doc.create_element("div");
@@ -150,6 +152,7 @@ test "a node iterator answers the node it passes, either way" {
 
 // <body><div><p></p><span>hi</span></div><em></em></body>, and an iterator over
 // its elements whose reference is `SPAN`, the pointer on the side `before` says.
+
 fn at_span(doc: Document, before: bool) -> NodeIterator with Dom {
     let iterator = doc.create_node_iterator(
         traversal_tree(doc),
@@ -293,6 +296,40 @@ test "a document nothing loads or shows is complete and hidden" {
         let doc = Dom::document();
         assert doc.ready_state() == DocumentReadyState::Complete;
         assert doc.visibility_state() == DocumentVisibilityState::Hidden;
+    };
+}
+
+test "hidden answers a boolean, or the string of the hidden-until-found state" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let body = Dom::document().body().unwrap();
+        assert body.hidden() == Option::Some(BoolOrF64OrString::AsBool(false));
+        body.set_attribute("hidden", "bogus");
+        assert body.hidden() == Option::Some(BoolOrF64OrString::AsBool(true));
+        body.set_attribute("hidden", "Until-Found");
+        assert body.hidden() == Option::Some(BoolOrF64OrString::AsString("until-found"));
+    };
+}
+
+test "setting hidden keeps the attribute unless the value is falsy" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let body = Dom::document().body().unwrap();
+        body.set_hidden(Option::Some(BoolOrF64OrString::AsString("UNTIL-FOUND")));
+        assert body.get_attribute("hidden") == Option::Some("until-found");
+        body.set_hidden(Option::Some(BoolOrF64OrString::AsF64(2.0)));
+        assert body.get_attribute("hidden") == Option::Some("");
+        for let falsy of [
+            Option::Some(BoolOrF64OrString::AsBool(false)),
+            Option::Some(BoolOrF64OrString::AsString("")),
+            null,
+            Option::Some(BoolOrF64OrString::AsF64(-0.0)),
+            Option::Some(BoolOrF64OrString::AsF64(f64::NAN)),
+        ] as List<Option<BoolOrF64OrString>> {
+            body.set_hidden(Option::Some(BoolOrF64OrString::AsBool(true)));
+            body.set_hidden(falsy);
+            assert !body.has_attribute("hidden");
+        }
     };
 }
 
@@ -1108,6 +1145,7 @@ test "a removed subtree stays a tree, and its listeners stay with it" {
 
 // What a node the program dropped costs is what the collector copies of it:
 // kept alive, each of these would be copied at every collection after it.
+
 #[timeout(seconds = 10)]
 test "a node the program dropped is collected" {
     let mut dom = SurfaceDom::new();

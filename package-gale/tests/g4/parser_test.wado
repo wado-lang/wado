@@ -10,6 +10,7 @@ test "minimal grammar" {
 
 // ANTLR4's `NameStartChar` admits `À` upwards, and it types a rule by
 // `Character.isUpperCase` on its first character: the UCD's `Uppercase`.
+
 test "a rule name outside ASCII parses and is typed by Uppercase" {
     let upper = parse("grammar Test;\nÀBC : [0-9]+ ;").unwrap();
     assert upper.lexer_rules.len() == 1;
@@ -443,6 +444,7 @@ X : [\\p{Script=Greek}] ;");
 
 // `core:icu` has no Block, Decomposition_Type or contributory `Other_*`, so each is
 // refused, not approximated: `\P{...}` of a close-enough set admits real members.
+
 test "a property Gale deliberately does not answer says so" {
     let blk = parse("grammar Test;\nX : [\\p{Block=Greek_And_Coptic}] ;");
     assert blk.unwrap_err().message.contains("ICU ships no Block data");
@@ -1465,6 +1467,7 @@ b : 'y' ;";
 
 // A set is fixed before any input is read, so code inside one has no point at
 // which to run. ANTLR4 rejects every form as a syntax error.
+
 test "an action or predicate inside a `~` set is rejected" {
     for let src of [
         "grammar Test;\na : ~( {true}? A | B ) ;", "grammar Test;\na : ~( {int x = 1;} A | B ) ;",
@@ -2469,6 +2472,7 @@ test "a label rebound as another kind, or to another rule, in one rule is reject
 
 // A labelled alternative's labels live in its own context, which a prequel
 // does not see: the jar's Java fails to compile on these.
+
 test "a prequel reading a label of labelled alternatives is rejected" {
     let bad: List<String> = [
         "grammar Test;\nr @after {$x.text} : x=a # One | x=a C # Two ;\na : A ;",

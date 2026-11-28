@@ -3,7 +3,7 @@
 //! its decision; emit renders the same conditions into the dispatch. Both read
 //! one answer here, each from the site it stands at.
 
-use { AltAction, Alternative, Element, ParserRule } from "./ir.wado";
+use { AltAction, Alternative, Element, ParserRule, edge_gates } from "./ir.wado";
 use { rule_returns_vals } from "./action_translate.wado";
 use { GrammarAnalysis, RuleLeftEdges } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
@@ -111,7 +111,7 @@ pub fn predicate_condition_for(
         let name = pred_fn_name(analysis.predicate_fn_id(a.source.action_id));
         return Option::Some(GateCond::calling(name, `${name}(p)`));
     }
-    let rules = analysis.parser_rules();
+    let rules = analysis.rule_attrs();
     let rule = &rules[site.rule_index];
     return match translate_predicate(
         &settings.action_language,
@@ -148,7 +148,9 @@ pub fn predicate_is_fn(a: &AltAction, settings: &GenSettings) -> bool {
 /// written.
 pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &GrammarAnalysis, site: &PredicateSite) -> bool {
     return settings.emit_actions
-        && alt.edge_gates().iter_ref().any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
+        && edge_gates(&alt.actions)
+            .iter_ref()
+            .any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
 }
 
 /// Whether prediction entering `alt` meets a predicate that renders:
@@ -244,7 +246,7 @@ pub fn decision_predicates(settings: &GenSettings, analysis: &mut GrammarAnalysi
             let rule = &rules[r];
             let site = PredicateSite {
                 rule_index: r,
-                vals_in_scope: rule_returns_vals(rule),
+                vals_in_scope: rule_returns_vals(&analysis.rule_attrs()[r]),
                 before_alternatives: true,
             };
             let exit = walk.exits[r];
@@ -817,7 +819,7 @@ fn alt_empty_paths(
 /// answers a predicate.
 pub fn scan_answers_predicates(rules: &List<ParserRule>, settings: &GenSettings, analysis: &mut GrammarAnalysis) -> bool {
     for let mut r = 0; r < rules.len(); r += 1 {
-        let site = PredicateSite { rule_index: r, vals_in_scope: rule_returns_vals(&rules[r]) };
+        let site = PredicateSite { rule_index: r, vals_in_scope: rule_returns_vals(&analysis.rule_attrs()[r]) };
         if any_alt_scan_answers(&rules[r].alternatives, settings, analysis, &site, &rules[r].name) {
             return true;
         }
@@ -876,7 +878,7 @@ fn alt_scan_gate_conjunction(
         return String::new();
     }
     let mut conds: List<String> = [];
-    for let a of &alt.edge_gates() {
+    for let a of &edge_gates(&alt.actions) {
         if let Some(code) = scan_gate_condition_for(a, settings, analysis, site) {
             conds.push(code);
         }

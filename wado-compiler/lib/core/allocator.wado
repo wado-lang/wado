@@ -2,16 +2,16 @@
 #![no_prelude]
 #![stdlib("core:allocator")]
 
-/// This module defines the linear memory allocator for the Component Model.
-/// All items here are compiled into a separate Wasm core module named "mem".
-///
-/// Two allocator implementations are provided:
-/// - `freelist_realloc`: Free-list allocator that reclaims freed memory.
-/// - `debug_realloc`: Debug allocator that poisons freed memory with 0xFF
-///   and never reuses freed addresses (for use-after-free detection).
-///
-/// The compiler selects one based on `--allocator` flag or target world,
-/// and DCE removes the unused implementations.
+//! This module defines the linear memory allocator for the Component Model.
+//! All items here are compiled into a separate Wasm core module named "mem".
+//!
+//! Two allocator implementations are provided:
+//! - `freelist_realloc`: Free-list allocator that reclaims freed memory.
+//! - `debug_realloc`: Debug allocator that poisons freed memory with 0xFF
+//!   and never reuses freed addresses (for use-after-free detection).
+//!
+//! The compiler selects one based on `--allocator` flag or target world,
+//! and DCE removes the unused implementations.
 
 // Addresses and sizes are `u32` here, and `realloc`'s `i32`s are cast at the
 // boundary: a 32-bit memory spans 4 GiB, and a signed comparison misorders the
@@ -128,37 +128,6 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     return block as i32;
 }
 
-/// Free-list allocator — reclaims freed memory with a *coalescing*,
-/// size-class-segregated free list. The default for every world but the test
-/// world.
-///
-/// Every block carries an 8-byte header and 8-byte footer (boundary
-/// tags), both holding `block_size | used_bit`. On free, the physically
-/// adjacent previous and next blocks are inspected through their tags
-/// and merged when free, so per-request allocation churn cannot shatter
-/// the heap into unusable fragments.
-///
-/// Free blocks are kept in segregated free lists — one doubly-linked
-/// list per size class. Bin `k` (k < 32) holds blocks of size exactly
-/// `32 + 16*k`; bin 32 is the catch-all "large" bin (first-fit).
-/// Allocation goes straight to the size class's bin, so the common case
-/// is O(1) rather than a first-fit scan over every free block.
-///
-/// Block layout (size a multiple of 16):
-///   [ size|used : i32 ][ pad : i32 ][ payload … ][ size|used : i32 ][ pad : i32 ]
-/// Block sizes are multiples of 16 and the first block sits at an address
-/// congruent to 8 (mod 16), so `alloc` returns `block + 8` — a payload
-/// that is always 16-byte aligned. That satisfies every alignment
-/// `realloc` is ever called with: Component Model alignments are all
-/// <= 8, and the widest Wasm alignment, `v128`, is 16.
-///
-/// The 33 bin heads live at heap offsets `[8, 8 + 4*33)`; the first block
-/// starts at heap offset 152 (the lowest offset past the bin-head table that
-/// is congruent to 8 mod 16, which `freelist_realloc` requires the heap base
-/// to keep). Wasm memory is zero-initialised, so every bin head starts empty.
-///
-/// Selected by `--allocator freelist` (default for HTTP service world).
-
 /// Block size encoded in a boundary tag (clears the low 3 bits).
 fn fl_size(tag: u32) -> u32 {
     return tag & ~7;
@@ -253,6 +222,37 @@ fn fl_carve(block: u32, block_size: u32, size: u32) {
 // slack), and every block payload is unconditionally 16-byte aligned,
 // which satisfies every alignment `realloc` is called with (Component
 // Model alignments are all <= 8; the widest Wasm alignment, `v128`, is 16).
+
+/// Free-list allocator — reclaims freed memory with a *coalescing*,
+/// size-class-segregated free list. The default for every world but the test
+/// world.
+///
+/// Every block carries an 8-byte header and 8-byte footer (boundary
+/// tags), both holding `block_size | used_bit`. On free, the physically
+/// adjacent previous and next blocks are inspected through their tags
+/// and merged when free, so per-request allocation churn cannot shatter
+/// the heap into unusable fragments.
+///
+/// Free blocks are kept in segregated free lists — one doubly-linked
+/// list per size class. Bin `k` (k < 32) holds blocks of size exactly
+/// `32 + 16*k`; bin 32 is the catch-all "large" bin (first-fit).
+/// Allocation goes straight to the size class's bin, so the common case
+/// is O(1) rather than a first-fit scan over every free block.
+///
+/// Block layout (size a multiple of 16):
+///   [ size|used : i32 ][ pad : i32 ][ payload … ][ size|used : i32 ][ pad : i32 ]
+/// Block sizes are multiples of 16 and the first block sits at an address
+/// congruent to 8 (mod 16), so `alloc` returns `block + 8` — a payload
+/// that is always 16-byte aligned. That satisfies every alignment
+/// `realloc` is ever called with: Component Model alignments are all
+/// <= 8, and the widest Wasm alignment, `v128`, is 16.
+///
+/// The 33 bin heads live at heap offsets `[8, 8 + 4*33)`; the first block
+/// starts at heap offset 152 (the lowest offset past the bin-head table that
+/// is congruent to 8 mod 16, which `freelist_realloc` requires the heap base
+/// to keep). Wasm memory is zero-initialised, so every bin head starts empty.
+///
+/// Selected by `--allocator freelist` (default for HTTP service world).
 #[allocator("freelist")]
 export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
     // The shared `heap_offset` global starts at 8; on first use, reserve

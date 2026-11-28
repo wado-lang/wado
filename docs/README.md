@@ -222,6 +222,7 @@
 - [Every Package Has a Coordinate](./wep-2026-11-24-required-namespace.md)
 - [Test Timeout in Seconds](./wep-2026-11-26-test-timeout.md)
 - [Writable References — A Borrow That Is Not Copied, and a Shared Cell](./wep-2026-11-27-writable-references.md)
+- [Union Types](./wep-2026-11-28-union-types.md)
 
 ## Standard Library
 

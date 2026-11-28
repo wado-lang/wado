@@ -3025,13 +3025,15 @@ struct DroppedComment {
 }
 
 /// A comment present in `before` but missing from `after` (by delimiter+text
-/// multiset; `emit_comment` is verbatim so relocation keeps the same key).
+/// multiset; `emit_comment` is verbatim so relocation keeps the same key). A
+/// line comment of any kind is keyed as `//`, since one that documents nothing
+/// is written as one.
 fn dropped_comment(before: &str, after: &str) -> Option<DroppedComment> {
     fn delim(kind: comment::CommentKind) -> &'static str {
         match kind {
-            comment::CommentKind::Line => "//",
-            comment::CommentKind::DocLine => "///",
-            comment::CommentKind::ModuleDoc => "//!",
+            comment::CommentKind::Line
+            | comment::CommentKind::DocLine
+            | comment::CommentKind::ModuleDoc => "//",
             comment::CommentKind::Block => "/*",
         }
     }

@@ -94,6 +94,7 @@ test "a format closes every object and bounds no number, however deep" {
     struct Inner {
         n: i32,
     }
+
     struct Outer {
         one: Option<Inner>,
         many: List<Inner>,
@@ -210,8 +211,8 @@ struct ConverseRequest {
     tools: List<Tool>,
     tool_choice: Kind,
     messages: List<Value>,
-    // The whole conversation is resent each turn; caching its prefix keeps
-    // the diff at the head from being billed in full again.
+    /// The whole conversation is resent each turn; caching its prefix keeps
+    /// the diff at the head from being billed in full again.
     cache_control: Kind,
     output_config: OutputConfig,
 }

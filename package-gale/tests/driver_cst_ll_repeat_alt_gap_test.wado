@@ -11,6 +11,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 // One `X` — the repeat alt and the `X Z` alt are separated by the second token.
+
 test "tree: X Y takes the repeat alt" {
     assert_tree("X Y", "(r (a X Y))");
 }
@@ -21,6 +22,7 @@ test "tree: X Z takes the second alt" {
 
 // The repeat iterating more than once: the second `X` belongs to `X+`,
 // so no first-token dispatch on a fixed depth can decide it.
+
 test "tree: X X Y iterates the repeat" {
     assert_tree("X X Y", "(r (a X X Y))");
 }

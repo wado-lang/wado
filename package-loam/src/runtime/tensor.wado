@@ -710,11 +710,13 @@ pub trait Element with () {
     /// The `count` elements stored from element `start` of `bytes`, as a
     /// checkpoint stores them.
     fn loaded(bytes: &LinearArray<u8>, start: i32, count: i32) -> List<Self>;
+
     /// Whether an f32 holds every value of this exactly, so a GPU can store
     /// it as one: a float, and `bool` as 1.0 and 0.0.
     fn exact_in_f32() -> bool {
         return Self::is_float();
     }
+
     /// Whether arithmetic on this is a float's: computed in f32 and rounded
     /// once to this. An integer's is computed in i64 and wraps to it.
     fn is_float() -> bool {
@@ -1608,6 +1610,7 @@ pub affine trait Holds with _ {
     fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return self.upload(t);
     }
+
     /// `t`'s extents.
     fn extents_of<E: Element, Axes>(&self, t: &Self::Tensor<E, Axes>) -> List<i32>;
     /// `t` back on the host.
@@ -1617,6 +1620,7 @@ pub affine trait Holds with _ {
     /// release it.
     fn begin(&mut self) {
     }
+
     /// Keeps `t` alive through the next [`Self::begin`], for the pass after
     /// it to read, as a model retains the attention cache it still holds just
     /// before it begins. The begin after that releases it, unless `t` is

@@ -26,6 +26,7 @@ global SPLITMIX_GAMMA: u64 = 0x9E3779B97F4A7C15;
 
 // A seed generator in its own right, and what RomuTrio's state starts from, so
 // the comparison is of the generator and not of its initialization.
+
 struct SplitMix64 {
     state: u64,
 }
@@ -48,6 +49,7 @@ fn rotl(x: u64, n: u64) -> u64 {
 // RomuTrio: three words, one multiply and two rotates per output. Faster than
 // xoshiro256++ per word and with no proven stream separation, which is why the
 // library ships the one and not the other.
+
 struct RomuTrio {
     x: u64,
     y: u64,
@@ -82,6 +84,7 @@ global BATCH_WORDS: i32 = 16;
 // The batch is sixteen words wide, so a consumer that wants one pays a cursor
 // and a branch for it. That cost is the whole reason `Rng` and `VectorRng` are
 // separate traits, and this is where it is measured.
+
 struct BatchCursor<R: VectorRng> {
     engine: R,
     words: List<u64> = List::<u64>::filled(BATCH_WORDS, 0),
@@ -119,6 +122,7 @@ fn spill_batch(out: &mut List<u64>, at: i32, batch: [u64x2, u64x2, u64x2, u64x2,
 
 // A generator that repeats a value, or returns zero throughout, would win this
 // benchmark. Fold the whole run and require the fold to move.
+
 fn drain_scalar<R: Rng>(rng: &mut R, n: i32) -> u64 {
     let mut acc: u64 = 0;
     for let mut i = 0; i < n; i += 1 {
@@ -131,6 +135,7 @@ fn drain_scalar<R: Rng>(rng: &mut R, n: i32) -> u64 {
 // lands a word in memory, and extracts two lanes per run rather than two per
 // word. The gap between this and `drain_scalar` over a `BatchCursor` is what
 // the per-draw API costs.
+
 fn drain_by_batch<R: VectorRng>(rng: &mut R, n: i32) -> u64 {
     let mut acc: u64x2 = [0, 0];
     for let mut i = 0; i < n; i += BATCH_WORDS {
@@ -145,6 +150,7 @@ fn drain_by_batch<R: VectorRng>(rng: &mut R, n: i32) -> u64 {
 // per word rather than a write, a read and a cursor. Against `drain_scalar`
 // over a scalar engine, this separates what the generator costs from what
 // landing a u64 in memory costs.
+
 fn drain_scalar_fill<R: Rng>(rng: &mut R, buffer: &mut List<u64>, n: i32) -> u64 {
     assert !buffer.is_empty(), "an empty buffer would not advance the loop";
     let mut acc: u64 = 0;
@@ -184,6 +190,7 @@ fn drain_batch_fill<R: VectorRng>(rng: &mut R, buffer: &mut List<u64>, n: i32) -
 // a counter-based PRF (Random123; JAX's default Threefry is its cousin), ten
 // rounds for the statistical claims. The Philox and Threefry constants are the
 // references' and nothing here checks a known-answer vector.
+
 global MIX_C1: u64 = 0xBF58476D1CE4E5B9;
 
 global MIX_C2: u64 = 0x94D049BB133111EB;
@@ -239,6 +246,7 @@ fn philox4x32(key0: u32, key1: u32, counter: u32) -> [u32, u32, u32, u32] {
 }
 
 // Wasm has no vector rotate, so each one is a shift pair and an or.
+
 fn vrotl(v: u64x2, n: u32) -> u64x2 {
     return v << n | v >> 64 - n;
 }
@@ -248,6 +256,7 @@ global THREEFRY_PARITY: u64 = 0x1BD11BDAA9FC1A22;
 // Thirteen rounds, unrolled so each rotation is an immediate. The rotation
 // table is Threefish-256's for the 2x64 word size, and a key is injected after
 // every fourth round.
+
 fn threefry2x64(key0: u64, key1: u64, ctr0: u64, ctr1: u64) -> [u64, u64] {
     let ks2 = key0 ^ key1 ^ THREEFRY_PARITY;
     let mut x0 = ctr0 + key0;
@@ -293,6 +302,7 @@ fn threefry2x64(key0: u64, key1: u64, ctr0: u64, ctr1: u64) -> [u64, u64] {
 
 // Two counters at once: every word of the scalar form becomes a lane, so the
 // instruction count per call is the scalar one and the output is twice as wide.
+
 fn threefry2x64x2(key0: u64x2, key1: u64x2, ctr0: u64x2, ctr1: u64x2) -> [u64x2, u64x2] {
     let parity = u64x2::splat(THREEFRY_PARITY as i64);
     let one = u64x2::splat(1);
@@ -343,6 +353,7 @@ fn threefry2x64x2(key0: u64x2, key1: u64x2, ctr0: u64x2, ctr1: u64x2) -> [u64x2,
 // The high half of four 32x32 products, which is the only part of Philox's
 // round Wasm cannot spell directly: two widening multiplies and one shuffle
 // that takes the upper four bytes of each 64-bit product.
+
 fn mulhi_u32x4(a: u32x4, b: u32x4) -> u32x4 {
     let av = a as v128 as i64x2;
     let bv = b as v128 as i64x2;
@@ -371,6 +382,7 @@ fn mulhi_u32x4(a: u32x4, b: u32x4) -> u32x4 {
 }
 
 // Four counters at once, one per 32-bit lane.
+
 fn philox4x32x4(key0: u32, key1: u32, counter: u32x4) -> [u32x4, u32x4, u32x4, u32x4] {
     let m0 = u32x4::splat(PHILOX_M0 as i32);
     let m1 = u32x4::splat(PHILOX_M1 as i32);
@@ -419,6 +431,7 @@ fn drain_mix_simd(n: i32) -> u64 {
 
 // The shape the terrain case actually has: two coordinates mixed into a key,
 // walked in the consumer's order.
+
 fn drain_value_at(side: i32) -> u64 {
     assert side * side == DRAW_COUNT, "the grid must hold one iteration's work";
     let mut acc: u64 = 0;
@@ -494,6 +507,7 @@ global COORD_Y: u64 = 0xC2B2AE3D27D4EB4F;
 // The terrain shape: the counter is two coordinates folded into one word, and
 // the key is the world seed. Every candidate folds the same way, so the gap
 // between these and the counter drains above is the fold and nothing else.
+
 fn coord_key(x: i32, y: i32) -> u64 {
     return x as i64 as u64 * COORD_X ^ y as i64 as u64 * COORD_Y;
 }
@@ -539,6 +553,7 @@ global GRID_SIDE: i32 = 1 << 8;
 
 // Long enough to cross every boundary in the file several times, short enough
 // that a failure prints a stream a reader can scan.
+
 #[allow(dead_code)]
 global STREAM_WORDS: i32 = 128;
 
@@ -546,6 +561,7 @@ global STREAM_WORDS: i32 = 128;
 // equivalence must not rest on: a fold agrees across a reordering of the batch
 // or a swap of two lanes. The collector below keeps the emission order, which
 // is what two paths agreeing means.
+
 #[allow(dead_code)]
 fn collect_by_batch<R: VectorRng>(rng: &mut R, n: i32) -> List<u64> {
     let mut out = List::<u64>::filled(n, 0);

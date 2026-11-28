@@ -17,6 +17,7 @@ struct Stats {
 }
 
 // Compute summary statistics using SIMD-accelerated accumulation
+
 fn compute_stats(data: &List<f64>) -> Stats {
     let len = data.len();
     if len == 0 {
@@ -79,6 +80,7 @@ fn std_dev(s: &Stats) -> f64 {
 }
 
 // Normalize data to zero mean, unit variance (z-score)
+
 fn normalize(data: &List<f64>) -> List<f64> {
     let s = compute_stats(data);
     let sd = std_dev(&s);
@@ -105,6 +107,7 @@ fn normalize(data: &List<f64>) -> List<f64> {
 }
 
 // Compute dot product of two arrays using SIMD
+
 fn dot_product(a: &List<f64>, b: &List<f64>) -> f64 {
     let len = i32::min(a.len(), b.len());
     let mut sum_vec = f64x2::splat(0.0);

@@ -1,32 +1,41 @@
 //! Stage 2b migration: unicode_props parses through the emitter.
+
 use g from "./grammars/unicode_props.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_unicode_props" },
     };
+
 fn ok<S: AsStrSlice>(input: S) {
     assert g::parse(input).ok();
 }
+
 test "unicode: ascii word" {
     ok("hello");
 }
+
 test "unicode: digits" {
     ok("12345");
 }
+
 test "unicode: word and number" {
     ok("foo 42");
 }
+
 test "unicode: latin accents" {
     ok("café");
     ok("naïve");
     ok("résumé");
 }
+
 test "unicode: greek" {
     ok("αβγδε");
     ok("ΑΒΓΔΕ");
 }
+
 test "unicode: cyrillic" {
     ok("Привет");
 }
+
 test "unicode: cjk" {
     ok("世界");
     ok("日本語");

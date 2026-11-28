@@ -229,6 +229,7 @@ fn lexer_not_set_code_span(elem: &LexerElement) -> Option<Span> {
 // A set is computed before any input is read, so an action has no point at
 // which to run and a predicate none at which to decide; no reading of either
 // is the grammar's, which the compatibility contract asks to reject.
+
 fn not_set_code_error(span: Span) -> ParseError {
     return ParseError::new(
         "an action or predicate inside a `~` set: the set is fixed before parsing, so the code would never run",
@@ -463,7 +464,6 @@ impl G4Parser {
                 lexer_rules.push(LexerRule::virtual_token(vt));
             }
         }
-
 
         let channels = self.channels;
         let options = self.options;

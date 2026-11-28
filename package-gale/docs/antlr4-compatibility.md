@@ -713,8 +713,8 @@ drops the scans of alternatives the lookahead cannot reach.
 **A nullable alternative is admitted by what follows the group, as well as by
 its own first set.** It can match nothing, so the group's local FOLLOW selects
 it too; lower computes that at the group's position and bakes it as
-`GroupOp.empty_alt_admits` — one value both walkers read, rather than an
-absence each interprets. It has three states, because a bare list would fold
+`GroupOp.empty_alt_admits` — one value the parse and the scan read, rather
+than an absence each interprets. It has three states, because a bare list would fold
 two of them together: no alternative is nullable; a nullable one whose suffix
 is nullable in turn, so the answer is the caller's FOLLOW and is not
 statically known; or one admitted by exactly this set. The follow set **joins**
@@ -725,8 +725,7 @@ can also be skipped.
 **What an alternative matches is one value, `AltClass`, produced once.**
 Deriving it per site — is there a wildcard in the elements, is the first set
 empty, is it nullable, has it no elements — gets a different answer per
-spelling, so the two emit walkers partition the same group differently
-(invariant 9). `alt_class` in `alt_grouping` is the only producer:
+spelling, so the parse and the scan partition the same group differently. `alt_class` in `alt_grouping` is the only producer:
 
 - `OpenEnded(first)` — `.` or `~X`, written in the alternative or reached
   through a nullable prefix or a rule. Admits every token, so no set describes
@@ -738,9 +737,9 @@ spelling, so the two emit walkers partition the same group differently
 `alt_grouping` owns the whole decision. `decision_partition` splits the
 alternatives into branches and says what each admits, and `fallback_last`
 orders them. A token that only one alternative starts gets a branch of its own,
-so only a contested token runs a scan tournament. The surface walker, the op-only
-walker, the scan and lower's kind-set interning are four readers of that one
-answer rather than four derivations of it. Lower bakes the classification into
+so only a contested token runs a scan tournament. The parse emitter, the scan
+and lower's kind-set interning are three readers of that one answer rather than
+three derivations of it. Lower bakes the classification into
 `DispatchBranch.alt_class` and `ScanGroupElement.alt_classes`, and `GroupOp`
 carries the built `ScanGroupElement` rather than bare scan bodies, so emit has
 nothing left to assemble a second classification into.
@@ -873,17 +872,11 @@ take no alternative, append nothing, and report nothing while the sequence
 continued as though it had matched — the shape reached first-set-only
 positions for years and reached predicate-gated ones as soon as gating landed.
 
-Two decisions are deliberately not that emitter, because their inputs are not
-a group's alternatives:
-
-- **A rule's own alternatives** are independent attempts that fall through to
-  the next on a body failure, closing with the rule's error fallback, rather
-  than a chain that commits on a condition.
-- **A group inside a left-recursive suffix** is walked by the GIR walker off
-  the dispatch plan lower baked (`MultiAltDispatch`), not off first sets, and
-  closes with `expect_set` over the union — a report, but not the same one.
-  Its optional's decision is built from that plan for the same reason
-  (invariant 9), so the two walkers still each decide once.
+A rule's own alternatives are deliberately not that emitter, because they are
+not a group's alternatives: they are independent attempts that fall through to
+the next on a body failure, closing with the rule's error fallback, rather than
+a chain that commits on a condition. A group inside a left-recursive suffix is
+a group like any other (invariant 9).
 
 ### Static LL prediction — the runtime FOLLOW gate
 
@@ -1013,15 +1006,15 @@ relevant sites.
    is on the whole-rule result only, so leniency inside the body — what
    the tournament relies on — is untouched. Fixture
    `tests/grammars/scan_zero_length_rule.g4`.
-9. The two emit walkers decide identically. A construct is emitted either by
-   the surface-element walker or, inside an LR suffix, by the op-only walker
-   that reads the lowered op alone. Anything the first decides from a surface
-   field the second cannot see must be carried on the op, or the same construct
-   gets a weaker decision in a suffix than in a plain rule body. All three known
-   instances rejected valid input: an optional's `RepeatStrategy` and its
-   shape-lookahead half both degraded to a one-token first-set check, and a
-   non-greedy `??` was read as greedy because `non_greedy` lived only on the
-   surface element. Fixtures `lr_opt_two_token.g4`, `lr_suffix_opt_shape.g4`,
+9. Emit decides from the lowered op alone, through one walker
+   (`gen_ops_with_actions`) and one repeat emitter (`gen_op_repeat`), in a rule
+   body and in an LR suffix alike. A decision input lower leaves on the surface
+   element gets a weaker decision wherever emit cannot reach it. All three
+   known instances rejected valid input in an LR suffix: an optional's
+   `RepeatStrategy` and its shape-lookahead half both degraded to a one-token
+   first-set check, and a non-greedy `??` was read as greedy because
+   `non_greedy` lived only on the surface element. Fixtures
+   `lr_opt_two_token.g4`, `lr_suffix_opt_shape.g4`,
    `lr_suffix_non_greedy_opt.g4` — pair any new decision input with one like
    them.
 
@@ -1063,12 +1056,12 @@ relevant sites.
     `('>' '>')?` is measurable from what follows only when one token wide. A
     shape no K-prefix walk measures falls back to the candidate's own suffix
     scan. Fixtures `lr_overlap_{multi_token,opaque_op,nullable_carrier}.g4`.
-12. A repeat's body op and its surface element are paired through
-    `peel_repeat_body_label`. The Repeat supplies the `List<>` typing itself, so
-    both label forms lose their wrapper on the op side; peeling one form and not
-    the other left the pair disagreeing about the shape, which aborted codegen
-    for `n=( A B )+` and narrowed the iter-follow of every `xs+=( … )*`.
-    Fixture `wado_label_group.g4`.
+12. A repeat's body op is lowered from its element under both label forms
+    (`peel_labels`). The Repeat supplies the `List<>` typing itself, so both
+    lose their wrapper on the op side; peeling one form and not the other left
+    a reader of the element disagreeing with the op about the shape, which
+    aborted codegen for `n=( A B )+` and narrowed the iter-follow of every
+    `xs+=( … )*`. Fixture `wado_label_group.g4`.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a
@@ -1144,11 +1137,9 @@ the compiled fast path:**
    open with a loop operator or be empty, in an atom (`'new' e args`) as in a
    suffix. Fixture `lr_mid_operand.g4`.
 2. A **non-greedy `??`**, whose enter-or-skip choice is taken at runtime;
-   several `??` in one rule decide independently. Both emit walkers route it
-   here — the surface-element walker from `RepeatElement.non_greedy`, the
-   op-only walker (LR-suffix bodies) from `RepeatOp.non_greedy`; a `??` lowers
-   to `strategy: Plain`, so the flag is what tells the two apart from a greedy
-   `?`. A caller's scan asks the same question, so it skips where the parse
+   several `??` in one rule decide independently. Emit routes it here from
+   `RepeatOp.non_greedy`; a `??` lowers to `strategy: Plain`, so the flag is
+   what tells it apart from a greedy `?`. A caller's scan asks the same question, so it skips where the parse
    will. Fixtures: `ll_optional_non_greedy{,_multi}.g4`, plus
    `lr_dangling_else.g4` (atom alternative) and
    `lr_suffix_non_greedy_opt.g4` (LR-suffix alternative).

@@ -2,7 +2,6 @@
 #![stdlib("core:prelude/string.wado")]
 // Split from the prelude so other stdlib modules can depend on String without a cycle.
 
-
 use { Eq, Ord, Hash, Hasher, Add, Default, Display, Error, From, Ordering } from "core:prelude/traits.wado";
 use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
 use {
@@ -746,6 +745,7 @@ impl String {
     // its ASCII fast path here, and the optimizer's `nir/const_ascii_push`
     // rewrite retargets `push(<const char < 0x80>)` here, skipping
     // `encode_char`'s width dispatch.
+
     #[compiler_item("string_push_ascii")]
     fn push_ascii_byte(&mut self, byte: u8) {
         let start = self.internal_reserve_uninit(1);

@@ -83,6 +83,7 @@ pub fn schema_for<T: JsonSchema>() -> Schema {
 // ── The derivation, one blanket per reflection kind ──
 
 // An open struct only, as serde derives: a closed one writes its own wire form.
+
 impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: JsonSchema + Serialize> JsonSchema for T {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         return gen.define(Reflect::<T>::decl_name(), |g| struct_schema::<T>(g));
@@ -568,6 +569,7 @@ impl JsonSchema for () {
 
 // Any JSON value, since `Value` writes itself as the value it holds rather than
 // as a variant.
+
 impl JsonSchema for Value {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         return Schema::Bool(true);
@@ -575,6 +577,7 @@ impl JsonSchema for Value {
 }
 
 // `anyOf` rather than `oneOf`: in `Option<Option<T>>` both branches accept null.
+
 impl<T: JsonSchema> JsonSchema for Option<T> {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         return Schema::Object(SchemaObject {

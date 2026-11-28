@@ -6,20 +6,10 @@
 //! grammar-specific tables that path needs: the per-rule `NodeKind` constants
 //! + name table, and the `to_string_tree` convenience.
 
-use { Grammar, ParserRule } from "./ir.wado";
-use { LitToken, gen_token_names_global } from "./lexer_gen.wado";
-use { Rule } from "./gir.wado";
+use { gen_token_names_global } from "./lexer_gen.wado";
+use { LoweredGrammar, Rule, RuleHeader, rule_header } from "./gir.wado";
 use { CodeWriter, EnumSpec, FnSpec, GlobalSpec, ImplSpec, Vis } from "wado-lang:wadopoet";
 use { to_pascal_case, escape_case, rule_kind_const } from "./gen_util.wado";
-use { rule_alts_labeled } from "./ir_shape.wado";
-
-fn rule_name(rule: &Rule) -> String {
-    return match *rule {
-        Simple(s) => s.header.name,
-        MultiAlt(m) => m.header.name,
-        LeftRecursive(l) => l.header.name,
-    };
-}
 
 /// Emit the per-rule `RK_<RULE>` node-kind constants and the `RULE_NAMES`
 /// table (rule-index order); the name table drives `to_string_tree`. The
@@ -27,7 +17,7 @@ fn rule_name(rule: &Rule) -> String {
 /// (e.g. an interpreter walking the tree).
 pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     for let mut i = 0; i < rules.len(); i += 1 {
-        GlobalSpec::new(rule_kind_const(&rule_name(&rules[i])), "NodeKind", `${i}`, Vis::Pub).emit(w);
+        GlobalSpec::new(rule_kind_const(&rule_header(&rules[i]).name), "NodeKind", `${i}`, Vis::Pub).emit(w);
     }
     w.blank();
     let mut names = String::with_capacity(rules.len() * 12);
@@ -37,7 +27,7 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
             names.push_str(", ");
         }
         names.push('"');
-        names.push_str(&rule_name(&rules[i]));
+        names.push_str(&rule_header(&rules[i]).name);
         names.push('"');
     }
     names.push(']');
@@ -73,14 +63,14 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
 /// so the accessor maps `self.alt` straight to its case. The accessor returns
 /// `Option`, so a node whose `alt` was never set (an error-recovery node, or a
 /// node of another rule) is `None` rather than a silent first alternative.
-pub fn gen_alt_enums(w: &mut CodeWriter, grammar: &Grammar) {
-    for let rule of &grammar.parser_rules {
-        gen_one_alt_enum(w, rule);
+pub fn gen_alt_enums(w: &mut CodeWriter, rules: &List<Rule>) {
+    for let rule of rules {
+        gen_one_alt_enum(w, rule_header(rule));
     }
 }
 
-fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
-    if !rule_alts_labeled(&rule.alternatives) {
+fn gen_one_alt_enum(w: &mut CodeWriter, rule: &RuleHeader) {
+    if !rule.alts_labeled() {
         return;
     }
     let enum_name = `${to_pascal_case(&rule.name)}Alt`;
@@ -90,8 +80,8 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
     // a repeated variant would not compile.
     let mut cases = EnumSpec::new(&enum_name, Vis::Pub);
     let mut seen: List<String> = [];
-    for let alt of &rule.alternatives {
-        if let Some(label) = &alt.label {
+    for let alt_label of &rule.alt_labels {
+        if let Some(label) = alt_label {
             let case = escape_case(label);
             if !seen.contains(&case) {
                 seen.push(case);
@@ -109,8 +99,8 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
             .set_return_type(`Option<${enum_name}>`)
             .emit(w, |w| {
                 w.begin("return match self.alt(node)");
-                for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-                    if let Some(label) = &rule.alternatives[i].label {
+                for let mut i = 0; i < rule.alt_labels.len(); i += 1 {
+                    if let Some(label) = &rule.alt_labels[i] {
                         w.line(`${i} => Option::Some(${enum_name}::${escape_case(label)}),`);
                     }
                 }
@@ -123,8 +113,8 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
 
 /// Emit `TOKEN_NAMES` and the `to_string_tree(result)` convenience that renders
 /// with it and `RULE_NAMES`.
-pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
-    gen_token_names_global(w, &grammar.lexer_rules, lit_tokens);
+pub fn gen_string_tree_helper(w: &mut CodeWriter, lowered: &LoweredGrammar) {
+    gen_token_names_global(w, &lowered.lexer_rules, &lowered.lit_tokens);
     FnSpec::new("to_string_tree", Vis::Pub)
         .add_param({ name: "result", type: "&ParseResult" })
         .set_return_type("String")

@@ -9,10 +9,11 @@ use {
     AttrDecl,
     Grammar,
     ParserRule,
+    edge_gates,
     is_parser_members,
     is_lexer_members,
-    push_alt_actions,
 } from "./ir.wado";
+use { RuleAttrs, rule_attrs_table } from "./rule_attrs.wado";
 use { Diagnostics, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Op, RuleCallOp } from "./gir.wado";
 use { EmitContext } from "./emit_context.wado";
 use { GenSettings } from "./gen_settings.wado";
@@ -68,7 +69,8 @@ fn arg_param_name<S: AsStrSlice>(name: S) -> String {
 /// <default>`), in declaration order, at the end of the signature. Defaulted so
 /// the public entry and plain `a` call sites (no `a[...]`) fill them in. Only
 /// emitted for rules whose args are threaded (`rule_threads_args`).
-pub fn add_arg_params(f: &mut FnSpec, rule: &ParserRule, ctx: &EmitContext) {
+pub fn add_arg_params(f: &mut FnSpec, ctx: &EmitContext) {
+    let rule = ctx.current_rule_attrs();
     if !ctx.settings.emit_actions || !rule_threads_args(rule) {
         return;
     }
@@ -83,7 +85,8 @@ pub fn add_arg_params(f: &mut FnSpec, rule: &ParserRule, ctx: &EmitContext) {
 }
 
 /// The threaded args a rule wrapper forwards to its inner body.
-pub fn wrapper_args(rule: &ParserRule, ctx: &EmitContext) -> List<String> {
+pub fn wrapper_args(ctx: &EmitContext) -> List<String> {
+    let rule = ctx.current_rule_attrs();
     if !ctx.settings.emit_actions || !rule_threads_args(rule) {
         return [];
     }
@@ -93,10 +96,11 @@ pub fn wrapper_args(rule: &ParserRule, ctx: &EmitContext) -> List<String> {
 /// Store each `returns` / `locals` initializer into the rule's `vals` local.
 /// The jar runs them as the rule's context is built, so they see none of its
 /// arguments yet.
-pub fn emit_attr_inits(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut EmitContext) {
-    if !ctx.settings.emit_actions || !ctx.rule_emits_vals(rule) {
+pub fn emit_attr_inits(w: &mut CodeWriter, ctx: &mut EmitContext) {
+    if !ctx.settings.emit_actions || !ctx.current_rule_emits_vals() {
         return;
     }
+    let rule = ctx.current_rule_attrs();
     let outer = *ctx.cursor.alt_bindings();
     ctx.cursor.set_alt_bindings(unmatched_bindings(rule));
     emit_decl_inits(w, rule, &rule.returns_decls, ctx);
@@ -104,12 +108,13 @@ pub fn emit_attr_inits(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut EmitCont
     ctx.cursor.set_alt_bindings(outer);
 }
 
-pub fn rule_has_attr_inits(rule: &ParserRule) -> bool {
+pub fn rule_has_attr_inits(ctx: &EmitContext) -> bool {
+    let rule = ctx.current_rule_attrs();
     let initialized = |d: &AttrDecl| d.init matches { Some(_) } && field_in_vals(d);
     return rule.returns_decls.iter_ref().any(initialized) || rule.locals_decls.iter_ref().any(initialized);
 }
 
-fn emit_decl_inits(w: &mut CodeWriter, rule: &ParserRule, decls: &List<AttrDecl>, ctx: &mut EmitContext) {
+fn emit_decl_inits(w: &mut CodeWriter, rule: &RuleAttrs, decls: &List<AttrDecl>, ctx: &mut EmitContext) {
     for let d of decls {
         let Some(init) = &d.init else {
             continue;
@@ -127,7 +132,8 @@ fn emit_decl_inits(w: &mut CodeWriter, rule: &ParserRule, decls: &List<AttrDecl>
 /// Store each threaded rule argument into the rule's `vals` local, so `$arg`
 /// (which resolves to `vals.<name>`) reads the passed-in value. Emitted right
 /// after the `vals` local, before `@init`.
-pub fn emit_arg_stores(w: &mut CodeWriter, rule: &ParserRule, ctx: &EmitContext) {
+pub fn emit_arg_stores(w: &mut CodeWriter, ctx: &EmitContext) {
+    let rule = ctx.current_rule_attrs();
     if !ctx.settings.emit_actions || !rule_threads_args(rule) {
         return;
     }
@@ -144,7 +150,7 @@ pub fn call_args(rc: &RuleCallOp, ctx: &mut EmitContext) -> List<String> {
     if !ctx.settings.emit_actions {
         return [];
     }
-    let callee = match ctx.analysis.find_rule(&rc.target_name) {
+    let callee = match ctx.analysis.find_rule_attrs(&rc.target_name) {
         Some(r) => r,
         null => {
             return [];
@@ -178,14 +184,12 @@ fn translate_caller_arg<S: AsStrSlice>(expr: S, ctx: &EmitContext) -> Option<Str
     if ctx.settings.action_language matches { _::Wado } && find_attr_refs(expr).len() == 0 {
         return Option::Some(expr.to_string());
     }
-    let rule = ctx.current_rule();
-    let vals_in_scope = ctx.rule_emits_vals(rule);
     return match translate_predicate(
         &ctx.settings.action_language,
-        rule,
-        ctx.analysis.parser_rules(),
+        ctx.current_rule_attrs(),
+        ctx.analysis.rule_attrs(),
         expr,
-        vals_in_scope,
+        ctx.current_rule_emits_vals(),
         ctx.cursor.alt_bindings(),
         &ctx.settings.grammar_name,
         &ctx.settings.action_members,
@@ -210,12 +214,13 @@ pub fn translate_gate_bodies(grammar: &Grammar, settings: &GenSettings) -> HashM
     if !settings.emit_actions {
         return out;
     }
-    for let rule of &grammar.parser_rules {
-        for let src of rule_gate_sources(rule) {
+    let attrs = rule_attrs_table(&grammar.parser_rules);
+    for let mut i = 0; i < attrs.len(); i += 1 {
+        for let src of rule_gate_sources(&grammar.parser_rules[i]) {
             if src.action_id < 0 {
                 continue;
             }
-            if let Some(code) = translate_gate_body(&src.text, rule, grammar, settings) {
+            if let Some(code) = translate_gate_body(&src.text, &attrs[i], &attrs, grammar, settings) {
                 out[src.action_id] = code;
             }
         }
@@ -247,14 +252,15 @@ fn rule_gate_sources(rule: &ParserRule) -> List<ActionSource> {
 
 fn translate_gate_body<S: AsStrSlice>(
     text: S,
-    rule: &ParserRule,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     grammar: &Grammar,
     settings: &GenSettings,
 ) -> Option<String> {
     return match translate_action(
         &grammar.action_language,
         rule,
-        &grammar.parser_rules,
+        rules,
         text,
         /*vals_in_scope=*/ true,
         &NO_GATE_BINDINGS,
@@ -298,14 +304,12 @@ pub fn gen_predicate_fns(w: &mut CodeWriter, ctx: &EmitContext) {
     }
 }
 
-pub fn warn_unhandled_actions(grammar: &Grammar, ctx: &mut EmitContext) {
+pub fn warn_unhandled_actions(ctx: &mut EmitContext) {
     if !ctx.settings.emit_actions {
         return;
     }
-    for let rule of &grammar.parser_rules {
-        let mut ids: List<i32> = [];
-        collect_rule_action_ids(rule, &mut ids);
-        for let id of &ids {
+    for let rule of ctx.analysis.rule_attrs() {
+        for let id of &rule.action_ids {
             if !ctx.cursor.action_was_seen(*id) {
                 ctx.diagnostics.warn(
                     &DiagnosticOwner { rule: rule.name, site: DiagnosticSite::Action(*id) },
@@ -320,33 +324,12 @@ pub fn warn_unhandled_actions(grammar: &Grammar, ctx: &mut EmitContext) {
 /// Whether codegen will emit any action / predicate for this rule. Rules that
 /// do are kept off the compact single-token fast path (which has no per-alt
 /// body to host them).
-pub fn rule_has_emittable_actions(rule: &ParserRule, ctx: &EmitContext) -> bool {
-    if !ctx.settings.emit_actions {
-        return false;
-    }
-    let mut ids: List<i32> = [];
-    collect_rule_action_ids(rule, &mut ids);
-    return ids.len() > 0;
-}
-
-fn collect_rule_action_ids(rule: &ParserRule, out: &mut List<i32>) {
-    if let Some(a) = &rule.init_action {
-        out.push(a.action_id);
-    }
-    if let Some(a) = &rule.after_action {
-        out.push(a.action_id);
-    }
-    let mut actions: List<&AltAction> = [];
-    for let alt of &rule.alternatives {
-        push_alt_actions(alt, &mut actions);
-    }
-    for let a of &actions {
-        out.push(a.source.action_id);
-    }
+pub fn rule_has_emittable_actions(ctx: &EmitContext) -> bool {
+    return ctx.settings.emit_actions && !ctx.current_rule_attrs().action_ids.is_empty();
 }
 
 pub fn entry_emits_vals<S: AsStrSlice>(ctx: &EmitContext, rule_name: S) -> bool {
-    return match ctx.analysis.find_rule(rule_name) {
+    return match ctx.analysis.find_rule_attrs(rule_name) {
         Some(r) => ctx.rule_emits_vals(r),
         null => false,
     };
@@ -355,8 +338,8 @@ pub fn entry_emits_vals<S: AsStrSlice>(ctx: &EmitContext, rule_name: S) -> bool 
 /// Emit a `<Rule>Vals` struct per rule that exposes a value channel. Fields
 /// are the rule's returns then locals, each with a defaulted Wado type, so
 /// the rule function can default-construct `<Rule>Vals {}`.
-pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &EmitContext) {
-    for let rule of &grammar.parser_rules {
+pub fn gen_vals_structs(w: &mut CodeWriter, ctx: &EmitContext) {
+    for let rule of ctx.analysis.rule_attrs() {
         if !ctx.rule_emits_vals(rule) {
             continue;
         }
@@ -383,7 +366,6 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &EmitContext
 pub fn after_label_field<S: AsStrSlice>(base: S) -> String {
     return `label_${base}`;
 }
-
 
 /// The captured token range / builder row of each labeled rule call an action
 /// reads. A read that may come before the call asks the shared label instead
@@ -488,7 +470,7 @@ pub fn rule_result_type() -> String {
 
 /// A rule's inner / wrapper result type: `<Rule>Vals` when the rule exposes a
 /// value channel (action execution on), else `()`.
-pub fn rule_result_type_for(rule: &ParserRule, ctx: &EmitContext) -> String {
+pub fn rule_result_type_for(rule: &RuleAttrs, ctx: &EmitContext) -> String {
     if ctx.rule_emits_vals(rule) {
         return vals_struct_name(rule);
     }
@@ -501,7 +483,7 @@ pub fn label_value_type<S: AsStrSlice>(is_token: bool, ref_name: S, ctx: &EmitCo
     if is_token {
         return "i32";
     }
-    let callee = ctx.analysis.find_rule(ref_name).expect("a rule label calls a parser rule");
+    let callee = ctx.analysis.find_rule_attrs(ref_name).expect("a rule label calls a parser rule");
     return `Option<${rule_result_type_for(callee, ctx)}>`;
 }
 
@@ -663,12 +645,12 @@ pub fn atn_decision_gates(met: &List<MetPredicate>, ctx: &mut EmitContext, in_sc
 /// order — and marked gated as it goes: handing one out without suppressing
 /// the body's own inline guard is what this refuses to make possible. Ask
 /// `alt_has_gate` for the question alone.
-pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &mut EmitContext) -> List<String> {
+pub fn alt_initial_gate_conditions(actions: &List<AltAction>, ctx: &mut EmitContext) -> List<String> {
     if !ctx.settings.emit_actions {
         return [];
     }
     let mut conds: List<String> = [];
-    for let a of &alt.edge_gates() {
+    for let a of &edge_gates(actions) {
         if let Some(c) = ctx.gate_condition(a) {
             ctx.cursor.mark_predicate_gated(a.source.action_id);
             conds.push(ctx.cursor.take_cond(c));
@@ -769,13 +751,13 @@ pub fn mark_gated_predicates(
     }
     if !has_overlaps {
         for let idx of non_lr_indices {
-            mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
+            mark_alt_gate_predicates(&rule.alternatives[*idx].actions, ctx);
         }
         return;
     }
     for let group of groups {
         if group.len() == 1 {
-            mark_alt_gate_predicates(&rule.alternatives[non_lr_indices[group[0]]], ctx);
+            mark_alt_gate_predicates(&rule.alternatives[non_lr_indices[group[0]]].actions, ctx);
         } else {
             let tree = build_group_prediction_tree(
                 &rule.alternatives,
@@ -788,42 +770,43 @@ pub fn mark_gated_predicates(
             let mut gated: List<i32> = [];
             collect_gated_alts(&tree, &rule.alternatives, ctx, &mut gated);
             for let idx of &gated {
-                mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
+                mark_alt_gate_predicates(&rule.alternatives[*idx].actions, ctx);
             }
         }
     }
 }
 
-/// Mark `alt`'s gateable alt-initial predicates gated, so the dispatch
-/// carries them as its condition and the body does not repeat them as a guard.
-fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut EmitContext) {
-    for let a of &alt.edge_gates() {
+/// Mark the gateable alt-initial predicates among an alternative's `actions`
+/// gated, so the dispatch carries them as its condition and the body does not
+/// repeat them as a guard.
+fn mark_alt_gate_predicates(actions: &List<AltAction>, ctx: &mut EmitContext) {
+    for let a of &edge_gates(actions) {
         if ctx.gate_condition(a) matches { Some(_) } {
             ctx.cursor.mark_predicate_gated(a.source.action_id);
         }
     }
 }
 
-/// Record that `alt`'s alt-initial predicates are answered by a condition the
-/// caller has emitted — for one that can only tell after rendering it
-/// (`group_admits`).
-pub fn mark_alt_gate_answered(alt: &Alternative, ctx: &mut EmitContext) {
+/// Record that an alternative's alt-initial predicates are answered by a
+/// condition the caller has emitted — for one that can only tell after
+/// rendering it (`group_admits`).
+pub fn mark_alt_gate_answered(actions: &List<AltAction>, ctx: &mut EmitContext) {
     if ctx.settings.emit_actions {
-        mark_alt_gate_predicates(alt, ctx);
+        mark_alt_gate_predicates(actions, ctx);
     }
 }
 
 /// The ` && (pred)` suffix folding an alt's gateable predicates into a
 /// token-led dispatch condition, or "" when off (keeping non-Wado grammars
 /// byte-identical) or the alt has none.
-pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &mut EmitContext) -> String {
-    return and_gate(alt_gate_condition(alt, ctx));
+pub fn alt_gate_and_suffix(actions: &List<AltAction>, ctx: &mut EmitContext) -> String {
+    return and_gate(alt_gate_condition(actions, ctx));
 }
 
 /// An alt's gateable predicates joined into one condition, marked answered by
 /// it, or "" where it has none.
-pub fn alt_gate_condition(alt: &Alternative, ctx: &mut EmitContext) -> String {
-    return join_gate_conds(&alt_initial_gate_conditions(alt, ctx));
+pub fn alt_gate_condition(actions: &List<AltAction>, ctx: &mut EmitContext) -> String {
+    return join_gate_conds(&alt_initial_gate_conditions(actions, ctx));
 }
 
 /// The ` && <cond>` a rendered gate condition adds to a test, or nothing.
@@ -836,12 +819,12 @@ pub fn and_gate(cond: String) -> String {
 
 /// The same suffix without claiming the predicate answered; the caller marks it
 /// with `mark_alt_gate_answered` once it can tell.
-pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut EmitContext) -> String {
+pub fn alt_gate_suffix_unanswered(actions: &List<AltAction>, ctx: &mut EmitContext) -> String {
     if !ctx.settings.emit_actions {
         return String::new();
     }
     let mut conds: List<String> = [];
-    for let a of &alt.edge_gates() {
+    for let a of &edge_gates(actions) {
         if let Some(c) = ctx.gate_condition(a) {
             conds.push(ctx.cursor.take_cond(c));
         }
@@ -857,8 +840,8 @@ pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut EmitContext) -> S
 /// defaulted `follow` parameter precedes it (non-default params cannot follow
 /// default ones). The vals struct is default-constructible by construction (its
 /// fields are all defaultable — that is the value-channel eligibility check).
-pub fn add_seeded_vals_param(f: &mut FnSpec, rule: &ParserRule) {
-    let vname = vals_struct_name(rule);
+pub fn add_seeded_vals_param(f: &mut FnSpec, ctx: &EmitContext) {
+    let vname = vals_struct_name(ctx.current_rule_attrs());
     f.add_param({
         name: "vals",
         type: vname,
@@ -954,14 +937,15 @@ fn translate_body_or_warn(
     if body_needs_no_translator(text, &ctx.settings) {
         return Option::Some(*text);
     }
-    let rule = ctx.current_rule();
-    let vals_in_scope = ctx.rule_emits_vals(rule);
+    let rule = ctx.current_rule_attrs();
+    let rules = ctx.analysis.rule_attrs();
+    let vals_in_scope = ctx.current_rule_emits_vals();
     let lang = ctx.settings.action_language;
     let translated = if is_predicate {
         translate_predicate(
             &lang,
             rule,
-            ctx.analysis.parser_rules(),
+            rules,
             text,
             vals_in_scope,
             ctx.cursor.alt_bindings(),
@@ -972,7 +956,7 @@ fn translate_body_or_warn(
         translate_action(
             &lang,
             rule,
-            ctx.analysis.parser_rules(),
+            rules,
             text,
             vals_in_scope,
             ctx.cursor.alt_bindings(),
@@ -990,21 +974,15 @@ fn translate_body_or_warn(
     };
 }
 
-/// Whether codegen emits the `_rule_start_tok` capture for this rule — its
-/// actions reference a rule-span special (`$text` / `$start` / `$stop`). The
-/// translator keys their substitution on the same predicate, so the local they
-/// read is always in scope, for every rule shape.
-fn rule_captures_span(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
-    return rule_uses_rule_span(rule, rules);
-}
-
 /// Emit `let _rule_start_tok = p.pos;` at a rule-body entry (where `p.pos` is
 /// the rule's first token), when the rule references `$text` / `$start` /
-/// `$stop`. Placed at every shape's body entry (single-alt inner, multi-alt
-/// inner, `_alt_<n>` helpers, LR inner/atom), so span specials resolve
-/// uniformly regardless of dispatch.
-pub fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &EmitContext, needed: bool = false) {
-    if ctx.settings.emit_actions && (needed || rule_captures_span(rule, ctx.analysis.parser_rules())) {
+/// `$stop`. The translator keys their substitution on the same
+/// `rule_uses_rule_span`, and this is placed at every shape's body entry
+/// (single-alt inner, multi-alt inner, `_alt_<n>` helpers, LR inner/atom), so
+/// the local they read is always in scope.
+pub fn emit_span_capture(w: &mut CodeWriter, ctx: &EmitContext, needed: bool = false) {
+    if ctx.settings.emit_actions
+        && (needed || rule_uses_rule_span(ctx.current_rule_attrs(), ctx.analysis.rule_attrs())) {
         w.line(`let ${RULE_START_TOK_LOCAL} = p.pos;`);
     }
 }
@@ -1039,7 +1017,3 @@ fn emit_action_stmt<S: AsStrSlice>(w: &mut CodeWriter, code: S) {
     w.line(code);
     w.end();
 }
-
-/// No actions — the default for an inner body whose caller has none to place
-/// (a group whose alternative carries no retained `{ ... }`).
-pub global NO_ACTIONS: List<AltAction> = [];

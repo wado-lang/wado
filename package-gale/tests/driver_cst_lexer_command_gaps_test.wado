@@ -1,26 +1,33 @@
 //! Stage 2b migration: lexer_command_gaps parses through the emitter.
+
 use g from "./grammars/lexer_command_gaps.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_command_gaps" },
     };
+
 fn ok<S: AsStrSlice>(input: S) {
     assert g::parse(input).ok();
 }
+
 test "lexer-cmd: words" {
     ok("hello world");
 }
+
 test "lexer-cmd: numbers" {
     ok("42 100");
 }
+
 test "lexer-cmd: zero keyword" {
     ok("zero 42");
     ok("zero foo zero bar");
     assert g::parse_numbers("zero 42").ok(), "`zero` is re-typed to NUMBER";
     assert !g::parse_numbers("zeros 42").ok(), "a longer word is a WORD";
 }
+
 test "lexer-cmd: line comment skip" {
     ok("hello // a comment\nworld");
 }
+
 test "lexer-cmd: pragma channel" {
     ok("hello #pragma once\nworld 42");
     ok("#pragma foo\nx");

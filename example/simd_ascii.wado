@@ -9,6 +9,7 @@ use { u8x16 } from "core:simd";
 
 // Convert ASCII uppercase letters to lowercase, 16 bytes at a time.
 // Non-letter bytes pass through unchanged.
+
 fn to_lowercase_simd(input: String) -> String {
     let len = input.len();
     let mut result = String::with_capacity(len);
@@ -51,6 +52,7 @@ fn to_lowercase_simd(input: String) -> String {
 
 // Count occurrences of a specific ASCII byte in a string using SIMD.
 // Uses bitmask + popcount instead of lane-by-lane extraction.
+
 fn count_byte_simd(input: String, target: u8) -> i32 {
     let len = input.len();
     let mut count = 0;
@@ -80,6 +82,7 @@ fn count_byte_simd(input: String, target: u8) -> i32 {
 
 // Check if a string contains only ASCII printable characters (0x20..0x7E)
 // Uses all_true instead of lane-by-lane checking.
+
 fn is_ascii_printable_simd(input: String) -> bool {
     let len = input.len();
 
@@ -114,6 +117,7 @@ fn is_ascii_printable_simd(input: String) -> bool {
 
 // Count ASCII digits in a string using SIMD.
 // Uses bitmask + popcount for efficient counting.
+
 fn count_digits_simd(input: String) -> i32 {
     let len = input.len();
     let mut count = 0;

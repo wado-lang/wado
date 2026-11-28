@@ -5,6 +5,7 @@
 
 use { Grammar, Element } from "./ir.wado";
 use { LoweredGrammar, Op, Rule } from "./gir.wado";
+use { RuleAttrs } from "./rule_attrs.wado";
 use { GrammarAnalysis, close_over_callers } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { push_unique } from "./list_util.wado";
@@ -14,7 +15,6 @@ use { RecoverySets, empty_recovery_sets, recovery_sets } from "./recovery_sets.w
 use {
     action_reads_rule_ctx,
     action_reads_rule_span,
-    rule_action_bodies,
     rule_binding_reads,
     rule_named_bindings,
     body_names_binding,
@@ -150,8 +150,9 @@ pub fn plan_parser(
     let mut binding_reads: List<Option<List<String>>> = [];
     let mut named_bindings: List<List<String>> = [];
     if settings.emit_actions {
-        binding_reads = grammar.parser_rules.iter_ref().map(|r| rule_binding_reads(r, &grammar.parser_rules)).collect();
-        named_bindings = grammar.parser_rules.iter_ref().map(|r| rule_named_bindings(r)).collect();
+        let attrs = analysis.rule_attrs();
+        binding_reads = attrs.iter_ref().map(|r| rule_binding_reads(r, attrs)).collect();
+        named_bindings = attrs.iter_ref().map(|r| rule_named_bindings(r)).collect();
     }
     return ParserPlan {
         emit_follow: marks.caller_follow_gate,
@@ -168,7 +169,7 @@ pub fn plan_parser(
         scan_memo: rescanned.contains(&true) || any_lr,
         lr_frames: lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(l) && l.mid_operand_gated() }),
         rescanned,
-        speculates: !settings.emit_actions || grammar.parser_rules.iter_ref().all(|r| rule_action_bodies(r).is_empty()),
+        speculates: !settings.emit_actions || analysis.rule_attrs().iter_ref().all(|r| r.action_bodies.is_empty()),
         lr_loop_entry_decisions: lr_decs,
         atn_rule_body_decisions: body_decs,
         atn_call_site_returns: if needs_atn { atn.call_site_returns } else { [] },
@@ -176,7 +177,11 @@ pub fn plan_parser(
         // Every grammar reads its recovery sets off the ATN; only the
         // simulator's grammars also embed it.
         recovery: recovery_sets(atn, analysis.eof_kind_id()),
-        rule_captures: if settings.emit_actions { rule_captures_of(grammar, lowered) } else { HashMap::new() },
+        rule_captures: if settings.emit_actions {
+            rule_captures_of(grammar, analysis.rule_attrs(), lowered);
+        } else {
+            HashMap::new();
+        },
         binding_reads,
         named_bindings,
     };
@@ -349,11 +354,15 @@ fn name_set(names: &List<String>) -> HashSet<String> {
 
 /// What every rule's actions read off its labeled rule calls, so the value
 /// struct, the capture emit, and the reference all read one answer.
-fn rule_captures_of(grammar: &Grammar, lowered: &LoweredGrammar) -> HashMap<String, RuleCaptures> {
+fn rule_captures_of(
+    grammar: &Grammar,
+    attrs: &List<RuleAttrs>,
+    lowered: &LoweredGrammar,
+) -> HashMap<String, RuleCaptures> {
     let mut captures: HashMap<String, RuleCaptures> = HashMap::new();
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         let rule = &grammar.parser_rules[i];
-        let bodies = rule_action_bodies(rule);
+        let bodies = attrs[i].action_bodies;
         if bodies.is_empty() {
             continue;
         }

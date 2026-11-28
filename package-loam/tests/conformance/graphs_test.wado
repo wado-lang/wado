@@ -73,6 +73,7 @@ use ranked from "./ranked.onnxtext"
     };
 
 // A folded output is returned as the literal the build wrote for it.
+
 test "a folded scalar output comes back as a rank-0 tensor" {
     let mut cpu = Cpu {};
     let mut model = folded::Model::new(folded::Params::embedded(&mut cpu));
@@ -90,6 +91,7 @@ test "a folded scalar output comes back as a rank-0 tensor" {
 
 // Row gathers over an int64 input, and position ids the build folds into a
 // literal tensor.
+
 test "each token's row adds its position's row, and -1 names the last token" {
     let mut cpu = Cpu {};
     let mut model = embedding::Model::new(embedding::Params::embedded(&mut cpu));
@@ -107,6 +109,7 @@ test "each token's row adds its position's row, and -1 names the last token" {
 
 // An int64 tensor through the layout kernels, and the Cast that makes it a
 // float.
+
 test "a masked key becomes -f32::MAX and a kept one 0" {
     let mut cpu = Cpu {};
     let mut model = masked::Model::new(masked::Params::embedded(&mut cpu));
@@ -124,6 +127,7 @@ test "a masked key becomes -f32::MAX and a kept one 0" {
 
 // Two operands' axes of 1 meeting, which is one axis: the kernel must produce
 // the output under the one name both take.
+
 test "a folded scalar and a Gemm bias, folded or not, each name the axis of 1 they meet" {
     let mut cpu = Cpu {};
     let mut model = renamed::Model::new(renamed::Params::embedded(&mut cpu));
@@ -304,6 +308,7 @@ test "what a branch owes is checked where it runs" {
 
 // An attention matched as the composite whose past is held outside the cache,
 // at a length its capacity holds exactly.
+
 test "the new position joins a past at its capacity" {
     let held_key: Tensor<f32, [joined::Q0, joined::HeldKey1, joined::P, joined::HeldKey3]> = Tensor {
         data: List::<f32>::filled(16, 0.0),

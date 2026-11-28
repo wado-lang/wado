@@ -376,6 +376,7 @@ impl TryFrom<f64> for bf16 {
 
 // Every comparison is f32's on the widened value, which is exact: every NaN is
 // one value and the two zeroes are one value, neither of which bits give.
+
 impl Eq for f16 {
     pub fn eq(&self, other: &Self) -> bool {
         return f32::from(*self) == f32::from(*other);
@@ -401,6 +402,7 @@ impl Ord for bf16 {
 }
 
 // The widened value is the one the comparison reads, so it is the one hashed.
+
 impl Hash for f16 {
     pub fn hash<H: Hasher>(&self, h: &mut H) {
         f32::from(*self).hash(h);

@@ -35,6 +35,7 @@ use {
 
 // The Wado twin of `grammars/java/TypeScriptParserBase.java`, which
 // `antlr4_oracle.wado --super` runs ANTLR4 against. Edit both or neither.
+
 struct TsParserBase {
 }
 
@@ -78,12 +79,13 @@ impl TypeScriptParserBase for TsParserBase {
 //
 // `IsStrictMode` still sees only the `'use strict'` literal the lexer passes,
 // not the parser's notion of scope.
+
 struct TsBase {
-    // One entry per `${` interpolation still open: how many plain `{` are open
-    // inside it. A `}` ends the interpolation only at count 0.
+    /// One entry per `${` interpolation still open: how many plain `{` are open
+    /// inside it. A `}` ends the interpolation only at count 0.
     interp_braces: List<i32>,
-    // Where each open template's interpolation entries start, so a closing
-    // backtick drops what its interpolations left behind.
+    /// Where each open template's interpolation entries start, so a closing
+    /// backtick drops what its interpolations left behind.
     template_marks: List<i32>,
     strict: bool,
     /// `-1` before the first token. Upstream tracks this by overriding

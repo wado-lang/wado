@@ -30,6 +30,7 @@ struct Point {
     x: i32,
     y: i32,
 }
+
 impl Serialize for Point;
 impl Deserialize for Point;
 

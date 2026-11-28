@@ -88,6 +88,7 @@ test "a @ inside user info does not move the password's colon" {
 
 // A credential is stored in WHATWG's userinfo percent-encode set, so what
 // `authority()` writes parses back to the credential it came from.
+
 test "user info is stored percent-encoded" {
     if let Ok(url) = Url::from_str("http://u:p:q@example.com/") {
         assert url.password == "p%3Aq";
@@ -1099,6 +1100,7 @@ test "resolve takes a network-path reference with no path" {
 
 // Every parsed path starts with `/`, but the fields are public, so a base
 // built by hand may not.
+
 test "resolve against a base path with no slash merges onto the reference alone" {
     let base = Url {
         scheme: "http",

@@ -4778,14 +4778,14 @@ fn scan_expression_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
     if pos < 0 { return -1; }
     while atn_decide_0(atn, tokens, pos, 0) == 0 {
         let sp = pos;
-        sg_0_done: {
-            sg_0: {
+        sg_3_done: {
+            sg_3: {
                 pos += 1;
                 atn.stack.push(25);
                 pos = scan_e(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_1, follow), 0);
                 atn.stack.pop();
-                if pos < 0 { break sg_0; }
-                break sg_0_done;
+                if pos < 0 { break sg_3; }
+                break sg_3_done;
             }
             pos = -1;
         }
@@ -4843,11 +4843,11 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
             pos = scan_typespec(tokens, pos, atn, memo);
             atn.stack.pop();
             if pos < 0 { break try_10; }
-            let gp_1 = pos;
-            sg_1_done: {
-                let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if sgk_1 == TK_LIT_LPAREN {
-                    sg_1_0: {
+            let gp_0 = pos;
+            sg_0_done: {
+                let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if sgk_0 == TK_LIT_LPAREN {
+                    sg_0_0: {
                         pos += 1;
                         if pos < tokens.len() && _kind_set_1(tokens[pos]) {
                             let sp = pos;
@@ -4856,47 +4856,47 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut
                             atn.stack.pop();
                             if pos < 0 { pos = sp; }
                         }
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_1_0; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_0_0; }
                         pos += 1;
-                        break sg_1_done;
+                        break sg_0_done;
                     }
-                } else if sgk_1 == TK_LIT_LBRACKET {
-                    sg_1_1: {
-                        sg_2_done: {
-                            sg_2: {
+                } else if sgk_0 == TK_LIT_LBRACKET {
+                    sg_0_1: {
+                        sg_1_done: {
+                            sg_1: {
                                 pos += 1;
                                 atn.stack.push(68);
                                 pos = scan_e(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_5, follow), 0);
                                 atn.stack.pop();
-                                if pos < 0 { break sg_2; }
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_2; }
+                                if pos < 0 { break sg_1; }
+                                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_1; }
                                 pos += 1;
-                                break sg_2_done;
+                                break sg_1_done;
                             }
-                            break sg_1_1;
+                            break sg_0_1;
                         }
                         while atn_decide_4(atn, tokens, pos, min_prec) == 0 {
                             let sp = pos;
-                            sg_3_done: {
-                                sg_3: {
+                            sg_2_done: {
+                                sg_2: {
                                     pos += 1;
                                     atn.stack.push(68);
                                     pos = scan_e(tokens, pos, atn, memo, follow_push(FOLLOW_SITE_5, follow), 0);
                                     atn.stack.pop();
-                                    if pos < 0 { break sg_3; }
-                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_3; }
+                                    if pos < 0 { break sg_2; }
+                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_2; }
                                     pos += 1;
-                                    break sg_3_done;
+                                    break sg_2_done;
                                 }
                                 pos = -1;
                             }
                             if pos < 0 { pos = sp; break; }
                             if pos == sp { break; }
                         }
-                        break sg_1_done;
+                        break sg_0_done;
                     }
                 }
-                pos = gp_1;
+                pos = gp_0;
             }
             return pos;
         }
@@ -5538,17 +5538,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
             p.expect(TK_LIT_super, &SYNC_7, false);
             p.expect(TK_LIT_LPAREN, &SYNC_5, false);
             if !SYNC_5.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
-            let mut opt_scan_pos: i32 = -1;
-            opt_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                p.atn.stack.push(113);
-                pos = scan_expression_list(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_2, follow));
-                p.atn.stack.pop();
-                if pos < 0 { break opt_scan; }
-                opt_scan_pos = pos;
-            }
-            if opt_scan_pos >= 0 {
+            if _kind_set_1(p.peek_kind()) {
                 p.site = 8;
                 p.atn_ret_pending = 113;
                 _parse_expression_list(p, follow_push(FOLLOW_SITE_2, follow));
@@ -5562,17 +5552,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
             p.expect(TK_ID, &SYNC_7, false);
             p.expect(TK_LIT_LPAREN, &SYNC_5, false);
             if !SYNC_5.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
-            let mut opt_scan_pos_2: i32 = -1;
-            opt_scan_2: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                p.atn.stack.push(127);
-                pos = scan_expression_list(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_2, follow));
-                p.atn.stack.pop();
-                if pos < 0 { break opt_scan_2; }
-                opt_scan_pos_2 = pos;
-            }
-            if opt_scan_pos_2 >= 0 {
+            if _kind_set_1(p.peek_kind()) {
                 p.site = 10;
                 p.atn_ret_pending = 127;
                 _parse_expression_list(p, follow_push(FOLLOW_SITE_2, follow));
@@ -5595,17 +5575,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
             p.b.start_node_at(_cp, RK_E, _start);
             p.take();
             if !SYNC_5.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
-            let mut opt_scan_pos_3: i32 = -1;
-            opt_scan_3: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                p.atn.stack.push(145);
-                pos = scan_expression_list(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_2, follow));
-                p.atn.stack.pop();
-                if pos < 0 { break opt_scan_3; }
-                opt_scan_pos_3 = pos;
-            }
-            if opt_scan_pos_3 >= 0 {
+            if _kind_set_1(p.peek_kind()) {
                 p.site = 20;
                 p.atn_ret_pending = 145;
                 _parse_expression_list(p, follow_push(FOLLOW_SITE_2, follow));

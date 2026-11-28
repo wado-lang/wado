@@ -32,6 +32,7 @@ fn assert_kinds<S: AsStrSlice>(input: S, expected: &List<String>) {
 // 10. Scoring arm 1 without its predicate makes it reach `abc` against arm 0's
 // `ab`, so the replay hands the actions to the arm the match ruled out and the
 // `!` lexes as `BANG`.
+
 test "the replay scores the arms the match scored" {
     assert_kinds("abc!", &["T", "C", "MARK", "Eof"]);
 }
