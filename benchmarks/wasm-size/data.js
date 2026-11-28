@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795856779695,
+  "lastUpdate": 1795871081609,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -83393,6 +83393,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e9bace24ce334bbfc66404ed85cd0b5a6c8b4f74"
         },
         "date": 1795856779272,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334842,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dac02742d0347a41fb61ea8f66e31850b18776f4",
+          "message": "Merge pull request #2797 from wado-lang/ccr-f0010f7e-dmdgyw\n\nfeat(windrow): find code that repeats one shape across Rust and Wado",
+          "timestamp": "2026-11-28T21:46:49+09:00",
+          "tree_id": "db1907041cb61966812028be6cd6f216d7826a48",
+          "url": "https://github.com/wado-lang/wado/commit/dac02742d0347a41fb61ea8f66e31850b18776f4"
+        },
+        "date": 1795871080605,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
