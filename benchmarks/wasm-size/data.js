@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795831452917,
+  "lastUpdate": 1795842912208,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -83173,6 +83173,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1d41cc65ff93896c25c4b54644487cffd94ba2df"
         },
         "date": 1795831451821,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24947,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 334355,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b6695539322e610886f0dad26f70612766fda6ca",
+          "message": "Merge pull request #2790 from wado-lang/ccr-06ec82c2-nz18ok\n\nfeat(web): bind WebIDL unions in results, and widen the slice to canvas and style",
+          "timestamp": "2026-11-28T13:50:48+09:00",
+          "tree_id": "ee7bc039a83b3d4cf54f4db68f0022a54dfbe999",
+          "url": "https://github.com/wado-lang/wado/commit/b6695539322e610886f0dad26f70612766fda6ca"
+        },
+        "date": 1795842910906,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
