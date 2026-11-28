@@ -218,7 +218,6 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Resul
         .filter(|&fd| fd > libc::STDERR_FILENO)
         .collect();
     keep.sort_unstable();
-    keep.dedup();
     let mut failure = None;
     // SAFETY: the closure makes only system calls, on memory built above.
     let pid = unsafe {
