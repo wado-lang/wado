@@ -1715,6 +1715,8 @@ enum Reach {
     /// a loop takes as well: spliced, its environment is a literal SROA splits
     /// and its captures are loads LICM hoists. Admitting every such callee in a
     /// loop spliced the derived deserializers' `next_field` and measured slower.
+    /// Not [`Reach::Sole`]: its plain site still leaves a call the engine may
+    /// fold to it, which splicing the closure first keeps from folding.
     SoleClosure,
     Everywhere,
 }
