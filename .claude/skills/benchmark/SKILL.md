@@ -81,9 +81,9 @@ allocation moves where collections land. `wado run --gc-log` shows that, and
 Two figures from different sessions can differ by noise alone, so a row the
 user asks about is attributed by an A/B in one session: the compiler that
 measured the README against this one, with `WADO_BIN` and `ab.ts` (see the
-`wado-performance` skill). If the verdict is `noise`, the row did not move. Otherwise read the
-verdict on its `(no-pgo)` row. If that moved too, the compiler moved it apart
-from PGO. If not, PGO moved it: either the row's `pgo/` file, or how the compiler
+`wado-performance` skill). If the verdict is `noise`, the row did not move.
+Otherwise read the verdict on its `(no-pgo)` row. If that moved too, the
+compiler moved it apart from PGO. If not, PGO moved it: either the row's `pgo/` file, or how the compiler
 uses a profile, such as the thresholds in `pgo.rs` or the inliner's hot price.
 `git log` on each shows what changed, and when both did, isolate them before
 naming one. http-routing has no `(no-pgo)` row, so its A/B, which
