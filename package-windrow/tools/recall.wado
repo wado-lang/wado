@@ -1,0 +1,145 @@
+//! How many past deduplications Windrow would have found. For each commit in
+//! the list (`--commits <file>`, one sha first on each line), it reads the
+//! parent's version of every `.rs` file the commit changed and reports, at
+//! each similarity, whether a group joins a node the commit deleted lines of to
+//! another node: the copy it folded away and the one it kept, or two copies it
+//! folded into a helper. Run it from the repository root.
+
+use { read_rust, find_similar, Tree, Group } from "../src/lib.wado";
+use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { cmd, Command, Process } from "core:process";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+
+global MIN_TOKENS: i32 = 40;
+/// A hunk shorter than this deletes a line or two around a fold, not a copy.
+global MIN_DELETED_LINES: i32 = 3;
+
+fn git_text(command: Command) -> String with Process {
+    return String::try_from_utf8(command.read().expect("git must succeed")).expect("git prints UTF-8");
+}
+
+/// The line ranges of `file` a commit deleted, 1-based and inclusive, in the
+/// parent's numbering: the `-a,b` side of each `-U0` hunk header.
+fn deleted_ranges(parent: &String, sha: &String, file: &String) -> List<[i32, i32]> with Process {
+    let mut out: List<[i32, i32]> = [];
+    for let line of git_text(cmd`git diff -U0 ${parent} ${sha} -- ${file}`).lines() {
+        if !line.starts_with("@@ -") {
+            continue;
+        }
+        let old = line.slice(4, line.len()).split(" ").next().unwrap();
+        let mut parts = old.split(",");
+        let start = i32::from_str(parts.next().unwrap()).unwrap();
+        let count = match parts.next() {
+            Some(n) => i32::from_str(n).unwrap(),
+            null => 1,
+        };
+        if count >= MIN_DELETED_LINES {
+            out.push([start, start + count - 1]);
+        }
+    }
+    return out;
+}
+
+struct Lines {
+    tree: i32,
+    first: i32,
+    last: i32,
+}
+
+fn lines_of(trees: &List<Tree>, tree: i32, row: i32) -> Lines {
+    let t = &trees[tree];
+    return Lines {
+        tree,
+        first: t.line_of(t.start[row]),
+        last: t.line_of(t.end[row]),
+    };
+}
+
+/// The deleted range a member overlaps, by index, or -1.
+fn deleted_at(member: &Lines, deleted: &List<List<[i32, i32]>>) -> i32 {
+    let ranges = &deleted[member.tree];
+    for let mut k = 0; k < ranges.len(); k += 1 {
+        if member.first <= ranges[k].1 && ranges[k].0 <= member.last {
+            return k;
+        }
+    }
+    return -1;
+}
+
+/// The first group, largest first, that joins a deleted node to another
+/// node, described for the report.
+fn first_hit(trees: &List<Tree>, groups: &List<Group>, deleted: &List<List<[i32, i32]>>) -> Option<String> {
+    for let g of groups {
+        let mut members: List<Lines> = [];
+        for let s of &g.sites {
+            members.push(lines_of(trees, s.tree, s.row));
+        }
+        for let a of &members {
+            let at = deleted_at(a, deleted);
+            if at < 0 {
+                continue;
+            }
+            for let b of &members {
+                let same_hunk = b.tree == a.tree && deleted_at(b, deleted) == at;
+                if !same_hunk {
+                    let mut text = `${g.similarity:.2} ${g.tokens}t`;
+                    for let m of &members {
+                        text.push_str(` ${trees[m.tree].path}:${m.first}-${m.last}`);
+                    }
+                    return Option::Some(text);
+                }
+            }
+        }
+    }
+    return null;
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Process) {
+    let argv = args();
+    assert argv.len() == 2 && argv[0] == "--commits", "usage: recall --commits <file>";
+    let list = fs::read_to_string(&argv[1]).expect("the commit list must be readable");
+    let sims: List<f64> = [0.7, 0.8, 0.9];
+    let mut hits: List<i32> = [0, 0, 0];
+    let mut evaluated = 0;
+    for let entry of list.lines() {
+        let Some(sha) = entry.split(" ").next() else {
+            continue;
+        };
+        if sha.is_empty() {
+            continue;
+        }
+        let sha = sha.to_string();
+        let parent = git_text(cmd`git rev-parse ${sha}^`).trim().to_string();
+        let mut trees: List<Tree> = [];
+        let mut deleted: List<List<[i32, i32]>> = [];
+        for let file of git_text(cmd`git diff --name-only --diff-filter=M ${parent} ${sha} -- ${"*.rs"}`).lines() {
+            let file = file.to_string();
+            let source = git_text(cmd`git show ${parent}:${file}`);
+            match read_rust(file, source) {
+                Ok(tree) => {
+                    trees.push(tree);
+                    deleted.push(deleted_ranges(&parent, &sha, &file));
+                },
+                Err(message) => eprintln(`${sha}: skipped ${file}: ${message}`),
+            }
+        }
+        if deleted.iter_ref().all(|d| d.is_empty()) {
+            println(`${sha}\tno deleted hunk`);
+            continue;
+        }
+        evaluated += 1;
+        let mut line = sha;
+        for let k of 0..<3 {
+            match first_hit(&trees, &find_similar(&trees, MIN_TOKENS, sims[k]), &deleted) {
+                Some(text) => {
+                    hits[k] += 1;
+                    line.push_str(`\thit@${sims[k]} ${text}`);
+                },
+                null => line.push_str(`\tmiss@${sims[k]}`),
+            }
+        }
+        println(line);
+    }
+    eprintln(`${evaluated} commits: ${hits[0]} at 0.7, ${hits[1]} at 0.8, ${hits[2]} at 0.9`);
+}
