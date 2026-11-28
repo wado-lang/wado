@@ -4214,13 +4214,98 @@ fn test_format_lone_semicolon_leaves_a_blank_line() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// One blank line sets apart a declaration with a body, and a `//` run from
+/// the declarations around it; a run of another kind of comment is a unit of
+/// its own. A `///` run keeps the source's gap, which decides what it
+/// documents. Two blank lines become one, and a body opens with none.
+#[test]
+fn test_format_blank_lines_between_units() {
+    let source = concat!(
+        "//! Module.\n",
+        "use { a } from \"./a.wado\";\n",
+        "// Group b.\n",
+        "use { b } from \"./b.wado\";\n",
+        "// Note.\n",
+        "/// Documented.\n",
+        "fn f() {\n",
+        "\n",
+        "    // Explains the let.\n",
+        "    let x = 1;\n",
+        "\n",
+        "\n",
+        "    let y = 2;\n",
+        "    struct L { v: i32 }\n",
+        "    let z = 3;\n",
+        "}\n",
+        "fn g() {}\n",
+        "struct S {\n",
+        "    a: i32,\n",
+        "    // Undocumented b.\n",
+        "    b: i32,\n",
+        "    c: i32,\n",
+        "    /// Documented d.\n",
+        "    d: i32,\n",
+        "}\n",
+        "/// Detached.\n",
+        "\n",
+        "type A = i32;\n",
+    );
+    let expected = concat!(
+        "//! Module.\n",
+        "\n",
+        "use { a } from \"./a.wado\";\n",
+        "\n",
+        "// Group b.\n",
+        "\n",
+        "use { b } from \"./b.wado\";\n",
+        "\n",
+        "// Note.\n",
+        "\n",
+        "/// Documented.\n",
+        "fn f() {\n",
+        "    // Explains the let.\n",
+        "    let x = 1;\n",
+        "\n",
+        "    let y = 2;\n",
+        "\n",
+        "    struct L {\n",
+        "        v: i32,\n",
+        "    }\n",
+        "\n",
+        "    let z = 3;\n",
+        "}\n",
+        "\n",
+        "fn g() {\n",
+        "}\n",
+        "\n",
+        "struct S {\n",
+        "    a: i32,\n",
+        "\n",
+        "    // Undocumented b.\n",
+        "\n",
+        "    b: i32,\n",
+        "    c: i32,\n",
+        "    /// Documented d.\n",
+        "    d: i32,\n",
+        "}\n",
+        "\n",
+        "/// Detached.\n",
+        "\n",
+        "type A = i32;\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// A `with` row of one goes bare and a row of more than one is parenthesised,
 /// in every position a row can appear.
 #[test]
 fn test_format_effect_row_parentheses() {
     let source = concat!(
-        "fn one() with Stdout {\n}\n",
-        "fn many() with (Stdout, Stderr) {\n}\n",
+        "fn one() with Stdout {\n}\n\n",
+        "fn many() with (Stdout, Stderr) {\n}\n\n",
         "fn nested(f: fn() with (A, B), x: i32) {\n}\n",
     );
     let formatted = wado_compiler::format(source).expect("format failed");
@@ -4441,6 +4526,7 @@ fn test_format_keeps_an_attribute_on_a_local_item() {
         "    struct Size {\n",
         "        w: i32,\n",
         "    }\n",
+        "\n",
         "    assert Size { w: 1 }.w == 1;\n",
         "}\n"
     );
@@ -4983,6 +5069,7 @@ fn test_format_trait_contract_clauses() {
         "    fn pick(&self, i: i32) -> i32\n",
         "        contract i >= 0, \"negative\"\n",
         "        contract i < 9;\n",
+        "\n",
         "    fn first(&self) -> i32\n",
         "        contract true\n",
         "    {\n",

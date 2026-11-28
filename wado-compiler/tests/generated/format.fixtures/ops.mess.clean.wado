@@ -1,12 +1,10 @@
 // Operator precedence tests - messy version
 // with inconsistent spacing and block comments everywhere
 
-
 /// Arithmetic: redundant parens (will be removed by formatter)
 test "arithmetic" {
     // mul before add
     assert 1 + 2 * 3 == 7;
-
 
     // parens override mul
     assert (1 + 2) * 3 == 9;
@@ -25,7 +23,6 @@ test "arithmetic" {
 
 /// Left-associativity: redundant parens (will be removed by formatter)
 test "left-assoc" {
-
     // subtraction is left-assoc
     assert 10 - 3 - 2 == 5;
 
@@ -43,7 +40,6 @@ test "left-assoc" {
 
 /// Shift operators: + binds tighter than <<
 test "shift" {
-
     // add first, then shift
     assert 1 + 1 << 3 == 16;
 
@@ -62,7 +58,6 @@ test "shift" {
 
 /// Bitwise operators: & > ^ > |, all tighter than ==
 test "bitwise" {
-
     /* & is tighter than == */
     assert 0b1100 & 0b1010 == 8;
 
@@ -84,7 +79,6 @@ test "bitwise" {
 
 /// Logical operators: && binds tighter than ||
 test "logical" {
-
     // && before ||
     let a = true && false || true;
     assert a == true;
@@ -104,5 +98,6 @@ test "logical" {
 
 // A command entry so the fixture compiles (golden-dump emits non-empty NIR/WAT
 // goldens). The `test` blocks above are the formatter's actual subject.
+
 export fn run() {
 }

@@ -1,57 +1,75 @@
 // More than 2 blank lines between top-level items (reduced to 2)
+
 fn first() {
 }
 
-
 fn second() {
 }
-
 
 fn third() {
 }
 
 // use {} with no inner spaces and no space after commas
+
 use { println, eprintln, print, eprint } from "core:cli";
 
 // Inline /* */ comments on struct fields
+
 struct Point {
     x: i32,  /* horizontal */
+
     /* vertical component */
+
     y: i32,
     z: i32,  /* depth */
 }
 
 // Block comment /* */ before struct
 /* This is the Color enum */
+
 enum Color {
     Red,  /* primary */
+
     /* secondary */
+
     Green,
     Blue,  /* another primary */
+
     /* last one */
+
     Alpha,
 }
 
 // Block comments /* */ in variant
 /* Represents a geometric shape */
+
 variant Shape {
     /* a circle with radius */
+
     Circle(f64),
+
     /* width and height */
+
     Rect([f64, f64]),
+
     /* just a point */
+
     Dot,
 }
 
 // Block comments /* */ in flags
+
 flags Access {
     Read,  /* can read */
+
     /* can write */
+
     Write,
     Execute,  /* can execute */
 }
 
 // No blank lines between impl methods (corrected to 1)
+
 struct Counter {
     n: i32,
 }
@@ -75,18 +93,18 @@ impl Counter {
 }
 
 // More than 2 blank lines inside a function (reduced to 2)
+
 fn with_many_blank_lines() {
     let a = 1;
 
-
     let b = 2;
-
 
     let c = a + b;
     /* a trailing block comment inside function */
 }
 
 // Block comments before and after control flow
+
 fn control_flow(x: i32) -> i32 {
     /* check if positive */
     if x > 0 {
@@ -103,6 +121,7 @@ fn control_flow(x: i32) -> i32 {
 }
 
 // Block comments inside a loop
+
 fn loop_example() {
     let mut i = 0;
     /* start of loop */
@@ -115,6 +134,7 @@ fn loop_example() {
 }
 
 // Nested block comments
+
 fn nested_blocks() {
     /* outer */
     for let mut j = 0; j < 5; j += 1 {
@@ -126,6 +146,7 @@ fn nested_blocks() {
 }
 
 // Reference receivers
+
 struct Wrapper {
     val: i32,
 }
@@ -145,47 +166,59 @@ impl Wrapper {
 }
 
 // Block comments in impl (before and after methods)
+
 struct Logger {
     prefix: String,
 }
 
 impl Logger {
     /* constructor */
+
     fn new(prefix: String) -> Logger {
         return Logger { prefix };
     }
 
     /* main log method */
+
     fn log(&self, msg: String) {
     }
 
     /* log with level */
+
     fn log_level(&self, level: i32, msg: String) {
     }
 }
 
 // Generic struct for bounded impl test
+
 struct MyArray<T> {
     items: List<T>,
 }
 
 // Block comment /* */ before impl
 /* inherent impl with trait bound */
+
 impl<T: Ord> MyArray<T> {
     /* sort in ascending order */
+
     fn sort(&mut self) {
     }
 }
 
 // Block comments /* */ on trait methods
+
 trait Printable {
     /* print to stdout */
+
     fn print(&self);
+
     /* print with newline */
+
     fn println(&self);
 }
 
 // Multiple /* */ comments at the start of a function body
+
 fn add(a: i32, b: i32) -> i32 {
     /* first number */
     /* second number */
@@ -193,6 +226,7 @@ fn add(a: i32, b: i32) -> i32 {
 }
 
 // Multiline expression statement followed by comment (no extra blank lines)
+
 fn multiline_expr_stmt(mut buf: String, upper: bool) {
     buf.push_str(&if upper { "E" } else { "e" });
     // next statement immediately follows
@@ -200,6 +234,7 @@ fn multiline_expr_stmt(mut buf: String, upper: bool) {
 }
 
 // Multiline return statement followed by comment (no extra blank lines)
+
 fn multiline_return_stmt(x: i32) -> i32 {
     return match x {
         0 => 100,
@@ -209,6 +244,7 @@ fn multiline_return_stmt(x: i32) -> i32 {
 }
 
 // Multiline assert statement followed by comment
+
 fn multiline_assert_stmt(items: List<i32>) {
     assert items.len() > 0;
     // check passed
@@ -220,6 +256,7 @@ fn multiline_assert_stmt(items: List<i32>) {
 // so we just test that break spans are correct.
 
 // Break with comment immediately after (no extra blank lines)
+
 fn break_with_comment() {
     loop {
         break;
@@ -228,12 +265,11 @@ fn break_with_comment() {
 }
 
 // Too many blank lines after closures
+
 fn with_closures() {
     let inc = |x: i32| x + 1;
 
-
     let double = |x: i32| x * 2;
-
 
     let result = double(inc(5));
 }

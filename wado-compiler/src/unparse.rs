@@ -255,21 +255,78 @@ fn function_decl_keyword_into(f: &Function, output: &mut String) {
     output.push(' ');
 }
 
-/// Number of blank lines the formatter emits between two source lines.
-///
-/// This is the formatter's gap-display rule: if the source had no blank
-/// line between the two anchors we emit none, exactly one blank line is
-/// preserved as one, and any larger gap collapses to two so an arbitrary
-/// number of empty lines in the input cannot blow up output size.
-fn blank_lines_between(prev_line: usize, next_line: usize) -> usize {
-    if next_line <= prev_line + 1 {
-        return 0;
+/// What a line of the output holds, as far as the blank lines around it go.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Unit {
+    /// A `//` or `/* */` comment on a line of its own.
+    Comment,
+    /// A `///` line.
+    Doc,
+    /// A `//!` line.
+    ModuleDoc,
+    /// A declaration: an item, a member, a field or a case. `braced` when it
+    /// has a body of its own.
+    Item { braced: bool },
+    /// A statement, a match arm, anything else.
+    Other,
+}
+
+impl Unit {
+    fn of_comment(kind: CommentKind) -> Unit {
+        match kind {
+            CommentKind::Line | CommentKind::Block => Unit::Comment,
+            CommentKind::DocLine => Unit::Doc,
+            CommentKind::ModuleDoc => Unit::ModuleDoc,
+        }
     }
-    let blank_count = next_line - prev_line - 1;
-    match blank_count {
-        0 => 0,
-        1 => 1,
-        _ => 2,
+
+    fn of_item(item: &Item) -> Unit {
+        let braced = match item {
+            Item::Function(f) => f.body.is_some(),
+            Item::Impl(i) => !i.is_synthesize_request,
+            Item::Resource(r) => !r.methods.is_empty(),
+            Item::Struct(_)
+            | Item::Enum(_)
+            | Item::Variant(_)
+            | Item::Flags(_)
+            | Item::Trait(_)
+            | Item::Interface(_)
+            | Item::World(_)
+            | Item::Test(_) => true,
+            Item::Use(_)
+            | Item::Global(_)
+            | Item::Newtype(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::Error(_) => false,
+        };
+        Unit::Item { braced }
+    }
+
+    fn is_comment(self) -> bool {
+        matches!(self, Unit::Comment | Unit::Doc | Unit::ModuleDoc)
+    }
+}
+
+/// The blank lines between `prev` and `next`, where the source had
+/// `source_blanks` (0 or 1); `prev` is `None` at the start of a body, which
+/// opens with none. Each comment run is a unit of its own, so a `//` run is set
+/// apart from the declarations on both sides, which leaves a comment that
+/// should document one visibly detached. A `///` run keeps what the source
+/// had: a blank line there detaches the doc comment.
+fn blank_lines(prev: Option<Unit>, next: Unit, source_blanks: usize) -> usize {
+    let Some(prev) = prev else {
+        return 0;
+    };
+    match (prev, next) {
+        (a, b) if a == b && a.is_comment() => source_blanks,
+        (a, b) if a.is_comment() && b.is_comment() => 1,
+        (Unit::Doc, _) => source_blanks,
+        (Unit::ModuleDoc, _)
+        | (Unit::Comment, Unit::Item { .. })
+        | (Unit::Item { .. }, Unit::Comment) => 1,
+        (Unit::Item { braced: true }, _) | (_, Unit::Item { braced: true }) => 1,
+        _ => source_blanks,
     }
 }
 
@@ -339,6 +396,8 @@ pub struct Unparser<'a> {
     indent_level: usize,
     emitted_comments: IndexSet<usize>,
     last_source_line: usize,
+    /// What the output's last line holds; `None` at the start of a body.
+    last_unit: Option<Unit>,
     /// The span start of the one call whose arguments must take their wrapped
     /// form. Keyed by span rather than set as a flag: what needs to wrap is the
     /// call that *ends* the line, and a flag any nested rendering may consume
@@ -598,13 +657,6 @@ impl<'a> Unparser<'a> {
         self.trivia.map(|t| t.leading_of(id)).unwrap_or(&[])
     }
 
-    /// The line `id`'s leading run starts on: its first still-unplaced leading
-    /// comment, else `fallback`.
-    fn leading_start_line(&self, id: AstId, fallback: usize) -> usize {
-        self.first_unplaced_leading(id)
-            .map_or(fallback, |c| c.span.line)
-    }
-
     /// Trailing trivia for `id`. Same fallback as [`Self::leading_of`].
     fn trailing_of(&self, id: AstId) -> &'a [Comment] {
         self.trivia.map(|t| t.trailing_of(id)).unwrap_or(&[])
@@ -615,18 +667,19 @@ impl<'a> Unparser<'a> {
         self.trivia.map(|t| t.inner_tail_of(id)).unwrap_or(&[])
     }
 
-    /// Emit blank lines to reach the target line, updating `last_source_line`
-    fn emit_blank_lines_to(&mut self, target_line: usize) {
-        if self.last_source_line > 0 && target_line > self.last_source_line {
-            let blanks = blank_lines_between(self.last_source_line, target_line);
-            for _ in 0..blanks {
-                self.output.push('\n');
-            }
+    /// Emit the blank lines before `next`, which the source starts on
+    /// `target_line`. A gap of any size in the source counts as one.
+    fn emit_blank_lines_to(&mut self, target_line: usize, next: Unit) {
+        let source_blanks =
+            usize::from(self.last_source_line > 0 && target_line > self.last_source_line + 1);
+        for _ in 0..blank_lines(self.last_unit, next, source_blanks) {
+            self.output.push('\n');
         }
         // Never backwards. A construct written above what the output has
         // already reached is one being moved down, and re-anchoring to its line
         // would invent the gap below it.
         self.last_source_line = self.last_source_line.max(target_line);
+        self.last_unit = Some(next);
     }
 
     pub fn unparse(mut self, module: &Module) -> String {
@@ -655,6 +708,7 @@ impl<'a> Unparser<'a> {
             // Anchor `last_source_line` to the inner attr so blank lines
             // between it and the first item are preserved.
             self.last_source_line = attr.span.end_line();
+            self.last_unit = Some(Unit::Other);
         }
 
         for item in &module.items {
@@ -671,7 +725,7 @@ impl<'a> Unparser<'a> {
     fn unparse_item(&mut self, item: &Item) {
         let id = get_item_id(item);
         self.open_member(id, get_item_span(item).start, item.attrs());
-        self.emit_blank_lines_to(get_item_first_line(item));
+        self.emit_blank_lines_to(get_item_first_line(item), Unit::of_item(item));
 
         match item {
             Item::Use(u) => self.unparse_use(u),
@@ -696,6 +750,7 @@ impl<'a> Unparser<'a> {
         }
 
         self.emit_trailing_for(id);
+        self.last_unit = Some(Unit::of_item(item));
     }
 
     fn unparse_use(&mut self, u: &UseDecl) {
@@ -1311,36 +1366,12 @@ impl<'a> Unparser<'a> {
                 .chain(i.methods.iter().map(Member::Method)),
         );
         self.with_braced_body(i.span, members.first().map(Member::span), |this| {
-            let mut previous: Option<&Member<'_>> = None;
             for member in &members {
-                let effective_line = effective_start_line(member.attrs(), member.span().line);
-                let effective_start = this.leading_start_line(member.id(), effective_line);
-                match previous {
-                    // One blank line separates declarations from the method
-                    // after them whatever the source did. Anchoring past it
-                    // stops a second.
-                    Some(p) if !p.is_method() && member.is_method() => {
-                        this.output.push('\n');
-                        this.last_source_line = effective_start;
-                    }
-                    // A method is set apart from the member after it by at
-                    // least one blank line, which `emit_blank_lines_to` alone
-                    // cannot force.
-                    Some(p)
-                        if p.is_method()
-                            && blank_lines_between(this.last_source_line, effective_start) == 0 =>
-                    {
-                        this.output.push('\n');
-                        this.last_source_line = effective_start;
-                    }
-                    _ => {}
-                }
                 this.unparse_member(member, None);
-                previous = Some(member);
             }
 
             if let Some(rest) = i.rest {
-                if previous.is_some_and(Member::is_method) {
+                if members.last().is_some_and(Member::is_method) {
                     this.output.push('\n');
                 }
                 this.write_indent();
@@ -1426,7 +1457,7 @@ impl<'a> Unparser<'a> {
                     }
                     None => self.unparse_function(method),
                 }
-                self.last_source_line = span.end_line();
+                self.close_method(method);
             }
         }
     }
@@ -1470,14 +1501,28 @@ impl<'a> Unparser<'a> {
         for method in methods {
             self.open_method(method);
             self.unparse_function(method);
-            self.last_source_line = method.span.end_line();
+            self.close_method(method);
+        }
+    }
+
+    fn method_unit(method: &Function) -> Unit {
+        Unit::Item {
+            braced: method.body.is_some(),
         }
     }
 
     /// [`Self::open_member`] for `method`, and the blank lines above it.
     fn open_method(&mut self, method: &Function) {
         self.open_member(method.id, method.span.start, &method.attrs);
-        self.emit_blank_lines_to(effective_start_line(&method.attrs, method.span.line));
+        self.emit_blank_lines_to(
+            effective_start_line(&method.attrs, method.span.line),
+            Self::method_unit(method),
+        );
+    }
+
+    fn close_method(&mut self, method: &Function) {
+        self.last_source_line = method.span.end_line();
+        self.last_unit = Some(Self::method_unit(method));
     }
 
     fn unparse_world(&mut self, w: &WorldDecl) {
@@ -1494,8 +1539,9 @@ impl<'a> Unparser<'a> {
             .chain(w.exports.iter().map(WorldExport::span))
             .min_by_key(|span| span.start);
         self.with_braced_body(w.span, first_entry, |this| {
+            let entry = Unit::Item { braced: false };
             for imp in &w.imports {
-                this.emit_blank_lines_to(imp.span.line);
+                this.emit_blank_lines_to(imp.span.line, entry);
                 this.write_indent();
                 this.output.push_str("import ");
                 this.output.push_str(&imp.interface_name);
@@ -1506,7 +1552,7 @@ impl<'a> Unparser<'a> {
             for exp in &w.exports {
                 match exp {
                     WorldExport::Interface(iface) => {
-                        this.emit_blank_lines_to(iface.span.line);
+                        this.emit_blank_lines_to(iface.span.line, entry);
                         this.write_indent();
                         this.output.push_str("export ");
                         this.output.push_str(&iface.interface_name);
@@ -1514,7 +1560,7 @@ impl<'a> Unparser<'a> {
                         this.last_source_line = iface.span.end_line();
                     }
                     WorldExport::Function(func) => {
-                        this.emit_blank_lines_to(func.span.line);
+                        this.emit_blank_lines_to(func.span.line, entry);
                         this.write_indent();
                         this.output.push_str("export ");
                         this.emit_kw_if(func.is_async, "async ");
@@ -1575,6 +1621,7 @@ impl<'a> Unparser<'a> {
     fn unparse_block(&mut self, block: &Block, floor: usize) {
         let saved_line = self.last_source_line;
         self.last_source_line = block.span.line;
+        self.last_unit = None;
 
         for stmt in &block.stmts {
             if stmt.as_contract().is_some() {
@@ -1599,16 +1646,18 @@ impl<'a> Unparser<'a> {
                     _ => &[],
                 },
             );
-            // A local item's attributes sit above its keyword, and
-            // `unparse_item` anchors on them. Anchoring here on the keyword
-            // instead would count the attribute lines as a gap and open one.
-            self.emit_blank_lines_to(match stmt {
-                Stmt::Item(item) => get_item_first_line(item),
-                _ => stmt_span.line,
-            });
+            // `unparse_item` spaces a local item as it does a module's, anchored
+            // on its attributes.
+            let is_item = matches!(stmt, Stmt::Item(_));
+            if !is_item {
+                self.emit_blank_lines_to(stmt_span.line, Unit::Other);
+            }
             self.unparse_stmt(stmt);
             self.emit_trailing_for(stmt_id);
             self.last_source_line = stmt_span.end_line();
+            if !is_item {
+                self.last_unit = Some(Unit::Other);
+            }
         }
 
         // Comments that landed after the last stmt but before the closing brace
@@ -2635,6 +2684,7 @@ impl<'a> Unparser<'a> {
         self.last_source_line = brace.map_or(m.expr.span().end_line(), |b| b.line);
         let floor = brace.map_or(body, |b| b.end);
         self.indent_level += 1;
+        self.last_unit = None;
 
         for arm in &m.arms {
             self.flush_comments_in(
@@ -2643,11 +2693,12 @@ impl<'a> Unparser<'a> {
                 Spacing::KeepBlankLines,
             );
             self.emit_leading_for(arm.id, &[]);
-            self.emit_blank_lines_to(arm.span.line);
+            self.emit_blank_lines_to(arm.span.line, Unit::Other);
             self.unparse_match_arm(arm);
             self.emit_trailing_for_inline(arm.id);
             self.output.push('\n');
             self.last_source_line = arm.span.end_line();
+            self.last_unit = Some(Unit::Other);
         }
         self.flush_comments_in(floor, m.span.end, Spacing::KeepBlankLines);
         self.indent_level -= 1;
@@ -2964,6 +3015,8 @@ impl<'a> Unparser<'a> {
             self.unparse_attribute(attr);
             self.output.push('\n');
             self.last_source_line = self.last_source_line.max(attr.span.line);
+            // A comment among the attributes keeps the source's spacing.
+            self.last_unit = Some(Unit::Other);
             let next = attrs.get(i + 1).map_or(usize::MAX, |next| next.span.start);
             for comment in leading {
                 if !(attr.span.end..next).contains(&comment.span.start)
@@ -2996,6 +3049,7 @@ impl<'a> Unparser<'a> {
         self.last_source_line = self
             .open_brace_between(outer_span.start, outer_span.start, body_start)
             .map_or(outer_span.line, |brace| brace.line);
+        self.last_unit = None;
         self.indent_level += 1;
 
         body(self);
@@ -3017,13 +3071,15 @@ impl<'a> Unparser<'a> {
         F: FnOnce(&mut Self),
     {
         let effective_line = effective_start_line(attrs, span.line);
+        let unit = Unit::Item { braced: false };
         self.open_member(id, span.start, attrs);
-        self.emit_blank_lines_to(effective_line);
+        self.emit_blank_lines_to(effective_line, unit);
         self.emit_outer_attrs(id, attrs);
         body(self);
         self.emit_trailing_for_inline(id);
         self.output.push('\n');
         self.last_source_line = span.end_line();
+        self.last_unit = Some(unit);
     }
 
     /// Save the current output position and emitted-comment count.
@@ -3128,12 +3184,14 @@ impl<'a> Unparser<'a> {
     /// Emit `comment` on an indented line of its own, after the blank lines
     /// written above it unless `spacing` drops them.
     fn emit_on_own_line(&mut self, comment: &Comment, spacing: Spacing) {
+        let unit = Unit::of_comment(comment.kind);
         if spacing == Spacing::KeepBlankLines {
-            self.emit_blank_lines_to(comment.span.line);
+            self.emit_blank_lines_to(comment.span.line, unit);
         }
         self.write_indent();
         self.emit_comment(comment);
         self.output.push('\n');
+        self.last_unit = Some(unit);
     }
 
     /// Emit `trivia.trailing_of(id)` after the node, inserting it

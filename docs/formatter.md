@@ -94,8 +94,25 @@ return starts.filter(
 );
 ```
 
-Blank lines follow the source: none stays none, one stays one, and a larger gap
-collapses to two.
+## Blank Lines
+
+A gap of any size in the source counts as one blank line, and a body opens with
+none after its `{`. Between two lines, the formatter keeps the source's gap
+unless one of these rules decides it:
+
+- A declaration with a body (a function, an `impl`, a `struct`, a `test`, and
+  so on) is set apart by one blank line from what comes before and after it.
+- A run of comments on consecutive lines is one unit. `//` (or `/* */`), `///`
+  and `//!` runs are each their own kind, and two runs of different kinds are
+  set apart by one blank line.
+- A `//` run is set apart by one blank line from a declaration on either side,
+  fields and cases included. A comment that describes the declaration after it
+  then reads as detached, which shows it should be a `///` doc comment.
+- A `//!` run is followed by one blank line.
+- A `///` run keeps the source's gap before what follows it, since a blank line
+  there detaches it from the declaration.
+- Between statements, and between a statement and a `//` run, the source's
+  gap stands.
 
 ## What it rewrites
 
