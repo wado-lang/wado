@@ -9,12 +9,14 @@
 use { println, Stdout } from "core:cli";
 
 // Numerical derivative via the central difference.
+
 fn derivative(f: fn(f64) -> f64, x: f64) -> f64 {
     let h = 0.000001;
     return (f(x + h) - f(x - h)) / (2.0 * h);
 }
 
 // Root of `f` in [lo, hi] by bisection (assumes a sign change on the interval).
+
 fn bisect(f: fn(f64) -> f64, mut lo: f64, mut hi: f64) -> f64 {
     for let mut i = 0; i < 100; i += 1 {
         let mid = (lo + hi) / 2.0;
@@ -28,6 +30,7 @@ fn bisect(f: fn(f64) -> f64, mut lo: f64, mut hi: f64) -> f64 {
 }
 
 // Newton's method: needs both `f` and its derivative `df`.
+
 fn newton(f: fn(f64) -> f64, df: fn(f64) -> f64, x0: f64) -> f64 {
     let mut x = x0;
     for let mut i = 0; i < 50; i += 1 {
@@ -37,6 +40,7 @@ fn newton(f: fn(f64) -> f64, df: fn(f64) -> f64, x0: f64) -> f64 {
 }
 
 // Definite integral over [a, b] by the composite Simpson rule (n even).
+
 fn integrate(f: fn(f64) -> f64, a: f64, b: f64, n: i32) -> f64 {
     let h = (b - a) / n as f64;
     let mut sum = f(a) + f(b);

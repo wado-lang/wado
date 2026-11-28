@@ -41,6 +41,7 @@ fn assert_bytes_eq_string<B: AsByteSlice>(bytes: &B, s: &String) {
 struct Utf8Rec {
     a: String,
 }
+
 impl Deserialize for Utf8Rec;
 
 #[wire(name_policy = "camelCase")]
@@ -480,6 +481,7 @@ test "deserialize string with escapes" {
 }
 
 // Non-ASCII content takes the UTF-8 validation branch, escape-free and split by `\/`.
+
 test "deserialize raw multibyte string value" {
     let r: Result<String, DeserializeError> = from_string(`"café 日本 🦀"`);
     assert r matches { Ok(v) && v == "café 日本 🦀" };
@@ -772,6 +774,7 @@ test "from_bytes rejects invalid UTF-8 after ASCII prefix" {
 }
 
 // Encoding rules that only apply to a whole sequence must still reject.
+
 test "from_bytes validates multibyte sequences during the scan" {
     // A 4-byte scalar immediately before the closing quote.
     let emoji: Result<String, DeserializeError> = from_string(`"🦀"`);
@@ -804,6 +807,7 @@ test "from_bytes validates multibyte sequences during the scan" {
 
 // UTF-8 validity must not depend on whether the schema names the field: a
 // skipped value and a key are string tokens too.
+
 test "from_bytes rejects invalid UTF-8 outside materialized values" {
     // {"b":"<0xff>","a":"x"} -- bad byte inside a field `Rec` does not declare
     let skipped: ByteList = [
@@ -865,12 +869,14 @@ fn canonical_of_text(json: String) -> String {
 }
 
 // RFC 8785 §3.2.4.
+
 test "to_bytes_canonical writes the RFC 8785 example" {
     let input = `{"numbers":[333333333.33333329,1E30,4.50,2e-3,0.000000000000000000000000001],"string":"\\u20ac$\\u000F\\u000aA'\\u0042\\u0022\\u005c\\\\\\"\\/","literals":[null,true,false]}`;
     assert canonical_of_text(input) == `{"literals":[null,true,false],"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27],"string":"€$\\u000f\\nA'B\\"\\\\\\\\\\"/"}`;
 }
 
 // RFC 8785 §3.2.3: keys sort by their UTF-16 code units, unescaped.
+
 test "to_bytes_canonical sorts keys by UTF-16 code units" {
     let input = `{"\\u20ac":"Euro Sign","\\r":"Carriage Return","\\ufb33":"Hebrew Letter Dalet With Dagesh","1":"One","\\ud83d\\ude00":"Emoji: Grinning Face","\\u0080":"Control","\\u00f6":"Latin Small Letter O With Diaeresis"}`;
     assert canonical_of_text(input) == `{"\\r":"Carriage Return","1":"One","\u{80}":"Control","ö":"Latin Small Letter O With Diaeresis","€":"Euro Sign","😀":"Emoji: Grinning Face","\u{fb33}":"Hebrew Letter Dalet With Dagesh"}`;
@@ -878,6 +884,7 @@ test "to_bytes_canonical sorts keys by UTF-16 code units" {
 }
 
 // RFC 8785 §3.2.2.3: a number is written as ECMAScript's `Number.prototype.toString`.
+
 test "to_bytes_canonical writes numbers in the ECMAScript form" {
     let cases: List<[f64, String]> = [
         [0.0, "0"],
@@ -1103,6 +1110,7 @@ struct Dup {
     a: i32,
     b: i32 = 9,
 }
+
 impl Deserialize for Dup;
 
 test "a repeated field is rejected by default" {
@@ -1267,6 +1275,7 @@ struct OneEntry<K> {
 }
 
 // Only a key the map refuses reaches these, so nothing after it runs.
+
 #[coverage(off)]
 impl<K: Serialize> Serialize for OneEntry<K> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
@@ -1347,6 +1356,7 @@ fn de_err<T: Deserialize>(text: String) -> DeserializeError {
 
 // One field per scalar the serializers write. The integers sit past the f64
 // safe range where they have one, so each takes its string form.
+
 struct Scalars {
     i: i64,
     u: u32,
@@ -1738,6 +1748,7 @@ variant Signal {
 
 // Reads the tag shape through `is_unit` rather than by name, as a hand-written
 // impl for a format-agnostic variant may.
+
 impl Deserialize for Signal {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Signal, DeserializeError> {
         let mut access = d.begin_variant("Signal", 2)?;

@@ -48,16 +48,17 @@ struct Listener {
 // Linked as the DOM standard models the tree. A node lives in its handle, and
 // the links are handles, so the tree alone keeps a node alive: one that is
 // detached and that the program dropped is collected.
+
 struct SurfaceNode {
     content: Content,
-    // The DOM standard's node document, `None` on the document itself.
+    /// The DOM standard's node document, `None` on the document itself.
     document: Option<Document>,
     attributes: HashMap<String, String>,
-    // The elements a reflected element reference was set to, by its attribute.
+    /// The elements a reflected element reference was set to, by its attribute.
     referenced: HashMap<String, List<Element>>,
     value: String,
     listeners: List<Listener>,
-    // On the document, its node iterators, which a removal moves.
+    /// On the document, its node iterators, which a removal moves.
     iterators: List<NodeIterator>,
     parent: Option<Node>,
     first_child: Option<Node>,
@@ -72,7 +73,7 @@ struct SurfaceEvent {
     cancelable: bool,
     composed: bool,
     target: Option<EventTarget>,
-    // Empty unless the event is being dispatched.
+    /// Empty unless the event is being dispatched.
     path: List<EventTarget>,
 }
 
@@ -83,11 +84,12 @@ struct SurfaceRejection {
 
 // What a `TreeWalker` and a `NodeIterator` share, as the DOM standard's
 // traverser.
+
 struct Traverser {
     root: Node,
     what_to_show: u32,
     filter: NodeFilter,
-    // Set while the filter runs, which may not reenter its traverser.
+    /// Set while the filter runs, which may not reenter its traverser.
     active: bool,
 }
 
@@ -97,6 +99,7 @@ struct SurfaceWalker {
 }
 
 // The DOM standard's node pointer.
+
 struct NodePointer {
     node: Node,
     before: bool,
@@ -105,8 +108,8 @@ struct NodePointer {
 struct SurfaceIterator {
     traverser: Traverser,
     reference: NodePointer,
-    // Where a traversal has reached, which a removal its filter makes moves as
-    // it moves the reference.
+    /// Where a traversal has reached, which a removal its filter makes moves as
+    /// it moves the reference.
     candidate: Option<NodePointer>,
 }
 
@@ -125,6 +128,7 @@ fn surface_iterator(iterator: NodeIterator) -> &mut SurfaceIterator {
 
 // The Fullscreen standard rejects with a `TypeError` where fullscreen is not
 // supported, and no screen shows this document.
+
 fn fullscreen_unsupported() -> Rejection {
     return Rejection::backed_by(SurfaceRejection { name: "TypeError", message: "fullscreen is not supported" });
 }
@@ -138,6 +142,7 @@ fn surface_event(event: Event) -> &mut SurfaceEvent {
 }
 
 // Every event target is a node here, the window included.
+
 fn surface_node(target: EventTarget) -> &mut SurfaceNode {
     return target.backing::<SurfaceNode>().expect("a node of a SurfaceDom backs the handle");
 }
@@ -314,6 +319,7 @@ fn sibling_toward(node: Node, direction: Direction) -> Option<Node> {
 
 // The child a walk toward `direction` enters by: the first going next, the
 // last going previous.
+
 fn child_toward(node: Node, direction: Direction) -> Option<Node> {
     let here = surface_node(node);
     return match direction {
@@ -323,6 +329,7 @@ fn child_toward(node: Node, direction: Direction) -> Option<Node> {
 }
 
 // The node after `node` in tree order, among `root`'s inclusive descendants.
+
 fn following(node: Node, root: Node) -> Option<Node> {
     if let Some(child) = surface_node(node).first_child {
         return Option::Some(child);
@@ -332,6 +339,7 @@ fn following(node: Node, root: Node) -> Option<Node> {
 
 // The node after `node`'s inclusive descendants in tree order, among `root`'s
 // inclusive descendants.
+
 fn following_past(node: Node, root: Node) -> Option<Node> {
     let mut at = node;
     while at != root {
@@ -348,6 +356,7 @@ fn following_past(node: Node, root: Node) -> Option<Node> {
 }
 
 // The node before `node` in tree order, among `root`'s inclusive descendants.
+
 fn preceding(node: Node, root: Node) -> Option<Node> {
     if node == root {
         return null;
@@ -365,6 +374,7 @@ fn preceding(node: Node, root: Node) -> Option<Node> {
 
 // The DOM standard's `NodeIterator` pre-remove steps, as `removed` leaves its
 // parent.
+
 fn pre_remove(iterator: &mut SurfaceIterator, removed: Node) {
     let root = iterator.traverser.root;
     iterator.reference = adjust(iterator.reference, root, removed);
@@ -374,6 +384,7 @@ fn pre_remove(iterator: &mut SurfaceIterator, removed: Node) {
 }
 
 // The DOM standard's adjust a node pointer.
+
 fn adjust(pointer: NodePointer, root: Node, removed: Node) -> NodePointer {
     if !is_inclusive_ancestor(removed, pointer.node) || is_inclusive_ancestor(removed, root) {
         return pointer;
@@ -409,6 +420,7 @@ fn any_sibling(start: Option<Node>, step: fn(&SurfaceNode) -> Option<Node>, acce
 // before `child`, or for replacing `child` with it where `replacing`: the child
 // replaced counts for neither the one element nor the one doctype a document
 // holds. A DOM exception traps (Web WEP, Exceptions).
+
 fn assert_insertable(parent: Node, node: Node, child: Option<Node>, replacing: bool) {
     let replaced = if replacing { child } else { null };
     let other_child = |accept: fn(&SurfaceNode) -> bool| children(parent).find(
@@ -451,6 +463,7 @@ fn assert_insertable(parent: Node, node: Node, child: Option<Node>, replacing: b
 }
 
 // The DOM standard's pre-insert.
+
 fn pre_insert(parent: Node, node: Node, child: Option<Node>) {
     assert_insertable(parent, node, child, false);
     let next = if child == Option::Some(node) { surface_node(node).next_sibling } else { child };
@@ -459,6 +472,7 @@ fn pre_insert(parent: Node, node: Node, child: Option<Node>) {
 
 // Writes an element's attribute, or removes it for `null`. Either forgets
 // the elements a reference was set to under that name.
+
 fn write_attribute(node: &mut SurfaceNode, name: String, value: Option<String>) {
     node.referenced.remove(name);
     if let Some(value) = value {
@@ -504,6 +518,7 @@ fn serialize_children(parent: Node, out: &mut String) {
 }
 
 // Infra's ASCII whitespace leaves out the VT that `char::is_ascii_whitespace` counts.
+
 fn is_infra_whitespace(c: char) -> bool {
     return c matches { '\t' | '\n' | '\u{C}' | '\r' | ' ' };
 }
@@ -529,11 +544,13 @@ fn is_void(local_name: &String) -> bool {
 }
 
 // Scripting is disabled where no browser runs, so `noscript` is escaped.
+
 fn is_raw_text(local_name: &String) -> bool {
     return *local_name matches { "style" | "script" | "xmp" | "iframe" | "noembed" | "noframes" | "plaintext" };
 }
 
 // The Infra standard's "split on ASCII whitespace".
+
 fn split_on_ascii_whitespace(text: &String) -> List<String> {
     let mut tokens: List<String> = [];
     let mut token = "";
@@ -552,6 +569,7 @@ fn split_on_ascii_whitespace(text: &String) -> List<String> {
 }
 
 // The HTML standard's "escaping a string".
+
 fn escape(text: &String, in_attribute: bool, out: &mut String) {
     for let c of text.chars() {
         match c {
@@ -617,6 +635,7 @@ impl SurfaceDom {
     }
 
     // The slice has no `DocumentType`, so a doctype carries `Node`'s class.
+
     fn new_doctype(&self) -> Node {
         return Node::backed_by(self.detached(Content::Doctype));
     }
@@ -640,6 +659,7 @@ impl SurfaceDom {
     }
 
     // The DOM standard's event path, which reaches the window from the document.
+
     fn event_path(&self, target: EventTarget) -> List<EventTarget> {
         let mut path: List<EventTarget> = [target];
         let mut at = target;
@@ -658,6 +678,7 @@ impl SurfaceDom {
     // Runs with this DOM reinstalled, since a listener is a program calling back
     // into it. A listener added meanwhile waits for the next dispatch, and one
     // added with `once` is gone before it runs, as the DOM standard removes it.
+
     fn invoke(&mut self, target: EventTarget, event: Event, capture: bool) {
         let type = &surface_event(event).type;
         let node = surface_node(target);
@@ -689,6 +710,7 @@ impl SurfaceDom {
 
     // The HTML standard's attr-associated elements of a reflected element
     // reference: the elements set, or else those its attribute names by id.
+
     fn referenced_elements(&self, element: Element, attribute: String) -> Option<List<Element>> {
         let node = self.own(element);
         let root = root_of(element);
@@ -754,6 +776,7 @@ impl SurfaceDom {
     // The DOM standard's filter. The filter runs with this DOM reinstalled, as
     // a listener does, and reentering its own traverser is an
     // `InvalidStateError`, which traps.
+
     fn filter(&mut self, traverser: &mut Traverser, node: Node) -> u16 {
         assert !traverser.active, "InvalidStateError: a filter must not reenter its traverser";
         let shown = traverser.what_to_show >> (node_type(surface_node(node)) - 1) as u32 & 1;
@@ -790,6 +813,7 @@ impl SurfaceDom {
     }
 
     // The DOM standard's traverse children.
+
     fn walk_to_child(&mut self, walker: &mut SurfaceWalker, direction: Direction) -> Option<Node> {
         let mut at = child_toward(walker.current, direction);
         while let Some(node) = at {
@@ -820,6 +844,7 @@ impl SurfaceDom {
     }
 
     // The DOM standard's traverse siblings.
+
     fn walk_to_sibling(&mut self, walker: &mut SurfaceWalker, direction: Direction) -> Option<Node> {
         let mut node = walker.current;
         if node == walker.traverser.root {
@@ -917,6 +942,7 @@ impl SurfaceDom {
     }
 
     // The DOM standard's traverse, for a `NodeIterator`.
+
     fn iterate(&mut self, iterator: &mut SurfaceIterator, direction: Direction) -> Option<Node> {
         let root = iterator.traverser.root;
         iterator.candidate = Option::Some(iterator.reference);
@@ -1151,12 +1177,14 @@ impl Document for SurfaceDom {
     }
 
     // Nothing loads the document: it is whole from the start.
+
     fn ready_state(&mut self, this: &Document) -> DocumentReadyState {
         self.own(*this);
         resume DocumentReadyState::Complete;
     }
 
     // Nothing shows it either.
+
     fn visibility_state(&mut self, this: &Document) -> DocumentVisibilityState {
         self.own(*this);
         resume DocumentVisibilityState::Hidden;
@@ -1246,6 +1274,7 @@ impl NodeIterator for SurfaceDom {
     }
 
     // The DOM standard keeps `detach` and has it do nothing.
+
     fn detach(&mut self, this: &NodeIterator) {
         resume ();
     }
@@ -1453,6 +1482,7 @@ impl Element for SurfaceDom {
     }
 
     // Nothing is laid out, so there is nowhere to scroll.
+
     fn scroll_into_view(&mut self, this: &Element, arg: Option<BoolOrScrollIntoViewOptions>) -> Result<(), Rejection> {
         self.own(*this);
         resume Result::Ok(());

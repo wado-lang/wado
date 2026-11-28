@@ -300,6 +300,7 @@ test "a half widens exactly and narrows from f64 rounded once" {
 // 2^60 + 2^52 + 1 lies just past the midpoint of bf16's neighbours 2^60 and
 // 2^60 + 2^53. Rounding it to f64 first lands on that midpoint, whose tie goes
 // down; rounding to odd keeps it above, so it rounds up as the integer does.
+
 test "a 64-bit integer narrows to bf16 rounded once" {
     assert builtin::black_box(1157425104234217473 as u64) as bf16 == bf16::from_f64(1161928703861587968.0);
     assert builtin::black_box(-1157425104234217473 as i64) as bf16 == bf16::from_f64(-1161928703861587968.0);

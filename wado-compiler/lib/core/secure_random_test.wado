@@ -5,6 +5,7 @@ use { Seedable, Rng, Xoshiro256pp } from "core:prng";
 // Counts host calls and hands out a known stream: what the buffer served, and
 // how often it reached past itself to get it. `chunk` makes it answer short
 // and `overrun` makes it answer long, neither of which a caller may rely on.
+
 struct CountingRandom {
     next: u8 = 0,
     calls: i32 = 0,
@@ -231,6 +232,7 @@ test "token_from draws from the alphabet" {
 
 // Serves a fixed byte sequence, cycling, so a draw that must be rejected can
 // be placed exactly where the test wants it.
+
 struct ScriptedRandom {
     script: List<u8> = [],
     pos: i32 = 0,

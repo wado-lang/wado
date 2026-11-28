@@ -77,6 +77,7 @@ pub variant Value {
 // A JSON-shaped literal builds a `Value` directly (WEP 2026-08-24): `[ … ]`
 // through the array impl, `{ … }` through the pair-array one, and each leaf
 // through its own `From`.
+
 impl From<Array<Value>> for Value {
     fn from(elements: Array<Value>) -> Value {
         return Value::List(List::<Value>::from(elements));
@@ -91,6 +92,7 @@ impl From<Array<[String, Value]>> for Value {
 
 // A bare `null` is an `Option<!>` — a value of every `Option` and of nothing
 // else — so a type accepts `null` in a literal by converting from it.
+
 impl From<Option<!>> for Value {
     fn from(value: Option<!>) -> Value {
         return Value::Null;

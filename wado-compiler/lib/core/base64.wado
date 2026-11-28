@@ -5,7 +5,6 @@
 //! accepts only the canonical URL-safe unpadded spelling. Entry points accept
 //! any `AsByteSlice` source (`ByteList`, `ByteArray`, `ByteSlice`, or `String`).
 
-
 #[synopsis]
 test {
     let encoded = encode(&b"Hello, Wado!");
@@ -34,6 +33,7 @@ global URL_SAFE_TABLE: ByteList = [
 
 // Written out rather than built in a loop, so the initializer is a Wasm constant and a module that never
 // decodes drops both tables. The test below states the rules these entries follow, and checks them.
+
 global DECODE_TABLE: ByteList = [
     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 62, 255, 62, 255,
@@ -49,6 +49,7 @@ global DECODE_TABLE: ByteList = [
 ];
 
 // The URL-safe alphabet alone, so a canonical decode rejects `+`, `/` and `=`.
+
 global URL_DECODE_TABLE: ByteList = [
     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 62,

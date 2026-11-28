@@ -4,6 +4,7 @@ use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 // only exits on i64 overflow, which never happens in any reasonable
 // timeout window. The `if` is there so that wasmtime cannot prove the
 // loop is infinite at validation time.
+
 export async fn handle(_request: Request) -> Result<Response, ErrorCode> with Response {
     let mut x: i64 = 0;
     loop {

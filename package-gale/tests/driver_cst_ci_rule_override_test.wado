@@ -1,4 +1,5 @@
 //! Stage 2b migration probe: ci_rule_override.
+
 use ci from "./grammars/ci_rule_override.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ci_rule_override" },
@@ -7,15 +8,19 @@ use callee from "./grammars/ci_rule_callee.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ci_rule_callee" },
     };
+
 fn ok<S: AsStrSlice>(input: S) {
     assert ci::parse(input).ok();
 }
+
 test "ci-override: lowercase" {
     ok("if foo");
 }
+
 test "ci-override: uppercase" {
     ok("IF foo");
 }
+
 test "ci-callee: an exact rule calling a folding one matches each case the callee does" {
     let r = callee::parse("qRx");
     assert r.ok(), "unexpected diagnostics for qRx";

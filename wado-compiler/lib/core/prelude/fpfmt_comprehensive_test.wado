@@ -12,6 +12,7 @@ use { short, digits, check_special } from "core:prelude/fpfmt.wado";
 use { println, Stdout } from "core:cli";
 
 // format_exp with '+' sign and zero-padded exponent (matching Go %e style)
+
 fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
     let mut buf = String::with_capacity(30);
     let exp = p + nd - 1;
@@ -89,7 +90,6 @@ fn f64_to_string_exp(f: f64) -> String {
     return formatted;
 }
 
-
 fn run_batch(bits: &List<u64>, expected: &List<String>, batch_name: String) -> i32 with Stdout {
     let mut failures = 0;
     let n = bits.len();
@@ -118,7 +118,6 @@ fn run_batch(bits: &List<u64>, expected: &List<String>, batch_name: String) -> i
     return failures;
 }
 
-
 #[timeout(seconds = 10)]
 test "comprehensive testFloats" {
     let bits = test_floats_bits();
@@ -133,7 +132,6 @@ test "comprehensive hardFloats" {
     let failures = run_batch(&bits, &expected, "hardFloats");
     assert failures == 0;
 }
-
 
 fn test_floats_bits() -> List<u64> {
     return [

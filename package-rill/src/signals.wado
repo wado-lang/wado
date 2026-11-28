@@ -21,8 +21,16 @@ pub interface Track {
 struct Readers {
     observers: List<Observer>,
     version: i32,
+<<<<<<< HEAD
     // The memo whose value this is; `None` for a signal.
     memo: Option<Shared<MemoCore>>,
+||||||| 6a06481b7887
+    // The memo whose value this is; `None` for a signal.
+    memo: Option<&mut MemoCore>,
+=======
+    /// The memo whose value this is; `None` for a signal.
+    memo: Option<&mut MemoCore>,
+>>>>>>> origin/main
 }
 
 pub struct Dep {
@@ -42,9 +50,9 @@ variant Observer {
 
 enum Freshness {
     Fresh,
-    // A dependency may have changed.
+    /// A dependency may have changed.
     Check,
-    // Never computed, or no longer listening.
+    /// Never computed, or no longer listening.
     Stale,
 }
 
@@ -161,7 +169,7 @@ fn notify(dep: Dep) {
 }
 
 struct Computation {
-    // `None` leaves the reads untracked.
+    /// `None` leaves the reads untracked.
     observer: Option<Observer>,
     deps: List<Seen>,
     owns: bool,
@@ -171,6 +179,7 @@ struct Computation {
 impl Track for Computation {
     // Subscribing here and not once the run ends, so a write the run itself
     // makes to what it already read marks it.
+
     fn read(&mut self, dep: Dep) {
         if let Some(observer) = self.observer && subscribe(dep, observer) {
             self.deps.push(Seen { dep, version: dep.readers.version });

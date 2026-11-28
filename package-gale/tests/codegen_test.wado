@@ -144,6 +144,7 @@ global SHOW_TOKENS_FN: String = "fn show_tokens(label: String, toks: &TokenStrea
 
 // A lexer base's handler calls `show_tokens` itself, since `tokenize` then
 // carries the base's effect.
+
 global LEX_FN: String = `${SHOW_TOKENS_FN}
 
 fn lex(input: String) with Stdout {
@@ -543,6 +544,7 @@ X : 'x' ; Y : 'y' ; Z : 'z' ; W : 'w' ;
 }
 
 // Generating SQLite alone takes about the default five seconds.
+
 #[timeout(seconds = 30)]
 test "every emitted FOLLOW site is named by a call" {
     let output = gen_source(#include_str("./grammars/SQLite.g4"));
@@ -712,6 +714,7 @@ TRACE gale.trace:       pick a alt#1 rule=a alt=1
 }
 
 // `b` hides the token that tells `b X` from `b`, so the static tree gives up.
+
 global OPAQUE_PREFIX_G4: String = "grammar T;
 r : a EOF ;
 a : b X | b ;
@@ -730,6 +733,7 @@ test "longest leaves an ambiguity the simulator decides by default to the tourna
 
 // `c` takes what `f` takes with a `U A` at least, and wins the tie by its
 // lower index, so `f` wins only where `c` fails.
+
 global FALLBACK_LAST_G4: String = "grammar T;
 s : t (c | f) EOF ;
 t : c | f ;
@@ -752,6 +756,7 @@ test "a tournament scans the alternative it falls back to only once another won"
 
 // `Z Z X` reads either way. The simulator takes the lower alternative, `b`, and
 // the tournament the longer, `b X`.
+
 global OPAQUE_CONTINUED_G4: String = "grammar T;
 r : a X* EOF ;
 a : b | b X ;
@@ -780,6 +785,7 @@ test "verify builds exact's tree and reports where the tournament picks otherwis
 
 // `(a | a B)` shares `a`, which hides the deciding token. The tournament takes
 // the longest scan, `a B`, and strands the `B` the rule still owes.
+
 global GROUP_LONGEST_G4: String = "grammar G;
 s : (a | a B) B EOF ;
 a : A+ ;
@@ -805,6 +811,7 @@ test "verify checks a group's tournament against the simulator" {
 // The atoms `n …` and `f …` share `any`, and one holds a group tournament, so
 // both checks run in helpers of a left-recursive rule, which read its
 // `min_prec`.
+
 global LR_GROUP_CHECK_G4: String = "grammar L;
 s : e EOF ;
 e : e '+' e | n (a | a B) | f '(' ')' | INT ;
@@ -827,6 +834,7 @@ test "verify checks a group inside a left-recursive rule's atom" {
 
 // The atom choice reads past `any`'s nesting, so the simulator owns it, and the
 // LR loop decides through its table.
+
 global VERIFIED_LR_G4: String = "grammar L;
 s : K_SEL e (K_ORD ID)? EOF ;
 e : e '||' e | e '=' e | e 'and' e | e 'btw' e 'and' e | n | f '(' ')' | '(' e ')' | INT ;
@@ -857,6 +865,7 @@ test "verify checks the atom's tournament against the simulator" {
 // kinds, so it must not turn this one away: the lookahead DFA's widest edge
 // here settles on the set, the LR loop's `_` exits, and a rule's sync set
 // lists the grammar's kinds alone.
+
 global FOREIGN_KIND_G4: String = "grammar T;
 r : a X EOF ;
 a : b (A | B | C | D | E | F | G) | b . ;
@@ -905,6 +914,7 @@ test "a wildcard takes a kind past the grammar's" {
 
 // Each repeat's body can start what follows it, so its first token does not say
 // whether it enters. The trees are the jar's.
+
 global CONTESTED_REPEATS_G4: String = "grammar R;
 s : a* a B EOF ;
 t : C c? c EOF ;
@@ -959,6 +969,7 @@ test "verify checks a contested repeat against the simulator" {
 // A loop in a left-recursion suffix whose body is decided by its own
 // alternatives, and which must leave the suffix's `D` behind. The trees are the
 // jar's.
+
 test "a decided loop in a left-recursion suffix leaves what follows it" {
     let g4 = "grammar R;
 s : e EOF ;
@@ -985,6 +996,7 @@ a c d c d c d => (s (e (e a) c d c d c d))
 
 // The simulator decides a `??` under every mode, so `verify` has nothing to
 // check there. The trees are the jar's.
+
 test "verify leaves a decision the simulator makes unchecked" {
     let g4 = "grammar Q;\ns : (A B)?? A C EOF ;\nA : 'a' ;\nB : 'b' ;\nC : 'c' ;\nWS : ' ' -> skip ;\n";
     let got = parses_each(g4, [
@@ -997,6 +1009,7 @@ test "verify leaves a decision the simulator makes unchecked" {
 // On `a c d d` and `a c d d d` the jar enters the loop on the first `d` and
 // takes `D` for the group, where the tournament takes `D D`. The trees are the
 // jar's.
+
 test "verify checks a contested repeat in a left-recursion suffix" {
     let g4 = "grammar R;
 s : e EOF ;
@@ -1026,6 +1039,7 @@ a c d c d => (s (e (e (e a) c d) c d))
 
 // The atom choice between the two `new` alternatives is the simulator's, and
 // the loop after it is static. The trees are the jar's.
+
 global CONTESTED_NEW_G4: String = "grammar L;
 s : e EOF ;
 e : e '.' ID
@@ -1062,6 +1076,7 @@ new a < b > . c => (s (e (e new (e a) (targs < b >)) . c))
 // The loop of a mid operand nested in another is decided statically, by the
 // continuation gate standing in for the simulator's full context. The trees
 // are the jar's.
+
 test "verify checks a mid operand's loop against the simulator" {
     let inputs: List<[String, String]> = [
         ["s", "a between b between c and d and e"],
@@ -1078,6 +1093,7 @@ a between b and c and d and e => (s (e (e a) between (e (e (e b) and (e c)) and 
 // The first loop's iteration ends with a checked `?`, emitted into the loop's
 // own scope, so each check's locals must be the loop's alone. The trees are
 // the jar's.
+
 test "verify checks a repeat nested in a checked loop's iteration" {
     let g4 = "grammar D;
 s : '{' l? '}' EOF ;
@@ -1103,6 +1119,7 @@ WS : ' ' -> skip ;
 // the caller's FOLLOW. On the last two inputs the jar enters it, and so does
 // the static pick computed beside the simulator's, though `longest`, whose
 // loop around the atom differs, does not. The trees are the jar's.
+
 test "verify checks an optional ending a left-recursive atom" {
     let g4 = "grammar N;
 s : e EOF ;
@@ -1126,6 +1143,7 @@ a new b ( ) ( ) => (s (e a (e new (e b (e (args ( )))) (args ( )))))
 // The mid operand's rest opens with a group of loop operators, so it climbs
 // only to where the group and the trailing operand still parse. The trees are
 // the jar's.
+
 test "a mid operand stops where a rest opening with a group still parses" {
     let g4 = "grammar M;
 s : e EOF ;
@@ -1147,6 +1165,7 @@ a y b x c z d y e y f y g => (s (e (e a) y (e (e b) x (e (e c) z (e (e (e d) y (
 
 // An atom's mid operand owes `args` to its `new`, and climbs past a call whose
 // end no `(` follows to the last end one does. The trees are the jar's.
+
 test "an atom's mid operand climbs to the last boundary its rest parses at" {
     let g4 = "grammar N;
 s : e EOF ;
@@ -1172,6 +1191,7 @@ new new a ( ) . b ( c ) + d . e => (s (e (e new (e (e new (e a) (args ( ))) . b)
 
 // `'pre' e '!'?` can end with its operand, so the operand stops where the `new`
 // around it still finds its `args`. The trees are the jar's.
+
 test "a mid operand whose rest can be empty leaves the enclosing rest its tokens" {
     let g4 = "grammar N;
 s : e EOF ;
@@ -1187,6 +1207,7 @@ new pre a ( ) ( ) => (s (e new (e pre (e (e a) (args ( )))) (args ( ))))
 
 // The rest `. e` opens with any token, so the operand stops where one is left
 // for the wildcard. The trees are the jar's.
+
 test "a mid operand whose rest opens with a wildcard leaves it a token" {
     let g4 = "grammar W;
 s : e EOF ;
@@ -1201,6 +1222,7 @@ a x b x c + d + e + f => (s (e (e a) x (e (e b) x (e (e c) + (e d)) + (e e)) + (
 
 // The rest is scanned under the gate the operand left: the `flag = 1` ahead of
 // the operand already ran. The trees are the jar's.
+
 test "a mid operand's rest is scanned under the gate the operand left" {
     let g4 = "grammar G;
 @members { int flag = 0; }
@@ -1219,6 +1241,7 @@ new new a ( ) ( ) ( ) => (s (e new (e new (e (e a) (args ( ))) (args ( ))) (args
 // repeat's `q`, the group's `r`. A simulator handed no verdict would enter
 // each, where `longest` leaves it. `_vq_out` holds the output a check that asks
 // a predicate takes back. The trees are the jar's.
+
 test "verify hands the simulator the verdicts of the predicates a decision meets" {
     let verify = GenerateOptions { prediction: PredictionMode::Verify };
     let cases: List<[String, List<String>, String]> = [
@@ -1246,6 +1269,7 @@ test "verify hands the simulator the verdicts of the predicates a decision meets
 
 // The repeat's check asks `q`'s predicate again, and takes back what it
 // prints. The trees are the jar's.
+
 test "verify prints what exact prints" {
     let g4 = "grammar P;
 @parser::members {
@@ -1268,6 +1292,7 @@ WS : ' ' -> skip ;
 // A contested decision meeting a predicate needs both the continuation and the
 // verdict, so exact hands it the simulator: the loop's `q`, the group's and
 // the `+`'s alternative. The trees and output are the jar's.
+
 test "exact lets the simulator decide a contested decision meeting a predicate" {
     let p = "grammar P;
 @parser::members {
@@ -1290,6 +1315,7 @@ WS : ' ' -> skip ;
 // Each decision meets a predicate that holds, and on each input the jar takes
 // another pick than `longest`: the jar parses `a b` and `a a b`, and reads
 // `Z Z X` as `(r (a (b Z Z)) X)`.
+
 test "verify checks a decision meeting a predicate" {
     let verify = GenerateOptions { prediction: PredictionMode::Verify };
     for let [g4, rule, input, picker] of [
@@ -1319,6 +1345,7 @@ test "verify checks a decision meeting a predicate" {
 // Prediction evaluates a predicate exactly where it reaches one before
 // consuming a token. Behind a nullable prefix it does; past a consumed token,
 // in a rule the decision scans into, it does not. The trees are the jar's.
+
 test "prediction answers a predicate behind a nullable prefix" {
     for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         let options = GenerateOptions { prediction };
@@ -1478,6 +1505,7 @@ D a b a c => (s D a b a c)
 // left-recursive suffix too, a predicate included. On `x . a b` the simulator
 // takes `a`, as the jar does, and its predicate fails; the tournament takes
 // `a B`. The trees and the output are the jar's.
+
 #[timeout(seconds = 240)]
 test "a group in a left-recursive suffix runs its alternative's actions" {
     let printing = "grammar N5;
@@ -1585,6 +1613,7 @@ x a b => (s x q a b)
 
 // A wildcard leaves FOLLOW inexact only for the rules it may follow: `q`'s is
 // `{A}` whatever `.*` follows, so the empty alternative still meets `A`.
+
 test "a nullable alternative meets its FOLLOW in a grammar with a wildcard elsewhere" {
     let direct = "grammar T;
 s : 'x' q A .* EOF ;
@@ -1898,6 +1927,7 @@ A : 'a' { System.out.println(\"<\" + '\\\\' + \"n\" + '$' + \"{x}\" + '`' + '\\r
 // Pins "Positions an action reads are byte offsets" in antlr4-compatibility.md:
 // `$index` counts bytes where the jar counts chars (4 here), while `$pos`,
 // `getCharPositionInLine()` and `getText()` answer as the jar does.
+
 test "a lexer action reads byte positions and char columns" {
     let input = "lexer grammar L;
 E : 'é' ;
@@ -1981,6 +2011,7 @@ SEMI : ';' ;";
 
 // The expectations below are the jar's (antlr-4.13.2 on JDK 21), except where
 // a test says Gale departs from it.
+
 test "caseInsensitive adds a char's simple lowercase and uppercase" {
     let input = "lexer grammar Test;
 options { caseInsensitive = true; }
@@ -2040,6 +2071,7 @@ E : 'A'..'\\u00AA' ;";
 
 // Gale departs from the jar here: the jar's `'ǅ'` and `[Ǆ-ǅ]` match `Ǆ` and
 // `ǆ` but not the `ǅ` written in them.
+
 test "caseInsensitive matches a titlecase char as written" {
     let input = "lexer grammar Test;
 options { caseInsensitive = true; }
@@ -2357,6 +2389,7 @@ B : 'b' ;
 
 // `??` in an LR atom: its ATN prediction runs under the live `min_prec`, so an
 // enter edge that would climb a lower LR suffix is pruned.
+
 global QQ_IN_LR_G4: String = "
 grammar T;
 e : e '+' e | ID ('x')?? ;
@@ -2376,6 +2409,7 @@ test "non-greedy ?? inside a left-recursive rule threads min_prec" {
 
 // A multi-alt `AtEndConflict` must route through the ATN simulator, not the
 // `_sd_best_i` longest-match tournament.
+
 global AT_END_CONFLICT_G4: String = "
 grammar T;
 s : x 'c' ;
@@ -2640,6 +2674,7 @@ test "a scan leaves a non-greedy loop where the parse does" {
 }
 
 // SQLite's `sql_stmt_list`: an iteration's `;`s are also the list's tail.
+
 global SPECULATIVE_LOOP_G4: String = "
 grammar S;
 p : (lst | '#')* EOF ;
@@ -2662,6 +2697,7 @@ test "a loop speculates only where the parse runs no action" {
 }
 
 // SQLite's SELECT statements: `simple` is `factored` without its loop.
+
 global SUBSUMED_ALT_G4: String = "
 grammar T;
 s : (compound | factored | simple) ';' EOF ;
@@ -2681,6 +2717,7 @@ test "a tournament leaves out an alternative an earlier one subsumes" {
 }
 
 // `.*` matches empty, so it subsumes the empty alternative after it.
+
 global SUBSUMED_EMPTY_ALT_G4: String = "
 grammar T;
 s : ( X | .* | ) Y EOF ;
@@ -2720,6 +2757,7 @@ WS : ' ' -> skip ;
 // Rust's `impl Fn() -> a::R + Send`: the outer path reads `:: r` too, but the
 // inner one stays viable, and ANTLR4 resolves that by looping. The loop yields
 // to its caller's continuation only where the iteration would strand it.
+
 test "a greedy loop keeps an iteration its caller's continuation also reads" {
     for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         let got = parses(LOOP_ENTERS_WHILE_VIABLE_G4, "s", [
@@ -2763,6 +2801,7 @@ WS : ' ' -> skip ;
 // Wado's `x == y as List<i32>`: the comparison loop around `t` reads `< i` too,
 // and the type arguments are still entered wherever that leaves a viable parse.
 // Where both readings do, as on `c == b as L < i > d`, the jar compares.
+
 test "a tail group optional enters while entering stays viable" {
     let inputs: List<String> = [
         "b as L < i > ;", "c == b as L < i > ;", "c == b as L < i > d ;", "c < b as L < i > > d ;",
@@ -2795,6 +2834,7 @@ WS : ' ' -> skip ;
 // readings push what follows `e` past the continuation's last slot, and `t`
 // enters exactly where that, read from the actual caller, resumes after the
 // type arguments. Only the `k` caller resumes on an `ID`.
+
 test "a tail group optional enters while entering stays viable under deep loops" {
     let inputs: List<String> = [
         "c == b as L < i > ;", "c == b as L < i > d ;", "c == b as L < i > || d ;", "k c == b as L < i > d ;",
@@ -2824,6 +2864,7 @@ WS : ' ' -> skip ;
 // `st? '}'`, and that scan walks `st`'s optional one shape at a time. Each
 // shape's `e` hears what follows it in the shape, so `t` enters the type
 // arguments where the `;` or the `else` resumes after them.
+
 test "a tail group optional inside an optional's shape scan hears the shape's continuation" {
     let inputs: List<String> = [
         "{ let a = c == b as L < i > ; }", "{ let a = c == b as L < i > else d ; }", "{ let a = c == b as L < i > d ; }",
@@ -2854,6 +2895,7 @@ WS : ' ' -> skip ;
 // `u` hears both `mt` and `et` as readings that may start where it ends, each
 // known only by its first kinds. Holding both, the `else` belongs to the `if`
 // wherever one of them resumes after it.
+
 test "nested optional tails each stay a reading of the continuation" {
     let inputs: List<String> = [
         "{ let a = if c { x } else { y } / z ; }", "{ let a = if c { x } else { y } || z ; }",
@@ -2889,6 +2931,7 @@ WS : ' ' -> skip ;
 // PATHSEP? (genericArgs | typePathFn)?`, reached through rules that pass on no
 // continuation: what the caller resumes with is unknown, so it cannot overturn
 // the path's own `:: segment`.
+
 test "a tail token optional yields to a definite continuation its unknown caller cannot overturn" {
     let got = parses(TAIL_TOKEN_UNKNOWN_CALLER_G4, "s", [
         "fn f -> a::T {}", "fn f -> a::T;", "fn f -> ::a::T<X> {}", "fn f -> a:: T where T: a::b {}",
@@ -2899,6 +2942,7 @@ test "a tail token optional yields to a definite continuation its unknown caller
 // The two parenthesised atoms share `'(' e`, so the tournament scans the inner
 // `e` once per candidate. Unless a scan of `e` is answered once per reading,
 // every level doubles the work, and forty levels never finish.
+
 test "a nested operand is scanned once per reading, not once per enclosing candidate" {
     let grammar = "grammar T;
 s : e EOF ;
@@ -2939,6 +2983,7 @@ test "an operand inside an atom climbs only while its own continuation stays via
 // The prefix atom's trailing operand is the atom's own, not a suffix's, and it
 // owes `new` its arguments just the same. `'-' e '!'` puts the prefix atom in an
 // overlap group, so the operand sits in a per-alternative helper.
+
 test "a prefix atom's operand inside an atom leaves the arguments its enclosing atom owes" {
     let grammar = "grammar T;
 s : e ';' ;
@@ -3043,6 +3088,7 @@ test "ATN-class LR grammar keeps the decoder's LR tables" {
 
 // TypeScript's `typeParameter` shape: every first token of `id` leads to the same
 // depth-1 sub-dispatch, so the branches fold into one over their union.
+
 global SHARED_SUBDISPATCH_G4: String = "
 grammar T;
 tp : id c? | id '=' t | '<' tp '>' ;
@@ -3057,6 +3103,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 
 // `C?` is nullable, so the follow reaches past the rule into the caller's FOLLOW.
 // The local `C` is only a prefix of the answer.
+
 global INEXACT_FOLLOW_EMPTY_ALT_G4: String = "
 grammar T;
 s : r SEMI EOF ;
@@ -3069,6 +3116,7 @@ SEMI : ';' ;
 
 // `A` and `A B` overlap, so the rule takes the overlap dispatch rather than
 // the token-led one — a second rule-level emitter, with its own arms.
+
 global RULE_OVERLAP_EMPTY_ALT_G4: String = "
 grammar T;
 x : | A | A B ;
@@ -3078,6 +3126,7 @@ B : 'b' ;
 
 // The `.` sits behind a nullable prefix, so the alternative has a first set
 // (`{A}`) and is still open-ended: `c` reaches the wildcard.
+
 global PREFIXED_WILDCARD_ALT_G4: String = "
 grammar T;
 s : ( A? . | B ) EOF ;
@@ -3088,6 +3137,7 @@ C : 'c' ;
 
 // The epsilon alternative reached through a rule must earn the same follow-set
 // branch a written-empty one does.
+
 global INDIRECT_EPSILON_ADMITS_G4: String = "
 grammar T;
 s : 'k' ( A | x | B ) EOF ;
@@ -3098,6 +3148,7 @@ B : 'b' ;
 
 // `x` derives only epsilon, but through a rule reference — the mirror of an
 // open-ended alternative reached the same way.
+
 global INDIRECT_EPSILON_ALT_G4: String = "
 grammar T;
 s : ( x | A ) B EOF ;
@@ -3108,6 +3159,7 @@ B : 'b' ;
 
 // `w` is open-ended, but through a rule reference: its first set is empty for
 // the same reason a surface `.`'s is, and it is not the empty alternative.
+
 global INDIRECT_WILDCARD_ALT_G4: String = "
 grammar T;
 s : w EOF # Wild
@@ -3119,6 +3171,7 @@ A : 'a' ;
 
 // ANTLR4 takes the lowest viable alternative, so `. EOF` wins over `A EOF` on `a`.
 // Unlike an empty alternative, a wildcard-led one must not be reordered.
+
 global WILDCARD_FIRST_ALT_G4: String = "
 grammar T;
 s : . EOF # Wild
@@ -3129,6 +3182,7 @@ A : 'a' ;
 
 // A rule's own alternatives are a decision too, and an empty one among them is
 // selected by no lookahead.
+
 global RULE_LEVEL_EMPTY_ALT_G4: String = "
 grammar T;
 x : A | | B ;
@@ -3138,6 +3192,7 @@ B : 'b' ;
 
 // An LR suffix's group with an empty alternative, decided from what lower
 // baked as in a plain rule body.
+
 global OP_WALKER_EMPTY_ALT_G4: String = "
 grammar T;
 e : e ( A x | | B x ) | C ;
@@ -3186,9 +3241,9 @@ test "an alternative that derives only epsilon through a rule is selected by its
     assert got == "b => (s x b)\nab => (s a b)\n";
 }
 
-
 // The root's alternative, which the tree alone does not show when every
 // alternative builds the same one.
+
 global ROOT_ALT: String = "let r = parse_s(\"a\");
 println(`${to_string_tree(&r)} ${r.cst.s_alt(0):?}`);
 ";
@@ -3209,6 +3264,7 @@ test "a wildcard alternative keeps its index against a narrower one" {
 
 // `A? .` admits every token yet still has the first set `{A}`, which the unions
 // built over the group's classes need.
+
 global OPEN_ENDED_WITH_FIRST_G4: String = "
 grammar T;
 s : r EOF ;
@@ -3250,6 +3306,7 @@ test "dispatch branches sharing a sub-dispatch are emitted once" {
 
 // Alts 0 and 1 share `A` and `B`, which the token after them tells apart. `s`
 // scans `e` to choose between its group's alternatives, so `scan_e` is emitted.
+
 global REPEATED_SCAN_ALT_G4: String = "
 grammar T;
 s : (e X | e Y) EOF ;
@@ -3292,6 +3349,7 @@ test "an uncontested alternative is scanned in place" {
 
 // `RustParser.g4`'s `crate : innerAttribute* item* EOF`: the reserve walks the
 // whole rest of the file, so it runs only where the loop cannot go on.
+
 global RESERVE_AFTER_LOOP_G4: String = "
 grammar T;
 r : inner* outer* EOF ;
@@ -3313,6 +3371,7 @@ test "the reserve walk runs only after the loop's own lookahead declines" {
 
 // `e : a=e op=('+'|'-') b=e`: a labelled element's inner used a fresh
 // `name_counts`, so two labels shared one binding and redeclared it.
+
 test "label binding on repeated rule ref dedups against outer scope" {
     // A grammar with no action emits no label binding, and a binding declared
     // twice in one function does not compile.
@@ -3360,6 +3419,7 @@ WS : ' ' -> skip ;
 
 // "a prebound LR suffix scan is neither re-tested nor re-seeded" pins the guard's
 // absence where every suffix consumes.
+
 test "an LR loop never takes an iteration that consumes nothing" {
     // ANTLR rejects both grammars (error 148); `antlr4-compatibility.md` gives the
     // meaning Gale takes. `x` yields a `*` the caller takes, and `+` is reached
@@ -3451,6 +3511,7 @@ kc => error [x]
 
 // A predicate in a host language Gale does not emit renders nothing, so it must not
 // gate: `alt_has_gate` answers "reaches its arm", not "exists in the IR".
+
 test "a predicate in an unemitted host language gates nothing" {
     let gated = "grammar T;
 options { language = Cpp; }
@@ -3465,6 +3526,7 @@ C : 'c' ;
 
 // The rejection case: the same shape in a language Gale does emit is selected
 // by the predicate, so the test above is not passing because nothing ever gates.
+
 test "the same predicate in an emitted language does gate" {
     let gated = "grammar T;
 options { language = Wado; }
@@ -3509,6 +3571,7 @@ GT : '>' ;
 // Eight levels of `e` push past the continuation's slots, so the `X?` after `y`
 // reads its caller's through the link table, after the predicate ran a parse
 // of its own.
+
 test "a parse a predicate runs leaves the continuation of the parse it runs inside" {
     let grammar = "grammar N;
 options { superClass = NBase; language = Wado; }
@@ -4388,6 +4451,7 @@ WS : ' ' -> skip ;
 
 // A members block the translator refuses declares nothing, so the fields its
 // actions name have no type to copy and the gate goes unsimulated.
+
 fn members_grammar<S: AsStrSlice>(members: S) -> String {
     return `grammar C;
 options { language = Java; }
@@ -4408,6 +4472,7 @@ test "a members block the translator refuses leaves the gate unsimulated" {
 
 // The rejection case for the test above: without it, that assertion would also
 // hold for a grammar that simulates nothing.
+
 test "the same action with a translatable members block reaches the gate" {
     let out = gen_source(&members_grammar("    int n = 0;"));
     assert out.contains("struct ScanGate"), "a declared field stays simulable";
@@ -4415,6 +4480,7 @@ test "the same action with a translatable members block reaches the gate" {
 }
 
 // The gate is parser state that every scan walks by reference, never a global.
+
 test "the scan gate lives on the parser" {
     let out = longest_source("grammar C;
 options { language = Java; }
@@ -4435,6 +4501,7 @@ B : 'b' ;
 
 // The LR dispatch launches a scan three ways (branch call, prebound fallback, ATN
 // repick); each must start from the parser's gate, not a sibling's reading.
+
 test "every parse-launched LR suffix scan is seeded" {
     let out = gen_source("grammar L;
 @parser::members {
@@ -4579,6 +4646,7 @@ global STRATEGY_MARKERS: List<StrategyMarker> = [
 
 // Action-free: a rule that runs actions emits its body twice, to match and to
 // replay, so its locals would count double against a report naming each once.
+
 test "every strategy the dump reports is one the emitter emitted" {
     for let src of &[
         "grammar T;\nr : A ;\nA : ('a' | 'ab') ;\nB : . ;", "grammar T;\nr : A ;\nA : 'a' (~'b')+ 'c' ;\nB : . ;",
@@ -4648,6 +4716,7 @@ WS : ' ' -> skip ;
 // meets it in another (`doc/predicates.md`). The outer `r` has cleared its `x`
 // by the time it reaches `r?`; the second `r` of `s` is met through the first's
 // empty alternative, and the first's `d` is not its own.
+
 test "prediction ignores a context-dependent predicate outside its own invocation" {
     for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         let options = GenerateOptions { prediction };
@@ -4714,6 +4783,7 @@ WS : ' ' -> skip ;
 
 // The `.` suffix sends the loop to the simulator, whose table holds no
 // predicate: `op`'s decides between the two suffixes `+` opens.
+
 test "the left-recursion loop's simulator pick answers the predicates past the operand" {
     for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         assert parses("grammar T;
@@ -4730,6 +4800,7 @@ WS : ' ' -> skip ;
 }
 
 // The jar never enters the gated suffix, so `s` takes the `+ 2` itself.
+
 test "a predicate past the operand gates the left-recursive suffix in the simulator" {
     for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         assert parses("grammar T;
@@ -4743,6 +4814,7 @@ WS : ' ' -> skip ;
 
 // An action only hides the predicates behind it from the paths that run it: a
 // path still empty there reaches the predicate past the group.
+
 test "an action in one alternative leaves the others' predicates in view" {
     for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
         assert parses("grammar T;
@@ -4777,6 +4849,7 @@ WS : [ \\t]+ -> skip ;
 // `args` scopes the gate for its own extent (`locals` + `@init` / `@after`), so
 // the ban on the braced form resumes after the `)`; the scan has to restore it
 // the same way or it disagrees with the parse about the head's tail.
+
 test "a rule scoping a gate restores it for the rest of the enclosing head" {
     let got = parses("grammar T;
 @parser::members {
@@ -4833,6 +4906,7 @@ x(a ) [b]) => (s (e (e x) ( a ) [ b ] )))
 
 // The atom's alternatives share `(`, so each one gets a function of its own,
 // and the simulator deciding the loop inside it reads the rule's precedence.
+
 test "a non-greedy wildcard in a contested atom alternative decides at the rule's precedence" {
     let got = parses("grammar T;
 s : e EOF ;
@@ -4849,6 +4923,7 @@ WS : [ \\t]+ -> skip ;
 // by what `a` has left: `e` ends before the `!` under the first and after it
 // under the second. The second reaches further only with its own answer, so
 // the scan memo keeps no answer that read the caller.
+
 test "a remembered scan answers only where no prediction read its caller" {
     let got = parses("grammar T;
 s : a EOF ;
@@ -5035,6 +5110,7 @@ WS : [ \\t]+ -> skip ;
 // `q` tells its alternatives apart on its second token, so the one `b c`
 // leaves viable is predicated, and a false predicate leaves none. The jar
 // reports no viable alternative at `b`.
+
 test "a predicate on the one alternative deeper lookahead leaves removes it" {
     let g4 = "grammar X;\ns : x EOF ;\nx : 'a' q | 'a' 'b' 'c' ;\nq : {false}? 'b' 'c' | 'b' 'd' ;\nWS : ' ' -> skip ;\n";
     for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
@@ -5046,6 +5122,7 @@ test "a predicate on the one alternative deeper lookahead leaves removes it" {
 // Both alternatives end on `a c d`, and only what follows `r` would tell them
 // apart, but the first meets a false predicate inside its group: the jar takes
 // the second.
+
 test "a predicate inside a group decides a tie at the rule's end" {
     let g4 = "grammar Z;\ns : r EOF ;\nr : ({false}? 'a' 'b'? 'c')? 'd' | 'a' 'c' 'd' 'e'? ;\nWS : ' ' -> skip ;\n";
     for let prediction of [PredictionMode::Longest, PredictionMode::Verify, PredictionMode::Exact] {
@@ -5058,6 +5135,7 @@ test "a predicate inside a group decides a tie at the rule's end" {
 // and the second alternative calling a rule, so the tree names the pick. The
 // tournament cannot weigh it, so exact hands the tie to the simulator, and
 // `verify` reports where the tournament picks otherwise.
+
 test "a member predicate inside a group decides a tie at the rule's end" {
     let g4 = |verdict: String| `grammar Y;
 @parser::members {
@@ -5080,6 +5158,7 @@ WS : ' ' -> skip ;
 // The scan cannot answer `$d>0`, a local it does not simulate, but it still
 // answers the `{false}?` beside it, so the first alternative fails in the scan
 // as in the parse. The tree is the jar's.
+
 #[timeout(seconds = 120)]
 test "a gate keeps the predicates a scan answers beside one it cannot" {
     let g4 = "grammar F1;
@@ -5097,6 +5176,7 @@ WS : ' ' -> skip ;
 // A loop deciding its group's alternative as it enters leaves a group the
 // simulator decides to the simulator, and `verify` checks it. The longest match
 // takes `a B`; the jar takes `a`, then `b` on the next iteration.
+
 #[timeout(seconds = 120)]
 test "a repeated group the simulator decides takes the simulator's pick" {
     let g4 = "grammar N4;
@@ -5116,6 +5196,7 @@ WS : ' ' -> skip ;
 // the simulator decides it, and `verify` checks the tournament's pick there.
 // The longest match takes `a B`, which leaves the suffix's `B` nothing to
 // match; the jar takes `a`.
+
 #[timeout(seconds = 120)]
 test "a group in a left-recursive suffix takes the simulator's pick" {
     let g4 = |suffix: String| `grammar F2;
@@ -5135,6 +5216,7 @@ WS : ' ' -> skip ;
 
 // `x` matches empty, so entering it consumes nothing, but it still adds a node.
 // The trees are the jar's.
+
 #[timeout(seconds = 120)]
 test "verify takes an optional entered through an empty rule as entered" {
     let g4 = "grammar F5;
@@ -5285,6 +5367,7 @@ WS : [ \\t]+ -> skip ;
 
 // `xt` and its twins have `'a' 'b'` prefixing `'a' 'b' 'c'`, which the runtime
 // ATN decides; an alt-initial predicate removes its alternative from the seed set.
+
 test "a predicate at an ATN-routed decision disables its alternative" {
     let got = parses_each("grammar T;
 options { language = Wado; }
@@ -5358,6 +5441,7 @@ match x { a if b && c => {} } => (s match x { (arm a (guard if (e (e (p b)) && (
 
 // `x`'s first alternative opens with `g`, whose predicate prediction meets
 // before any token, so it decides `x` as one written on the alternative does.
+
 test "a predicate at the left edge of an invoked rule gates an ATN-routed decision" {
     let got = parses_each("grammar T;
 options { language = Wado; }
@@ -5608,6 +5692,7 @@ test "a greedy loop leaves its last token to a caller that ends the input with i
 
 // Where a parse enters a rule directly, the jar reads what follows it as what
 // follows each call of it, through callers that are themselves called.
+
 test "exact reads a directly entered rule's end as the jar does" {
     let got = parses_each(CALLER_ENDS_INPUT_G4, [
         ["list", "x;"],
@@ -5696,6 +5781,7 @@ WS : ' ' -> skip ;
 
 // `expression` calls only itself, so every continuation past its end comes
 // back to it, and none reads the end of the input.
+
 test "exact ends a directly entered rule that only calls itself at the end of the input" {
     let got = parses_each("grammar L;
 expression
@@ -6040,6 +6126,7 @@ a?b?c:d:e => (s (e (e a) ? (e (e b) ? (e c) : (e d)) : (e e)))
 
 // The left operand binds the label before the suffix rebinds it, so the
 // predicate between reads the left operand.
+
 test "a left-recursive alternative reusing its operand label reads the left operand first" {
     let g4 = "grammar L;
 s : e EOF {System.out.println($e.v);} ;
@@ -6088,6 +6175,7 @@ A : 'a' ; B : 'b' ; C : 'c' ;
 // A label belongs to the whole alternative, as a field of ANTLR4's context does:
 // one bound inside a group, an optional or a loop reads as null where it did not
 // match, and the last binding wins.
+
 test "an action reads a label bound anywhere in its alternative" {
     let g4 = "grammar T;
 s : 'A' r1 EOF | 'B' r2 EOF | 'C' r3 EOF | 'D' r4 EOF | 'E' r5 EOF | 'F' r6 EOF
@@ -6206,6 +6294,7 @@ I b a => (s I (r9 b a)) [r9 true\n]
 
 // The jar throws a NullPointerException calling a method on the text of a
 // token label that did not match; the parser generated here traps.
+
 test "an action calling a method on an unmatched label's text traps" {
     let source = gen_source("grammar T;
 s : (x='b')? 'a' {System.out.println($x.text.equals(\"b\"));} EOF ;
@@ -6216,6 +6305,7 @@ WS : ' ' -> skip ;
 
 // The jar throws a NullPointerException reading a member of a rule label that
 // did not match; the parser generated here traps.
+
 test "an action reading a value of an unmatched rule label traps" {
     let source = gen_source("grammar T;
 s : (y=q)? 'a' {System.out.println($y.v);} EOF ;
@@ -6304,6 +6394,7 @@ WS : ' ' -> skip ;
 
 // The jar's tokens, over the same rules with `getText().equals(…)`: a predicate
 // after a construct decides where it stops, the trailing one included.
+
 test "a predicate after a loop, an optional or an alternation decides where it stops" {
     let got = lexes("lexer grammar L;
 options { language = Wado; }
@@ -6333,6 +6424,7 @@ X : . ;
 }
 
 // The jar's tokens; its predicates read `getText().equals(…)`.
+
 test "a repeat over a string leaves the iterations the rest of the rule needs" {
     let got = lexes("lexer grammar L;
 options { language = Wado; }
@@ -6510,6 +6602,7 @@ fragment HEX : '0'..'9' | 'a'..'f' ;
 
 // Each alternative that competes with a loop agrees with two of its
 // iterations, so only a walk that re-enters the loop tells them apart.
+
 test "a prediction walks a loop through more than one iteration" {
     let got = parses("grammar T;
 t : s EOF ;
@@ -6607,6 +6700,7 @@ global DANGLING: String = "grammar Dangling;\nstart : missing ;\n";
 
 // `??` prefers to skip `A` while the rest of the input still parses, which only
 // the ATN simulator decides.
+
 global LAZY: String = "grammar Lazy;
 r : A?? A B ;
 A : 'a' ;
@@ -6860,6 +6954,7 @@ test "gen --prediction longest refuses a grammar only the simulator can parse" {
 
 // A query naming a token the grammar lacks is a `Warn` diagnostic: the parser
 // is built without that rule.
+
 test "a warning is logged by default and silenced by --log-level error" {
     let dir = scratch(SUITE, "gen-log-level");
     put(&dir, "Expr.g4", EXPR);
@@ -7273,6 +7368,7 @@ C : '/*' ( C | {true}? . )*? '*/' ;";
 // `--atn` reports the same grammar the GIR dump does, so it reports the same
 // lowering. Re-lowering it through `build_atn`'s fresh context instead reaches
 // a table that knows none of the stamped ids.
+
 test "the ATN dump builds off the lowering the dump already has" {
     let report = atn_dump_source("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;");
     assert report.contains("rule 0 'a'");
@@ -7760,6 +7856,7 @@ fn gate_fields(g: &Grammar) -> List<String> {
 
 // `gate_assignment` reads the translated body, not grammar text, so each input
 // reaches the member through the parser handle under its declared name.
+
 test "gate_assignment: a constant assignment" {
     let hit = gate_assignment("p.no_struct = 1;");
     assert hit matches { Some(_) };
@@ -7771,6 +7868,7 @@ test "gate_assignment: a constant assignment" {
 
 // A Wado grammar's member keeps its written name. Snake_casing it left every such
 // grammar without a simulable gate.
+
 test "gate_assignment: a member the translator did not rename" {
     let hit = gate_assignment("p.noBrace = 1;");
     assert hit matches { Some(_) };
@@ -7799,6 +7897,7 @@ test "gate_assignment: a negative constant" {
 
 // The rejection cases. Each is a body a scan cannot run by walking alone, so
 // simulating it would answer with a value the parse never holds.
+
 test "gate_assignment: a comparison is not an assignment" {
     assert gate_assignment("p.no_struct == 0") matches { null };
 }
@@ -7817,6 +7916,7 @@ test "gate_assignment: a call" {
 
 // Not reached through the parser handle, so not a member write the scan can
 // claim to run — a local, or a receiver the translator left standing.
+
 test "gate_assignment: a write that does not go through the handle" {
     assert gate_assignment("no_struct = 1;") matches { null };
     assert gate_assignment("this.no_struct = 1;") matches { null };
@@ -7828,6 +7928,7 @@ test "gate_assignment: a subscript is not a member" {
 
 // A gate scope is the save/restore a members field cannot express: each invocation
 // keeps its own saved value. `$L` arrives as the rule's own value channel.
+
 test "gate_scope: the @init / @after pair" {
     let s = gate_scope_of("vals.sv = p.no_struct; p.no_struct = 0;", "p.no_struct = vals.sv;");
     assert s matches { Some(_) };
@@ -7847,6 +7948,7 @@ test "gate_scope: a member the translator did not rename" {
 
 // The rejection cases. Each is a pair a scan cannot run as a save/restore, so
 // running it anyway would leave the gate holding a value the parse never does.
+
 test "gate_scope: a restore of a different field" {
     assert gate_scope_of("vals.sv = p.no_struct; p.no_struct = 0;", "p.depth = vals.sv;") matches { null };
 }
@@ -7865,6 +7967,7 @@ test "gate_scope: no @after is no scope" {
 
 // A field is simulated only if the scan runs every write, `@init` / `@after` included.
 // Declared members give a bare name a field and `ScanGate` a type to copy.
+
 global GATE_MEMBERS: String = "int noStruct = 0; int depth = 0; int other = 0;";
 
 global SCOPE_BODY: String = "A";
@@ -7908,6 +8011,7 @@ test "scan_gate_fields: the recognised scope pair leaves its field simulable" {
 
 // A left-recursive scan carries `min_prec`, so it takes no scope wrapper. The field
 // goes everywhere, or other scans would restore a ban this one never lifts.
+
 test "scan_gate_fields: a left-recursive rule's scope disqualifies its field" {
     let f = gate_fields_of(&gate_source(&GATE_SCOPE_INIT, &GATE_SCOPE_AFTER, "scope A | A"));
     assert f.is_empty();
@@ -7920,6 +8024,7 @@ test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
 
 // Every name in a body the scan cannot run is disqualified, not a list of write
 // shapes. Any list misses one, and that field holds a value the parse never does.
+
 test "scan_gate_fields: a compound assignment disqualifies the field" {
     for let op of ["+=", "|=", "&=", "^=", "%=", "<<=", ">>="] as List<String> {
         let f = gate_fields_of(&gate_source(`noStruct ${op} 1;`));
@@ -7929,6 +8034,7 @@ test "scan_gate_fields: a compound assignment disqualifies the field" {
 
 // Shapes an assignment-target matcher misses: the first hides a plain `f = 0` only
 // a statement splitter finds, and the second has no `=` at all.
+
 test "scan_gate_fields: a conditional write disqualifies the field" {
     for let body of ["if (c) noStruct = 0;", "while (c) noStruct = 0;", "for (;;) noStruct = 0;"] as List<String> {
         let f = gate_fields_of(&gate_source(&body));
@@ -7945,6 +8051,7 @@ test "scan_gate_fields: an increment disqualifies the field" {
 
 // Naming the field disqualifies even a plain read. Over-rejecting only leaves the
 // gate unsimulated.
+
 test "scan_gate_fields: a body that merely names the field disqualifies it" {
     let f = gate_fields_of(&gate_source("noStruct;"));
     assert f.is_empty();
@@ -7952,6 +8059,7 @@ test "scan_gate_fields: a body that merely names the field disqualifies it" {
 
 // A call names the method, not the field it writes, so no reading of the body
 // says which fields it leaves alone. The whole set goes.
+
 test "scan_gate_fields: a body that can call disqualifies every field" {
     let f = gate_fields_of(&gate_source("ban();"));
     assert f.is_empty();
@@ -7959,6 +8067,7 @@ test "scan_gate_fields: a body that can call disqualifies every field" {
 
 // The rejection case for both rules above: a body that names something else and
 // cannot call leaves the field alone, so the set is not simply always empty.
+
 test "scan_gate_fields: a body naming other things leaves the field simulable" {
     let f = gate_fields_of(&gate_source("depth = depth + 1;"));
     assert f == ["no_struct"];
@@ -7971,6 +8080,7 @@ test "scan_gate_fields: a write through a receiver disqualifies the field" {
 
 // The shapes an optional group is predicted by run no gate, so a scan cannot
 // follow the group's actions however simply they are written.
+
 test "scan_gate_fields: a write inside a group disqualifies the field" {
     let f = gate_fields_of(&gate_source(
         "other = 1;",
@@ -7982,6 +8092,7 @@ test "scan_gate_fields: a write inside a group disqualifies the field" {
 }
 
 // A condition the scan may evaluate reads simulated fields and nothing else.
+
 test "reads_only_scan_gate_fields: a simulated field" {
     assert reads_only_scan_gate_fields("(gate.no_struct == 0)", &["no_struct"]);
 }
@@ -7993,6 +8104,7 @@ test "reads_only_scan_gate_fields: two of them" {
 
 // One field name can be a prefix of another. Taking the short one out of the
 // long one leaves `_tail`, which is a read of a field the gate does not have.
+
 test "reads_only_scan_gate_fields: a field whose name extends a simulated one" {
     assert !reads_only_scan_gate_fields("(gate.no_struct_tail == 0)", &["no_struct"]);
 }
@@ -8024,6 +8136,7 @@ test "reads_only_scan_gate_fields: a call on the recognizer" {
 
 // The caller reads three tokens past `a`, so a token after the body that the
 // continuation could start with does not show it still parses there.
+
 test "a tail repeat takes a token only where the continuation still parses past it, at its full depth" {
     let tokens = "X : 'x' ; Y : 'y' ; B : 'b' ; WS : ' ' -> skip ;\n";
     for let body of ["X?", "X*"] {
@@ -8045,6 +8158,7 @@ test "a tail repeat takes a token only where the continuation still parses past 
 
 // `.` takes any token but the end of the input, so the caller's `. EOF` cannot
 // start at the last token's end, and a shape opening on `.` is still a shape.
+
 test "a wildcard takes every kind but EOF, in a continuation and in a shape" {
     let tokens = "X : 'x' ; A : 'a' ; B : 'b' ; WS : ' ' -> skip ;\n";
     assert parses(`grammar R;\ns : a . EOF ;\na : X? ;\n${tokens}`, "s", ["x", "xx"], &LONGEST) == "x => (s a x)\nxx => (s (a x) x)\n";
@@ -8054,6 +8168,7 @@ test "a wildcard takes every kind but EOF, in a continuation and in a shape" {
 
 // Every shape of `(t A?)?` decides like any other optional: the caller's `X`
 // starting at `x` does not stop the shape `t` that leaves it a parse.
+
 test "a shape optional enters where its caller's continuation still parses after it" {
     let grammar = "grammar R;\ns : r X? EOF ;\nr : (t A?)? ;\nt : X ;\nX : 'x' ; A : 'a' ; WS : ' ' -> skip ;\n";
     let got = parses(grammar, "s", ["x", "xx", "xa"], &LONGEST);

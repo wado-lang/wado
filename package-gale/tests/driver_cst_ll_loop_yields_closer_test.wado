@@ -35,6 +35,7 @@ test "an empty name list closes on its own bar" {
 // own follow past the local suffix, because the depth is what separates the
 // two: `|a|` and `|a|b|` are the same two tokens at the loop and differ at the
 // third.
+
 test "one name yields the bar that closes the list" {
     assert_tree("|a| b", "(start (block | (names (name a)) | b))");
 }
@@ -42,6 +43,7 @@ test "one name yields the bar that closes the list" {
 // The rejection case: the loop yields the closing bar exactly once, not every
 // bar. A repair that reads only the first two tokens at the loop cannot tell
 // this input from the one above.
+
 test "the loop keeps a bar the closer cannot be" {
     assert_tree("|a|b| c", "(start (block | (names (name a | b)) | c))");
 }

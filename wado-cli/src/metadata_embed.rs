@@ -7,10 +7,11 @@
 
 use std::borrow::Cow;
 use std::path::Path;
-use std::process::Command;
 
 use wado_manifest::MetadataSection;
 use wasm_encoder::{Encode, Section};
+
+use crate::git;
 
 /// Append each metadata section to `component` as a custom section. Returns the
 /// component unchanged when there is nothing to embed.
@@ -33,7 +34,7 @@ pub fn embed_metadata_sections(mut component: Vec<u8>, sections: &[MetadataSecti
 /// matching what a commit actually captures.
 #[must_use]
 pub fn working_tree_dirty(dir: &Path) -> Option<bool> {
-    let status = Command::new("git")
+    let status = git::command()
         .arg("-C")
         .arg(dir)
         .args(["status", "--porcelain", "--untracked-files=no"])
@@ -55,7 +56,7 @@ pub fn clean_git_revision(dir: &Path) -> Option<String> {
     if working_tree_dirty(dir)? {
         return None;
     }
-    let rev = Command::new("git")
+    let rev = git::command()
         .arg("-C")
         .arg(dir)
         .args(["rev-parse", "HEAD"])

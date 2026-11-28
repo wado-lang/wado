@@ -275,6 +275,7 @@ impl<affine I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator f
 
 // Its own impl: through the blanket one over `Iterator`, `into_iter` is
 // charged the effects of the function the adapter holds.
+
 impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> IntoIterator for IterMap<I, F> {
     type Item = U;
     type Iter = IterMap<I, F>;
@@ -308,6 +309,7 @@ impl<affine I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> Iterator f
 }
 
 // Its own impl, as `IterMap`'s is.
+
 impl<I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> IntoIterator for IterFilter<I, F> {
     type Item = I::Item;
     type Iter = IterFilter<I, F>;

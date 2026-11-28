@@ -94,15 +94,40 @@ return starts.filter(
 );
 ```
 
-Blank lines follow the source: none stays none, one stays one, and a larger gap
-collapses to two.
+## Blank Lines
+
+A gap of any size in the source counts as one blank line, and a body opens with
+none after its `{`. Between two lines, the formatter keeps the source's gap
+unless one of these rules decides it:
+
+- A declaration with a body (a function, an `impl`, a `struct`, a `test`, and
+  so on) is set apart by one blank line from what comes before and after it.
+- A run of comments on consecutive lines is one unit. `//` (or `/* */`), `///`
+  and `//!` runs are each their own kind, and two runs of different kinds are
+  set apart by one blank line.
+- A `//` run is set apart by one blank line from a declaration on either side,
+  fields and cases included. A comment that describes the declaration after it
+  then reads as detached, which shows it should be a `///` doc comment.
+- A `//!` run is followed by one blank line.
+- A `///` run belongs to the declaration it documents. It closes up to it, a
+  blank line in between being taken for a slip, and is spaced as the
+  declaration is.
+- Between statements, and between a statement and a `//` run, the source's
+  gap stands.
 
 ## What it rewrites
 
 Only what carries no meaning: redundant parentheses, an explicit `-> ()` return
 type, repeated or missing statement semicolons, an `impl` block's type
-parameters (always written out), and a field name's quoting (bare when it is an
-identifier).
+parameters (always written out), a field name's quoting (bare when it is an
+identifier), and a doc comment that documents nothing, which it writes as `//`.
+The doc comment of a declaration is the block of consecutive `///` lines
+nearest above it, with only blank lines between. The module's is the `//!`
+lines before its first item.
+
+One rewrite does carry meaning. The blank line between a declaration and its
+`///` block is taken for a slip and dropped, so `Reflect::doc()` answers the
+block's text after formatting rather than `null`.
 
 Everything else is kept as written, including the spelling of every literal
 (hex, octal, digit separators, float form, string and template escapes),
