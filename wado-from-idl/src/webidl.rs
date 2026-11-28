@@ -884,7 +884,8 @@ fn scalar(name: &str) -> Option<WadoType> {
         "unsigned long long" => WadoType::U64,
         "float" | "unrestricted float" => WadoType::F32,
         "double" | "unrestricted double" => WadoType::F64,
-        "DOMString" | "USVString" | "ByteString" => WadoType::String,
+        // CSSOM leaves `CSSOMString` to be either of the first two.
+        "DOMString" | "USVString" | "ByteString" | "CSSOMString" => WadoType::String,
         _ => return None,
     })
 }

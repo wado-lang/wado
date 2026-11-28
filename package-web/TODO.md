@@ -62,7 +62,7 @@ read the table:
 - A callback in a result is nearly always an event handler attribute
   (`onclick`).
 - A type outside the slice is a name no snapshot definition declares. Over the
-  whole platform those are `CSSOMString`, `WindowProxy`, the legacy aliases
+  whole platform those are `WindowProxy`, the legacy aliases
   `SVGPoint`, `SVGRect` and `SVGMatrix`, and an interface only a worker reaches.
 - An enum is one with a value Wado cannot spell as a case: the empty string, as
   in `ReferrerPolicy`, or one starting with a digit, as in `"2d"`.

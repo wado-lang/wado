@@ -3,25 +3,56 @@
 
 const $CLASSES = [
   ["EventTarget", 0],
-  ["Event", 9],
+  ["Event", 12],
   ["Node", 1],
   ["CharacterData", 2],
   ["Text", 3],
-  ["Element", 4],
-  ["HTMLElement", 5],
-  ["HTMLInputElement", 6],
-  ["Document", 7],
-  ["Window", 8],
-  ["NodeIterator", 10],
-  ["TreeWalker", 11],
+  ["Element", 5],
+  ["HTMLElement", 6],
+  ["HTMLInputElement", 7],
+  ["Document", 9],
+  ["Window", 11],
+  ["NodeIterator", 13],
+  ["TreeWalker", 14],
+  ["Comment", 4],
+  ["DocumentFragment", 10],
+  ["NodeList", 15],
+  ["HTMLCollection", 16],
+  ["DOMTokenList", 17],
+  ["CSSStyleDeclaration", 18],
+  ["CSSStyleProperties", 19],
+  ["DOMRectReadOnly", 20],
+  ["DOMRect", 21],
+  ["TrustedHTML", 22],
+  ["HTMLCanvasElement", 8],
+  ["CanvasRenderingContext2D", 23],
+  ["CanvasGradient", 24],
+  ["CanvasPattern", 25],
+  ["Path2D", 26],
+  ["TextMetrics", 27],
+  ["ImageData", 28],
 ];
 const $ENUMS = {
   AriaNotifyPriority: ["normal", "high"],
+  CanvasColorType: ["unorm8", "float16"],
+  CanvasDirection: ["ltr", "rtl", "inherit"],
+  CanvasFillRule: ["nonzero", "evenodd"],
+  CanvasFontKerning: ["auto", "normal", "none"],
+  CanvasFontStretch: ["ultra-condensed", "extra-condensed", "condensed", "semi-condensed", "normal", "semi-expanded", "expanded", "extra-expanded", "ultra-expanded"],
+  CanvasFontVariantCaps: ["normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps", "unicase", "titling-caps"],
+  CanvasLineCap: ["butt", "round", "square"],
+  CanvasLineJoin: ["round", "bevel", "miter"],
+  CanvasTextAlign: ["start", "end", "left", "right", "center"],
+  CanvasTextBaseline: ["top", "hanging", "middle", "alphabetic", "ideographic", "bottom"],
+  CanvasTextRendering: ["auto", "optimizeSpeed", "optimizeLegibility", "geometricPrecision"],
   DocumentReadyState: ["loading", "interactive", "complete"],
   DocumentVisibilityState: ["visible", "hidden"],
   FocusableAreaSearchMode: ["visible", "all"],
   FullscreenKeyboardLock: ["browser", "none"],
   FullscreenNavigationUi: ["auto", "show", "hide"],
+  ImageDataPixelFormat: ["rgba-unorm8", "rgba-float16"],
+  ImageSmoothingQuality: ["low", "medium", "high"],
+  PredefinedColorSpace: ["srgb", "srgb-linear", "display-p3", "display-p3-linear"],
   ScrollBehavior: ["auto", "instant", "smooth"],
   ScrollIntoViewContainer: ["all", "nearest"],
   ScrollLogicalPosition: ["start", "center", "end", "nearest"],
@@ -281,6 +312,9 @@ export function $glue() {
       "$wado-lang:web/node#has-child-nodes": (p0) => {
         return (p0.hasChildNodes() ? 1 : 0);
       },
+      "$wado-lang:web/node#child-nodes": (p0) => {
+        return p0.childNodes;
+      },
       "$wado-lang:web/node#first-child": (p0) => {
         return (p0.firstChild ?? null);
       },
@@ -434,6 +468,12 @@ export function $glue() {
       "$wado-lang:web/element#spatial-navigation-search": (p0, p1, p2, p3, p4, p5, p6, p7) => {
         return (p0.spatialNavigationSearch($ENUMS.SpatialNavigationDirection[p1], (p2 === 0 ? undefined : { candidates: (p3 === 0 ? undefined : $list(p4, p5, 4, (at) => $core.exports[$SLOT_GET]($view().getUint32(at, true)))), container: (p6 === 0 ? undefined : $core.exports[$SLOT_GET](p7)) })) ?? null);
       },
+      "$wado-lang:web/element#part": (p0) => {
+        return p0.part;
+      },
+      "$wado-lang:web/element#get-bounding-client-rect": (p0) => {
+        return p0.getBoundingClientRect();
+      },
       "$wado-lang:web/element#check-visibility": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11) => {
         return (p0.checkVisibility((p1 === 0 ? undefined : { checkOpacity: (p2 === 0 ? undefined : (p3 !== 0)), checkVisibilityCSS: (p4 === 0 ? undefined : (p5 !== 0)), contentVisibilityAuto: (p6 === 0 ? undefined : (p7 !== 0)), opacityProperty: (p8 === 0 ? undefined : (p9 !== 0)), visibilityProperty: (p10 === 0 ? undefined : (p11 !== 0)) })) ? 1 : 0);
       },
@@ -538,6 +578,9 @@ export function $glue() {
       "$wado-lang:web/element#set-class-name": (p0, p1, p2) => {
         p0.className = $string(p1, p2);
       },
+      "$wado-lang:web/element#class-list": (p0) => {
+        return p0.classList;
+      },
       "$wado-lang:web/element#slot": (p0, $ret) => {
         const $value = p0.slot;
         $putString($ret, $value);
@@ -572,11 +615,11 @@ export function $glue() {
           $putString($ret + 4, $value);
         }
       },
-      "$wado-lang:web/element#set-attribute": (p0, p1, p2, p3, p4) => {
-        p0.setAttribute($string(p1, p2), $string(p3, p4));
+      "$wado-lang:web/element#set-attribute": (p0, p1, p2, p3, p4, p5) => {
+        p0.setAttribute($string(p1, p2), (p3 === 0 ? $core.exports[$SLOT_GET](p4) : $string(p4, p5)));
       },
-      "$wado-lang:web/element#set-attribute-ns": (p0, p1, p2, p3, p4, p5, p6, p7) => {
-        p0.setAttributeNS((p1 === 0 ? undefined : $string(p2, p3)), $string(p4, p5), $string(p6, p7));
+      "$wado-lang:web/element#set-attribute-ns": (p0, p1, p2, p3, p4, p5, p6, p7, p8) => {
+        p0.setAttributeNS((p1 === 0 ? undefined : $string(p2, p3)), $string(p4, p5), (p6 === 0 ? $core.exports[$SLOT_GET](p7) : $string(p7, p8)));
       },
       "$wado-lang:web/element#remove-attribute": (p0, p1, p2) => {
         p0.removeAttribute($string(p1, p2));
@@ -602,6 +645,15 @@ export function $glue() {
       "$wado-lang:web/element#webkit-matches-selector": (p0, p1, p2) => {
         return (p0.webkitMatchesSelector($string(p1, p2)) ? 1 : 0);
       },
+      "$wado-lang:web/element#get-elements-by-tag-name": (p0, p1, p2) => {
+        return p0.getElementsByTagName($string(p1, p2));
+      },
+      "$wado-lang:web/element#get-elements-by-tag-name-ns": (p0, p1, p2, p3, p4, p5) => {
+        return p0.getElementsByTagNameNS((p1 === 0 ? undefined : $string(p2, p3)), $string(p4, p5));
+      },
+      "$wado-lang:web/element#get-elements-by-class-name": (p0, p1, p2) => {
+        return p0.getElementsByClassName($string(p1, p2));
+      },
       "$wado-lang:web/element#insert-adjacent-element": (p0, p1, p2, p3) => {
         return (p0.insertAdjacentElement($string(p1, p2), p3) ?? null);
       },
@@ -622,21 +674,45 @@ export function $glue() {
       "$wado-lang:web/element#set-html": (p0, p1, p2) => {
         p0.setHTML($string(p1, p2));
       },
-      "$wado-lang:web/element#set-html-unsafe": (p0, p1, p2, p3, p4, p5) => {
-        p0.setHTMLUnsafe($string(p1, p2), (p3 === 0 ? undefined : { runScripts: (p4 === 0 ? undefined : (p5 !== 0)) }));
+      "$wado-lang:web/element#set-html-unsafe": (p0, p1, p2, p3, p4, p5, p6) => {
+        p0.setHTMLUnsafe((p1 === 0 ? $core.exports[$SLOT_GET](p2) : $string(p2, p3)), (p4 === 0 ? undefined : { runScripts: (p5 === 0 ? undefined : (p6 !== 0)) }));
       },
       "$wado-lang:web/element#get-html": (p0, p1, p2, p3, $ret) => {
         const $value = p0.getHTML((p1 === 0 ? undefined : { serializableShadowRoots: (p2 === 0 ? undefined : (p3 !== 0)) }));
         $putString($ret, $value);
       },
-      "$wado-lang:web/element#set-inner-html": (p0, p1, p2) => {
-        p0.innerHTML = $string(p1, p2);
+      "$wado-lang:web/element#inner-html": (p0, $ret) => {
+        const $value = p0.innerHTML;
+        if ($within($value, 22, 22)) {
+          $view().setUint8($ret, 0);
+          $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
+        } else if (typeof $value === "string") {
+          $view().setUint8($ret, 1);
+          $putString($ret + 4, $value);
+        } else {
+          throw new TypeError(`${$value} is no case of the union`);
+        }
       },
-      "$wado-lang:web/element#set-outer-html": (p0, p1, p2) => {
-        p0.outerHTML = $string(p1, p2);
+      "$wado-lang:web/element#set-inner-html": (p0, p1, p2, p3) => {
+        p0.innerHTML = (p1 === 0 ? $core.exports[$SLOT_GET](p2) : $string(p2, p3));
       },
-      "$wado-lang:web/element#insert-adjacent-html": (p0, p1, p2, p3, p4) => {
-        p0.insertAdjacentHTML($string(p1, p2), $string(p3, p4));
+      "$wado-lang:web/element#outer-html": (p0, $ret) => {
+        const $value = p0.outerHTML;
+        if ($within($value, 22, 22)) {
+          $view().setUint8($ret, 0);
+          $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
+        } else if (typeof $value === "string") {
+          $view().setUint8($ret, 1);
+          $putString($ret + 4, $value);
+        } else {
+          throw new TypeError(`${$value} is no case of the union`);
+        }
+      },
+      "$wado-lang:web/element#set-outer-html": (p0, p1, p2, p3) => {
+        p0.outerHTML = (p1 === 0 ? $core.exports[$SLOT_GET](p2) : $string(p2, p3));
+      },
+      "$wado-lang:web/element#insert-adjacent-html": (p0, p1, p2, p3, p4, p5) => {
+        p0.insertAdjacentHTML($string(p1, p2), (p3 === 0 ? $core.exports[$SLOT_GET](p4) : $string(p4, p5)));
       },
       "$wado-lang:web/element#set-pointer-capture": (p0, p1) => {
         p0.setPointerCapture(p1);
@@ -650,6 +726,13 @@ export function $glue() {
       "$wado-lang:web/element#request-pointer-lock": (p0, p1, p2, p3) => {
         return $settle(p0.requestPointerLock((p1 === 0 ? undefined : { unadjustedMovement: (p2 === 0 ? undefined : (p3 !== 0)) })), 4, ($ret, $value) => {
         });
+      },
+      "$wado-lang:web/element#region-overset": (p0, $ret) => {
+        const $value = p0.regionOverset;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/element#children": (p0) => {
+        return p0.children;
       },
       "$wado-lang:web/element#first-element-child": (p0) => {
         return (p0.firstElementChild ?? null);
@@ -674,6 +757,9 @@ export function $glue() {
       },
       "$wado-lang:web/element#query-selector": (p0, p1, p2) => {
         return (p0.querySelector($string(p1, p2)) ?? null);
+      },
+      "$wado-lang:web/element#query-selector-all": (p0, p1, p2) => {
+        return p0.querySelectorAll($string(p1, p2));
       },
       "$wado-lang:web/element#previous-element-sibling": (p0) => {
         return (p0.previousElementSibling ?? null);
@@ -1508,6 +1594,9 @@ export function $glue() {
       "$wado-lang:web/html-element#set-heading-reset": (p0, p1) => {
         p0.headingReset = (p1 !== 0);
       },
+      "$wado-lang:web/html-element#style": (p0) => {
+        return p0.style;
+      },
       "$wado-lang:web/html-element#content-editable": (p0, $ret) => {
         const $value = p0.contentEditable;
         $putString($ret, $value);
@@ -1815,6 +1904,9 @@ export function $glue() {
       "$wado-lang:web/html-input-element#set-custom-validity": (p0, p1, p2) => {
         p0.setCustomValidity($string(p1, p2));
       },
+      "$wado-lang:web/html-input-element#labels": (p0) => {
+        return (p0.labels ?? null);
+      },
       "$wado-lang:web/html-input-element#select": (p0) => {
         p0.select();
       },
@@ -1946,14 +2038,29 @@ export function $glue() {
       "$wado-lang:web/document#document-element": (p0) => {
         return (p0.documentElement ?? null);
       },
+      "$wado-lang:web/document#get-elements-by-tag-name": (p0, p1, p2) => {
+        return p0.getElementsByTagName($string(p1, p2));
+      },
+      "$wado-lang:web/document#get-elements-by-tag-name-ns": (p0, p1, p2, p3, p4, p5) => {
+        return p0.getElementsByTagNameNS((p1 === 0 ? undefined : $string(p2, p3)), $string(p4, p5));
+      },
+      "$wado-lang:web/document#get-elements-by-class-name": (p0, p1, p2) => {
+        return p0.getElementsByClassName($string(p1, p2));
+      },
       "$wado-lang:web/document#create-element": (p0, p1, p2, p3, p4, p5, p6, p7) => {
         return p0.createElement($string(p1, p2), (p3 === 0 ? undefined : (p4 === 0 ? $string(p5, p6) : { is: (p5 === 0 ? undefined : $string(p6, p7)) })));
       },
       "$wado-lang:web/document#create-element-ns": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10) => {
         return p0.createElementNS((p1 === 0 ? undefined : $string(p2, p3)), $string(p4, p5), (p6 === 0 ? undefined : (p7 === 0 ? $string(p8, p9) : { is: (p8 === 0 ? undefined : $string(p9, p10)) })));
       },
+      "$wado-lang:web/document#create-document-fragment": (p0) => {
+        return p0.createDocumentFragment();
+      },
       "$wado-lang:web/document#create-text-node": (p0, p1, p2) => {
         return p0.createTextNode($string(p1, p2));
+      },
+      "$wado-lang:web/document#create-comment": (p0, p1, p2) => {
+        return p0.createComment($string(p1, p2));
       },
       "$wado-lang:web/document#import-node": (p0, p1, p2, p3, p4, p5) => {
         return p0.importNode(p1, (p2 === 0 ? undefined : (p3 === 0 ? (p4 !== 0) : { selfOnly: (p4 === 0 ? undefined : (p5 !== 0)) })));
@@ -1980,8 +2087,8 @@ export function $glue() {
         return $settle(p0.exitFullscreen(), 4, ($ret, $value) => {
         });
       },
-      "$wado-lang:web/document#parse-html-unsafe": (p0, p1) => {
-        return globalThis.Document.parseHTMLUnsafe($string(p0, p1));
+      "$wado-lang:web/document#parse-html-unsafe": (p0, p1, p2) => {
+        return globalThis.Document.parseHTMLUnsafe((p0 === 0 ? $core.exports[$SLOT_GET](p1) : $string(p1, p2)));
       },
       "$wado-lang:web/document#parse-html": (p0, p1) => {
         return globalThis.Document.parseHTML($string(p0, p1));
@@ -2031,6 +2138,27 @@ export function $glue() {
       "$wado-lang:web/document#set-body": (p0, p1) => {
         p0.body = (p1 ?? undefined);
       },
+      "$wado-lang:web/document#images": (p0) => {
+        return p0.images;
+      },
+      "$wado-lang:web/document#embeds": (p0) => {
+        return p0.embeds;
+      },
+      "$wado-lang:web/document#plugins": (p0) => {
+        return p0.plugins;
+      },
+      "$wado-lang:web/document#links": (p0) => {
+        return p0.links;
+      },
+      "$wado-lang:web/document#forms": (p0) => {
+        return p0.forms;
+      },
+      "$wado-lang:web/document#scripts": (p0) => {
+        return p0.scripts;
+      },
+      "$wado-lang:web/document#get-elements-by-name": (p0, p1, p2) => {
+        return p0.getElementsByName($string(p1, p2));
+      },
       "$wado-lang:web/document#open-with-unused1-unused2": (p0, p1, p2, p3, p4, p5, p6) => {
         return p0.open((p1 === 0 ? undefined : $string(p2, p3)), (p4 === 0 ? undefined : $string(p5, p6)));
       },
@@ -2038,10 +2166,10 @@ export function $glue() {
         p0.close();
       },
       "$wado-lang:web/document#write": (p0, p1, p2) => {
-        p0.write(...$list(p1, p2, 8, (at) => $string($view().getUint32(at, true), $view().getUint32(at + 4, true))));
+        p0.write(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
       },
       "$wado-lang:web/document#writeln": (p0, p1, p2) => {
-        p0.writeln(...$list(p1, p2, 8, (at) => $string($view().getUint32(at, true), $view().getUint32(at + 4, true))));
+        p0.writeln(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
       },
       "$wado-lang:web/document#has-focus": (p0) => {
         return (p0.hasFocus() ? 1 : 0);
@@ -2113,6 +2241,12 @@ export function $glue() {
       "$wado-lang:web/document#set-bg-color": (p0, p1, p2) => {
         p0.bgColor = $string(p1, p2);
       },
+      "$wado-lang:web/document#anchors": (p0) => {
+        return p0.anchors;
+      },
+      "$wado-lang:web/document#applets": (p0) => {
+        return p0.applets;
+      },
       "$wado-lang:web/document#clear": (p0) => {
         p0.clear();
       },
@@ -2177,6 +2311,9 @@ export function $glue() {
       "$wado-lang:web/document#pointer-lock-element": (p0) => {
         return (p0.pointerLockElement ?? null);
       },
+      "$wado-lang:web/document#children": (p0) => {
+        return p0.children;
+      },
       "$wado-lang:web/document#first-element-child": (p0) => {
         return (p0.firstElementChild ?? null);
       },
@@ -2201,6 +2338,9 @@ export function $glue() {
       "$wado-lang:web/document#query-selector": (p0, p1, p2) => {
         return (p0.querySelector($string(p1, p2)) ?? null);
       },
+      "$wado-lang:web/document#query-selector-all": (p0, p1, p2) => {
+        return p0.querySelectorAll($string(p1, p2));
+      },
       "$wado-lang:web/document#create-ns-resolver": (p0, p1) => {
         return p0.createNSResolver(p1);
       },
@@ -2218,6 +2358,9 @@ export function $glue() {
       },
       "$wado-lang:web/window#request-resize": (p0) => {
         p0.requestResize();
+      },
+      "$wado-lang:web/window#get-computed-style": (p0, p1, p2, p3, p4) => {
+        return p0.getComputedStyle(p1, (p2 === 0 ? undefined : $string(p3, p4)));
       },
       "$wado-lang:web/window#move-to": (p0, p1, p2) => {
         p0.moveTo(p1, p2);
@@ -2470,6 +2613,666 @@ export function $glue() {
       },
       "$wado-lang:web/tree-walker#next-node": (p0) => {
         return (p0.nextNode() ?? null);
+      },
+      "$wado-lang:web/comment#new": (p0, p1) => {
+        return new globalThis.Comment($string(p0, p1));
+      },
+      "$wado-lang:web/document-fragment#new": () => {
+        return new globalThis.DocumentFragment();
+      },
+      "$wado-lang:web/document-fragment#get-element-by-id": (p0, p1, p2) => {
+        return (p0.getElementById($string(p1, p2)) ?? null);
+      },
+      "$wado-lang:web/document-fragment#children": (p0) => {
+        return p0.children;
+      },
+      "$wado-lang:web/document-fragment#first-element-child": (p0) => {
+        return (p0.firstElementChild ?? null);
+      },
+      "$wado-lang:web/document-fragment#last-element-child": (p0) => {
+        return (p0.lastElementChild ?? null);
+      },
+      "$wado-lang:web/document-fragment#child-element-count": (p0) => {
+        return p0.childElementCount;
+      },
+      "$wado-lang:web/document-fragment#prepend": (p0, p1, p2) => {
+        p0.prepend(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/document-fragment#append": (p0, p1, p2) => {
+        p0.append(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/document-fragment#replace-children": (p0, p1, p2) => {
+        p0.replaceChildren(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+      },
+      "$wado-lang:web/document-fragment#move-before": (p0, p1, p2) => {
+        p0.moveBefore(p1, (p2 ?? undefined));
+      },
+      "$wado-lang:web/document-fragment#query-selector": (p0, p1, p2) => {
+        return (p0.querySelector($string(p1, p2)) ?? null);
+      },
+      "$wado-lang:web/document-fragment#query-selector-all": (p0, p1, p2) => {
+        return p0.querySelectorAll($string(p1, p2));
+      },
+      "$wado-lang:web/node-list#length": (p0) => {
+        return p0.length;
+      },
+      "$wado-lang:web/html-collection#length": (p0) => {
+        return p0.length;
+      },
+      "$wado-lang:web/dom-token-list#length": (p0) => {
+        return p0.length;
+      },
+      "$wado-lang:web/dom-token-list#contains": (p0, p1, p2) => {
+        return (p0.contains($string(p1, p2)) ? 1 : 0);
+      },
+      "$wado-lang:web/dom-token-list#add": (p0, p1, p2) => {
+        p0.add(...$list(p1, p2, 8, (at) => $string($view().getUint32(at, true), $view().getUint32(at + 4, true))));
+      },
+      "$wado-lang:web/dom-token-list#remove": (p0, p1, p2) => {
+        p0.remove(...$list(p1, p2, 8, (at) => $string($view().getUint32(at, true), $view().getUint32(at + 4, true))));
+      },
+      "$wado-lang:web/dom-token-list#toggle": (p0, p1, p2, p3, p4) => {
+        return (p0.toggle($string(p1, p2), (p3 === 0 ? undefined : (p4 !== 0))) ? 1 : 0);
+      },
+      "$wado-lang:web/dom-token-list#replace": (p0, p1, p2, p3, p4) => {
+        return (p0.replace($string(p1, p2), $string(p3, p4)) ? 1 : 0);
+      },
+      "$wado-lang:web/dom-token-list#supports": (p0, p1, p2) => {
+        return (p0.supports($string(p1, p2)) ? 1 : 0);
+      },
+      "$wado-lang:web/dom-token-list#value": (p0, $ret) => {
+        const $value = p0.value;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/dom-token-list#set-value": (p0, p1, p2) => {
+        p0.value = $string(p1, p2);
+      },
+      "$wado-lang:web/css-style-declaration#css-text": (p0, $ret) => {
+        const $value = p0.cssText;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/css-style-declaration#set-css-text": (p0, p1, p2) => {
+        p0.cssText = $string(p1, p2);
+      },
+      "$wado-lang:web/css-style-declaration#length": (p0) => {
+        return p0.length;
+      },
+      "$wado-lang:web/css-style-declaration#get-property-value": (p0, p1, p2, $ret) => {
+        const $value = p0.getPropertyValue($string(p1, p2));
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/css-style-declaration#get-property-priority": (p0, p1, p2, $ret) => {
+        const $value = p0.getPropertyPriority($string(p1, p2));
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/css-style-declaration#set-property": (p0, p1, p2, p3, p4, p5, p6) => {
+        p0.setProperty($string(p1, p2), $string(p3, p4), $string(p5, p6));
+      },
+      "$wado-lang:web/css-style-declaration#remove-property": (p0, p1, p2, $ret) => {
+        const $value = p0.removeProperty($string(p1, p2));
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/css-style-properties#css-float": (p0, $ret) => {
+        const $value = p0.cssFloat;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/css-style-properties#set-css-float": (p0, p1, p2) => {
+        p0.cssFloat = $string(p1, p2);
+      },
+      "$wado-lang:web/dom-rect-read-only#new": (p0, p1, p2, p3) => {
+        return new globalThis.DOMRectReadOnly(p0, p1, p2, p3);
+      },
+      "$wado-lang:web/dom-rect-read-only#from-rect": (p0, p1, p2, p3, p4, p5, p6, p7, p8) => {
+        return globalThis.DOMRectReadOnly.fromRect((p0 === 0 ? undefined : { x: (p1 === 0 ? undefined : p2), y: (p3 === 0 ? undefined : p4), width: (p5 === 0 ? undefined : p6), height: (p7 === 0 ? undefined : p8) }));
+      },
+      "$wado-lang:web/dom-rect-read-only#x": (p0) => {
+        return p0.x;
+      },
+      "$wado-lang:web/dom-rect-read-only#y": (p0) => {
+        return p0.y;
+      },
+      "$wado-lang:web/dom-rect-read-only#width": (p0) => {
+        return p0.width;
+      },
+      "$wado-lang:web/dom-rect-read-only#height": (p0) => {
+        return p0.height;
+      },
+      "$wado-lang:web/dom-rect-read-only#top": (p0) => {
+        return p0.top;
+      },
+      "$wado-lang:web/dom-rect-read-only#right": (p0) => {
+        return p0.right;
+      },
+      "$wado-lang:web/dom-rect-read-only#bottom": (p0) => {
+        return p0.bottom;
+      },
+      "$wado-lang:web/dom-rect-read-only#left": (p0) => {
+        return p0.left;
+      },
+      "$wado-lang:web/dom-rect#new": (p0, p1, p2, p3) => {
+        return new globalThis.DOMRect(p0, p1, p2, p3);
+      },
+      "$wado-lang:web/dom-rect#from-rect": (p0, p1, p2, p3, p4, p5, p6, p7, p8) => {
+        return globalThis.DOMRect.fromRect((p0 === 0 ? undefined : { x: (p1 === 0 ? undefined : p2), y: (p3 === 0 ? undefined : p4), width: (p5 === 0 ? undefined : p6), height: (p7 === 0 ? undefined : p8) }));
+      },
+      "$wado-lang:web/dom-rect#set-x": (p0, p1) => {
+        p0.x = p1;
+      },
+      "$wado-lang:web/dom-rect#set-y": (p0, p1) => {
+        p0.y = p1;
+      },
+      "$wado-lang:web/dom-rect#set-width": (p0, p1) => {
+        p0.width = p1;
+      },
+      "$wado-lang:web/dom-rect#set-height": (p0, p1) => {
+        p0.height = p1;
+      },
+      "$wado-lang:web/trusted-html#to-json": (p0, $ret) => {
+        const $value = p0.toJSON();
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/html-canvas-element#width": (p0) => {
+        return p0.width;
+      },
+      "$wado-lang:web/html-canvas-element#set-width": (p0, p1) => {
+        p0.width = (p1 >>> 0);
+      },
+      "$wado-lang:web/html-canvas-element#height": (p0) => {
+        return p0.height;
+      },
+      "$wado-lang:web/html-canvas-element#set-height": (p0, p1) => {
+        p0.height = (p1 >>> 0);
+      },
+      "$wado-lang:web/html-canvas-element#to-data-url": (p0, p1, p2, $ret) => {
+        const $value = p0.toDataURL($string(p1, p2));
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#canvas": (p0) => {
+        return p0.canvas;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#get-context-attributes": (p0, $ret) => {
+        const $value = p0.getContextAttributes();
+        if ($value.alpha === null || $value.alpha === undefined) {
+          $view().setUint8($ret, 0);
+        } else {
+          $view().setUint8($ret, 1);
+          $view().setUint8($ret + 1, ($value.alpha ? 1 : 0));
+        }
+        if ($value.desynchronized === null || $value.desynchronized === undefined) {
+          $view().setUint8($ret + 2, 0);
+        } else {
+          $view().setUint8($ret + 2, 1);
+          $view().setUint8($ret + 3, ($value.desynchronized ? 1 : 0));
+        }
+        if ($value.colorSpace === null || $value.colorSpace === undefined) {
+          $view().setUint8($ret + 4, 0);
+        } else {
+          $view().setUint8($ret + 4, 1);
+          $view().setUint8($ret + 5, $case($ENUMS.PredefinedColorSpace, $value.colorSpace));
+        }
+        if ($value.colorType === null || $value.colorType === undefined) {
+          $view().setUint8($ret + 6, 0);
+        } else {
+          $view().setUint8($ret + 6, 1);
+          $view().setUint8($ret + 7, $case($ENUMS.CanvasColorType, $value.colorType));
+        }
+        if ($value.willReadFrequently === null || $value.willReadFrequently === undefined) {
+          $view().setUint8($ret + 8, 0);
+        } else {
+          $view().setUint8($ret + 8, 1);
+          $view().setUint8($ret + 9, ($value.willReadFrequently ? 1 : 0));
+        }
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#save": (p0) => {
+        p0.save();
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#restore": (p0) => {
+        p0.restore();
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#reset": (p0) => {
+        p0.reset();
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#is-context-lost": (p0) => {
+        return (p0.isContextLost() ? 1 : 0);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#scale": (p0, p1, p2) => {
+        p0.scale(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#rotate": (p0, p1) => {
+        p0.rotate(p1);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#translate": (p0, p1, p2) => {
+        p0.translate(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#transform": (p0, p1, p2, p3, p4, p5, p6) => {
+        p0.transform(p1, p2, p3, p4, p5, p6);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-transform-with-a-b-c-d-e-f": (p0, p1, p2, p3, p4, p5, p6) => {
+        p0.setTransform(p1, p2, p3, p4, p5, p6);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-transform-with-transform": (p0) => {
+        $core.exports[$SLOT_GET]($view().getUint32(p0, true)).setTransform(($view().getUint8(p0 + 8) === 0 ? undefined : ({ a: ($view().getUint8(p0 + 16) === 0 ? undefined : $view().getFloat64(p0 + 24, true)), b: ($view().getUint8(p0 + 32) === 0 ? undefined : $view().getFloat64(p0 + 40, true)), c: ($view().getUint8(p0 + 48) === 0 ? undefined : $view().getFloat64(p0 + 56, true)), d: ($view().getUint8(p0 + 64) === 0 ? undefined : $view().getFloat64(p0 + 72, true)), e: ($view().getUint8(p0 + 80) === 0 ? undefined : $view().getFloat64(p0 + 88, true)), f: ($view().getUint8(p0 + 96) === 0 ? undefined : $view().getFloat64(p0 + 104, true)), m11: ($view().getUint8(p0 + 112) === 0 ? undefined : $view().getFloat64(p0 + 120, true)), m12: ($view().getUint8(p0 + 128) === 0 ? undefined : $view().getFloat64(p0 + 136, true)), m21: ($view().getUint8(p0 + 144) === 0 ? undefined : $view().getFloat64(p0 + 152, true)), m22: ($view().getUint8(p0 + 160) === 0 ? undefined : $view().getFloat64(p0 + 168, true)), m41: ($view().getUint8(p0 + 176) === 0 ? undefined : $view().getFloat64(p0 + 184, true)), m42: ($view().getUint8(p0 + 192) === 0 ? undefined : $view().getFloat64(p0 + 200, true)) })));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#reset-transform": (p0) => {
+        p0.resetTransform();
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#global-alpha": (p0) => {
+        return p0.globalAlpha;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-global-alpha": (p0, p1) => {
+        p0.globalAlpha = p1;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#global-composite-operation": (p0, $ret) => {
+        const $value = p0.globalCompositeOperation;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-global-composite-operation": (p0, p1, p2) => {
+        p0.globalCompositeOperation = $string(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#image-smoothing-enabled": (p0) => {
+        return (p0.imageSmoothingEnabled ? 1 : 0);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-image-smoothing-enabled": (p0, p1) => {
+        p0.imageSmoothingEnabled = (p1 !== 0);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#image-smoothing-quality": (p0) => {
+        return $case($ENUMS.ImageSmoothingQuality, p0.imageSmoothingQuality);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-image-smoothing-quality": (p0, p1) => {
+        p0.imageSmoothingQuality = $ENUMS.ImageSmoothingQuality[p1];
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#stroke-style": (p0, $ret) => {
+        const $value = p0.strokeStyle;
+        if (typeof $value === "string") {
+          $view().setUint8($ret, 0);
+          $putString($ret + 4, $value);
+        } else if ($within($value, 24, 24)) {
+          $view().setUint8($ret, 1);
+          $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
+        } else if ($within($value, 25, 25)) {
+          $view().setUint8($ret, 2);
+          $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
+        } else {
+          throw new TypeError(`${$value} is no case of the union`);
+        }
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-stroke-style": (p0, p1, p2, p3) => {
+        p0.strokeStyle = (p1 === 0 ? $string(p2, p3) : p1 === 1 ? $core.exports[$SLOT_GET](p2) : $core.exports[$SLOT_GET](p2));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#fill-style": (p0, $ret) => {
+        const $value = p0.fillStyle;
+        if (typeof $value === "string") {
+          $view().setUint8($ret, 0);
+          $putString($ret + 4, $value);
+        } else if ($within($value, 24, 24)) {
+          $view().setUint8($ret, 1);
+          $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
+        } else if ($within($value, 25, 25)) {
+          $view().setUint8($ret, 2);
+          $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
+        } else {
+          throw new TypeError(`${$value} is no case of the union`);
+        }
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-fill-style": (p0, p1, p2, p3) => {
+        p0.fillStyle = (p1 === 0 ? $string(p2, p3) : p1 === 1 ? $core.exports[$SLOT_GET](p2) : $core.exports[$SLOT_GET](p2));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#create-linear-gradient": (p0, p1, p2, p3, p4) => {
+        return p0.createLinearGradient(p1, p2, p3, p4);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#create-radial-gradient": (p0, p1, p2, p3, p4, p5, p6) => {
+        return p0.createRadialGradient(p1, p2, p3, p4, p5, p6);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#create-conic-gradient": (p0, p1, p2, p3) => {
+        return p0.createConicGradient(p1, p2, p3);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#create-pattern": (p0, p1, p2, p3) => {
+        return (p0.createPattern(p1, $string(p2, p3)) ?? null);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#shadow-offset-x": (p0) => {
+        return p0.shadowOffsetX;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-shadow-offset-x": (p0, p1) => {
+        p0.shadowOffsetX = p1;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#shadow-offset-y": (p0) => {
+        return p0.shadowOffsetY;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-shadow-offset-y": (p0, p1) => {
+        p0.shadowOffsetY = p1;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#shadow-blur": (p0) => {
+        return p0.shadowBlur;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-shadow-blur": (p0, p1) => {
+        p0.shadowBlur = p1;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#shadow-color": (p0, $ret) => {
+        const $value = p0.shadowColor;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-shadow-color": (p0, p1, p2) => {
+        p0.shadowColor = $string(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#filter": (p0, $ret) => {
+        const $value = p0.filter;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-filter": (p0, p1, p2) => {
+        p0.filter = $string(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#clear-rect": (p0, p1, p2, p3, p4) => {
+        p0.clearRect(p1, p2, p3, p4);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#fill-rect": (p0, p1, p2, p3, p4) => {
+        p0.fillRect(p1, p2, p3, p4);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#stroke-rect": (p0, p1, p2, p3, p4) => {
+        p0.strokeRect(p1, p2, p3, p4);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#begin-path": (p0) => {
+        p0.beginPath();
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#fill-with-fill-rule": (p0, p1) => {
+        p0.fill($ENUMS.CanvasFillRule[p1]);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#fill-with-path-fill-rule": (p0, p1, p2) => {
+        p0.fill(p1, $ENUMS.CanvasFillRule[p2]);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#stroke": (p0) => {
+        p0.stroke();
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#stroke-with-path": (p0, p1) => {
+        p0.stroke(p1);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#clip-with-fill-rule": (p0, p1) => {
+        p0.clip($ENUMS.CanvasFillRule[p1]);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#clip-with-path-fill-rule": (p0, p1, p2) => {
+        p0.clip(p1, $ENUMS.CanvasFillRule[p2]);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#is-point-in-path-with-x-y-fill-rule": (p0, p1, p2, p3) => {
+        return (p0.isPointInPath(p1, p2, $ENUMS.CanvasFillRule[p3]) ? 1 : 0);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#is-point-in-path-with-path-x-y-fill-rule": (p0, p1, p2, p3, p4) => {
+        return (p0.isPointInPath(p1, p2, p3, $ENUMS.CanvasFillRule[p4]) ? 1 : 0);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#is-point-in-stroke-with-x-y": (p0, p1, p2) => {
+        return (p0.isPointInStroke(p1, p2) ? 1 : 0);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#is-point-in-stroke-with-path-x-y": (p0, p1, p2, p3) => {
+        return (p0.isPointInStroke(p1, p2, p3) ? 1 : 0);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#draw-focus-if-needed-with-element": (p0, p1) => {
+        p0.drawFocusIfNeeded(p1);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#draw-focus-if-needed-with-path-element": (p0, p1, p2) => {
+        p0.drawFocusIfNeeded(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#fill-text": (p0, p1, p2, p3, p4, p5, p6) => {
+        p0.fillText($string(p1, p2), p3, p4, (p5 === 0 ? undefined : p6));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#stroke-text": (p0, p1, p2, p3, p4, p5, p6) => {
+        p0.strokeText($string(p1, p2), p3, p4, (p5 === 0 ? undefined : p6));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#measure-text": (p0, p1, p2) => {
+        return p0.measureText($string(p1, p2));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#draw-image-with-dx-dy": (p0, p1, p2, p3) => {
+        p0.drawImage(p1, p2, p3);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#draw-image-with-dx-dy-dw-dh": (p0, p1, p2, p3, p4, p5) => {
+        p0.drawImage(p1, p2, p3, p4, p5);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#draw-image-with-sx-sy-sw-sh-dx-dy-dw-dh": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9) => {
+        p0.drawImage(p1, p2, p3, p4, p5, p6, p7, p8, p9);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#create-image-data-with-sw-sh-settings": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        return p0.createImageData(p1, p2, (p3 === 0 ? undefined : { colorSpace: (p4 === 0 ? undefined : $ENUMS.PredefinedColorSpace[p5]), pixelFormat: (p6 === 0 ? undefined : $ENUMS.ImageDataPixelFormat[p7]) }));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#create-image-data-with-image-data": (p0, p1) => {
+        return p0.createImageData(p1);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#get-image-data": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9) => {
+        return p0.getImageData(p1, p2, p3, p4, (p5 === 0 ? undefined : { colorSpace: (p6 === 0 ? undefined : $ENUMS.PredefinedColorSpace[p7]), pixelFormat: (p8 === 0 ? undefined : $ENUMS.ImageDataPixelFormat[p9]) }));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#put-image-data": (p0, p1, p2, p3) => {
+        p0.putImageData(p1, p2, p3);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#put-image-data-with-dirty-x-dirty-y-dirty-width-dirty-height": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        p0.putImageData(p1, p2, p3, p4, p5, p6, p7);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#line-width": (p0) => {
+        return p0.lineWidth;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-line-width": (p0, p1) => {
+        p0.lineWidth = p1;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#line-cap": (p0) => {
+        return $case($ENUMS.CanvasLineCap, p0.lineCap);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-line-cap": (p0, p1) => {
+        p0.lineCap = $ENUMS.CanvasLineCap[p1];
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#line-join": (p0) => {
+        return $case($ENUMS.CanvasLineJoin, p0.lineJoin);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-line-join": (p0, p1) => {
+        p0.lineJoin = $ENUMS.CanvasLineJoin[p1];
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#miter-limit": (p0) => {
+        return p0.miterLimit;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-miter-limit": (p0, p1) => {
+        p0.miterLimit = p1;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-line-dash": (p0, p1, p2) => {
+        p0.setLineDash($list(p1, p2, 8, (at) => $view().getFloat64(at, true)));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#get-line-dash": (p0, $ret) => {
+        const $value = p0.getLineDash();
+        $putList($ret, $value, 8, 8, (at, item) => {
+          $view().setFloat64(at, item, true);
+        });
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#line-dash-offset": (p0) => {
+        return p0.lineDashOffset;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-line-dash-offset": (p0, p1) => {
+        p0.lineDashOffset = p1;
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#lang": (p0, $ret) => {
+        const $value = p0.lang;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-lang": (p0, p1, p2) => {
+        p0.lang = $string(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#font": (p0, $ret) => {
+        const $value = p0.font;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-font": (p0, p1, p2) => {
+        p0.font = $string(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#text-align": (p0) => {
+        return $case($ENUMS.CanvasTextAlign, p0.textAlign);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-text-align": (p0, p1) => {
+        p0.textAlign = $ENUMS.CanvasTextAlign[p1];
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#text-baseline": (p0) => {
+        return $case($ENUMS.CanvasTextBaseline, p0.textBaseline);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-text-baseline": (p0, p1) => {
+        p0.textBaseline = $ENUMS.CanvasTextBaseline[p1];
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#direction": (p0) => {
+        return $case($ENUMS.CanvasDirection, p0.direction);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-direction": (p0, p1) => {
+        p0.direction = $ENUMS.CanvasDirection[p1];
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#letter-spacing": (p0, $ret) => {
+        const $value = p0.letterSpacing;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-letter-spacing": (p0, p1, p2) => {
+        p0.letterSpacing = $string(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#font-kerning": (p0) => {
+        return $case($ENUMS.CanvasFontKerning, p0.fontKerning);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-font-kerning": (p0, p1) => {
+        p0.fontKerning = $ENUMS.CanvasFontKerning[p1];
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#font-stretch": (p0) => {
+        return $case($ENUMS.CanvasFontStretch, p0.fontStretch);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-font-stretch": (p0, p1) => {
+        p0.fontStretch = $ENUMS.CanvasFontStretch[p1];
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#font-variant-caps": (p0) => {
+        return $case($ENUMS.CanvasFontVariantCaps, p0.fontVariantCaps);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-font-variant-caps": (p0, p1) => {
+        p0.fontVariantCaps = $ENUMS.CanvasFontVariantCaps[p1];
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#text-rendering": (p0) => {
+        return $case($ENUMS.CanvasTextRendering, p0.textRendering);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-text-rendering": (p0, p1) => {
+        p0.textRendering = $ENUMS.CanvasTextRendering[p1];
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#word-spacing": (p0, $ret) => {
+        const $value = p0.wordSpacing;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#set-word-spacing": (p0, p1, p2) => {
+        p0.wordSpacing = $string(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#close-path": (p0) => {
+        p0.closePath();
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#move-to": (p0, p1, p2) => {
+        p0.moveTo(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#line-to": (p0, p1, p2) => {
+        p0.lineTo(p1, p2);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#quadratic-curve-to": (p0, p1, p2, p3, p4) => {
+        p0.quadraticCurveTo(p1, p2, p3, p4);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#bezier-curve-to": (p0, p1, p2, p3, p4, p5, p6) => {
+        p0.bezierCurveTo(p1, p2, p3, p4, p5, p6);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#arc-to": (p0, p1, p2, p3, p4, p5) => {
+        p0.arcTo(p1, p2, p3, p4, p5);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#rect": (p0, p1, p2, p3, p4) => {
+        p0.rect(p1, p2, p3, p4);
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#round-rect": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14) => {
+        p0.roundRect(p1, p2, p3, p4, (p5 === 0 ? undefined : (p6 === 0 ? $f64(p7) : p6 === 1 ? { x: (Number(BigInt.asIntN(32, p7)) === 0 ? undefined : $f64(p8)), y: (p9 === 0 ? undefined : p10), z: (p11 === 0 ? undefined : p12), w: (p13 === 0 ? undefined : p14) } : $list(Number(BigInt.asIntN(32, p7)), Number(BigInt.asIntN(32, p8)), 72, (at) => ($view().getUint8(at) === 0 ? $view().getFloat64(at + 8, true) : ({ x: ($view().getUint8(at + 8) === 0 ? undefined : $view().getFloat64(at + 16, true)), y: ($view().getUint8(at + 24) === 0 ? undefined : $view().getFloat64(at + 32, true)), z: ($view().getUint8(at + 40) === 0 ? undefined : $view().getFloat64(at + 48, true)), w: ($view().getUint8(at + 56) === 0 ? undefined : $view().getFloat64(at + 64, true)) }))))));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#arc": (p0, p1, p2, p3, p4, p5, p6) => {
+        p0.arc(p1, p2, p3, p4, p5, (p6 !== 0));
+      },
+      "$wado-lang:web/canvas-rendering-context2-d#ellipse": (p0, p1, p2, p3, p4, p5, p6, p7, p8) => {
+        p0.ellipse(p1, p2, p3, p4, p5, p6, p7, (p8 !== 0));
+      },
+      "$wado-lang:web/canvas-gradient#add-color-stop": (p0, p1, p2, p3) => {
+        p0.addColorStop(p1, $string(p2, p3));
+      },
+      "$wado-lang:web/canvas-pattern#set-transform": (p0) => {
+        $core.exports[$SLOT_GET]($view().getUint32(p0, true)).setTransform(($view().getUint8(p0 + 8) === 0 ? undefined : ({ a: ($view().getUint8(p0 + 16) === 0 ? undefined : $view().getFloat64(p0 + 24, true)), b: ($view().getUint8(p0 + 32) === 0 ? undefined : $view().getFloat64(p0 + 40, true)), c: ($view().getUint8(p0 + 48) === 0 ? undefined : $view().getFloat64(p0 + 56, true)), d: ($view().getUint8(p0 + 64) === 0 ? undefined : $view().getFloat64(p0 + 72, true)), e: ($view().getUint8(p0 + 80) === 0 ? undefined : $view().getFloat64(p0 + 88, true)), f: ($view().getUint8(p0 + 96) === 0 ? undefined : $view().getFloat64(p0 + 104, true)), m11: ($view().getUint8(p0 + 112) === 0 ? undefined : $view().getFloat64(p0 + 120, true)), m12: ($view().getUint8(p0 + 128) === 0 ? undefined : $view().getFloat64(p0 + 136, true)), m21: ($view().getUint8(p0 + 144) === 0 ? undefined : $view().getFloat64(p0 + 152, true)), m22: ($view().getUint8(p0 + 160) === 0 ? undefined : $view().getFloat64(p0 + 168, true)), m41: ($view().getUint8(p0 + 176) === 0 ? undefined : $view().getFloat64(p0 + 184, true)), m42: ($view().getUint8(p0 + 192) === 0 ? undefined : $view().getFloat64(p0 + 200, true)) })));
+      },
+      "$wado-lang:web/path2-d#new": (p0, p1, p2, p3) => {
+        return new globalThis.Path2D((p0 === 0 ? undefined : (p1 === 0 ? $core.exports[$SLOT_GET](p2) : $string(p2, p3))));
+      },
+      "$wado-lang:web/path2-d#add-path": (p0) => {
+        $core.exports[$SLOT_GET]($view().getUint32(p0, true)).addPath($core.exports[$SLOT_GET]($view().getUint32(p0 + 4, true)), ($view().getUint8(p0 + 8) === 0 ? undefined : ({ a: ($view().getUint8(p0 + 16) === 0 ? undefined : $view().getFloat64(p0 + 24, true)), b: ($view().getUint8(p0 + 32) === 0 ? undefined : $view().getFloat64(p0 + 40, true)), c: ($view().getUint8(p0 + 48) === 0 ? undefined : $view().getFloat64(p0 + 56, true)), d: ($view().getUint8(p0 + 64) === 0 ? undefined : $view().getFloat64(p0 + 72, true)), e: ($view().getUint8(p0 + 80) === 0 ? undefined : $view().getFloat64(p0 + 88, true)), f: ($view().getUint8(p0 + 96) === 0 ? undefined : $view().getFloat64(p0 + 104, true)), m11: ($view().getUint8(p0 + 112) === 0 ? undefined : $view().getFloat64(p0 + 120, true)), m12: ($view().getUint8(p0 + 128) === 0 ? undefined : $view().getFloat64(p0 + 136, true)), m21: ($view().getUint8(p0 + 144) === 0 ? undefined : $view().getFloat64(p0 + 152, true)), m22: ($view().getUint8(p0 + 160) === 0 ? undefined : $view().getFloat64(p0 + 168, true)), m41: ($view().getUint8(p0 + 176) === 0 ? undefined : $view().getFloat64(p0 + 184, true)), m42: ($view().getUint8(p0 + 192) === 0 ? undefined : $view().getFloat64(p0 + 200, true)) })));
+      },
+      "$wado-lang:web/path2-d#close-path": (p0) => {
+        p0.closePath();
+      },
+      "$wado-lang:web/path2-d#move-to": (p0, p1, p2) => {
+        p0.moveTo(p1, p2);
+      },
+      "$wado-lang:web/path2-d#line-to": (p0, p1, p2) => {
+        p0.lineTo(p1, p2);
+      },
+      "$wado-lang:web/path2-d#quadratic-curve-to": (p0, p1, p2, p3, p4) => {
+        p0.quadraticCurveTo(p1, p2, p3, p4);
+      },
+      "$wado-lang:web/path2-d#bezier-curve-to": (p0, p1, p2, p3, p4, p5, p6) => {
+        p0.bezierCurveTo(p1, p2, p3, p4, p5, p6);
+      },
+      "$wado-lang:web/path2-d#arc-to": (p0, p1, p2, p3, p4, p5) => {
+        p0.arcTo(p1, p2, p3, p4, p5);
+      },
+      "$wado-lang:web/path2-d#rect": (p0, p1, p2, p3, p4) => {
+        p0.rect(p1, p2, p3, p4);
+      },
+      "$wado-lang:web/path2-d#round-rect": (p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14) => {
+        p0.roundRect(p1, p2, p3, p4, (p5 === 0 ? undefined : (p6 === 0 ? $f64(p7) : p6 === 1 ? { x: (Number(BigInt.asIntN(32, p7)) === 0 ? undefined : $f64(p8)), y: (p9 === 0 ? undefined : p10), z: (p11 === 0 ? undefined : p12), w: (p13 === 0 ? undefined : p14) } : $list(Number(BigInt.asIntN(32, p7)), Number(BigInt.asIntN(32, p8)), 72, (at) => ($view().getUint8(at) === 0 ? $view().getFloat64(at + 8, true) : ({ x: ($view().getUint8(at + 8) === 0 ? undefined : $view().getFloat64(at + 16, true)), y: ($view().getUint8(at + 24) === 0 ? undefined : $view().getFloat64(at + 32, true)), z: ($view().getUint8(at + 40) === 0 ? undefined : $view().getFloat64(at + 48, true)), w: ($view().getUint8(at + 56) === 0 ? undefined : $view().getFloat64(at + 64, true)) }))))));
+      },
+      "$wado-lang:web/path2-d#arc": (p0, p1, p2, p3, p4, p5, p6) => {
+        p0.arc(p1, p2, p3, p4, p5, (p6 !== 0));
+      },
+      "$wado-lang:web/path2-d#ellipse": (p0, p1, p2, p3, p4, p5, p6, p7, p8) => {
+        p0.ellipse(p1, p2, p3, p4, p5, p6, p7, (p8 !== 0));
+      },
+      "$wado-lang:web/text-metrics#width": (p0) => {
+        return p0.width;
+      },
+      "$wado-lang:web/text-metrics#actual-bounding-box-left": (p0) => {
+        return p0.actualBoundingBoxLeft;
+      },
+      "$wado-lang:web/text-metrics#actual-bounding-box-right": (p0) => {
+        return p0.actualBoundingBoxRight;
+      },
+      "$wado-lang:web/text-metrics#font-bounding-box-ascent": (p0) => {
+        return p0.fontBoundingBoxAscent;
+      },
+      "$wado-lang:web/text-metrics#font-bounding-box-descent": (p0) => {
+        return p0.fontBoundingBoxDescent;
+      },
+      "$wado-lang:web/text-metrics#actual-bounding-box-ascent": (p0) => {
+        return p0.actualBoundingBoxAscent;
+      },
+      "$wado-lang:web/text-metrics#actual-bounding-box-descent": (p0) => {
+        return p0.actualBoundingBoxDescent;
+      },
+      "$wado-lang:web/text-metrics#em-height-ascent": (p0) => {
+        return p0.emHeightAscent;
+      },
+      "$wado-lang:web/text-metrics#em-height-descent": (p0) => {
+        return p0.emHeightDescent;
+      },
+      "$wado-lang:web/text-metrics#hanging-baseline": (p0) => {
+        return p0.hangingBaseline;
+      },
+      "$wado-lang:web/text-metrics#alphabetic-baseline": (p0) => {
+        return p0.alphabeticBaseline;
+      },
+      "$wado-lang:web/text-metrics#ideographic-baseline": (p0) => {
+        return p0.ideographicBaseline;
+      },
+      "$wado-lang:web/image-data#new-with-sw-sh-settings": (p0, p1, p2, p3, p4, p5, p6) => {
+        return new globalThis.ImageData((p0 >>> 0), (p1 >>> 0), (p2 === 0 ? undefined : { colorSpace: (p3 === 0 ? undefined : $ENUMS.PredefinedColorSpace[p4]), pixelFormat: (p5 === 0 ? undefined : $ENUMS.ImageDataPixelFormat[p6]) }));
+      },
+      "$wado-lang:web/image-data#width": (p0) => {
+        return p0.width;
+      },
+      "$wado-lang:web/image-data#height": (p0) => {
+        return p0.height;
+      },
+      "$wado-lang:web/image-data#pixel-format": (p0) => {
+        return $case($ENUMS.ImageDataPixelFormat, p0.pixelFormat);
+      },
+      "$wado-lang:web/image-data#color-space": (p0) => {
+        return $case($ENUMS.PredefinedColorSpace, p0.colorSpace);
       },
       "$wado-lang:web/rejection#name": (p0, $ret) => {
         const $value = String(p0.name ?? "Error");

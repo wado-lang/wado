@@ -450,6 +450,19 @@ fn a_keyword_is_escaped_and_a_typedef_resolves() {
     assert!(code.contains("fn started(&self) -> f64;"), "{code}");
 }
 
+/// CSSOM leaves `CSSOMString` to be either string type, and each is a `String`.
+#[test]
+fn a_cssom_string_is_a_string() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[attribute("cssText", &plain("CSSOMString"), false)],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(code.contains("fn css_text(&self) -> String;"), "{code}");
+    assert_eq!(skipped, Vec::<String>::new());
+}
+
 #[test]
 fn the_global_yields_the_dom_effect_with_its_resource_typed_attributes() {
     let (code, _) = chain().generate();
