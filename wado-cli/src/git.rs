@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -14,7 +15,9 @@ use wado_lsp::host::discovery::{
 };
 use wado_manifest::{GitTagInfo, MANIFEST_FILENAME, Manifest, ProviderError};
 
+use crate::args::CliExit;
 use crate::cache::{hold, root};
+use crate::discover::checkout_root;
 use crate::registry::parse_version_tag;
 
 /// List a repository's semver tags via `git ls-remote --tags`.
@@ -300,6 +303,35 @@ fn ready_marker(worktree: &Path) -> PathBuf {
     PathBuf::from(marker)
 }
 
+/// Whether git ignores `path`, as `git check-ignore` answers: every source of
+/// ignore rules git reads, `.git/info/exclude` and `core.excludesFile`
+/// included. Outside a checkout, or with no `git` to ask, nothing is ignored,
+/// since no commit can then take the path either way.
+pub(crate) fn ignores(path: &Path) -> Result<bool, CliExit> {
+    let Some(checkout) = checkout_root(path) else {
+        return Ok(false);
+    };
+    let output = match Command::new("git")
+        .current_dir(checkout)
+        .args(["check-ignore", "-q", "--"])
+        .arg(path)
+        .output()
+    {
+        Ok(output) => output,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(CliExit::error(format!("running git check-ignore: {e}"))),
+    };
+    match output.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => Err(CliExit::error(format!(
+            "git check-ignore {}: {}",
+            path.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
 /// Run `git`, returning stdout on success. A missing `git` binary or a non-zero
 /// exit becomes a descriptive [`ProviderError`].
 fn run_git(cwd: Option<&Path>, args: &[&str]) -> Result<String, ProviderError> {
@@ -309,7 +341,7 @@ fn run_git(cwd: Option<&Path>, args: &[&str]) -> Result<String, ProviderError> {
     }
     cmd.args(args);
     let output = cmd.output().map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
+        if e.kind() == ErrorKind::NotFound {
             ProviderError::NotFound {
                 source: "git".to_string(),
                 message: "the `git` executable was not found on PATH".to_string(),

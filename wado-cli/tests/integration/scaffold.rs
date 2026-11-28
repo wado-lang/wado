@@ -4,12 +4,23 @@
 use predicates::prelude::*;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 use wado_manifest::WorkspaceManifest;
 
 use crate::common::wado_in;
 
 fn read(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// A git checkout at `dir`, which git itself answers for.
+fn git_init(dir: &Path) {
+    let status = Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(dir)
+        .status()
+        .unwrap();
+    assert!(status.success(), "git init failed");
 }
 
 #[test]
@@ -259,7 +270,7 @@ fn new_requires_a_directory() {
 #[test]
 fn new_under_a_workspace_adds_it_to_members() {
     let tmp = tempfile::tempdir().unwrap();
-    fs::create_dir(tmp.path().join(".git")).unwrap();
+    git_init(tmp.path());
     fs::write(
         tmp.path().join("wado-workspace.toml"),
         "# the tools\n[workspace]\nmembers = [\"a\", \"c\"]\n\n\
@@ -292,20 +303,22 @@ fn new_under_a_workspace_adds_it_to_members() {
 #[test]
 fn new_in_a_git_ignored_directory_stays_out_of_the_workspace() {
     let tmp = tempfile::tempdir().unwrap();
-    fs::create_dir(tmp.path().join(".git")).unwrap();
+    git_init(tmp.path());
     fs::write(tmp.path().join(".gitignore"), "scratch/\n").unwrap();
+    fs::write(tmp.path().join(".git/info/exclude"), "local/\n").unwrap();
     let ws = "[workspace]\nmembers = []\n\n[workspace.package]\nnamespace = \"acme\"\n";
     fs::write(tmp.path().join("wado-workspace.toml"), ws).unwrap();
 
-    wado_in(tmp.path())
-        .args(["new", "scratch/demo", "--namespace", "mine"])
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("ignored by git"));
-
+    for dir in ["scratch/demo", "local/demo"] {
+        wado_in(tmp.path())
+            .args(["new", dir, "--namespace", "mine"])
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("ignored by git"));
+        let manifest = read(&tmp.path().join(dir).join("wado.toml"));
+        assert!(manifest.contains("namespace = \"mine\""), "{manifest}");
+    }
     assert_eq!(read(&tmp.path().join("wado-workspace.toml")), ws);
-    let manifest = read(&tmp.path().join("scratch/demo/wado.toml"));
-    assert!(manifest.contains("namespace = \"mine\""), "{manifest}");
 }
 
 /// Only the part of the path the workspace holds is asked of git: a workspace
@@ -313,7 +326,7 @@ fn new_in_a_git_ignored_directory_stays_out_of_the_workspace() {
 #[test]
 fn new_joins_a_workspace_that_sits_in_a_git_ignored_directory() {
     let tmp = tempfile::tempdir().unwrap();
-    fs::create_dir(tmp.path().join(".git")).unwrap();
+    git_init(tmp.path());
     fs::write(tmp.path().join(".gitignore"), "scratch/\n").unwrap();
     let root = tmp.path().join("scratch/tools");
     fs::create_dir_all(&root).unwrap();

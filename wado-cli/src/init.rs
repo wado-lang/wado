@@ -12,7 +12,8 @@ use wado_manifest::{
 };
 
 use crate::args::{self, CliExit};
-use crate::discover::{checkout_root, is_git_ignored_below};
+use crate::discover::checkout_root;
+use crate::git;
 use crate::workspace::{member_entry, with_member, write_workspace};
 
 #[derive(Debug)]
@@ -214,7 +215,9 @@ pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit
                 joining: false,
                 root,
             }),
-            Some(_) if is_git_ignored_below(&root, &dir).map_err(CliExit::error)? => {
+            // Only what lies below the workspace root is asked: a workspace in
+            // ignored scratch space still takes members.
+            Some(_) if git::ignores(&dir)? && !git::ignores(&root)? => {
                 eprintln!(
                     "{} is ignored by git, so it does not join the workspace",
                     dir.display()

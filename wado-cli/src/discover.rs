@@ -625,33 +625,6 @@ pub(crate) fn checkout_root(path: &Path) -> Option<&Path> {
     path.ancestors().find(|dir| dir.join(".git").exists())
 }
 
-/// Whether git ignores the directory `dir` on the way down from `base`, both
-/// canonical: whether `dir` or a directory between it and `base` matches the
-/// `.gitignore` rules above it. `base` and what holds it are not asked, so a
-/// tree that itself sits in ignored scratch space ignores nothing of its own.
-/// Outside a checkout nothing is ignored.
-pub(crate) fn is_git_ignored_below(base: &Path, dir: &Path) -> Result<bool, WalkError> {
-    assert!(dir.starts_with(base), "`dir` must lie under `base`");
-    let Some(checkout) = checkout_root(dir) else {
-        return Ok(false);
-    };
-    let mut rules = Vec::new();
-    let mut level = checkout.to_path_buf();
-    for component in dir
-        .strip_prefix(checkout)
-        .expect("an ancestor is a prefix")
-        .components()
-    {
-        load_gitignore(&level, &mut rules)?;
-        level.push(component);
-        let below_base = level.starts_with(base) && level != base;
-        if below_base && is_ignored(&rules, &level, true) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 fn is_ignored(rules: &[GitignoreRule], path: &Path, is_dir: bool) -> bool {
     let mut ignored = false;
     for rule in rules {
@@ -679,32 +652,6 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::fixture::{one, touch, write_manifest};
-
-    #[test]
-    fn is_git_ignored_reads_each_gitignore_down_to_the_directory() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
-        fs::create_dir(root.join(".git")).unwrap();
-        fs::create_dir_all(root.join("a/b/c")).unwrap();
-        fs::create_dir_all(root.join("a/kept")).unwrap();
-        fs::write(root.join(".gitignore"), "b/\n").unwrap();
-        fs::write(root.join("a/.gitignore"), "kept\n").unwrap();
-
-        let ignored = |dir: &str| is_git_ignored_below(&root, &root.join(dir)).unwrap();
-        assert!(!ignored("a"));
-        assert!(ignored("a/b"));
-        assert!(ignored("a/b/c"), "under an ignored directory");
-        assert!(ignored("a/kept"), "by a nested .gitignore");
-        assert!(
-            !is_git_ignored_below(&root.join("a/b"), &root.join("a/b/c")).unwrap(),
-            "above the base"
-        );
-        let outside = tmp.path().parent().unwrap();
-        assert!(
-            !is_git_ignored_below(outside, outside).unwrap(),
-            "outside a checkout"
-        );
-    }
 
     fn names_of(root: &Path, paths: &[PathBuf]) -> BTreeSet<String> {
         paths
