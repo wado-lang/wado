@@ -513,6 +513,24 @@ impl<'a> Merged<'a> {
             }
         }
     }
+
+    /// Drop each dashed attribute whose camel-cased attribute is a member: the
+    /// two name one CSS property.
+    fn drop_dashed_aliases(&mut self) {
+        let attributes: IndexSet<&'a str> = self
+            .members
+            .iter()
+            .copied()
+            .filter_map(|member| match member {
+                Member::Attribute { name, .. } => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        self.members.retain(|member| {
+            !matches!(member, Member::Attribute { name, .. }
+                if name.contains('-') && attributes.contains(camel_cased(name).as_str()))
+        });
+    }
 }
 
 /// The types signatures name that the module declares, each once.
@@ -867,7 +885,27 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
             target.add(&mixin.members);
         }
     }
+    for iface in merged.values_mut() {
+        iface.drop_dashed_aliases();
+    }
     Ok(merged)
+}
+
+/// CSSOM's camel-cased attribute for the property a dashed attribute names:
+/// each `-` before a lowercase letter dropped, and the letter uppercased.
+fn camel_cased(dashed: &str) -> String {
+    let mut out = String::new();
+    let mut chars = dashed.chars().peekable();
+    while let Some(c) = chars.next() {
+        match chars.peek() {
+            Some(next) if c == '-' && next.is_ascii_lowercase() => {
+                out.push(next.to_ascii_uppercase());
+                chars.next();
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// The Wado type of a `WebIDL` scalar or string type.

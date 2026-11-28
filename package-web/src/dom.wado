@@ -484,12 +484,6 @@ pub variant TogglePopoverOptionsOrBool {
     AsBool(bool),
 }
 
-#[cm("wado-lang:web/types#trusted-html-or-string")]
-pub variant TrustedHtmlOrString {
-    AsTrustedHtml(TrustedHtml),
-    AsString(String),
-}
-
 #[cm("wado-lang:web/types#event-listener")]
 pub type EventListener = fn mut(Event) with Dom;
 
@@ -902,10 +896,10 @@ pub resource Element extends Node {
     fn get_attribute_ns(&self, namespace: Option<String>, local_name: String) -> Option<String>;
     #[cm("wado-lang:web/element#set-attribute")]
     #[cm_params("self", "qualified-name", "value")]
-    fn set_attribute(&self, qualified_name: String, value: TrustedHtmlOrString);
+    fn set_attribute(&self, qualified_name: String, value: String);
     #[cm("wado-lang:web/element#set-attribute-ns")]
     #[cm_params("self", "namespace", "qualified-name", "value")]
-    fn set_attribute_ns(&self, namespace: Option<String>, qualified_name: String, value: TrustedHtmlOrString);
+    fn set_attribute_ns(&self, namespace: Option<String>, qualified_name: String, value: String);
     #[cm("wado-lang:web/element#remove-attribute")]
     #[cm_params("self", "qualified-name")]
     fn remove_attribute(&self, qualified_name: String);
@@ -959,25 +953,19 @@ pub resource Element extends Node {
     fn set_html(&self, html: String);
     #[cm("wado-lang:web/element#set-html-unsafe")]
     #[cm_params("self", "html", "options")]
-    fn set_html_unsafe(&self, html: TrustedHtmlOrString, options: Option<SetHtmlUnsafeOptions> = null);
+    fn set_html_unsafe(&self, html: String, options: Option<SetHtmlUnsafeOptions> = null);
     #[cm("wado-lang:web/element#get-html")]
     #[cm_params("self", "options")]
     fn get_html(&self, options: Option<GetHtmlOptions> = null) -> String;
-    #[cm("wado-lang:web/element#inner-html")]
-    #[cm_params("self")]
-    fn inner_html(&self) -> TrustedHtmlOrString;
     #[cm("wado-lang:web/element#set-inner-html")]
     #[cm_params("self", "value")]
-    fn set_inner_html(&self, value: TrustedHtmlOrString);
-    #[cm("wado-lang:web/element#outer-html")]
-    #[cm_params("self")]
-    fn outer_html(&self) -> TrustedHtmlOrString;
+    fn set_inner_html(&self, value: String);
     #[cm("wado-lang:web/element#set-outer-html")]
     #[cm_params("self", "value")]
-    fn set_outer_html(&self, value: TrustedHtmlOrString);
+    fn set_outer_html(&self, value: String);
     #[cm("wado-lang:web/element#insert-adjacent-html")]
     #[cm_params("self", "position", "string")]
-    fn insert_adjacent_html(&self, position: String, string: TrustedHtmlOrString);
+    fn insert_adjacent_html(&self, position: String, string: String);
     #[cm("wado-lang:web/element#set-pointer-capture")]
     #[cm_params("self", "pointer-id")]
     fn set_pointer_capture(&self, pointer_id: i32);
@@ -1957,7 +1945,7 @@ pub resource Document extends Node {
     async fn exit_fullscreen(&self) -> AsyncCall<Result<(), Rejection>>;
     #[cm("wado-lang:web/document#parse-html-unsafe")]
     #[cm_params("html")]
-    fn parse_html_unsafe(html: TrustedHtmlOrString) -> Document;
+    fn parse_html_unsafe(html: String) -> Document;
     #[cm("wado-lang:web/document#parse-html")]
     #[cm_params("html")]
     fn parse_html(html: String) -> Document;
@@ -2029,10 +2017,10 @@ pub resource Document extends Node {
     fn close(&self);
     #[cm("wado-lang:web/document#write")]
     #[cm_params("self", "text")]
-    fn write(&self, text: List<TrustedHtmlOrString>);
+    fn write(&self, text: List<String>);
     #[cm("wado-lang:web/document#writeln")]
     #[cm_params("self", "text")]
-    fn writeln(&self, text: List<TrustedHtmlOrString>);
+    fn writeln(&self, text: List<String>);
     #[cm("wado-lang:web/document#has-focus")]
     #[cm_params("self")]
     fn has_focus(&self) -> bool;
@@ -2646,13 +2634,6 @@ pub resource DomRect extends DomRectReadOnly {
     fn set_height(&self, value: f64);
 }
 
-#[cm("wado-lang:web/trusted-html", linearity = "unrestricted", repr = "externref", classes = "22..=22")]
-pub resource TrustedHtml {
-    #[cm("wado-lang:web/trusted-html#to-json")]
-    #[cm_params("self")]
-    fn to_json(&self) -> String;
-}
-
 #[cm("wado-lang:web/html-canvas-element", linearity = "unrestricted", repr = "externref", classes = "8..=8")]
 pub resource HtmlCanvasElement extends HtmlElement {
     #[cm("wado-lang:web/html-canvas-element#width")]
@@ -2672,7 +2653,7 @@ pub resource HtmlCanvasElement extends HtmlElement {
     fn to_data_url(&self, type: String = "image/png") -> String;
 }
 
-#[cm("wado-lang:web/canvas-rendering-context2-d", linearity = "unrestricted", repr = "externref", classes = "23..=23")]
+#[cm("wado-lang:web/canvas-rendering-context2-d", linearity = "unrestricted", repr = "externref", classes = "22..=22")]
 pub resource CanvasRenderingContext2D {
     #[cm("wado-lang:web/canvas-rendering-context2-d#canvas")]
     #[cm_params("self")]
@@ -3022,21 +3003,21 @@ pub resource CanvasRenderingContext2D {
     fn create_image_data(&self);
 }
 
-#[cm("wado-lang:web/canvas-gradient", linearity = "unrestricted", repr = "externref", classes = "24..=24")]
+#[cm("wado-lang:web/canvas-gradient", linearity = "unrestricted", repr = "externref", classes = "23..=23")]
 pub resource CanvasGradient {
     #[cm("wado-lang:web/canvas-gradient#add-color-stop")]
     #[cm_params("self", "offset", "color")]
     fn add_color_stop(&self, offset: f64, color: String);
 }
 
-#[cm("wado-lang:web/canvas-pattern", linearity = "unrestricted", repr = "externref", classes = "25..=25")]
+#[cm("wado-lang:web/canvas-pattern", linearity = "unrestricted", repr = "externref", classes = "24..=24")]
 pub resource CanvasPattern {
     #[cm("wado-lang:web/canvas-pattern#set-transform")]
     #[cm_params("self", "transform")]
     fn set_transform(&self, transform: Option<DomMatrix2DInit> = null);
 }
 
-#[cm("wado-lang:web/path2-d", linearity = "unrestricted", repr = "externref", classes = "26..=26")]
+#[cm("wado-lang:web/path2-d", linearity = "unrestricted", repr = "externref", classes = "25..=25")]
 pub resource Path2D {
     #[cm("wado-lang:web/path2-d#new")]
     #[cm_params("path")]
@@ -3076,7 +3057,7 @@ pub resource Path2D {
     fn ellipse(&self, x: f64, y: f64, radius_x: f64, radius_y: f64, rotation: f64, start_angle: f64, end_angle: f64, counterclockwise: bool = false);
 }
 
-#[cm("wado-lang:web/text-metrics", linearity = "unrestricted", repr = "externref", classes = "27..=27")]
+#[cm("wado-lang:web/text-metrics", linearity = "unrestricted", repr = "externref", classes = "26..=26")]
 pub resource TextMetrics {
     #[cm("wado-lang:web/text-metrics#width")]
     #[cm_params("self")]
@@ -3116,7 +3097,7 @@ pub resource TextMetrics {
     fn ideographic_baseline(&self) -> f64;
 }
 
-#[cm("wado-lang:web/image-data", linearity = "unrestricted", repr = "externref", classes = "28..=28")]
+#[cm("wado-lang:web/image-data", linearity = "unrestricted", repr = "externref", classes = "27..=27")]
 pub resource ImageData {
     #[cm("wado-lang:web/image-data#new-with-sw-sh-settings")]
     #[cm_params("sw", "sh", "settings")]

@@ -23,14 +23,13 @@ const $CLASSES = [
   ["CSSStyleProperties", 19],
   ["DOMRectReadOnly", 20],
   ["DOMRect", 21],
-  ["TrustedHTML", 22],
   ["HTMLCanvasElement", 8],
-  ["CanvasRenderingContext2D", 23],
-  ["CanvasGradient", 24],
-  ["CanvasPattern", 25],
-  ["Path2D", 26],
-  ["TextMetrics", 27],
-  ["ImageData", 28],
+  ["CanvasRenderingContext2D", 22],
+  ["CanvasGradient", 23],
+  ["CanvasPattern", 24],
+  ["Path2D", 25],
+  ["TextMetrics", 26],
+  ["ImageData", 27],
 ];
 const $ENUMS = {
   AriaNotifyPriority: ["normal", "high"],
@@ -615,11 +614,11 @@ export function $glue() {
           $putString($ret + 4, $value);
         }
       },
-      "$wado-lang:web/element#set-attribute": (p0, p1, p2, p3, p4, p5) => {
-        p0.setAttribute($string(p1, p2), (p3 === 0 ? $core.exports[$SLOT_GET](p4) : $string(p4, p5)));
+      "$wado-lang:web/element#set-attribute": (p0, p1, p2, p3, p4) => {
+        p0.setAttribute($string(p1, p2), $string(p3, p4));
       },
-      "$wado-lang:web/element#set-attribute-ns": (p0, p1, p2, p3, p4, p5, p6, p7, p8) => {
-        p0.setAttributeNS((p1 === 0 ? undefined : $string(p2, p3)), $string(p4, p5), (p6 === 0 ? $core.exports[$SLOT_GET](p7) : $string(p7, p8)));
+      "$wado-lang:web/element#set-attribute-ns": (p0, p1, p2, p3, p4, p5, p6, p7) => {
+        p0.setAttributeNS((p1 === 0 ? undefined : $string(p2, p3)), $string(p4, p5), $string(p6, p7));
       },
       "$wado-lang:web/element#remove-attribute": (p0, p1, p2) => {
         p0.removeAttribute($string(p1, p2));
@@ -674,45 +673,21 @@ export function $glue() {
       "$wado-lang:web/element#set-html": (p0, p1, p2) => {
         p0.setHTML($string(p1, p2));
       },
-      "$wado-lang:web/element#set-html-unsafe": (p0, p1, p2, p3, p4, p5, p6) => {
-        p0.setHTMLUnsafe((p1 === 0 ? $core.exports[$SLOT_GET](p2) : $string(p2, p3)), (p4 === 0 ? undefined : { runScripts: (p5 === 0 ? undefined : (p6 !== 0)) }));
+      "$wado-lang:web/element#set-html-unsafe": (p0, p1, p2, p3, p4, p5) => {
+        p0.setHTMLUnsafe($string(p1, p2), (p3 === 0 ? undefined : { runScripts: (p4 === 0 ? undefined : (p5 !== 0)) }));
       },
       "$wado-lang:web/element#get-html": (p0, p1, p2, p3, $ret) => {
         const $value = p0.getHTML((p1 === 0 ? undefined : { serializableShadowRoots: (p2 === 0 ? undefined : (p3 !== 0)) }));
         $putString($ret, $value);
       },
-      "$wado-lang:web/element#inner-html": (p0, $ret) => {
-        const $value = p0.innerHTML;
-        if ($within($value, 22, 22)) {
-          $view().setUint8($ret, 0);
-          $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
-        } else if (typeof $value === "string") {
-          $view().setUint8($ret, 1);
-          $putString($ret + 4, $value);
-        } else {
-          throw new TypeError(`${$value} is no case of the union`);
-        }
+      "$wado-lang:web/element#set-inner-html": (p0, p1, p2) => {
+        p0.innerHTML = $string(p1, p2);
       },
-      "$wado-lang:web/element#set-inner-html": (p0, p1, p2, p3) => {
-        p0.innerHTML = (p1 === 0 ? $core.exports[$SLOT_GET](p2) : $string(p2, p3));
+      "$wado-lang:web/element#set-outer-html": (p0, p1, p2) => {
+        p0.outerHTML = $string(p1, p2);
       },
-      "$wado-lang:web/element#outer-html": (p0, $ret) => {
-        const $value = p0.outerHTML;
-        if ($within($value, 22, 22)) {
-          $view().setUint8($ret, 0);
-          $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
-        } else if (typeof $value === "string") {
-          $view().setUint8($ret, 1);
-          $putString($ret + 4, $value);
-        } else {
-          throw new TypeError(`${$value} is no case of the union`);
-        }
-      },
-      "$wado-lang:web/element#set-outer-html": (p0, p1, p2, p3) => {
-        p0.outerHTML = (p1 === 0 ? $core.exports[$SLOT_GET](p2) : $string(p2, p3));
-      },
-      "$wado-lang:web/element#insert-adjacent-html": (p0, p1, p2, p3, p4, p5) => {
-        p0.insertAdjacentHTML($string(p1, p2), (p3 === 0 ? $core.exports[$SLOT_GET](p4) : $string(p4, p5)));
+      "$wado-lang:web/element#insert-adjacent-html": (p0, p1, p2, p3, p4) => {
+        p0.insertAdjacentHTML($string(p1, p2), $string(p3, p4));
       },
       "$wado-lang:web/element#set-pointer-capture": (p0, p1) => {
         p0.setPointerCapture(p1);
@@ -2087,8 +2062,8 @@ export function $glue() {
         return $settle(p0.exitFullscreen(), 4, ($ret, $value) => {
         });
       },
-      "$wado-lang:web/document#parse-html-unsafe": (p0, p1, p2) => {
-        return globalThis.Document.parseHTMLUnsafe((p0 === 0 ? $core.exports[$SLOT_GET](p1) : $string(p1, p2)));
+      "$wado-lang:web/document#parse-html-unsafe": (p0, p1) => {
+        return globalThis.Document.parseHTMLUnsafe($string(p0, p1));
       },
       "$wado-lang:web/document#parse-html": (p0, p1) => {
         return globalThis.Document.parseHTML($string(p0, p1));
@@ -2166,10 +2141,10 @@ export function $glue() {
         p0.close();
       },
       "$wado-lang:web/document#write": (p0, p1, p2) => {
-        p0.write(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+        p0.write(...$list(p1, p2, 8, (at) => $string($view().getUint32(at, true), $view().getUint32(at + 4, true))));
       },
       "$wado-lang:web/document#writeln": (p0, p1, p2) => {
-        p0.writeln(...$list(p1, p2, 12, (at) => ($view().getUint8(at) === 0 ? $core.exports[$SLOT_GET]($view().getUint32(at + 4, true)) : $string($view().getUint32(at + 4, true), $view().getUint32(at + 4 + 4, true)))));
+        p0.writeln(...$list(p1, p2, 8, (at) => $string($view().getUint32(at, true), $view().getUint32(at + 4, true))));
       },
       "$wado-lang:web/document#has-focus": (p0) => {
         return (p0.hasFocus() ? 1 : 0);
@@ -2767,10 +2742,6 @@ export function $glue() {
       "$wado-lang:web/dom-rect#set-height": (p0, p1) => {
         p0.height = p1;
       },
-      "$wado-lang:web/trusted-html#to-json": (p0, $ret) => {
-        const $value = p0.toJSON();
-        $putString($ret, $value);
-      },
       "$wado-lang:web/html-canvas-element#width": (p0) => {
         return p0.width;
       },
@@ -2886,10 +2857,10 @@ export function $glue() {
         if (typeof $value === "string") {
           $view().setUint8($ret, 0);
           $putString($ret + 4, $value);
-        } else if ($within($value, 24, 24)) {
+        } else if ($within($value, 23, 23)) {
           $view().setUint8($ret, 1);
           $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
-        } else if ($within($value, 25, 25)) {
+        } else if ($within($value, 24, 24)) {
           $view().setUint8($ret, 2);
           $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
         } else {
@@ -2904,10 +2875,10 @@ export function $glue() {
         if (typeof $value === "string") {
           $view().setUint8($ret, 0);
           $putString($ret + 4, $value);
-        } else if ($within($value, 24, 24)) {
+        } else if ($within($value, 23, 23)) {
           $view().setUint8($ret, 1);
           $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
-        } else if ($within($value, 25, 25)) {
+        } else if ($within($value, 24, 24)) {
           $view().setUint8($ret, 2);
           $view().setUint32($ret + 4, $core.exports[$SLOT_PUT]($value), true);
         } else {

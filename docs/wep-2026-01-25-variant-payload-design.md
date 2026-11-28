@@ -194,143 +194,10 @@ if let Shape::Rectangle([w, h]) = shape {
 }
 ```
 
-## Union Type & Subset Binding
+## Union Types
 
-Beyond named variants, Wado supports anonymous union types with a powerful **subset binding** feature.
-
-### Union Types
-
-Union types are anonymous sum types with set semantics:
-
-```wado
-type A = { kind: "a", a: i32 };
-type B = { kind: "b", b: i32 };
-type C = { kind: "c", c: i32 };
-type D = { kind: "d", d: i32 };
-
-type AB = A | B;
-type CD = C | D;
-type ABCD = AB | CD;  // flattens to A | B | C | D
-```
-
-Internally, union types have a discriminant (tag) just like variants.
-
-#### Union with Primitives
-
-Union types work with any types, including primitives:
-
-```wado
-type IntOrString = i32 | String;
-
-fn process(x: IntOrString) {
-    if let n: i32 = x {
-        println(`int: ${n}`);
-    } else if let s: String = x {
-        println(`string: ${s}`);
-    }
-}
-```
-
-#### Union of Variant Cases
-
-Variant cases can be combined into union types:
-
-```wado
-variant Shape { Circle(f64), Rectangle([f64, f64]), Point }
-
-type CircleOrRect = Shape::Circle | Shape::Rectangle;
-
-fn process_non_point(s: CircleOrRect) {
-    // Only Circle or Rectangle, Point is excluded at type level
-}
-```
-
-### Normalization Rules
-
-Union types follow set semantics with normalization:
-
-```wado
-// Flattening
-type AB = A | B;
-type BA = B | A;
-type ABBA = AB | BA;      // normalizes to A | B (order: first occurrence)
-
-// Duplicate handling - becomes Union<A>, not bare A
-type AA = A | A;          // Union<A> - requires match binding to use
-
-// Why Union<A> instead of A?
-// Consistency: all union types require subset binding/match
-// Edge case, but consistent rules are more important
-```
-
-### Subset Binding
-
-**Subset binding** allows pattern matching against any subset of a union type:
-
-```wado
-fn process(x: ABCD) {
-    // Bind to a named subset type
-    if let ab: AB = x {
-        // ab: A | B
-        println("got A or B");
-    }
-
-    // Bind to an inline subset
-    if let bc: B | C = x {
-        // bc: B | C
-        println("got B or C");
-    }
-
-    // Bind to a single type
-    if let a: A = x {
-        // a: A
-        println(`got A with a=${a.a}`);
-    }
-}
-```
-
-Subset binding also works in match expressions:
-
-```wado
-match x {
-    ab: A | B => println("A or B"),
-    c: C => println("C"),
-    d: D => println("D"),
-}
-```
-
-This provides set-like operations that named variants cannot express:
-
-| Feature                 | `variant` | Union Type     |
-| ----------------------- | --------- | -------------- |
-| Named cases             | ✓         | ✗ (structural) |
-| Exhaustiveness checking | ✓         | ✓              |
-| Subset binding          | ✗         | ✓              |
-| Set operations          | ✗         | `\|` (union)   |
-
-### Comparison with TypeScript
-
-TypeScript's type narrowing:
-
-```typescript
-function process(x: A | B | C | D) {
-    if (isAB(x)) {
-        // x: A | B (via type guard)
-    }
-}
-```
-
-Wado's subset binding:
-
-```wado
-fn process(x: A | B | C | D) {
-    if let ab: A | B = x {
-        // ab: A | B (via subset binding)
-    }
-}
-```
-
-Wado's approach is more declarative - no need for manual type guard functions.
+Anonymous union types with subset binding, proposed here beside named
+variants, moved to [WEP: Union Types](./wep-2026-11-28-union-types.md).
 
 ## Edge Cases
 
@@ -463,15 +330,14 @@ if let Shape::Rectangle([w, _]) = shape {
 2. **Consistent syntax**: All non-unit payloads use `Name(payload)` form
 3. **Consistent access**: Payload is always at `.0`
 4. **Variant types**: Functions can accept specific variants, improving type safety
-5. **Subset binding**: Union types enable flexible pattern matching against type subsets
-6. **TypeScript familiarity**: Variant cases as types and union types align with TypeScript patterns
-7. **Minimal special rules**: Edge cases (empty variants, single-element tuples) just work
+5. **TypeScript familiarity**: Variant cases as types align with TypeScript patterns
+6. **Minimal special rules**: Edge cases (empty variants, single-element tuples) just work
 
 ### Trade-offs
 
 1. **More verbose**: `r.0.0` instead of `r.0` for tuple element access
 2. **Different from Rust**: Users from Rust may expect implicit tuple expansion and `Name { }` syntax
-3. **Implementation complexity**: Variant cases as types and subset binding require additional type system work
+3. **Implementation complexity**: Variant cases as types require additional type system work
 
 ### Comparison with Rust
 
@@ -482,7 +348,6 @@ if let Shape::Rectangle([w, _]) = shape {
 | Payload access    | `.0`, `.1` directly        | `.0.0`, `.0.1` (payload at `.0`) |
 | Variant as type   | Not supported              | `Shape::Circle` is a type        |
 | Empty variants    | Unit/tuple/struct differ   | Unit only: `Foo`                 |
-| Union types       | Not supported              | `A \| B` with subset binding     |
 
 ## Implementation Roadmap
 
@@ -499,15 +364,6 @@ if let Shape::Rectangle([w, _]) = shape {
 - [ ] Implicit coercion from variant case to variant type
 - [ ] Field access on variant case types (`.0` for payload)
 - [ ] Generic variant case types (`Option::<i32>::Some`)
-
-### Phase 4: Union Types & Subset Binding
-
-- [ ] Union type syntax (`A | B`)
-- [ ] Union type normalization (flattening, deduplication to `Union<A>`)
-- [ ] Discriminant generation for union types
-- [ ] Subset binding in `if let` (`if let x: A | B = abc`)
-- [ ] Subset binding in `match`
-- [ ] Exhaustiveness checking for union types
 
 ### Completed
 

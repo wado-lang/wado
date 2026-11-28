@@ -40,7 +40,6 @@ const SLICE = [
   "CSSStyleProperties",
   "DOMRectReadOnly",
   "DOMRect",
-  "TrustedHTML",
   "HTMLCanvasElement",
   "CanvasRenderingContext2D",
   "CanvasGradient",

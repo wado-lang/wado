@@ -543,6 +543,40 @@ fn a_member_declared_twice_is_one_member() {
     assert_eq!(skipped, Vec::<String>::new());
 }
 
+/// CSSOM's dashed attribute names the CSS property its camel-cased attribute
+/// does, as `CSSPositionTryDescriptors` declares both `margin-top` and
+/// `marginTop`.
+#[test]
+fn a_dashed_attribute_is_its_camel_cased_one() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("margin-top", &plain("CSSOMString"), false),
+            attribute("marginTop", &plain("CSSOMString"), false),
+            attribute("anchor-name", &plain("CSSOMString"), false),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert_eq!(code.matches("fn margin_top(&self)").count(), 1, "{code}");
+    // With no camel-cased attribute beside it, a dashed one binds itself.
+    assert!(code.contains("fn anchor_name(&self) -> String;"), "{code}");
+    assert_eq!(skipped, Vec::<String>::new());
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(glue.contains("const $value = p0.marginTop;"), "{glue}");
+    // A dashed name is no identifier, so the glue reaches it by its string.
+    assert!(
+        glue.contains("const $value = p0[\"anchor-name\"];"),
+        "{glue}"
+    );
+    assert!(
+        glue.contains("p0[\"anchor-name\"] = $string(p1, p2);"),
+        "{glue}"
+    );
+}
+
 /// `WebIDL` keeps a static operation apart from a regular one of its name, as
 /// Fetch's `Response.json` is both; a resource has one namespace for the two.
 #[test]

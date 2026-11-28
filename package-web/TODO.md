@@ -23,17 +23,17 @@ left before the slice can be everything:
 | Cause                                           | Definitions | Members | Arguments |
 | ----------------------------------------------- | ----------- | ------- | --------- |
 | a callback in a result                          | 5           | 954     | 0         |
-| a type outside the slice                        | 2           | 282     | 2         |
 | `any`                                           | 3           | 158     | 35        |
 | a buffer                                        | 15          | 172     | 5         |
 | a namespace member                              | 0           | 133     | 0         |
-| a dictionary                                    | 24          | 52      | 6         |
 | a special operation                             | 0           | 81      | 0         |
+| a dictionary                                    | 23          | 49      | 6         |
 | `object`                                        | 4           | 67      | 7         |
 | `[HTMLConstructor]`                             | 0           | 76      | 0         |
 | a redeclared inherited method                   | 0           | 56      | 0         |
 | an enum                                         | 19          | 24      | 0         |
 | an iteration declaration                        | 0           | 41      | 0         |
+| a type outside the slice                        | 0           | 36      | 1         |
 | `Promise<…>`                                    | 0           | 32      | 1         |
 | a callback the glue cannot call                 | 0           | 13      | 5         |
 | `record<…>`                                     | 0           | 15      | 0         |
@@ -43,7 +43,7 @@ left before the slice can be everything:
 | `ObservableArray<…>`                            | 0           | 4       | 0         |
 | `bigint`                                        | 0           | 2       | 0         |
 | `async_sequence<…>`                             | 0           | 1       | 0         |
-| Total                                           | 80          | 2189    | 62        |
+| Total                                           | 77          | 1940    | 61        |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
@@ -134,11 +134,16 @@ lower is then available to each interface the slice adds.
   `data` and `insert_before`
 - [x] Traversal: `NodeIterator` and `TreeWalker`; `SurfaceDom` answers
   `create_node_iterator`, `create_tree_walker` and their traversals
-- [ ] Tree: `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`
-- [ ] Style and classes: `DOMTokenList`, `CSSStyleDeclaration`, `DOMRect`
+- [x] Tree: `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`
+- [x] Style and classes: `DOMTokenList`, `CSSStyleDeclaration` and
+  `CSSStyleProperties`, `DOMRect`
+- [x] Canvas: `HTMLCanvasElement`, `CanvasRenderingContext2D`,
+  `CanvasGradient`, `CanvasPattern`, `Path2D`, `TextMetrics`, `ImageData`
+- [ ] Trusted Types: `TrustedHTML`, once
+  [WEP: Union Types](../docs/wep-2026-11-28-union-types.md) settles how a
+  string reaches a `(TrustedHTML or DOMString)` argument
 - [ ] Elements: `HTMLButtonElement`, `HTMLAnchorElement`, `HTMLFormElement`,
-  `HTMLSelectElement`, `HTMLTextAreaElement`, `HTMLCanvasElement`,
-  `CanvasRenderingContext2D`
+  `HTMLSelectElement`, `HTMLTextAreaElement`
 - [ ] Events: `UIEvent`, `MouseEvent`, `KeyboardEvent`, `InputEvent`,
   `FocusEvent`
 - [ ] Window: `Location`, `Storage`, `setTimeout` and `setInterval`
@@ -169,6 +174,11 @@ lower is then available to each interface the slice adds.
   `sequence<Node>` and `NodeList` do. The generator stops on it.
 - No member of the slice takes more than sixteen core values, so no test runs
   parameters read from memory against a host.
+- `HTMLCanvasElement.getContext` is not bound: it returns a union of every
+  rendering context, and the slice holds only `CanvasRenderingContext2D`. So
+  nothing reaches a `CanvasRenderingContext2D`, though its members bind.
+- `SurfaceDom` answers none of the members the canvas, style and collection
+  interfaces brought.
 - No member of the slice returns a union with an interface, a sequence or a
   dictionary case, so no test runs the glue telling those apart against a
   host.

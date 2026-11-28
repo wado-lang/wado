@@ -284,15 +284,19 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction, cl
     let receiver = || args.first().expect("a member of the receiver");
     let call_args = |skip: usize| args[skip..].join(", ");
     let value = match &js.member {
-        JsMember::Get(attribute) => format!("{}.{attribute}", receiver()),
-        JsMember::Set(attribute) => format!("{}.{attribute} = {}", receiver(), args[1]),
-        JsMember::Call(operation) => format!("{}.{operation}({})", receiver(), call_args(1)),
+        JsMember::Get(attribute) => format!("{}{}", receiver(), property(attribute)),
+        JsMember::Set(attribute) => {
+            format!("{}{} = {}", receiver(), property(attribute), args[1])
+        }
+        JsMember::Call(operation) => {
+            format!("{}{}({})", receiver(), property(operation), call_args(1))
+        }
         JsMember::Static { interface, name } => {
-            format!("globalThis.{interface}.{name}({})", call_args(0))
+            format!("globalThis.{interface}{}({})", property(name), call_args(0))
         }
         JsMember::New { interface } => format!("new globalThis.{interface}({})", call_args(0)),
         JsMember::Global => "globalThis".to_string(),
-        JsMember::GlobalGet(attribute) => format!("globalThis.{attribute}"),
+        JsMember::GlobalGet(attribute) => format!("globalThis{}", property(attribute)),
         JsMember::ReasonName => format!("String({}.name ?? \"Error\")", receiver()),
         JsMember::ReasonMessage => format!("String({0}.message ?? {0})", receiver()),
     };
@@ -334,6 +338,19 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction, cl
         writeln!(out, "        {line}").unwrap();
     }
     out.push_str("      },\n");
+}
+
+/// The access to the property `name`: `.name`, or `["name"]` where the name
+/// is no JavaScript identifier, as CSSOM's dashed attributes are not.
+fn property(name: &str) -> String {
+    if name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+    {
+        format!(".{name}")
+    } else {
+        format!("[{name:?}]")
+    }
 }
 
 /// The core parameters of the function being written, named in order.
