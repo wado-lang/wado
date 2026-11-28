@@ -55,8 +55,8 @@ struct Answer {
 /// Reports `reviewed`, a review of `change` in the tree at `w` checked out at
 /// `commit`, by its steps: each reproduction that reports a finding, in the
 /// tree as its reproducer left it, and then the review keeps as findings only
-/// those a test reproduced again alone. A review
-/// with no reproductions, which ran nothing, is reported whole. A step that
+/// those a test reproduced again alone, where `w` can run one. A review with
+/// no reproductions, which ran nothing, is reported whole. A step that
 /// fails to report is named in the error and the others are still reported.
 /// What `model` took is added to `spent`.
 pub fn report_all(
@@ -84,7 +84,7 @@ pub fn report_all(
             errors.push(`reproduction ${i + 1}: ${e}`);
         }
         for let f of &tried.findings {
-            if f.repro matches { Some(r) && r.verified } {
+            if w.runner matches { null } || f.repro matches { Some(r) && r.verified } {
                 verified.push(*f);
             }
         }

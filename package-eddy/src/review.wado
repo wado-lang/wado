@@ -131,6 +131,9 @@ pub struct Reviewed {
     pub searches: List<Reviewed> = [],
     /// What the triage kept, or the one candidate a reproduction tried.
     pub candidates: List<Finding> = [],
+    /// Why the triage's call failed, which leaves the candidates as the
+    /// searches found them, in their order.
+    pub triage_error: Option<String> = null,
     /// One per candidate kept, where the workspace runs code. Its findings
     /// are the candidate as a run showed it, or none.
     pub reproductions: List<Reviewed> = [],
@@ -444,7 +447,8 @@ fn triaged(
         },
         Err(e) => Reviewed {
             turns: 1,
-            error: Some(`the triage failed: ${e}`),
+            candidates: *candidates,
+            triage_error: Some(e),
             usage: Some(usage),
         },
     };

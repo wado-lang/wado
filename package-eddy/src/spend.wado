@@ -5,7 +5,10 @@
 //! Every request writes to the cache what the turn before it added and reads
 //! back everything earlier. What a turn added is charged to that turn's calls,
 //! in proportion to the bytes each returned. Each later read is split over
-//! the additions it read, in proportion to their tokens. So a large result
+//! the additions it read, in proportion to how much each grew the prompt: the
+//! first request's prompt is the system, the tools and the task, some of it
+//! read from a cache another agent wrote, and a write after the cache lapsed
+//! adds only what the turn added. So a large result
 //! read early costs once to write and again on every turn after it, and the
 //! parts add up to the review's cost exactly.
 
@@ -40,22 +43,19 @@ impl Spend {
 }
 
 /// What each step of `reviewed`, all on `model`, spent: each search, the
-/// triage, then each reproduction. `null` for a model with no listed price.
+/// triage where one ran, then each reproduction. `null` for a model with no
+/// listed price.
 pub fn spends(model: &String, reviewed: &Reviewed) -> Option<List<Spend>> {
     let mut out: List<Spend> = [];
     for let s of &reviewed.searches {
         out.push(spend(model, &`search ${s.focus}`, s)?);
     }
-    // A record written before the triage held a reviewer that confirmed the
-    // searches, and one before the searches a single reviewer.
-    let name = if !reviewed.candidates.is_empty() {
-        "triage";
-    } else if reviewed.searches.is_empty() {
-        "review";
-    } else {
-        "confirm";
-    };
-    out.push(spend(model, &name, reviewed)?);
+    // A record written before the searches holds a single reviewer.
+    if reviewed.searches.is_empty() {
+        out.push(spend(model, &"review", reviewed)?);
+    } else if reviewed.turns > 0 {
+        out.push(spend(model, &"triage", reviewed)?);
+    }
     for let [i, r] of reviewed.reproductions.into_iter().enumerate() {
         let tried = if r.candidates.is_empty() { "" } else { ` ${r.candidates[0].file}` };
         out.push(spend(model, &`reproduce ${i + 1}${tried}`, &r)?);
@@ -74,24 +74,25 @@ fn spend(model: &String, name: &String, r: &Reviewed) -> Option<Spend> {
         }
         return Some(s);
     }
-    // The tokens each request added to the conversation, and what each costs
-    // in all: its write, and its share of every later read.
+    // The tokens each request grew the prompt by, and what each costs in all:
+    // its write, and its share of every later read.
     let mut added: List<f64> = [];
     let mut dollars: List<f64> = [];
     let mut earlier = 0.0;
     for let [j, req] of r.requests.into_iter().enumerate() {
         let c = charges(model, &req.usage)?;
         s.charge(&"output", c.output);
-        if earlier == 0.0 {
+        if j == 0 {
             s.charge(&"prompt", c.read);
         } else {
             for let k of 0..<j {
                 dollars[k] += c.read * added[k] / earlier;
             }
         }
-        let tokens = (req.usage.input_tokens + req.usage.cache_creation_input_tokens) as f64;
-        added.push(tokens);
-        earlier += tokens;
+        let u = &req.usage;
+        let prompt = (u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens) as f64;
+        added.push(f64::max(0.0, prompt - earlier));
+        earlier = f64::max(earlier, prompt);
         dollars.push(c.input + c.write);
     }
     s.charge(&"prompt", dollars[0]);
@@ -184,6 +185,26 @@ test "a review's spend adds up to its cost, and a result is charged for every re
     assert f64::abs(s.parts["Read"] - 7.7) < 1e-9;
 }
 
+test "a prompt read from another agent's cache is charged to the prompt, every time it is read" {
+    let requests: List<Request> = [
+        Request { started: 0.0, usage: Usage { cache_read_input_tokens: 1_000_000 } },
+        Request {
+            started: 1.0,
+            usage: Usage { cache_read_input_tokens: 1_000_000, cache_creation_input_tokens: 1_000_000 },
+        },
+        Request { started: 2.0, usage: Usage { cache_read_input_tokens: 2_000_000 } },
+    ];
+    let calls: List<Call> = [
+        Call { name: "Read", input: Value::Null, is_error: false, turn: 1, bytes: 10 },
+    ];
+    let r = Reviewed { turns: 3, requests, calls };
+    let s = spend(&"claude-opus-5-5", &"review", &r).unwrap();
+    // Three reads of the prompt at $0.20; the Read result written ($5) and
+    // read once, as half of the last request ($0.20).
+    assert f64::abs(s.parts["prompt"] - 0.6) < 1e-9;
+    assert f64::abs(s.parts["Read"] - 5.2) < 1e-9;
+}
+
 test "a record that kept no requests is spent by kind of token alone" {
     let r = Reviewed { turns: 2, usage: Some(Usage { output_tokens: 1_000_000, cache_read_input_tokens: 5_000_000 }) };
     let s = spend(&"claude-opus-5-5", &"review", &r).unwrap();
@@ -211,11 +232,10 @@ test "a split review is spent search by search, then by the triage and each repr
     assert report.starts_with("spend: $60.0000\n  search code: $20.0000 in 1 turns (output $20.0000, ");
     assert report.contains("\n  triage: $20.0000 in 1 turns (output $20.0000, ");
     assert report.contains("\n  reproduce 1 a.rs: $20.0000 in 1 turns (output $20.0000, ");
-    let confirmed = Reviewed {
-        ..one,
+    let untriaged = Reviewed {
         searches: [
             Reviewed { ..one, focus: "code" },
         ],
     };
-    assert spend_report(&spends(&"claude-opus-5-5", &confirmed).unwrap()).contains("\n  confirm: ");
+    assert !spend_report(&spends(&"claude-opus-5-5", &untriaged).unwrap()).contains("triage");
 }

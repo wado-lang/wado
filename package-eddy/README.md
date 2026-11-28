@@ -41,7 +41,8 @@ The steps run one after another, so a review takes longer than a single
 reviewer would.
 
 The findings go to stdout as JSON. Each carries its `repro`, and only a finding
-whose test reproduced it again alone is reported; the record keeps the others:
+whose test reproduced it again alone is reported; the record keeps the others.
+Under `--no-run` the candidates are reported unreproduced. A `repro` holds:
 
 - `patch` is the test it wrote, as a diff against the reviewed commit.
 - `run` is the command that runs it: `cargo`, `mise` for a task of the

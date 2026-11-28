@@ -173,7 +173,6 @@ ${commits.trim()}`;
             options.effort,
         );
     };
-    // A report that fails leaves the findings as the reviewer worded them.
     let mut report_usage = Usage {};
     let report_error: Option<String> = match &result.error {
         Some(_) => null,
@@ -213,9 +212,13 @@ ${commits.trim()}`;
     // ever add files. The name sorts by when the review ended.
     let path = fs::join(&records, `${Instant::now().epoch_milliseconds()}-${token_hex(4)}.json`);
     fs::write(&path, &to_bytes_pretty(&attempt).unwrap()).unwrap();
+    let reported = if options.no_run { "reported unreproduced" } else { "reproduced alone" };
     eprintln(
-        `recorded in ${path}: ${result.searches.len()} searches, ${result.candidates.len()} candidates kept, ${result.reproductions.len()} tried, ${result.findings.len()} reproduced alone, ${result.total_turns()} turns`,
+        `recorded in ${path}: ${result.searches.len()} searches, ${result.candidates.len()} candidates kept, ${result.reproductions.len()} tried, ${result.findings.len()} ${reported}, ${result.total_turns()} turns`,
     );
+    if let Some(e) = &result.triage_error {
+        eprintln(`eddy: the triage failed, so the first candidates the searches found were kept: ${*e}`);
+    }
     // Computed here rather than recorded: a price changes, and the tokens a
     // review took do not.
     let cost = cost_summary(&[

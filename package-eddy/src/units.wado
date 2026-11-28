@@ -6,8 +6,9 @@
 //!
 //! Definitions are found by layout, which `rustfmt` and `wado format` fix: a
 //! header line starts an item, together with the comments and attributes
-//! right above it, and the first line after it that closes a brace at the
-//! header's indent ends it.
+//! right above it, and the brackets after it end it, at the `}` that closes
+//! its body or a `;` outside every bracket. A scan of the strings and comments
+//! keeps the text in them from reading as code.
 
 use { HashMap } from "core:collections";
 use { new_side } from "./diff.wado";
@@ -41,6 +42,8 @@ struct Item {
     start: i32,
     end: i32,
     is_fn: bool,
+    /// A test, or a module of them: the lines it holds are test code.
+    is_test: bool = false,
 }
 
 /// One part of a file to review.
@@ -56,12 +59,15 @@ pub struct Unit {
     /// The lines, numbered, those the change added marked `+` and those it
     /// removed shown unnumbered as `-`, then the definitions it calls.
     pub text: String,
+    /// Whether a test or a module of tests holds it.
+    pub in_test: bool = false,
 }
 
 impl Unit {
     /// Whether the unit is a test, which a review reads after the code.
     pub fn is_test(&self) -> bool {
-        return self.name.starts_with("test")
+        return self.in_test
+            || self.file.starts_with("tests/")
             || self.file.contains("/tests/")
             || self.file.ends_with("_test.wado")
             || self.file.ends_with("_test.rs");
@@ -80,16 +86,22 @@ pub fn units(diff: &String, sources: &HashMap<String, String>) -> List<Unit> {
         let lines: List<String> = source.lines().map(|l| l.to_string()).collect();
         let items = items_of(&lines);
         let mut spans: List<[i32, i32]> = [];
-        for let line of 1..=lines.len() {
-            if !touched.touches(line) || lines[line - 1].trim().is_empty() && !touched.removed.contains_key(line) {
+        // Past the last line: what the change removed at the end of the file.
+        for let line of 1..=lines.len() + 1 {
+            if !touched.touches(line) {
                 continue;
             }
-            if spans.into_iter().any(|s| s[0] <= line && line <= s[1]) {
+            let at = i32::min(line, lines.len());
+            if line == at && lines[line - 1].trim().is_empty() && !touched.removed.contains_key(line) {
                 continue;
             }
-            let [name, start, end] = span_of(&items, line, lines.len());
+            if spans.into_iter().any(|s| s[0] <= at && at <= s[1]) {
+                continue;
+            }
+            let [name, start, end] = span_of(&items, at, lines.len());
             spans.push([start, end]);
-            out.push(unit(file, &name, start, end, &lines, &items, touched));
+            let in_test = items.into_iter().any(|it| it.is_test && it.start <= at && at <= it.end);
+            out.push(Unit { ..unit(file, &name, start, end, &lines, &items, touched), in_test });
         }
     }
     out.sort_by(|a, b| if a.is_test() != b.is_test() {
@@ -111,15 +123,18 @@ fn unit(
 ) -> Unit {
     let mut text = "";
     let mut changed = 0;
-    for let n of start..=end {
+    let tail = if end == lines.len() { 1 } else { 0 };
+    for let n of start..=end + tail {
         if touched.touches(n) {
             changed += 1;
         }
         for let l of touched.removed.get(n).unwrap_or([]) {
             text.push_str(`       -${l}\n`);
         }
-        let mark = if touched.added.contains(&n) { "+" } else { " " };
-        text.push_str(`${n:>6}${mark}${lines[n - 1]}\n`);
+        if n <= lines.len() {
+            let mark = if touched.added.contains(&n) { "+" } else { " " };
+            text.push_str(`${n:>6}${mark}${lines[n - 1]}\n`);
+        }
     }
     let called = called_text(lines, items, start, end);
     if !called.is_empty() {
@@ -150,7 +165,7 @@ fn called_text(lines: &List<String>, items: &List<Item>, start: i32, end: i32) -
             body.push_str(`${n:>6} ${lines[n - 1]}\n`);
         }
         if out.len() + body.len() > CALLED_BYTES {
-            break;
+            continue;
         }
         out.push_str(&body);
     }
@@ -207,48 +222,157 @@ fn span_of(items: &List<Item>, line: i32, count: i32) -> [String, i32, i32] {
 
 /// The items of a formatted Rust or Wado file of `lines`.
 fn items_of(lines: &List<String>) -> List<Item> {
+    let mut scan = Scan {};
+    let mut starts_in_code: List<bool> = [];
+    let mut marks: List<List<char>> = [];
+    for let l of lines {
+        starts_in_code.push(scan.in_code());
+        marks.push(scan.marks(l));
+    }
     let mut out: List<Item> = [];
     for let i of 0..<lines.len() {
-        let line = &lines[i];
-        let body = line.trim_start();
-        let Some(name) = item_name(&body.to_string()) else {
+        if !starts_in_code[i] {
+            continue;
+        }
+        let Some(name) = item_name(&lines[i].trim_start().to_string()) else {
             continue;
         };
-        let indent = line.substr_bytes(0, line.len() - body.len());
-        let mut end = i;
-        if !ends_item(line) {
-            let close = `${indent}}`;
-            for let j of i + 1..<lines.len() {
-                if lines[j].starts_with(&close) {
-                    end = j;
-                    break;
-                }
-            }
-        }
         let mut start = i;
-        while start > 0 && is_preamble(&lines[start - 1]) {
+        let mut tested = name.starts_with("test") || name == "mod tests";
+        while start > 0 && starts_in_code[start - 1] && is_preamble(&lines[start - 1]) {
             start -= 1;
+            let t = lines[start].trim();
+            tested = tested || t.starts_with("#[") && (t.ends_with("test]") || t == "#[cfg(test)]");
         }
         out.push(Item {
             is_fn: name.starts_with("fn ") || name.starts_with("test"),
+            is_test: tested,
             name,
             start: start + 1,
-            end: end + 1,
+            end: item_end(&marks, i) + 1,
         });
     }
     return out;
+}
+
+/// The line, from 0, that ends the item whose header is line `header`: the
+/// `}` that closes a brace opened outside every bracket, or a `;` outside
+/// every bracket.
+fn item_end(marks: &List<List<char>>, header: i32) -> i32 {
+    let mut depth = 0;
+    let mut braced = false;
+    for let j of header..<marks.len() {
+        for let m of &marks[j] {
+            if *m == ';' {
+                if depth == 0 {
+                    return j;
+                }
+            } else if *m == '(' || *m == '[' || *m == '{' {
+                if depth == 0 {
+                    braced = *m == '{';
+                }
+                depth += 1;
+            } else {
+                depth -= 1;
+                if depth <= 0 && braced || depth < 0 {
+                    return j;
+                }
+            }
+        }
+    }
+    return marks.len() - 1;
+}
+
+/// Where a scan of source text stands between lines: in code, in a string
+/// `close` ends, where a backslash escapes unless the string is raw, or in a
+/// block comment.
+struct Scan {
+    close: String = "",
+    raw: bool = false,
+    in_comment: bool = false,
+}
+
+impl Scan {
+    fn in_code(&self) -> bool {
+        return self.close.is_empty() && !self.in_comment;
+    }
+
+    /// The brackets and semicolons of `line` that are code, read from where
+    /// the lines before it left the scan; the scan moves past the line.
+    fn marks(&mut self, line: &String) -> List<char> {
+        let cs: List<char> = line.chars().collect();
+        let mut out: List<char> = [];
+        let mut i = 0;
+        while i < cs.len() {
+            let c = cs[i];
+            if self.in_comment {
+                if c == '*' && i + 1 < cs.len() && cs[i + 1] == '/' {
+                    self.in_comment = false;
+                    i += 1;
+                }
+            } else if !self.close.is_empty() {
+                if c == '\\' && !self.raw {
+                    i += 1;
+                } else if closes_at(&cs, i, &self.close) {
+                    i += self.close.len() - 1;
+                    self.close = "";
+                }
+            } else if c == '/' && i + 1 < cs.len() && cs[i + 1] == '/' {
+                break;
+            } else if c == '/' && i + 1 < cs.len() && cs[i + 1] == '*' {
+                self.in_comment = true;
+                i += 1;
+            } else if c == '"' || c == '`' {
+                let mut hashes = 0;
+                while hashes < i && cs[i - 1 - hashes] == '#' {
+                    hashes += 1;
+                }
+                let before = i - hashes;
+                let r_prefix = before > 0 && cs[before - 1] == 'r' && (before == 1 || !is_word(cs[before - 2]) || cs[before - 2] == 'b');
+                self.raw = hashes > 0 || r_prefix;
+                self.close = `${c}`;
+                for let _ of 0..<hashes {
+                    self.close.push('#');
+                }
+            } else if c == '\'' {
+                // A char literal; a lifetime has no closing quote right after.
+                if i + 1 < cs.len() && cs[i + 1] == '\\' {
+                    i += 3;
+                    while i < cs.len() && cs[i] != '\'' {
+                        i += 1;
+                    }
+                } else if i + 2 < cs.len() && cs[i + 2] == '\'' {
+                    i += 2;
+                }
+            } else if c == '(' || c == '[' || c == '{' || c == ')' || c == ']' || c == '}' || c == ';' {
+                out.push(c);
+            }
+            i += 1;
+        }
+        return out;
+    }
+}
+
+fn is_word(c: char) -> bool {
+    return c.is_ascii_alphanumeric() || c == '_';
+}
+
+/// Whether `cs` holds `close` at `i`.
+fn closes_at(cs: &List<char>, i: i32, close: &String) -> bool {
+    let mut k = i;
+    for let c of close.chars() {
+        if k >= cs.len() || cs[k] != c {
+            return false;
+        }
+        k += 1;
+    }
+    return true;
 }
 
 /// Whether `line` belongs to the item below it: a comment or an attribute.
 fn is_preamble(line: &String) -> bool {
     let t = line.trim_start();
     return t.starts_with("//") || t.starts_with("#[");
-}
-
-/// Whether `line`, a header, holds its whole item.
-fn ends_item(line: &String) -> bool {
-    let t = line.trim_end();
-    return t.ends_with(";") || t.ends_with("}") && t.contains("{");
 }
 
 /// The kind and name of the item a line `body`, without its indent, starts,
@@ -298,33 +422,42 @@ fn item_name(body: &String) -> Option<String> {
 fn touched_files(diff: &String) -> HashMap<String, Touched> {
     let mut out = HashMap::<String, Touched>::new();
     let [mut file, mut n] = ["", 0];
+    let mut in_hunk = false;
     let mut pending: List<String> = [];
     for let l of diff.lines() {
         if l.starts_with("diff --git ") {
-            file = "";
-        } else if let Some(path) = l.strip_prefix("+++ b/") {
+            removed_before(&mut out, &file, n, &mut pending);
+            [file, in_hunk] = ["", false];
+        } else if !in_hunk && let Some(path) = l.strip_prefix("+++ b/") {
             file = path.to_string();
             out.try_insert(file, Touched { added: [], removed: HashMap::<i32, List<String>>::new() });
-        } else if file.is_empty() || l.starts_with("--- ") || l.starts_with("\\") {
-            continue;
-        } else if let Some(hunk) = l.strip_prefix("@@ ") {
+        } else if let Some(hunk) = l.strip_prefix("@@ ") && !file.is_empty() {
+            removed_before(&mut out, &file, n, &mut pending);
             n = new_side(hunk.to_string())[0];
-            pending = [];
+            in_hunk = true;
+        } else if !in_hunk || l.starts_with("\\") {
+            continue;
         } else if let Some(gone) = l.strip_prefix("-") {
             pending.push(gone.to_string());
         } else {
-            let t = &mut out[file];
-            if !pending.is_empty() {
-                t.removed.try_insert(n, pending);
-                pending = [];
-            }
+            removed_before(&mut out, &file, n, &mut pending);
             if l.starts_with("+") {
-                t.added.push(n);
+                out[file].added.push(n);
             }
             n += 1;
         }
     }
+    removed_before(&mut out, &file, n, &mut pending);
     return out;
+}
+
+/// Records `pending`, the lines removed just before line `n` of `file`, and
+/// empties it.
+fn removed_before(out: &mut HashMap<String, Touched>, file: &String, n: i32, pending: &mut List<String>) {
+    if !pending.is_empty() {
+        out[*file].removed.try_insert(n, *pending);
+        *pending = [];
+    }
 }
 
 test "a change is read by the definitions it touched, whole, with what it added and removed marked" {
@@ -386,8 +519,54 @@ test "an item header is read past its modifiers, and a line holding a whole item
     assert item_name(&"impl<T: Ord> Display for List<T> {") == Some("impl<T: Ord> Display for List<T>");
     assert item_name(&"test \"adds\" {") == Some("test \"adds\"");
     assert item_name(&"let fn_x = 1;") matches { null };
-    assert ends_item(&"struct A;") && ends_item(&"fn f() {}") && ends_item(&"fn f() { return 1; }");
-    assert !ends_item(&"fn f() {");
+}
+
+test "an item ends at the brace closing its body or a semicolon outside every bracket, and text in a string or comment is not code" {
+    let source = "global PROMPT: String = \"Read this.
+fn not_an_item() {
+}
+\";
+
+struct A;
+
+fn f(a: [u8; 4]) -> char {
+    let s = r#\"}\"#; // }
+    /* } */
+    return '}';
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn checks() {}
+}
+";
+    let lines: List<String> = source.lines().map(|l| l.to_string()).collect();
+    let spans: List<String> = items_of(&lines).into_iter().map(|it| `${it.name} ${it.start}-${it.end} ${it.is_test}`).collect();
+    assert spans == [
+        "global PROMPT 1-4 false",
+        "struct A 6-6 false",
+        "fn f 8-12 false",
+        "mod tests 14-18 true",
+        "fn checks 16-17 true",
+    ];
+}
+
+test "lines removed at a hunk's end, at the file's end, and ones that read as a header are kept" {
+    let diff = "diff --git a/f.rs b/f.rs
+--- a/f.rs
++++ b/f.rs
+@@ -1,3 +1,1 @@
+ fn a() {}
+--- gone
+-fn b() {}
+";
+    let t = touched_files(&diff);
+    assert t["f.rs"].removed.get(2) == Some(["-- gone", "fn b() {}"]);
+    let mut sources = HashMap::<String, String>::new();
+    sources["f.rs"] = "fn a() {}\n";
+    let found = units(&diff, &sources);
+    assert found.len() == 1 && found[0].text.contains("     1 fn a() {}\n       --- gone\n       -fn b() {}\n");
 }
 
 test "a line outside every definition, or in one too long, is read in a window" {
