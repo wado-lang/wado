@@ -45,7 +45,7 @@ research points. The evidence behind them is in
   evidence rather than transcripts.
 - [x] Searching and reproducing are separate steps. Reviewers each search a
   batch of the change's units, reading only, one call merges their candidates and
-  keeps the ten most severe, and a reproducer per candidate tries it with three
+  keeps the twenty most severe, and a reproducer per candidate tries it with three
   runs. A reviewer that reproduced as it searched spent its turns on its first
   suspicion and reported about one finding, and one reviewer confirming every
   candidate dropped most by reading. The searches overlap in what they read,

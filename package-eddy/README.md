@@ -28,7 +28,7 @@ A review takes three steps:
    place is a candidate too. They run nothing and report candidates, the
    uncertain ones included. `tools/units.wado` prints the units of a merge.
 2. Triage. One call merges the candidates that name one defect and keeps the
-   ten most severe. It reads the candidates alone, not the diff, and judges
+   twenty most severe. It reads the candidates alone, not the diff, and judges
    none of them right or wrong.
 3. Reproduce. A reproducer per candidate kept reads the diff of the
    candidate's file and has three runs to show it with a test. Reading settles

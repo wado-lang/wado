@@ -33,11 +33,17 @@ use { units, Unit } from "./units.wado";
 global ROLE: String = "You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
 Report defects: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.";
 
-/// The most findings one answer holds, and so the most candidates a review
-/// tries to reproduce.
+/// The most findings one search answers with.
 global MAX_FINDINGS: i32 = 10;
 
+/// The most candidates the triage keeps, and so a review tries to reproduce.
+/// A reproduction costs a tenth of a search or less, and with ten kept most
+/// of the candidates of twenty searches were never tried.
+global MAX_KEPT: i32 = 20;
+
 global ANSWER: String = `Report at most ${MAX_FINDINGS} findings, the most severe first. An empty list is a valid answer.`;
+
+global KEEP: String = `Keep at most ${MAX_KEPT}, the most severe first. An empty list is a valid answer.`;
 
 global SEARCH: String = "Several reviewers search this change, each a part of the code it touched, and a later step tries to reproduce what they report. Your part follows. Review its logic as it stands now: report every defect in it, whether this change brought it in or left it in place, one you are not sure of included, and say in its detail what would show it. Lines marked + are what the change added, and lines marked - what it removed. Look at:
 - each branch, boundary and error path, conversions, sizes and indices, and the result on the inputs its own tests do not try;
@@ -343,7 +349,7 @@ pub fn review(
     }
     let mut triage = triaged(credential, model, change, &candidates);
     triage.searches = searches;
-    triage.candidates.truncate(MAX_FINDINGS);
+    triage.candidates.truncate(MAX_KEPT);
     let [w, runner] = match ws {
         Some(w) && w.runner matches { Some(_) } => [w, w.runner.unwrap()],
         _ => {
@@ -429,7 +435,7 @@ fn triaged(
     candidates: &List<Finding>,
 ) -> Reviewed with (Client, MonotonicClock) {
     let mut usage = Usage {};
-    let system = `${ROLE}\n${TRIAGE}\n${ANSWER}`;
+    let system = `${ROLE}\n${TRIAGE}\n${KEEP}`;
     return match ask_json::<Answer>(credential, model, system, change.triaged_from(candidates), 32_000, &mut usage) {
         Ok(a) => Reviewed {
             turns: 1,
