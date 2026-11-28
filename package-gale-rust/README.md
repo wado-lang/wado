@@ -16,6 +16,7 @@ assert result.diagnostics.is_empty();
 `parse_rust` returns the generated parser's result: a flat concrete syntax
 tree (`result.cst`), the tokens (`result.tokens`), and the diagnostics.
 `tree_hash` folds a tree into one number, so two parses can be compared.
+`diagnose` renders the syntax errors, the one function the component exports.
 `token_kind_name` and the `RK_*` / `TK_*` constants the package re-exports name
 the node and token kinds.
 
