@@ -42,6 +42,7 @@ use wado_compiler::kiln::{
     content_hash, file_hash, generator_identity, harvest_module_graph, has_generated_marker,
     hex_digest, located_apart_message, parse_header, validate_options,
 };
+use wado_compiler::path::normalize;
 use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{Code, CompilerOptions, Diagnostic, Lints, OptLevel, Severity};
 
@@ -1090,10 +1091,18 @@ pub async fn harvest_invocations(
 /// Merge the invocations of [`harvest_invocations`]' packages once each clause
 /// has resolved its generator through its own package: clauses that resolve
 /// alike are one invocation, and two naming one `from` that resolve apart
-/// cannot both generate it, so they are reported.
+/// cannot both generate it, so they are reported. A `from` is the file it
+/// reads, from `manifest_root`: a dependency names its own file by a path and a
+/// consumer by a package reference.
 pub fn merge_across_packages(
     invocations: Vec<Invocation>,
+    manifest_root: &Path,
 ) -> Result<Vec<Invocation>, Vec<Diagnostic>> {
+    let primary_file = |invocation: &Invocation| {
+        let read = std::path::absolute(manifest_root.join(invocation.read_path(&invocation.from)))
+            .expect("a joined path is not empty");
+        normalize(&read.to_string_lossy())
+    };
     let mut merged: Vec<Invocation> = Vec::new();
     let mut diagnostics = Vec::new();
     for invocation in invocations {
@@ -1115,7 +1124,8 @@ pub fn merge_across_packages(
             }
             continue;
         }
-        if let Some(existing) = merged.iter().find(|m| m.from == invocation.from) {
+        let file = primary_file(&invocation);
+        if let Some(existing) = merged.iter().find(|m| primary_file(m) == file) {
             diagnostics.push(Diagnostic {
                 severity: Severity::Error,
                 code: Code::Log,
@@ -1711,22 +1721,47 @@ mod tests {
                     .insert(invocation.from.clone(), path.to_string());
                 invocation
             };
-            let same = merge_across_packages(vec![
-                at("a/main.wado", "/x/schema.proto"),
-                at("b/main.wado", "/x/schema.proto"),
-            ])
+            let root = Path::new("/r");
+            let same = merge_across_packages(
+                vec![
+                    at("a/main.wado", "/x/schema.proto"),
+                    at("b/main.wado", "/x/schema.proto"),
+                ],
+                root,
+            )
             .unwrap();
             assert_eq!(same.len(), 1);
-            let apart = merge_across_packages(vec![
-                at("a/main.wado", "/x/schema.proto"),
-                at("b/main.wado", "/y/schema.proto"),
-            ])
+            let apart = merge_across_packages(
+                vec![
+                    at("a/main.wado", "/x/schema.proto"),
+                    at("b/main.wado", "/y/schema.proto"),
+                ],
+                root,
+            )
             .unwrap_err();
             assert!(
                 apart[0].message.contains("/y/schema.proto"),
                 "{}",
                 apart[0].message
             );
+        }
+
+        #[test]
+        fn one_file_spelled_as_a_path_and_as_a_reference_must_agree() {
+            let mut by_path = sample_invocation();
+            by_path.decl_sites[0].module = "../dep/src/a.wado".to_string();
+            by_path.from = InvocationPath::normalize("../dep/schema.proto");
+            let mut by_reference = sample_invocation();
+            by_reference.module =
+                GeneratorModule::LocalPath(InvocationPath::normalize("../dep/gen.wado"));
+            by_reference.from = InvocationPath::normalize("acme:dep@0.1.0/schema.proto");
+            by_reference.located.insert(
+                by_reference.from.clone(),
+                "/r/app/../dep/schema.proto".to_string(),
+            );
+            let errs = merge_across_packages(vec![by_path, by_reference], Path::new("/r/app"))
+                .unwrap_err();
+            assert!(errs[0].message.contains("disagree"), "{}", errs[0].message);
         }
 
         fn runtime() -> tokio::runtime::Runtime {

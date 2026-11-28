@@ -151,8 +151,9 @@ where
 {
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     let mut by_tuple: IndexMap<String, Invocation> = IndexMap::default();
-    // `from` path → the identity key it resolved to, and the module that
-    // claimed it first.
+    // The file `from` reads → the identity key it resolved to, and the module
+    // that claimed it first. Keyed by the file rather than the spelling: a
+    // dependency names its own file by a path and a consumer by a reference.
     let mut by_from: IndexMap<String, (String, String)> = IndexMap::default();
 
     for (module_path, module) in modules {
@@ -185,7 +186,7 @@ where
                         }
                         continue;
                     }
-                    let from_key = invocation.from.as_str().to_string();
+                    let from_key = invocation.read_path(&invocation.from).to_string();
                     if let Some((prior_key, prior_mod)) = by_from.get(&from_key)
                         && *prior_key != tuple_key
                     {
@@ -1578,6 +1579,33 @@ mod tests {
             ));
             assert!(errs.iter().any(|d| d.message.contains("disagree")));
         }
+    }
+
+    #[test]
+    fn clauses_spelling_one_file_two_ways_must_agree() {
+        let dep = |_: &str, _: &str, file: &str| {
+            Ok(ExportedInput {
+                reference: format!("acme:dep@0.1.0/{file}"),
+                path: format!("dep/{file}"),
+            })
+        };
+        let by_path = module_with_use(
+            "../assets/g.g4",
+            attr_with_generator(&[("module", AttrValue::string("./gen.wado".to_string()))]),
+        );
+        let by_reference = module_with_use(
+            "lib:dep/assets/g.g4",
+            attr_with_generator(&[("module", AttrValue::string("lib:dep".to_string()))]),
+        );
+        let errs = expect_errors(collect_inline_invocations(
+            [("dep/src/a.wado", &by_path), ("main.wado", &by_reference)],
+            &dep,
+            "",
+        ));
+        assert!(
+            errs.iter().any(|d| d.message.contains("disagree")),
+            "{errs:?}"
+        );
     }
 
     #[test]

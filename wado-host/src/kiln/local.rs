@@ -103,7 +103,7 @@ async fn run(
         return Err(PipelineError::InlineClause(shared_dirs));
     }
     resolve_build_dependencies(&mut invocations, host.stubs());
-    let invocations = merge_across_packages(invocations).map_err(|disagreements| {
+    let invocations = merge_across_packages(invocations, root).map_err(|disagreements| {
         PipelineError::InlineClause(emit_counting_errors(host, disagreements))
     })?;
 
