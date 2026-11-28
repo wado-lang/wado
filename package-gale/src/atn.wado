@@ -435,7 +435,15 @@ fn build_alternation(
         let prefix_prec = if operand_precs.is_empty() { 0 } else { operand_precs[i] };
         let last = alts[i].elements.len() - 1;
         let operand_prec = |k: i32| if prefix_prec > 0 && k == last { prefix_prec } else { NOT_AN_OPERAND };
-        let seg = build_sequence(b, &alts[i].elements, rule, rule_index, &prediction_guards(&alts[i].actions), 0, operand_prec);
+        let seg = build_sequence(
+            b,
+            &alts[i].elements,
+            rule,
+            rule_index,
+            &prediction_guards(&alts[i].actions),
+            0,
+            operand_prec,
+        );
         b.add_eps(start, seg.0);
         b.add_eps(seg.1, end);
     }

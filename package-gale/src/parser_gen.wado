@@ -3194,12 +3194,7 @@ fn emit_rule_inner_fn<S: AsStrSlice>(
 
 /// An alternative body's own function, which the rule's inner function hands
 /// its seeded `vals`, `body` written after the seed.
-fn emit_seeded_alt_fn(
-    w: &mut CodeWriter,
-    f: &mut FnSpec,
-    ctx: &mut EmitContext,
-    mut body: fn mut(&mut CodeWriter),
-) {
+fn emit_seeded_alt_fn(w: &mut CodeWriter, f: &mut FnSpec, ctx: &mut EmitContext, mut body: fn mut(&mut CodeWriter)) {
     if ctx.cursor.lr_cont_in_atom() {
         add_lr_cont_param(f);
     }
@@ -5080,10 +5075,21 @@ fn gen_op_inner_for_storable_repeat(
             let Group(g_elem) = peel_labels(elem) else {
                 unreachable();
             };
-            gen_group_shape(w, g_op, Option::Some(g_elem), entry, ctx, name_counts, outer_follow, decided, proven, group_atn(
+            gen_group_shape(
+                w,
                 g_op,
+                Option::Some(g_elem),
+                entry,
                 ctx,
-            ));
+                name_counts,
+                outer_follow,
+                decided,
+                proven,
+                group_atn(
+                    g_op,
+                    ctx,
+                ),
+            );
         },
         _::TransparentGroup => unreachable(),
     }

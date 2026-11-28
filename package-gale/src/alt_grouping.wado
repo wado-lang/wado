@@ -366,7 +366,10 @@ pub fn alt_sort_priority(alt: &Alternative) -> i32 {
 /// What `sort_by_match_rank` orders an alternative by: its `ll_match_length`,
 /// then its `alt_sort_priority`.
 pub fn alt_match_rank(alt: &Alternative, analysis: &mut GrammarAnalysis) -> [i32, i32] {
-    return [ll_match_length(alt, analysis), alt_sort_priority(alt)];
+    return [
+        ll_match_length(alt, analysis),
+        alt_sort_priority(alt),
+    ];
 }
 
 /// Sort `group` by each alternative's rank in `ranks`, then source order, so

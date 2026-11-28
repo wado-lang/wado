@@ -148,7 +148,9 @@ pub fn predicate_is_fn(a: &AltAction, settings: &GenSettings) -> bool {
 /// written.
 pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &GrammarAnalysis, site: &PredicateSite) -> bool {
     return settings.emit_actions
-        && edge_gates(&alt.actions).iter_ref().any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
+        && edge_gates(&alt.actions)
+            .iter_ref()
+            .any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
 }
 
 /// Whether prediction entering `alt` meets a predicate that renders:
