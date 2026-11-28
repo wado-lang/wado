@@ -3,8 +3,8 @@
 //! Not here: scaffolding (`parser_runtime_gen`), actions (`action_gen`),
 //! token-set tables (`kind_set_gen`), naming leaves (`ir_shape`, `gen_util`).
 
-use { Grammar, ParserRule, RepeatKind, AltAction, ActionSource } from "./ir.wado";
-use { general_group_field_name, gen_visibility_comment, rule_alts_labeled } from "./ir_shape.wado";
+use { RepeatKind, AltAction, ActionSource } from "./ir.wado";
+use { general_group_field_name, gen_visibility_comment } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use {
     dedup_name,
@@ -233,13 +233,10 @@ fn parse_call_args(r: &RuleCallOp, ctx: &mut EmitContext) -> List<String> {
 
 pub fn gen_parser(
     w: &mut CodeWriter,
-    grammar: &Grammar,
     lowered: &LoweredGrammar,
     members: &MemberDecls,
     ctx: &mut EmitContext,
-)
-    contract lowered.parser_rules.len() == grammar.parser_rules.len(), "`lower` lowers each parser rule in order"
-{
+) {
     if ctx.settings.has_parser_superclass() {
         gen_parser_super_interface(w, &ctx.settings.parser_superclass_name, &ctx.settings.parser_superclass_ops);
     }
@@ -262,15 +259,13 @@ pub fn gen_parser(
         gen_trace_helpers(w);
     }
     let mut parse_w = CodeWriter::new();
-    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
-        let rule = &grammar.parser_rules[i];
-        let lowered_rule = &lowered.parser_rules[i];
+    for let mut i = 0; i < lowered.parser_rules.len(); i += 1 {
         ctx.cursor.set_current_rule_index(i);
-        gen_parse_fn(&mut parse_w, rule, lowered_rule, ctx);
+        gen_parse_fn(&mut parse_w, &lowered.parser_rules[i], ctx);
     }
     gen_predicate_fns(&mut parse_w, ctx);
     if ctx.settings.emit_fragment_recovery() {
-        let entries = compute_fragment_entries(grammar, ctx);
+        let entries = compute_fragment_entries(lowered, ctx);
         gen_recover_helpers(&mut parse_w, &entries, ctx);
     }
     gen_parse_entry(&mut parse_w, lowered, ctx);
@@ -2864,7 +2859,7 @@ fn gen_scan_op_elements_in_block<S: AsStrSlice>(
     gen_scan_op_elements(w, scan_elems, start, end, ctx, `break ${label};`, gates, gate_cond, known);
 }
 
-fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut EmitContext) {
+fn gen_parse_fn(w: &mut CodeWriter, lowered_rule: &Rule, ctx: &mut EmitContext) {
     let header = rule_header(lowered_rule);
     ctx.enter_rule(ctx.analysis.rule_index_of(&header.name));
     // The canonical name every other rule (and the public input entry)
@@ -2875,10 +2870,10 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     let inner = `${canonical}__inner`;
     match *lowered_rule {
         Simple(_) => gen_parse_fn_simple_named(w, lowered_rule, ctx, &inner),
-        MultiAlt(_) => gen_parse_fn_named(w, rule, lowered_rule, ctx, &inner),
+        MultiAlt(_) => gen_parse_fn_named(w, lowered_rule, ctx, &inner),
         LeftRecursive(_) => {
             ctx.cursor.set_lr_continuation(lr_continuation_of(lowered_rule));
-            gen_parse_fn_named(w, rule, lowered_rule, ctx, &inner);
+            gen_parse_fn_named(w, lowered_rule, ctx, &inner);
             ctx.cursor.set_lr_continuation([]);
         },
     }
@@ -3115,12 +3110,11 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(
 /// path needs no per-(rule, mask) specialisation.
 fn gen_parse_fn_named<S: AsStrSlice>(
     w: &mut CodeWriter,
-    rule: &ParserRule,
     lowered_rule: &Rule,
     ctx: &mut EmitContext,
     fn_name: S,
 )
-    contract rule.alternatives.len() > 1, "`lower_rule` makes a single-alternative rule `Simple`, which `gen_parse_fn` emits apart"
+    contract !(lowered_rule matches { Simple(_) }), "`gen_parse_fn` emits a `Simple` rule apart"
 {
     let header = rule_header(lowered_rule);
     // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
@@ -3198,7 +3192,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         assert !l.loop_checked || h_loop_dec >= 0, "a checked loop marked the grammar as needing the ATN, which builds every LR rule's loop entry";
         gen_lr_fn(
             w,
-            rule,
+            header,
             &l.lr_alts,
             &l.lr_dispatch,
             ctx,
@@ -3852,7 +3846,7 @@ fn open_winner_arm<S: AsStrSlice>(w: &mut CodeWriter, winner: S, order: &List<i3
 /// `atn_class` rule and checks on any other; -1 for neither.
 fn gen_lr_fn<S: AsStrSlice>(
     w: &mut CodeWriter,
-    rule: &ParserRule,
+    rule: &RuleHeader,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     ctx: &mut EmitContext,
@@ -3928,7 +3922,7 @@ fn gen_lr_fn<S: AsStrSlice>(
                 return;
             }
             let scan_fn = ctx.scan_fn_of(&rule.snake_name);
-            let labeled = rule_alts_labeled(&rule.alternatives);
+            let labeled = rule.alts_labeled();
             if mid_operand_gated {
                 gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
                 w.line(
@@ -3977,7 +3971,7 @@ fn gen_lr_fn<S: AsStrSlice>(
 /// `$v` reads the whole expression's value), run `@after`, and return. ANTLR
 /// runs `@after` once at `exitRule`, on the outermost (final) context. For a
 /// channel-less rule this is just the `@after` side effect and a bare return.
-fn emit_lr_after_return(w: &mut CodeWriter, rule: &ParserRule, emits_vals: bool, ctx: &mut EmitContext) {
+fn emit_lr_after_return(w: &mut CodeWriter, rule: &RuleHeader, emits_vals: bool, ctx: &mut EmitContext) {
     let has_after = ctx.settings.emit_actions && rule.after_action matches { Some(_) };
     if emits_vals && has_after {
         // `@after` reads (and may write) the final value under the name `vals`.
@@ -4008,7 +4002,7 @@ fn emit_lr_after_return(w: &mut CodeWriter, rule: &ParserRule, emits_vals: bool,
 /// precedence gate is dropped.
 fn gen_lr_fn_atn<S: AsStrSlice>(
     w: &mut CodeWriter,
-    rule: &ParserRule,
+    rule: &RuleHeader,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     ctx: &mut EmitContext,
@@ -4016,7 +4010,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     decision: i32,
 ) {
     let valid = &lr_dispatch.valid_lr_alts;
-    let labeled = rule_alts_labeled(&rule.alternatives);
+    let labeled = rule.alts_labeled();
     let mut nc: List<[String, i32]> = [];
     w.begin("loop");
     w.line("if p.recovering { break; }");

@@ -351,7 +351,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     );
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_alt_enums(&mut w, &lowered.parser_rules);
-    gen_parser(&mut w, grammar, &lowered, &parser_members, &mut ctx);
+    gen_parser(&mut w, &lowered, &parser_members, &mut ctx);
     warn_lexer_rules(grammar, &ctx.settings, &latn.atn_class_rules, &mut ctx.diagnostics);
     gen_string_tree_helper(&mut w, &lowered);
     if let Some(query) = &options.highlight_query {

@@ -4,7 +4,6 @@
 //! never over rules. Sibling of `src/runtime/*.wado`, a builder because
 //! the switches select which fields and methods exist.
 
-use { Grammar } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, LoweredGrammar, Rule, rule_header } from "./gir.wado";
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE } from "./emit_context.wado";
 use { kind_bitset_words } from "./kind_set_gen.wado";
@@ -20,7 +19,7 @@ internal struct RecoverFragmentEntry {
     first_ids: List<i32>,
 }
 
-internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut EmitContext) -> List<RecoverFragmentEntry> {
+internal fn compute_fragment_entries(lowered: &LoweredGrammar, ctx: &mut EmitContext) -> List<RecoverFragmentEntry> {
     let names = ctx.settings.fragment_entries;
     let mut result: List<RecoverFragmentEntry> = [];
     let mut seen: List<String> = [];
@@ -29,23 +28,16 @@ internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut EmitContext) -
             continue;
         }
         seen.push(*name);
-        let mut found = -1;
-        for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
-            if grammar.parser_rules[i].name == *name {
-                found = i;
-                break;
-            }
-        }
-        if found < 0 {
+        let Some(rule) = lowered.parser_rules.iter_ref().find(|r| rule_header(r).name == *name) else {
             ctx.diagnostics.warn(
                 &DiagnosticOwner::host("fragment_entries"),
                 DiagnosticKind::FragmentEntry,
                 `fragment_entries: unknown parser rule '${*name}'`,
             );
             continue;
-        }
-        let rule_name = grammar.parser_rules[found].name;
-        let snake = grammar.parser_rules[found].snake_name;
+        };
+        let rule_name = rule_header(rule).name;
+        let snake = rule_header(rule).snake_name;
         let emits_vals = entry_emits_vals(ctx, &rule_name);
         let mut visiting: List<String> = [];
         let first_ids = ctx.analysis.first_of_rule(&rule_name, &mut visiting);
