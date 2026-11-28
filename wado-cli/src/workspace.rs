@@ -10,6 +10,7 @@ use glob::Pattern;
 use lexopt::Arg::Value;
 use toml_edit::{Array, DocumentMut, Value as TomlValue};
 
+use wado_lsp::host::discovery::{Disk, nearest_workspace};
 use wado_manifest::workspace::workspace_governs;
 use wado_manifest::{
     MANIFEST_FILENAME, WORKSPACE_FILENAME, WorkspaceManifest, read_workspace_members,
@@ -229,21 +230,6 @@ fn init_workspace(dir: &Path, opts: &WorkspaceInitOptions) -> Result<(), CliExit
     write_scaffold(dir, Scaffold::Workspace, &init::directory_name(dir)?)
 }
 
-/// The nearest `wado-workspace.toml` strictly above `dir`, which must be
-/// canonical: its directory and contents. Only the nearest one is asked, as
-/// `governing_workspace` asks.
-pub(crate) fn nearest_above(dir: &Path) -> Result<Option<(PathBuf, String)>, CliExit> {
-    for root in dir.ancestors().skip(1) {
-        let path = root.join(WORKSPACE_FILENAME);
-        match fs::read_to_string(&path) {
-            Ok(text) => return Ok(Some((root.to_path_buf(), text))),
-            Err(e) if e.kind() == ErrorKind::NotFound => {}
-            Err(e) => return Err(CliExit::error(format!("reading {}: {e}", path.display()))),
-        }
-    }
-    Ok(None)
-}
-
 /// The workspace text with `member_dir` in `members`, or `None` where
 /// `members` already covers it. A `members` that cannot be read governs
 /// everything under it, as `governing_workspace` reads it.
@@ -332,7 +318,7 @@ fn add(dir: &Path) -> Result<(), CliExit> {
         }
     };
     let dir = init::canonical(dir)?;
-    let Some((root, text)) = nearest_above(&dir)? else {
+    let Some((root, text)) = nearest_workspace(&dir, &Disk) else {
         return Err(CliExit::error(format!(
             "no {WORKSPACE_FILENAME} above {}",
             dir.display()

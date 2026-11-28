@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use toml::Value as TomlValue;
-use wado_lsp::host::discovery::slash_separated;
+use wado_lsp::host::discovery::{Disk, nearest_workspace, slash_separated};
 
 use wado_manifest::{
     MANIFEST_FILENAME, Manifest, ManifestError, WORKSPACE_FILENAME, WorkspaceManifest,
@@ -13,7 +13,7 @@ use wado_manifest::{
 
 use crate::args::{self, CliExit};
 use crate::discover::{checkout_root, is_git_ignored};
-use crate::workspace::{member_entry, nearest_above, with_member, write_workspace};
+use crate::workspace::{member_entry, with_member, write_workspace};
 
 #[derive(Debug)]
 pub struct InitOptions {
@@ -193,7 +193,7 @@ pub(crate) fn init_package(dir: &Path, opts: &InitOptions) -> Result<(), CliExit
     }
     let dir = canonical(dir)?;
 
-    let workspace = match nearest_above(&dir)? {
+    let workspace = match nearest_workspace(&dir, &Disk) {
         Some((root, text)) => match with_member(&root, &text, &dir)? {
             None => Some(Membership {
                 text,
