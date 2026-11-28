@@ -13322,17 +13322,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0
             }
             p.expect(TK_OpenBracket, &SYNC_9, false);
             if !SYNC_9.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_9, &EXPECTED_9); }
-            let mut opt_scan_pos: i32 = -1;
-            opt_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                p.atn.stack.push(476);
-                pos = scan_primary_type(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_6, follow), 0);
-                p.atn.stack.pop();
-                if pos < 0 { break opt_scan; }
-                opt_scan_pos = pos;
-            }
-            if opt_scan_pos >= 0 {
+            if _kind_set_7(p.peek_kind()) {
                 p.site = 30;
                 p.atn_ret_pending = 476;
                 _parse_primary_type(p, follow_push(FOLLOW_SITE_6, follow));
@@ -15951,10 +15941,7 @@ fn _parse_import_module_items__inner(p: &mut Parser, follow: i64 = 0) with TypeS
         p.site = 182;
         p.atn_ret_pending = 1268;
         _parse_import_alias_name(p, follow_push(FOLLOW_SITE_61, follow));
-        if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_58, &EXPECTED_58); }
-        if p.peek_kind() == TK_Comma {
-            p.take();
-        }
+        p.expect(TK_Comma, &SYNC_58, false);
     } else if shape_scan_pos_2 >= 0 {
         p.site = 182;
         p.atn_ret_pending = 1268;
@@ -16355,10 +16342,7 @@ fn _parse_export_module_items__inner(p: &mut Parser, follow: i64 = 0) with TypeS
         p.site = 203;
         p.atn_ret_pending = 1395;
         _parse_export_alias_name(p, follow_push(FOLLOW_SITE_61, follow));
-        if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_58, &EXPECTED_58); }
-        if p.peek_kind() == TK_Comma {
-            p.take();
-        }
+        p.expect(TK_Comma, &SYNC_58, false);
     } else if shape_scan_pos_2 >= 0 {
         p.site = 203;
         p.atn_ret_pending = 1395;
@@ -17414,12 +17398,9 @@ fn _parse_case_block__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptPars
         p.site = 275;
         p.atn_ret_pending = 1797;
         _parse_default_clause(p, follow_push(FOLLOW_SITE_91, follow));
-        if !SYNC_85.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_85, &EXPECTED_85); }
-        if p.peek_kind() == TK_Case {
-            p.site = 276;
-            p.atn_ret_pending = 1801;
-            _parse_case_clauses(p, follow_push(FOLLOW_SITE_10, follow));
-        }
+        p.site = 276;
+        p.atn_ret_pending = 1801;
+        _parse_case_clauses(p, follow_push(FOLLOW_SITE_10, follow));
     } else if shape_scan_pos_2 >= 0 {
         p.site = 275;
         p.atn_ret_pending = 1797;
@@ -17436,7 +17417,7 @@ fn _parse_case_block(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBase 
 }
 
 fn _parse_case_clauses__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBase {
-    if !SYNC_86.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_86, &EXPECTED_86); }
+    if !SYNC_85.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_85, &EXPECTED_85); }
     _first_iter: {
         p.site = 277;
         p.atn_ret_pending = 1807;
@@ -17546,7 +17527,7 @@ fn _parse_try_statement__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptP
     p.site = 285;
     p.atn_ret_pending = 1854;
     _parse_block(p, follow_push(FOLLOW_SITE_96, follow));
-    if !SYNC_87.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_87, &EXPECTED_87); }
+    if !SYNC_86.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_86, &EXPECTED_86); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_Catch {
         p.site = 286;
@@ -17564,7 +17545,7 @@ fn _parse_try_statement__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptP
         p.atn_ret_pending = 1864;
         _parse_finally_production(p, follow);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_87);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_86);
     }
     return;
 }
@@ -17576,14 +17557,14 @@ fn _parse_try_statement(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBa
 }
 
 fn _parse_catch_production__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBase {
-    p.expect(TK_Catch, &SYNC_88, false);
-    if !SYNC_88.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_88, &EXPECTED_88); }
+    p.expect(TK_Catch, &SYNC_87, false);
+    if !SYNC_87.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_87, &EXPECTED_87); }
     if p.peek_kind() == TK_OpenParen && _kind_set_1(p.peek_at(1)) {
         p.take();
         p.site = 289;
         p.atn_ret_pending = 1876;
         _parse_identifier(p);
-        if !SYNC_89.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_89, &EXPECTED_89); }
+        if !SYNC_88.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_88, &EXPECTED_88); }
         if p.peek_kind() == TK_Colon {
             p.site = 290;
             p.atn_ret_pending = 1880;
@@ -17632,12 +17613,12 @@ fn _parse_debugger_statement(p: &mut Parser) with TypeScriptParserBase {
 }
 
 fn _parse_function_declaration__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBase {
-    if !SYNC_90.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_90, &EXPECTED_90); }
+    if !SYNC_89.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_89, &EXPECTED_89); }
     if p.peek_kind() == TK_Async {
         p.take();
     }
-    p.expect(TK_Function_, &SYNC_91, false);
-    if !SYNC_91.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_91, &EXPECTED_91); }
+    p.expect(TK_Function_, &SYNC_90, false);
+    if !SYNC_90.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_90, &EXPECTED_90); }
     if p.peek_kind() == TK_Multiply {
         p.take();
     }
@@ -17670,21 +17651,21 @@ fn _parse_function_declaration(p: &mut Parser, follow: i64 = 0) with TypeScriptP
 }
 
 fn _parse_class_declaration__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBase {
-    if !SYNC_92.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_92, &EXPECTED_92); }
+    if !SYNC_91.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_91, &EXPECTED_91); }
     if p.peek_kind() == TK_At {
         p.site = 297;
         p.atn_ret_pending = 1930;
         _parse_decorator_list(p, FOLLOW_SITE_102);
     }
-    if !SYNC_93.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_93, &EXPECTED_93); }
+    if !SYNC_92.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_92, &EXPECTED_92); }
     if p.peek_kind() == TK_Export {
         p.take();
-        if !SYNC_94.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_94, &EXPECTED_94); }
+        if !SYNC_93.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_93, &EXPECTED_93); }
         if p.peek_kind() == TK_Default {
             p.take();
         }
     }
-    if !SYNC_95.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_95, &EXPECTED_95); }
+    if !SYNC_94.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_94, &EXPECTED_94); }
     if p.peek_kind() == TK_Abstract {
         p.take();
     }
@@ -17692,7 +17673,7 @@ fn _parse_class_declaration__inner(p: &mut Parser, follow: i64 = 0) with TypeScr
     p.site = 298;
     p.atn_ret_pending = 1948;
     _parse_identifier(p);
-    if !SYNC_96.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_96, &EXPECTED_96); }
+    if !SYNC_95.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_95, &EXPECTED_95); }
     if p.peek_kind() == TK_LessThan {
         p.site = 299;
         p.atn_ret_pending = 1952;
@@ -17794,7 +17775,7 @@ fn scan_class_element__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
 }
 
 fn _parse_class_element__inner_alt_1(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBase {
-    if !SYNC_97.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_97, &EXPECTED_97); }
+    if !SYNC_96.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_96, &EXPECTED_96); }
     if p.peek_kind() == TK_At {
         p.site = 308;
         p.atn_ret_pending = 1997;
@@ -17918,17 +17899,17 @@ fn _parse_property_member_declaration__inner_alt_0(p: &mut Parser, follow: i64 =
     p.site = 313;
     p.atn_ret_pending = 2009;
     _parse_property_name(p, follow_push(FOLLOW_SITE_110, follow));
-    if !SYNC_98.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_98, &EXPECTED_98); }
+    if !SYNC_97.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_97, &EXPECTED_97); }
     if p.peek_kind() == TK_QuestionMark {
         p.take();
     }
-    if !SYNC_99.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_99, &EXPECTED_99); }
+    if !SYNC_98.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_98, &EXPECTED_98); }
     if p.peek_kind() == TK_Colon {
         p.site = 314;
         p.atn_ret_pending = 2017;
         _parse_type_annotation(p, follow_push(FOLLOW_SITE_111, follow));
     }
-    if !SYNC_100.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_100, &EXPECTED_100); }
+    if !SYNC_99.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_99, &EXPECTED_99); }
     if p.peek_kind() == TK_Assign {
         p.site = 315;
         p.atn_ret_pending = 2021;
@@ -18195,12 +18176,12 @@ fn _parse_property_member_base__inner(p: &mut Parser, follow: i64 = 0) with Type
     let rs_pick_190 = p.atn.predict(&ATN_SIM, 179, &p.kinds, p.pos, TK_EOF, 0, &[13, 14], &[], |_pred| match _pred { 13 => pred_13(p), 14 => pred_14(p), _ => unreachable() });
     if rs_pick_190 < 0 && rs_pick_190 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
     if rs_pick_190 == 0 {
-        p.expect(TK_Async, &SYNC_101, true);
+        p.expect(TK_Async, &SYNC_100, true);
     }
     let rs_pick_191 = p.atn.predict(&ATN_SIM, 180, &p.kinds, p.pos, TK_EOF, 0, &[13, 14], &[], |_pred| match _pred { 13 => pred_13(p), 14 => pred_14(p), _ => unreachable() });
     if rs_pick_191 < 0 && rs_pick_191 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
     if rs_pick_191 == 0 {
-        p.expect(TK_Static, &SYNC_102, true);
+        p.expect(TK_Static, &SYNC_101, true);
     }
     let rs_pick_192 = p.atn.predict(&ATN_SIM, 181, &p.kinds, p.pos, TK_EOF, 0, &[13, 14], &[], |_pred| match _pred { 13 => pred_13(p), 14 => pred_14(p), _ => unreachable() });
     if rs_pick_192 < 0 && rs_pick_192 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
@@ -18231,11 +18212,11 @@ fn _parse_index_member_declaration(p: &mut Parser, follow: i64 = 0) with TypeScr
 }
 
 fn _parse_generator_method__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBase {
-    if !SYNC_103.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_103, &EXPECTED_103); }
+    if !SYNC_102.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_102, &EXPECTED_102); }
     let rs_pick_193 = atn_decide_182(&mut p.atn, &p.kinds, p.pos, 0);
     if rs_pick_193 < 0 && rs_pick_193 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
     if rs_pick_193 == 0 {
-        p.expect(TK_Async, &SYNC_103, false);
+        p.expect(TK_Async, &SYNC_102, false);
         if !p.speculating {
             if !TypeScriptParserBase::not_line_terminator(p) {
                 p.no_viable("failed semantic predicate", p.peek_span(), &NO_EXPECTED);
@@ -18243,7 +18224,7 @@ fn _parse_generator_method__inner(p: &mut Parser, follow: i64 = 0) with TypeScri
             }
         }
     }
-    if !SYNC_103.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_103, &EXPECTED_103); }
+    if !SYNC_102.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_102, &EXPECTED_102); }
     if p.peek_kind() == TK_Multiply {
         p.take();
     }
@@ -18273,11 +18254,11 @@ fn _parse_generator_method(p: &mut Parser, follow: i64 = 0) with TypeScriptParse
 }
 
 fn _parse_generator_function_declaration__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBase {
-    if !SYNC_90.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_90, &EXPECTED_90); }
+    if !SYNC_89.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_89, &EXPECTED_89); }
     if p.peek_kind() == TK_Async {
         p.take();
     }
-    p.expect(TK_Function_, &SYNC_104, false);
+    p.expect(TK_Function_, &SYNC_103, false);
     p.expect(TK_Multiply, &SYNC_51, false);
     if !SYNC_51.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_51, &EXPECTED_51); }
     if _kind_set_1(p.peek_kind()) {
@@ -18308,23 +18289,23 @@ fn _parse_generator_function_declaration(p: &mut Parser, follow: i64 = 0) with T
 }
 
 fn _parse_generator_block__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBase {
-    p.expect(TK_OpenBrace, &SYNC_104, false);
+    p.expect(TK_OpenBrace, &SYNC_103, false);
     p.site = 332;
     p.atn_ret_pending = 2139;
     _parse_generator_definition(p, follow_push(FOLLOW_SITE_118, follow));
-    if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_58, &EXPECTED_58); }
+    if !SYNC_104.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_104, &EXPECTED_104); }
     loop {
         if p.recovering { break; }
         let rs_pick_200 = atn_decide_188(&mut p.atn, &p.kinds, p.pos, 0);
         if rs_pick_200 < 0 && rs_pick_200 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
         if rs_pick_200 != 0 { break; }
-        p.expect(TK_Comma, &SYNC_104, false);
+        p.expect(TK_Comma, &SYNC_103, false);
         p.site = 333;
         p.atn_ret_pending = 2147;
         _parse_generator_definition(p, follow_push(FOLLOW_SITE_118, follow));
-        if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_58, &EXPECTED_58); }
+        if !SYNC_104.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_104, &EXPECTED_104); }
     }
-    if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_58, &EXPECTED_58); }
+    if !SYNC_104.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_104, &EXPECTED_104); }
     if p.peek_kind() == TK_Comma {
         p.take();
     }
@@ -18357,7 +18338,7 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: i64 = 0) with TypeScript
     p.site = 335;
     p.atn_ret_pending = 2166;
     _parse_iterator_definition(p, follow_push(FOLLOW_SITE_119, follow));
-    if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_58, &EXPECTED_58); }
+    if !SYNC_104.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_104, &EXPECTED_104); }
     loop {
         if p.recovering { break; }
         let rs_pick_203 = atn_decide_190(&mut p.atn, &p.kinds, p.pos, 0);
@@ -18367,9 +18348,9 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: i64 = 0) with TypeScript
         p.site = 336;
         p.atn_ret_pending = 2174;
         _parse_iterator_definition(p, follow_push(FOLLOW_SITE_119, follow));
-        if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_58, &EXPECTED_58); }
+        if !SYNC_104.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_104, &EXPECTED_104); }
     }
-    if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_58, &EXPECTED_58); }
+    if !SYNC_104.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_104, &EXPECTED_104); }
     if p.peek_kind() == TK_Comma {
         p.take();
     }
@@ -18890,7 +18871,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) with TypeScript
         p.site = 364;
         p.atn_ret_pending = 2367;
         _parse_property_assignment(p, follow_push(FOLLOW_SITE_131, follow));
-        if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_58, &EXPECTED_58); }
+        if !SYNC_104.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_104, &EXPECTED_104); }
         loop {
             if p.recovering { break; }
             let rs_pick_235 = atn_decide_216(&mut p.atn, &p.kinds, p.pos, 0);
@@ -18900,9 +18881,9 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) with TypeScript
             p.site = 365;
             p.atn_ret_pending = 2375;
             _parse_property_assignment(p, follow_push(FOLLOW_SITE_131, follow));
-            if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_58, &EXPECTED_58); }
+            if !SYNC_104.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_104, &EXPECTED_104); }
         }
-        if !SYNC_58.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_58, &EXPECTED_58); }
+        if !SYNC_104.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_104, &EXPECTED_104); }
         if p.peek_kind() == TK_Comma {
             p.take();
         }
@@ -19302,10 +19283,7 @@ fn _parse_arguments__inner(p: &mut Parser, follow: i64 = 0) with TypeScriptParse
         p.site = 385;
         p.atn_ret_pending = 2478;
         _parse_argument_list(p, follow_push(FOLLOW_SITE_136, follow));
-        if !SYNC_118.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_118, &EXPECTED_118); }
-        if p.peek_kind() == TK_Comma {
-            p.take();
-        }
+        p.expect(TK_Comma, &SYNC_115, false);
     } else if shape_scan_pos_2 >= 0 {
         p.site = 385;
         p.atn_ret_pending = 2478;
@@ -19424,14 +19402,14 @@ fn scan_single_expression__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
 
 fn _parse_single_expression__inner_alt_1(p: &mut Parser, min_prec: i32, follow: i64 = 0) with TypeScriptParserBase {
     p.b.set_alt(1);
-    p.expect(TK_Class, &SYNC_119, false);
-    if !SYNC_119.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_119, &EXPECTED_119); }
+    p.expect(TK_Class, &SYNC_118, false);
+    if !SYNC_118.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_118, &EXPECTED_118); }
     if _kind_set_1(p.peek_kind()) {
         p.site = 393;
         p.atn_ret_pending = 2532;
         _parse_identifier(p);
     }
-    if !SYNC_96.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_96, &EXPECTED_96); }
+    if !SYNC_95.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_95, &EXPECTED_95); }
     if p.peek_kind() == TK_LessThan {
         p.site = 394;
         p.atn_ret_pending = 2536;
@@ -19663,7 +19641,7 @@ fn scan_single_expression__alt_42(tokens: &Array<i32>, pos: i32, atn: &mut AtnPr
 
 fn _parse_single_expression__inner_alt_43(p: &mut Parser, min_prec: i32, follow: i64 = 0) with TypeScriptParserBase {
     p.b.set_alt(43);
-    p.expect(TK_This, &SYNC_120, true);
+    p.expect(TK_This, &SYNC_119, true);
     return;
 }
 
@@ -19707,7 +19685,7 @@ fn scan_single_expression__alt_44(tokens: &Array<i32>, pos: i32, atn: &mut AtnPr
 
 fn _parse_single_expression__inner_alt_45(p: &mut Parser, min_prec: i32, follow: i64 = 0) with TypeScriptParserBase {
     p.b.set_alt(45);
-    p.expect(TK_Super, &SYNC_120, true);
+    p.expect(TK_Super, &SYNC_119, true);
     return;
 }
 
@@ -19758,7 +19736,7 @@ fn _parse_single_expression__inner_alt_49(p: &mut Parser, min_prec: i32, follow:
     p.site = 473;
     p.atn_ret_pending = 2626;
     _parse_expression_sequence(p, follow_push(FOLLOW_SITE_5, follow));
-    p.expect(TK_CloseParen, &SYNC_120, true);
+    p.expect(TK_CloseParen, &SYNC_119, true);
     return;
 }
 
@@ -20119,7 +20097,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
         if _atn_alt == 0 {
             p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
             p.b.set_alt(2);
-            if !SYNC_121.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_121, &EXPECTED_121); }
+            if !SYNC_120.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_120, &EXPECTED_120); }
             if p.peek_kind() == TK_QuestionMarkDot {
                 p.take();
             }
@@ -20127,7 +20105,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
             p.site = 398;
             p.atn_ret_pending = 2645;
             _parse_expression_sequence(p, follow_push(FOLLOW_SITE_6, follow));
-            p.expect(TK_CloseBracket, &SYNC_120, true);
+            p.expect(TK_CloseBracket, &SYNC_119, true);
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 1 {
             p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
@@ -20140,12 +20118,12 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
         } else if _atn_alt == 2 {
             p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
             p.b.set_alt(4);
-            if !SYNC_122.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_122, &EXPECTED_122); }
+            if !SYNC_121.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_121, &EXPECTED_121); }
             if p.peek_kind() == TK_Not {
                 p.take();
             }
-            p.expect(TK_Dot, &SYNC_123, false);
-            if !SYNC_123.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_123, &EXPECTED_123); }
+            p.expect(TK_Dot, &SYNC_122, false);
+            if !SYNC_122.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_122, &EXPECTED_122); }
             if p.peek_kind() == TK_Hashtag {
                 p.take();
             }
@@ -20163,12 +20141,12 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
         } else if _atn_alt == 3 {
             p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
             p.b.set_alt(5);
-            if !SYNC_124.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_124, &EXPECTED_124); }
+            if !SYNC_123.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_123, &EXPECTED_123); }
             if p.peek_kind() == TK_QuestionMark {
                 p.take();
             }
-            p.expect(TK_Dot, &SYNC_123, false);
-            if !SYNC_123.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_123, &EXPECTED_123); }
+            p.expect(TK_Dot, &SYNC_122, false);
+            if !SYNC_122.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_122, &EXPECTED_122); }
             if p.peek_kind() == TK_Hashtag {
                 p.take();
             }
@@ -20199,7 +20177,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     return;
                 }
             }
-            p.expect(TK_PlusPlus, &SYNC_120, true);
+            p.expect(TK_PlusPlus, &SYNC_119, true);
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 6 {
             p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
@@ -20210,7 +20188,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     return;
                 }
             }
-            p.expect(TK_MinusMinus, &SYNC_120, true);
+            p.expect(TK_MinusMinus, &SYNC_119, true);
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 7 {
             p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
@@ -20247,20 +20225,25 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
         } else if _atn_alt == 11 {
             p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
             p.b.set_alt(25);
-            let gd_atn = atn_decide_247(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if gd_atn < 0 {
-                p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED);
-            } else {
-                if gd_atn == 0 {
-                    p.expect(TK_LeftShiftArithmetic, &SYNC_0, false);
-                } else if gd_atn == 1 {
-                    p.expect(TK_MoreThan, &SYNC_125, false);
-                    p.expect(TK_MoreThan, &SYNC_0, false);
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_LeftShiftArithmetic {
+                p.take();
+            } else if grp_kind == TK_MoreThan {
+                let gd_atn = atn_decide_247(&mut p.atn, &p.kinds, p.pos, min_prec);
+                if gd_atn < 0 {
+                    p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED);
                 } else {
-                    p.expect(TK_MoreThan, &SYNC_125, false);
-                    p.expect(TK_MoreThan, &SYNC_125, false);
-                    p.expect(TK_MoreThan, &SYNC_0, false);
+                    if gd_atn == 2 {
+                        p.expect(TK_MoreThan, &SYNC_124, false);
+                        p.expect(TK_MoreThan, &SYNC_124, false);
+                        p.expect(TK_MoreThan, &SYNC_0, false);
+                    } else {
+                        p.expect(TK_MoreThan, &SYNC_124, false);
+                        p.expect(TK_MoreThan, &SYNC_0, false);
+                    }
                 }
+            } else {
+                p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_125);
             }
             p.site = 435;
             p.atn_ret_pending = 2727;
@@ -20561,7 +20544,7 @@ fn scan_anonymous_function__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPr
 }
 
 fn _parse_anonymous_function__inner_alt_1(p: &mut Parser, follow: i64 = 0) with TypeScriptParserBase {
-    if !SYNC_90.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_90, &EXPECTED_90); }
+    if !SYNC_89.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_89, &EXPECTED_89); }
     if p.peek_kind() == TK_Async {
         p.take();
     }
@@ -22364,8 +22347,7 @@ global SYNC_56: KindSet = [16777344, 201326592, -32, -33, 607];
 global EXPECTED_56: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
 global SYNC_57: KindSet = [512, 201326592, -32, -33, 1631];
 global EXPECTED_57: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_CloseBrace, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_58: KindSet = [2560];
-global EXPECTED_58: List<i32> = [TK_CloseBrace, TK_Comma];
+global SYNC_58: KindSet = [512];
 global SYNC_59: KindSet = [0, 0, 0, 24, 512];
 global EXPECTED_59: List<i32> = [TK_Await, TK_Identifier, TK_Yield];
 global SYNC_60: KindSet = [0, 201326592, -32, -33, 1631];
@@ -22413,43 +22395,43 @@ global SYNC_83: KindSet = [512, 0, 33554944];
 global EXPECTED_83: List<i32> = [TK_Case, TK_CloseBrace, TK_Default];
 global SYNC_84: KindSet = [512, 0, 33554432];
 global EXPECTED_84: List<i32> = [TK_CloseBrace, TK_Default];
-global SYNC_85: KindSet = [512, 0, 512];
-global EXPECTED_85: List<i32> = [TK_Case, TK_CloseBrace];
-global SYNC_86: KindSet = [0, 0, 512];
-global EXPECTED_86: List<i32> = [TK_Case];
-global SYNC_87: KindSet = [0, 0, 24576];
-global EXPECTED_87: List<i32> = [TK_Catch, TK_Finally];
-global SYNC_88: KindSet = [160];
-global EXPECTED_88: List<i32> = [TK_OpenBrace, TK_OpenParen];
-global SYNC_89: KindSet = [32832];
-global EXPECTED_89: List<i32> = [TK_CloseParen, TK_Colon];
-global SYNC_90: KindSet = [0, 0, 4194304, 4];
-global EXPECTED_90: List<i32> = [TK_Async, TK_Function_];
-global SYNC_91: KindSet = [16777216, 0, i32::MIN, -2097131, 583];
-global EXPECTED_91: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Multiply, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
-global SYNC_92: KindSet = [0, 0, 0, 2112, 320];
-global EXPECTED_92: List<i32> = [TK_Abstract, TK_At, TK_Class, TK_Export];
-global SYNC_93: KindSet = [0, 0, 0, 2112, 64];
-global EXPECTED_93: List<i32> = [TK_Abstract, TK_Class, TK_Export];
-global SYNC_94: KindSet = [0, 0, 33554432, 64, 64];
-global EXPECTED_94: List<i32> = [TK_Abstract, TK_Class, TK_Default];
-global SYNC_95: KindSet = [0, 0, 0, 64, 64];
-global EXPECTED_95: List<i32> = [TK_Abstract, TK_Class];
-global SYNC_96: KindSet = [-2147483520, 0, 0, 8448];
-global EXPECTED_96: List<i32> = [TK_Extends, TK_Implements, TK_LessThan, TK_OpenBrace];
-global SYNC_97: KindSet = [8, -67108864, -31, -33, 1887];
-global EXPECTED_97: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_98: KindSet = [46080];
-global EXPECTED_98: List<i32> = [TK_Assign, TK_Colon, TK_QuestionMark, TK_SemiColon];
-global SYNC_99: KindSet = [37888];
-global EXPECTED_99: List<i32> = [TK_Assign, TK_Colon, TK_SemiColon];
-global SYNC_100: KindSet = [5120];
-global EXPECTED_100: List<i32> = [TK_Assign, TK_SemiColon];
-global SYNC_101: KindSet = [0, 0, 0, 1048578];
-global SYNC_102: KindSet = [0, 0, 0, 2];
-global SYNC_103: KindSet = [16777224, -67108864, -31, -33, 1631];
-global EXPECTED_103: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_104: KindSet = [16777216];
+global SYNC_85: KindSet = [0, 0, 512];
+global EXPECTED_85: List<i32> = [TK_Case];
+global SYNC_86: KindSet = [0, 0, 24576];
+global EXPECTED_86: List<i32> = [TK_Catch, TK_Finally];
+global SYNC_87: KindSet = [160];
+global EXPECTED_87: List<i32> = [TK_OpenBrace, TK_OpenParen];
+global SYNC_88: KindSet = [32832];
+global EXPECTED_88: List<i32> = [TK_CloseParen, TK_Colon];
+global SYNC_89: KindSet = [0, 0, 4194304, 4];
+global EXPECTED_89: List<i32> = [TK_Async, TK_Function_];
+global SYNC_90: KindSet = [16777216, 0, i32::MIN, -2097131, 583];
+global EXPECTED_90: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Multiply, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
+global SYNC_91: KindSet = [0, 0, 0, 2112, 320];
+global EXPECTED_91: List<i32> = [TK_Abstract, TK_At, TK_Class, TK_Export];
+global SYNC_92: KindSet = [0, 0, 0, 2112, 64];
+global EXPECTED_92: List<i32> = [TK_Abstract, TK_Class, TK_Export];
+global SYNC_93: KindSet = [0, 0, 33554432, 64, 64];
+global EXPECTED_93: List<i32> = [TK_Abstract, TK_Class, TK_Default];
+global SYNC_94: KindSet = [0, 0, 0, 64, 64];
+global EXPECTED_94: List<i32> = [TK_Abstract, TK_Class];
+global SYNC_95: KindSet = [-2147483520, 0, 0, 8448];
+global EXPECTED_95: List<i32> = [TK_Extends, TK_Implements, TK_LessThan, TK_OpenBrace];
+global SYNC_96: KindSet = [8, -67108864, -31, -33, 1887];
+global EXPECTED_96: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_97: KindSet = [46080];
+global EXPECTED_97: List<i32> = [TK_Assign, TK_Colon, TK_QuestionMark, TK_SemiColon];
+global SYNC_98: KindSet = [37888];
+global EXPECTED_98: List<i32> = [TK_Assign, TK_Colon, TK_SemiColon];
+global SYNC_99: KindSet = [5120];
+global EXPECTED_99: List<i32> = [TK_Assign, TK_SemiColon];
+global SYNC_100: KindSet = [0, 0, 0, 1048578];
+global SYNC_101: KindSet = [0, 0, 0, 2];
+global SYNC_102: KindSet = [16777224, -67108864, -31, -33, 1631];
+global EXPECTED_102: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_103: KindSet = [16777216];
+global SYNC_104: KindSet = [2560];
+global EXPECTED_104: List<i32> = [TK_CloseBrace, TK_Comma];
 global SYNC_105: KindSet = [536870920, -67108864, -31, -33, 1631];
 global EXPECTED_105: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Hashtag, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
 global SYNC_106: KindSet = [136, 0, -32, -33, 863];
@@ -22474,20 +22456,19 @@ global SYNC_116: KindSet = [32896];
 global EXPECTED_116: List<i32> = [TK_Colon, TK_OpenBrace];
 global SYNC_117: KindSet = [-2130902804, -67108864, -1, -1, 3679];
 global EXPECTED_117: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_CloseParen, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
-global SYNC_118: KindSet = [2112];
-global EXPECTED_118: List<i32> = [TK_CloseParen, TK_Comma];
-global SYNC_119: KindSet = [-2147483520, 0, i32::MIN, -2088683, 583];
-global EXPECTED_119: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_Extends, TK_From, TK_Identifier, TK_Implements, TK_KeyOf, TK_LessThan, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
-global SYNC_120: KindSet = [-541167576, 33554431, -1610612608, 0, 2048];
-global SYNC_121: KindSet = [16392];
-global EXPECTED_121: List<i32> = [TK_OpenBracket, TK_QuestionMarkDot];
-global SYNC_122: KindSet = [8519680];
-global EXPECTED_122: List<i32> = [TK_Dot, TK_Not];
-global SYNC_123: KindSet = [536870912, 201326592, -32, -33, 607];
-global EXPECTED_123: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Hashtag, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_124: KindSet = [139264];
-global EXPECTED_124: List<i32> = [TK_Dot, TK_QuestionMark];
-global SYNC_125: KindSet = [0, 1];
+global SYNC_118: KindSet = [-2147483520, 0, i32::MIN, -2088683, 583];
+global EXPECTED_118: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_Extends, TK_From, TK_Identifier, TK_Implements, TK_KeyOf, TK_LessThan, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
+global SYNC_119: KindSet = [-541167576, 33554431, -1610612608, 0, 2048];
+global SYNC_120: KindSet = [16392];
+global EXPECTED_120: List<i32> = [TK_OpenBracket, TK_QuestionMarkDot];
+global SYNC_121: KindSet = [8519680];
+global EXPECTED_121: List<i32> = [TK_Dot, TK_Not];
+global SYNC_122: KindSet = [536870912, 201326592, -32, -33, 607];
+global EXPECTED_122: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Hashtag, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_123: KindSet = [139264];
+global EXPECTED_123: List<i32> = [TK_Dot, TK_QuestionMark];
+global SYNC_124: KindSet = [0, 1];
+global EXPECTED_125: List<i32> = [TK_LeftShiftArithmetic, TK_MoreThan];
 global SYNC_126: KindSet = [16777248];
 global EXPECTED_126: List<i32> = [TK_Multiply, TK_OpenParen];
 global SYNC_127: KindSet = [40, -67108864, -31, -33, 1631];

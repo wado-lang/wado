@@ -1,0 +1,11 @@
+// A Kiln generator's `generate` reads as `generate` from inside, though the
+// request adapter stands its own wire function in for it.
+
+use { generator_function } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/function_name_generator.wado" },
+    };
+
+test {
+    assert generator_function() == "generate";
+}

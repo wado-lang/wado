@@ -3874,6 +3874,18 @@ pub struct IdentExpr {
 pub const INFERRED_QUALIFIER: &str = "_";
 
 impl IdentExpr {
+    /// A bare `name`, as a rewrite synthesizes one.
+    pub fn bare(id: AstId, name: &str, span: Span) -> Expr {
+        Expr::Ident(Self {
+            id,
+            name: name.to_string(),
+            span,
+            segments: Vec::new(),
+            type_args: Vec::new(),
+            type_args_on_prefix: false,
+        })
+    }
+
     /// The segment naming the path's *owner*: `Color` in `Color::Red` and in
     /// `ns::Color::Red` — the one before the member, so a namespace qualifier
     /// ahead of the owner does not stand in for it. `None` for a bare name,

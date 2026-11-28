@@ -314,6 +314,15 @@ pub struct RuleHeader {
     /// Cached `case_names_for_rule(&rule.alternatives)`. Empty for
     /// `Simple`. Indexed by alt position in the original rule body.
     pub case_names: List<String>,
+    /// Each alternative's `# Label`, in source order.
+    pub alt_labels: List<Option<String>>,
+}
+
+impl RuleHeader {
+    /// Every alternative carries a `# Label`, so the CST names them by it.
+    pub fn alts_labeled(&self) -> bool {
+        return !self.alt_labels.is_empty() && self.alt_labels.iter_ref().all(|l| l matches { Some(_) });
+    }
 }
 
 /// Single-alternative rule. The body is emitted directly inside
@@ -719,9 +728,17 @@ pub struct AltBody {
     /// The precedence a prefix-LR alt's trailing operand climbs from, or 0.
     /// The one source for the parse call, its scan twin, and the ATN edge.
     pub prefix_self_ref_min_prec: i32,
-    /// A group alternative's actions, positioned by `ops` index, which the
-    /// op-only walker runs; empty on a rule's own alternative.
+    /// A group alternative's actions, positioned by `ops` index; empty on a
+    /// rule's own alternative.
     pub actions: List<AltAction> = [],
+    /// Whether a group alternative derives empty; false on a rule's own.
+    pub nullable: bool = false,
+    /// A group alternative's `alt_match_rank`, the order a branch of several
+    /// emits them in.
+    pub match_rank: [i32, i32] = [0, 0],
+    /// Whether a scan can measure every element of a group alternative, as a
+    /// tournament ranking it by scan length needs.
+    pub scannable: bool = false,
 }
 
 /// One lowered op — the per-position unit of work in a parse-time
@@ -941,8 +958,7 @@ pub struct ContinuationScan {
 pub struct RepeatOp {
     pub kind: RepeatKind,
     /// Surface `RepeatElement.non_greedy`. A `??` lowers to
-    /// `strategy: Plain`, so this is what tells it apart from a greedy `?`
-    /// for the op-only walker, which never sees the surface element.
+    /// `strategy: Plain`, so this is what tells it apart from a greedy `?`.
     pub non_greedy: bool = false,
     /// Inner op (recursive — single-element only). Wado allows
     /// the recursive type-reference; the variant boxes through the
@@ -982,6 +998,10 @@ pub struct RepeatOp {
     /// `compute_iter_follow` should union the body's first set with
     /// the outer follow rather than using outer alone.
     pub body_is_single_alt_group: bool,
+    /// Whether what follows this repeat in its group alternative derives
+    /// empty, so the follow handed to the group reaches it. Unread outside a
+    /// group alternative.
+    pub rest_nullable: bool = false,
     /// True iff the inner element contributes a CST field — i.e.
     /// emit's Repeat surfaces a storable `Option<T>` (`Optional`) or
     /// `List<T>` (`Star` / `Plus`) field. False for `Transparent`
@@ -990,14 +1010,8 @@ pub struct RepeatOp {
     /// to avoid threading the enum through every call site that just
     /// asks "does this body produce storage?".
     pub body_has_field: bool,
-    /// Lowered emit-shape classifier for the body op. Drives emit's
-    /// dispatch in `gen_op_repeat_*` so the `op_is_leaf` /
-    /// `is RuleCall(_)` / `is Group(_)` × `body_has_field` predicates
-    /// don't have to be re-checked at every dispatch site, and so the
-    /// fall-through panics ("op-driven dispatch did not cover this
-    /// body shape") become unreachable: every reachable body op has a
-    /// named variant here, and lower asserts at construction time
-    /// that no other shape leaks through.
+    /// Lowered emit-shape classifier for the body op, which emit's
+    /// `gen_op_repeat_*` dispatch matches on.
     pub body_shape: RepeatBodyShape,
     /// Caller-side second-token set for non-greedy 2-token
     /// disambiguation. For a non-greedy Repeat at position `i` of a
@@ -1031,8 +1045,7 @@ pub struct RepeatOp {
     pub duties: IterationDuties = IterationDuties {},
     /// `non_greedy_static_undecided` for this Repeat — no lookahead
     /// separates the loop body from the continuation. Stamped rather than
-    /// recomputed so the two emit walkers and the scan side cannot answer
-    /// it differently.
+    /// recomputed so the parse and the scan cannot answer it differently.
     pub static_exit_undecided: bool = false,
     /// The simulator decides whether each iteration enters: a non-greedy
     /// loop's exit no lookahead locates, or, under `prediction: "exact"`, any
@@ -1087,15 +1100,13 @@ pub struct GroupOp {
     /// Scan-side mirror, as the whole scan group and not the bare bodies, so
     /// emit reads the classification instead of making its own (invariant 9).
     pub scan_group: ScanGroupElement,
-    /// Dispatch when the group has multiple alts; parse and scan share
-    /// it. For single-alt groups this is `MultiAltDispatch::Direct` with
-    /// one branch.
-    pub dispatch: MultiAltDispatch,
     /// Which alternative is the nullable one and what selects it: what may
-    /// follow the group inside its own alternative. Lower names it so both
-    /// walkers partition alike (invariant 9); `null` where there is nothing to
+    /// follow the group inside its own alternative. Lower names it so the parse
+    /// and the scan partition alike; `null` where there is nothing to
     /// write, the caller's FOLLOW being the answer.
     pub empty_alt_admits: Option<EmptyAltAdmits>,
+    /// Surface `GroupElement.atn_decision` id, which the entry sync keys on.
+    pub atn_decision: i32 = -1,
     /// The group's ATN decision site where its empty alternative contends with
     /// another on a token that can follow the group; -1 where lookahead decides.
     pub atn_site: i32 = -1,
@@ -1105,17 +1116,13 @@ pub struct GroupOp {
     pub tournament_shadowed: bool = false,
 }
 
-/// Lower-side classification of a Repeat's body op shape. Drives
-/// emit's `gen_op_repeat_*` dispatch — every reachable shape lower
-/// produces has a named variant, so emit's per-Repeat dispatcher is
-/// an exhaustive `match rep_op.body_shape { ... }` rather than a
-/// cascade of `op_is_leaf` / `is RuleCall(_)` / `let Group(_) = ...`
-/// probes guarded by an "unhandled body shape" panic. Lower asserts
-/// at construction time that the body op falls into one of the four
-/// variants; ListLabel / Repeat shapes never reach `lower_repeat_op`.
+/// Lower-side classification of a Repeat's body op shape, which emit's
+/// `gen_op_repeat_*` dispatch matches on exhaustively. Lower asserts at
+/// construction time that the body op falls into one of the four variants;
+/// ListLabel / Repeat shapes never reach `lower_repeat_op`.
 pub variant RepeatBodyShape {
     /// `Op::RuleCall` body. Optional dispatch routes here for the
-    /// caller-follow subtraction (`gen_op_repeat_optional_rulecall`),
+    /// caller-follow subtraction (`gen_op_repeat_optional_leaf`),
     /// avoiding the next-sibling token greedy-eat issue.
     LeafRuleCall,
     /// `Op::Token` / `Op::Literal` / `Op::Wildcard` / `Op::Excluded`
@@ -1235,17 +1242,23 @@ pub struct SimpleCstShape {
     /// alt-shape.
     pub type_name: String,
     pub field: String,
+    /// The name `field` was deduplicated from.
+    pub dedup_base: String,
 }
 
 pub struct TokenOnlyShape {
     pub field: String,
     /// The name `field` was deduplicated from, which a label reference reads.
     pub dedup_base: String,
+    /// The kinds the alternatives consume, each once, in alternative order.
+    pub kinds: List<i32>,
 }
 
 pub struct SingleAltShape {
     pub struct_name: String,
     pub field: String,
+    /// The name `field` was deduplicated from.
+    pub dedup_base: String,
     /// Rule that owns the struct's general-group sub-type names
     /// when the single-alt body contains nested general groups.
     /// Drives `general_group_type_name` resolution.

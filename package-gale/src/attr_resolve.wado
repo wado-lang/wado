@@ -8,7 +8,7 @@
 //! and the fragment span the substitution engine later rewrites. An
 //! unresolvable reference is a loud error, never a silent passthrough.
 
-use { ParserRule, Element } from "./ir.wado";
+use { AttrEnv, LabelInfo, RuleAttrs } from "./rule_attrs.wado";
 use { AttrRef, find_attr_refs } from "./attr_scan.wado";
 use { to_snake_case, escape_ident } from "./ident.wado";
 
@@ -90,8 +90,8 @@ pub enum LabelReach {
 
 /// Every label and element reference of `rule`, as a decision ahead of its
 /// alternatives finds them.
-pub fn unmatched_bindings(rule: &ParserRule) -> List<AltBinding> {
-    let env = build_attr_env(rule);
+pub fn unmatched_bindings(rule: &RuleAttrs) -> List<AltBinding> {
+    let env = &rule.env;
     let mut out: List<AltBinding> = [];
     let mut push = |is_token: bool, name: &String, ref_name: &String| {
         let base = escape_ident(&to_snake_case(name));
@@ -111,44 +111,20 @@ pub fn unmatched_bindings(rule: &ParserRule) -> List<AltBinding> {
     return out;
 }
 
-struct LabelInfo {
-    name: String,
-    list: bool,
-    is_token: bool,
-    /// The referenced element's name: the rule name for a rule label (for member
-    /// validation against its `returns`) or the token name for a token label
-    /// (for the by-name alias). Empty when neither applies.
-    ref_name: String,
-}
-
-/// The attribute environment of one parser rule: the names it defines.
-pub struct AttrEnv {
-    labels: List<LabelInfo>,
-    attrs: List<String>,
-    token_refs: List<String>,
-    rule_refs: List<String>,
-    /// `underlying_name → label` aliases: a labeled ref (`q=e`, `x=ID`) is also
-    /// reachable by the referenced element's name (`$e`, `$ID`), resolving to the
-    /// label's storage. Registered only when that name has a single labeled
-    /// occurrence and no unlabeled one, matching ANTLR erroring on ambiguity.
-    label_aliases: List<[String, String]>,
-}
-
 /// Resolve every attribute reference in `body` against `rule`'s environment.
 /// `rules` is the parser-rule table, used to validate a rule member against
 /// the referenced rule's `returns` fields. Returns the resolved list, or an
 /// error message naming the first unresolvable reference / member.
 pub fn resolve_attrs<S: AsStrSlice>(
     body: S,
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     bindings: &List<AltBinding> = &NO_BINDINGS,
 ) -> Result<List<ResolvedAttr>, String> {
-    let env = build_attr_env(rule);
     let refs = find_attr_refs(body);
     let mut out: List<ResolvedAttr> = [];
     for let r of &refs {
-        let resolved = resolve_one(r, &env, rules, bindings)?;
+        let resolved = resolve_one(r, &rule.env, rules, bindings)?;
         out.push(resolved);
     }
     return Result::Ok(out);
@@ -157,7 +133,7 @@ pub fn resolve_attrs<S: AsStrSlice>(
 fn resolve_one(
     r: &AttrRef,
     env: &AttrEnv,
-    rules: &List<ParserRule>,
+    rules: &List<RuleAttrs>,
     bindings: &List<AltBinding>,
 ) -> Result<ResolvedAttr, String> {
     if let Some(lab) = label_named(env, &r.name, bindings) {
@@ -287,7 +263,7 @@ fn check_member<S: AsStrSlice>(
     r: &AttrRef,
     target: &AttrTarget,
     rule_name: S,
-    rules: &List<ParserRule>,
+    rules: &List<RuleAttrs>,
 ) -> Result<(), String> {
     let member = match &r.member {
         Some(m) => *m,
@@ -317,7 +293,7 @@ fn is_token_member<S: AsStrSlice>(m: S) -> bool {
     return m matches { "text" | "type" | "line" | "pos" | "index" | "channel" | "int" };
 }
 
-fn is_rule_member<S: AsStrSlice, S1: AsStrSlice>(m: S, rule_name: S1, rules: &List<ParserRule>) -> bool {
+fn is_rule_member<S: AsStrSlice, S1: AsStrSlice>(m: S, rule_name: S1, rules: &List<RuleAttrs>) -> bool {
     if is_rule_pseudo_member(m) {
         return true;
     }
@@ -341,107 +317,4 @@ pub fn is_rule_pseudo_member<S: AsStrSlice>(name: S) -> bool {
 
 fn is_parser_special<S: AsStrSlice>(name: S) -> bool {
     return is_rule_pseudo_member(name) || name == "_p";
-}
-
-/// Build a rule's attribute environment by collecting its declared
-/// attributes and walking its alternatives for labels and unlabeled refs.
-pub fn build_attr_env(rule: &ParserRule) -> AttrEnv {
-    let mut attrs: List<String> = [];
-    for let d of &rule.args {
-        attrs.push(d.name);
-    }
-    for let d of &rule.returns_decls {
-        attrs.push(d.name);
-    }
-    for let d of &rule.locals_decls {
-        attrs.push(d.name);
-    }
-    let mut labels: List<LabelInfo> = [];
-    let mut token_refs: List<String> = [];
-    let mut rule_refs: List<String> = [];
-    for let alt of &rule.alternatives {
-        for let e of &alt.elements {
-            collect_env_element(e, &mut labels, &mut token_refs, &mut rule_refs);
-        }
-    }
-    let label_aliases = build_label_aliases(&labels, &rule_refs, &token_refs);
-    return AttrEnv { labels, attrs, token_refs, rule_refs, label_aliases };
-}
-
-/// Build the `underlying_name → label` alias table so a labeled ref is also
-/// reachable by the referenced element's name: `$e` for `q=e`, `$ID` for
-/// `x=ID`. Registered only when that name has exactly one labeled occurrence
-/// and no unlabeled reference (of the same token/rule kind); an ambiguous
-/// reference stays unresolved, a loud error as ANTLR reports. The alias is a
-/// fallback (`resolve_one` tries direct resolution first), so it never shadows
-/// a same-named declared attribute or label.
-fn build_label_aliases(
-    labels: &List<LabelInfo>,
-    rule_refs: &List<String>,
-    token_refs: &List<String>,
-) -> List<[String, String]> {
-    let mut aliases: List<[String, String]> = [];
-    for let lab of labels {
-        if lab.list || lab.ref_name == "" {
-            continue;
-        }
-        let refs = if lab.is_token { token_refs } else { rule_refs };
-        if count_labeled_ref(labels, &lab.ref_name, lab.is_token) != 1 || refs.contains_str(&lab.ref_name) {
-            continue;
-        }
-        aliases.push([lab.ref_name, lab.name]);
-    }
-    return aliases;
-}
-
-fn count_labeled_ref<S: AsStrSlice>(labels: &List<LabelInfo>, ref_name: S, is_token: bool) -> i32 {
-    let mut n = 0;
-    for let lab of labels {
-        if !lab.list && lab.is_token == is_token && lab.ref_name == ref_name.as_str_slice() {
-            n += 1;
-        }
-    }
-    return n;
-}
-
-fn collect_env_element(
-    elem: &Element,
-    labels: &mut List<LabelInfo>,
-    token_refs: &mut List<String>,
-    rule_refs: &mut List<String>,
-) {
-    match *elem {
-        Label(lab) => {
-            let [is_token, ref_name] = classify_labeled(&lab.element);
-            labels.push(LabelInfo { name: lab.name, list: lab.list, is_token, ref_name });
-        },
-        RuleRef(rr) => rule_refs.push(rr.name),
-        TokenRef(tr) => token_refs.push(tr.name),
-        Group(g) => {
-            for let alt of &g.alternatives {
-                for let e of &alt.elements {
-                    collect_env_element(e, labels, token_refs, rule_refs);
-                }
-            }
-        },
-        Repeat(rep) => collect_env_element(&rep.element, labels, token_refs, rule_refs),
-        Not(n) => collect_env_element(&n.element, labels, token_refs, rule_refs),
-        _ => {
-        },
-    }
-}
-
-/// Classify a labeled element as token-bound or rule-bound, returning
-/// `[is_token, ref_name]`. A `RuleRef` is a rule (its name backs member
-/// validation); a `TokenRef` is a token (its name backs the by-name alias); a
-/// `Literal` is a token with no addressable name. Other shapes default
-/// token-like.
-fn classify_labeled(elem: &Element) -> [bool, String] {
-    return match *elem {
-        RuleRef(rr) => [false, rr.name],
-        TokenRef(tr) => [true, tr.name],
-        Literal(_) => [true, ""],
-        Not(n) => classify_labeled(&n.element),
-        _ => [true, ""],
-    };
 }

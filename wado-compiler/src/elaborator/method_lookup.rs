@@ -37,7 +37,6 @@ use super::infer::{infer_var_answers, unify};
 use super::infer_hole::{BoundRows, DeclaredBound, Obligation};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
-use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess, OpaqueReason};
 use super::trait_env::{ImplHeader, ImplMethodHeader, TraitEnv, header_as_written};
 use super::types::{
@@ -1072,7 +1071,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Each bound is owed where any argument names a variable, the answered
     /// ones included: the selection asked in three values wherever one did.
-    fn require_impl_bounds_at(&mut self, def: DefId, type_args: &[TypeId], span: Span) {
+    pub(super) fn require_impl_bounds_at(&mut self, def: DefId, type_args: &[TypeId], span: Span) {
         let binding = {
             let tt = self.tysys.type_table.borrow();
             let names_var = |ty: TypeId| !tt.infer_vars_in(ty).is_empty();
@@ -1186,47 +1185,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Enforce the bounds of the impl block a static call selected at the
-    /// receiver arguments it names, which no lookup filtered the block by:
-    /// now where they are decided, and once settled where they are open.
-    fn enforce_static_block_bounds(
-        &mut self,
-        block: Option<DefId>,
-        receiver_args: &[TypeId],
-        span: Span,
-    ) {
-        let Some(block) = block else {
-            return;
-        };
-        self.require_impl_bounds_at(block, receiver_args, span);
-        let unmet = self
-            .tysys
-            .unmet_impl_bound(
-                &self.annotate_ctx,
-                block,
-                None,
-                Some(receiver_args),
-                Unsettled::MayHold,
-            )
-            .or_else(|| {
-                // A list past the receiver's positions spells the slots only
-                // the trait arguments name, whose bounds no position reaches.
-                let mut table = self.tysys.type_table.borrow_mut();
-                if !table.impl_trait_sets_params(block) {
-                    return None;
-                }
-                let slots = table.impl_spelled_slots(block, receiver_args);
-                drop(table);
-                self.tysys
-                    .unmet_slot_bound(&self.annotate_ctx, block, &slots, Unsettled::MayHold)
-            });
-        if let Some(unmet) = unmet {
-            self.report_unmet(unmet, span);
-        }
-    }
-
     /// Report `unmet` through the bound enforcement. Whether it reported one.
-    fn report_unmet(&mut self, unmet: UnmetImplBound, span: Span) -> bool {
+    pub(super) fn report_unmet(&mut self, unmet: UnmetImplBound, span: Span) -> bool {
         let UnmetImplBound {
             param,
             type_arg,
@@ -1700,35 +1660,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(self.impl_instance_args(block, given, &inferred))
     }
 
-    /// The key of the instance a static call reaches in `block` at the
-    /// receiver's `positions`, its bounds enforced there, and the slots only
-    /// the trait arguments name settled by the call's `args`
-    /// ([`Self::slot_instance_args`]). `return_type` comes back with the
-    /// caller's projections answered, as the parameters already are.
-    pub(super) fn static_instance_args(
-        &mut self,
-        block: Option<DefId>,
-        positions: &[TypeId],
-        params: &mut [TypeId],
-        args: &[TypeId],
-        return_type: &mut TypeId,
-        span: Span,
-    ) -> Vec<TypeId> {
-        self.enforce_static_block_bounds(block, positions, span);
-        let instance_args = block
-            .and_then(|block| {
-                let given = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .impl_spelled_slots(block, positions);
-                self.slot_instance_args(block, given, params, args, return_type, span)
-            })
-            .unwrap_or_else(|| positions.to_vec());
-        *return_type = self.answer_frame_projections(*return_type);
-        instance_args
-    }
-
     /// What `block`'s instance is keyed by: every slot in slot order, `given`
     /// filling what the receiver binds and `inferred`, answered, the slots only
     /// the trait arguments name. A position the target writes concretely holds
@@ -1834,31 +1765,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             tt.open_impl_target_binding(&tt.impl_target_positions(def), &args, &open)?
         };
         Some(self.tysys.type_table.borrow_mut().settle_runs(binding))
-    }
-
-    /// [`Self::fill_defaulted_method_type_args`] for a static's own slots,
-    /// reading the trait and the declaring module off its signature.
-    pub(super) fn fill_static_default_type_args(
-        &mut self,
-        sig: &MethodSig,
-        receiver: &ReceiverId,
-        inferred: &mut [TypeId],
-    ) -> bool {
-        if !sig.own_params.iter().any(|p| p.default.is_some()) {
-            return false;
-        }
-        let Some(receiver_type) = self.static_receiver_type(receiver) else {
-            return false;
-        };
-        let declaring_module = Some(sig.defaults_module.clone());
-        let trait_decl = self.tysys.signatures.declaring_trait(sig);
-        self.fill_defaulted_method_type_args(
-            &sig.own_params,
-            SelfBinding::of_static(receiver_type, trait_decl),
-            &sig.own_type_param_ids(),
-            declaring_module,
-            inferred,
-        )
     }
 
     /// Bind a still-unbound method type param to its declared default,
@@ -2105,41 +2011,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.with_type_params_bound(&impl_args, |e| {
             e.bind_method_type_args_in_impl_frame(explicit, input)
         })
-    }
-
-    /// [`Self::bind_method_type_args`] for a static whose arguments resolved
-    /// before its own slots were instantiated: they are instantiated here, so
-    /// an unsolved one is blamed on `name`.
-    pub(super) fn bind_static_type_args(
-        &mut self,
-        explicit: Vec<TypeId>,
-        name: &str,
-        input: MethodInferenceInput<'_>,
-    ) -> (Vec<TypeId>, TypeArgMap) {
-        assert!(
-            input.inst.is_none(),
-            "the static's own slots are instantiated here"
-        );
-        let inst = (!input.slots.is_empty()).then(|| {
-            self.instantiate(
-                input.slots,
-                &Instantiation {
-                    kind: InstanceKind::Method,
-                    name,
-                    span: input.span,
-                    type_args: &explicit,
-                    self_binding: Some(input.self_binding),
-                    impl_args: input.impl_args,
-                },
-            )
-        });
-        self.bind_method_type_args(
-            explicit,
-            MethodInferenceInput {
-                inst: inst.as_ref(),
-                ..input
-            },
-        )
     }
 
     fn bind_method_type_args_in_impl_frame(
@@ -2535,26 +2406,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (id, b.type_id)
             })
             .collect()
-    }
-
-    /// The lists a `Type::method(...)` call checks and pads against. Every
-    /// static spelling asks this one question, so none of them differs on the
-    /// arity it checks.
-    pub(super) fn static_callee_params(
-        &mut self,
-        receiver: &ReceiverId,
-        method_name: &str,
-        arg_types: &[TypeId],
-        (required_trait, required_args): (Option<DefId>, &[TypeId]),
-        expected_return: Option<TypeId>,
-    ) -> StaticLookup {
-        self.resolve_static_callee(StaticQuery {
-            arg_types,
-            required_trait,
-            required_args,
-            expected_return,
-            ..StaticQuery::of(receiver, method_name)
-        })
     }
 
     /// Find a trait method for a given type and method name, for when an
@@ -4323,21 +4174,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.retain_most_specific_rhs(&mut found, class);
         }
         found
-    }
-
-    /// The method's own slots as its declaration wrote them, read off the
-    /// declaration [`Elaborator::resolve_static_callee`] picked: a trait-`impl`
-    /// method reports the trait's bounds and defaults, which the block itself
-    /// does not restate.
-    pub(super) fn lookup_static_method_type_params(
-        &mut self,
-        receiver: &ReceiverId,
-        method_name: &str,
-    ) -> Vec<ast::GenericParam> {
-        self.resolve_static_callee(StaticQuery::of(receiver, method_name))
-            .found()
-            .map(|callee| callee.own_params.clone())
-            .unwrap_or_default()
     }
 
     /// Look up the type parameters of a function from its AST definition.

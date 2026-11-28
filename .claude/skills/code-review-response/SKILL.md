@@ -80,6 +80,12 @@ was closed was wrong: the fix patched sites, or the class was drawn too narrow.
 Do not fix the new instance on its own. Analyze the class again from what admits
 it, and close that, so no review can find another instance.
 
+A fix built on a guess does not converge. Measure before you fix: run the case,
+or ask the tool that knows the answer, then choose the approach from what you
+saw. Code that predicts a primary source's answer rule by rule, such as name
+resolution read from the text instead of asked of rust-analyzer, gets one new
+finding per rule it missed.
+
 Many findings in one review are a sign of the same thing. Either the classes
 were not found, or most of the findings are not worth acting on.
 

@@ -8,9 +8,8 @@ design and the initial implementation are in
 
 The pipeline works end to end: WebIDL snapshot, generated bindings and glue,
 `SurfaceDom`, server-side rendering, callbacks, and a jsdom run in CI. The slice
-covers twelve interfaces: `EventTarget`, `Event`, `Node`, `CharacterData`,
-`Text`, `Element`, `HTMLElement`, `HTMLInputElement`, `Document`, `Window`,
-`NodeIterator` and `TreeWalker`.
+covers the interfaces `SLICE` in `tools/webidl/snapshot.mjs` lists: the tree,
+its traversal and collections, style, and canvas.
 
 `wado-from-idl` reads every definition and member kind webidl2 writes. It names
 each thing it does not bind on stderr, and counts them by cause.
@@ -23,27 +22,27 @@ left before the slice can be everything:
 | Cause                                           | Definitions | Members | Arguments |
 | ----------------------------------------------- | ----------- | ------- | --------- |
 | a callback in a result                          | 5           | 954     | 0         |
-| a type outside the slice                        | 2           | 282     | 2         |
-| a union                                         | 15          | 200     | 0         |
-| `any`                                           | 3           | 158     | 34        |
+| `any`                                           | 3           | 158     | 35        |
 | a buffer                                        | 15          | 172     | 5         |
 | a namespace member                              | 0           | 133     | 0         |
-| a dictionary                                    | 34          | 67      | 15        |
 | a special operation                             | 0           | 81      | 0         |
+| a dictionary                                    | 23          | 49      | 6         |
 | `object`                                        | 4           | 67      | 7         |
 | `[HTMLConstructor]`                             | 0           | 76      | 0         |
 | a redeclared inherited method                   | 0           | 56      | 0         |
+| an enum                                         | 19          | 24      | 0         |
 | an iteration declaration                        | 0           | 41      | 0         |
-| an enum                                         | 19          | 21      | 0         |
+| a type outside the slice                        | 0           | 36      | 1         |
 | `Promise<…>`                                    | 0           | 32      | 1         |
 | a callback the glue cannot call                 | 0           | 13      | 5         |
 | `record<…>`                                     | 0           | 15      | 0         |
-| a list of a list, a nullable type or a callback | 4           | 7       | 1         |
+| a union                                         | 3           | 12      | 0         |
+| a list of a list, a nullable type or a callback | 5           | 7       | 1         |
 | a static attribute                              | 0           | 7       | 0         |
 | `ObservableArray<…>`                            | 0           | 4       | 0         |
 | `bigint`                                        | 0           | 2       | 0         |
 | `async_sequence<…>`                             | 0           | 1       | 0         |
-| Total                                           | 101         | 2389    | 70        |
+| Total                                           | 77          | 1940    | 61        |
 
 The command prints the number of functions that do bind above the table. How to
 read the table:
@@ -62,7 +61,7 @@ read the table:
 - A callback in a result is nearly always an event handler attribute
   (`onclick`).
 - A type outside the slice is a name no snapshot definition declares. Over the
-  whole platform those are `CSSOMString`, `WindowProxy`, the legacy aliases
+  whole platform those are `WindowProxy`, the legacy aliases
   `SVGPoint`, `SVGRect` and `SVGMatrix`, and an interface only a worker reaches.
 - An enum is one with a value Wado cannot spell as a case: the empty string, as
   in `ReferrerPolicy`, or one starting with a digit, as in `"2d"`.
@@ -103,8 +102,9 @@ lower is then available to each interface the slice adds.
 - [x] Lower a union of two or more typable constituents to a `variant` where
   the guest supplies it, named after its typedef where it has one
   (`(Node or DOMString)`)
-- [ ] Lower such a union in a result, which takes telling the host's value
-  apart
+- [x] Lower such a union in a result, the glue telling the host's value apart
+  by the case whose test it passes
+- [x] `SurfaceDom` answers `hidden`, a union either way
 
 ### 4. Promises
 
@@ -133,11 +133,16 @@ lower is then available to each interface the slice adds.
   `data` and `insert_before`
 - [x] Traversal: `NodeIterator` and `TreeWalker`; `SurfaceDom` answers
   `create_node_iterator`, `create_tree_walker` and their traversals
-- [ ] Tree: `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`
-- [ ] Style and classes: `DOMTokenList`, `CSSStyleDeclaration`, `DOMRect`
+- [x] Tree: `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`
+- [x] Style and classes: `DOMTokenList`, `CSSStyleDeclaration` and
+  `CSSStyleProperties`, `DOMRect`
+- [x] Canvas: `HTMLCanvasElement`, `CanvasRenderingContext2D`,
+  `CanvasGradient`, `CanvasPattern`, `Path2D`, `TextMetrics`, `ImageData`
+- [ ] Trusted Types: `TrustedHTML`, once
+  [WEP: Union Types](../docs/wep-2026-11-28-union-types.md) settles how a
+  string reaches a `(TrustedHTML or DOMString)` argument
 - [ ] Elements: `HTMLButtonElement`, `HTMLAnchorElement`, `HTMLFormElement`,
-  `HTMLSelectElement`, `HTMLTextAreaElement`, `HTMLCanvasElement`,
-  `CanvasRenderingContext2D`
+  `HTMLSelectElement`, `HTMLTextAreaElement`
 - [ ] Events: `UIEvent`, `MouseEvent`, `KeyboardEvent`, `InputEvent`,
   `FocusEvent`
 - [ ] Window: `Location`, `Storage`, `setTimeout` and `setInterval`
@@ -155,9 +160,12 @@ lower is then available to each interface the slice adds.
   that leaves a constituent out.
 - A union's type changes as the slice grows: `set_attribute` takes a `String`
   until `TrustedHTML` joins the slice, and a variant from then on.
-- A dictionary's member is typed as a result is, so a callback or a union of
-  several types is left out of it even where the dictionary is only an
-  argument.
+- A dictionary's member is typed as a result is, so a callback is left out of
+  it even where the dictionary is only an argument.
+- An attribute whose union is there for its setter returns that union from its
+  getter too: once `TrustedHTML` joins the slice, `inner_html` returns a
+  variant whose case is always `AsString`, since the getter only ever returns a
+  string. The IDL does not tell such an attribute apart.
 - An optional member of a nullable type cannot be passed as `null`: its `None`
   is the member left out, for which the host reads the WebIDL default.
 - Two unions that differ take one name where a typedef's name is another
@@ -165,6 +173,15 @@ lower is then available to each interface the slice adds.
   `sequence<Node>` and `NodeList` do. The generator stops on it.
 - No member of the slice takes more than sixteen core values, so no test runs
   parameters read from memory against a host.
+- `HTMLCanvasElement.getContext` is not bound: it returns a union of every
+  rendering context, and the slice holds only `CanvasRenderingContext2D`. So
+  nothing reaches a `CanvasRenderingContext2D`, though its members bind.
+- `SurfaceDom` answers none of the members the canvas, style and collection
+  interfaces brought.
+- No test runs the glue telling apart a result union's interface, sequence,
+  dictionary or enum case against a host. `CanvasRenderingContext2D`'s
+  `fill_style` and `stroke_style` return an interface case, but nothing reaches
+  a `CanvasRenderingContext2D` while `getContext` is unbound.
 - `SurfaceDom` takes the options of what it does not model and ignores them:
   `passive`, since no event is cancelled, the `is` of `create_element`, and
   those of `get_html`, `scroll_into_view` and `request_fullscreen`.
@@ -175,9 +192,9 @@ lower is then available to each interface the slice adds.
 - jco 1.30.0 fails an export that a listener reenters during
   `dispatch_event`.
 - `SurfaceDom` neither removes a listener nor ignores one added twice.
-- `SurfaceDom` does not move a `NodeIterator`'s reference node off a node
-  removed from the tree, as the DOM standard's pre-removing steps do: it
-  tracks no iterator after creating it.
+- `SurfaceDom` keeps every `NodeIterator` it creates for the document's life,
+  and each removal visits them all: nothing drops an iterator the program no
+  longer reaches.
 - A callback that returns a value runs to its end before the page goes on, so
   waiting on a promise inside it traps.
 - A `NodeFilter` is required, though the page accepts `null` for one that

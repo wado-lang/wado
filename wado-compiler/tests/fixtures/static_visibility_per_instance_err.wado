@@ -1,0 +1,18 @@
+// Blocks written for two instances of one generic type each declare a
+// visibility of their own: a call is held to the block its instance reaches,
+// whichever the type's index lists first.
+use { W, V } from "./sub/static_visibility_per_instance_lib.wado";
+
+export fn run() {
+    let a = W::<String>::mk();
+    let b = W::<i32>::mk();
+    let c = V::<String>::mk();
+    let d = V::<i32>::mk();
+}
+
+__DATA__
+{
+  "compile_error": "is private to its defining file",
+  "compile_error_count": 2,
+  "compile_errors_contains": ["method `mk` of `W`", "method `mk` of `V`"]
+}

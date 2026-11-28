@@ -50,6 +50,7 @@ use {
     alt_class_of,
     alt_classes,
     alt_classes_of,
+    alt_match_rank,
     compute_overlap_groups,
     compute_overlap_groups_of,
     decision_partition,
@@ -1402,17 +1403,6 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClas
     };
 }
 
-/// Build a `Direct` dispatch over alternatives whose first sets are disjoint
-/// by construction — a token-only group's.
-fn build_direct_dispatch(
-    alts: &List<Alternative>,
-    first_sets: &List<List<i32>>,
-    ctx: &mut LowerContext,
-) -> MultiAltDispatch {
-    let slots = identity_slots(alts.len());
-    return direct_dispatch(&alt_classes(&slots, alts, false, first_sets, &mut ctx.analysis), &slots);
-}
-
 /// The token-led chain itself: one branch per class, in `indices` order. Emit
 /// translates it into `if / else if` and an error fallback.
 fn direct_dispatch(classes: &List<AltClass>, indices: &List<i32>) -> MultiAltDispatch
@@ -1443,14 +1433,35 @@ fn build_overlap_dispatch(
     classes: &List<AltClass>,
     ctx: &mut LowerContext,
 ) -> MultiAltDispatch {
-    let n_classes = classes.len();
-    let n_indices = indices.len();
-    assert n_classes == n_indices, "classes is parallel to indices";
+    if !warn_overlap_tournament(owner, alts, indices, classes, ctx) {
+        return direct_dispatch(classes, indices);
+    }
+    let mut sorted: List<i32> = [];
+    for let k of 0..<indices.len() {
+        if !classes[k] matches { _::Subsumed } {
+            sorted.push(indices[k]);
+        }
+    }
+    sort_group_by_element_count(&mut sorted, alts);
+    return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });
+}
 
+/// Whether the alternatives `indices` selects overlap, so only a scan
+/// tournament decides between them, reported as an advisory diagnostic where
+/// they do.
+fn warn_overlap_tournament(
+    owner: &DiagnosticOwner,
+    alts: &List<Alternative>,
+    indices: &List<i32>,
+    classes: &List<AltClass>,
+    ctx: &mut LowerContext,
+) -> bool
+    contract classes.len() == indices.len(), "classes is parallel to indices"
+{
     // A lone alternative overlaps nothing, whatever it admits, so there is no
     // tournament to run and none to report.
-    if n_indices < 2 {
-        return direct_dispatch(classes, indices);
+    if indices.len() < 2 {
+        return false;
     }
 
     // Overlap is `compute_overlap_groups_of`'s answer, as at every emitted
@@ -1459,7 +1470,7 @@ fn build_overlap_dispatch(
     // An open-ended alt reads as disjoint by its static set, and a Direct
     // chain would give it an unreachable empty-token branch.
     if disjoint && !any_open_ended(classes) {
-        return direct_dispatch(classes, indices);
+        return false;
     }
 
     for let idx of indices {
@@ -1480,15 +1491,7 @@ fn build_overlap_dispatch(
         DiagnosticKind::OverlapTournament,
         `alts ${join_kind_list(indices)} ${cause}; resolved by longest-match scan tournament, not a token-led branch`,
     );
-
-    let mut sorted: List<i32> = [];
-    for let k of 0..<n_indices {
-        if !classes[k] matches { _::Subsumed } {
-            sorted.push(indices[k]);
-        }
-    }
-    sort_group_by_element_count(&mut sorted, alts);
-    return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });
+    return true;
 }
 
 /// Collect the token kinds that appear in more than one alt's first
@@ -1939,14 +1942,9 @@ fn group_op(
     ctx: &mut LowerContext,
 ) -> Op {
     let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx);
-    let classes = group_alt_classes(alts, &empty_alt_admits, &mut ctx.analysis);
-    return Op::Group(GroupOp {
-        shape: shape,
-        alts: bodies,
-        scan_group: group_op_scan_group(scan_bodies, alts, &empty_alt_admits, ctx),
-        dispatch: build_overlap_dispatch(owner, alts, &identity_slots(alts.len()), &classes, ctx),
-        empty_alt_admits: empty_alt_admits,
-    });
+    let scan_group = group_op_scan_group(scan_bodies, alts, &empty_alt_admits, ctx);
+    let _ = warn_overlap_tournament(owner, alts, &identity_slots(alts.len()), &scan_group.alt_classes, ctx);
+    return Op::Group(GroupOp { shape, alts: bodies, scan_group, empty_alt_admits });
 }
 
 /// Whether a required scan group is emitted `lenient` — bailing out at its entry
@@ -2579,6 +2577,7 @@ fn lower_header(rule: &ParserRule) -> RuleHeader {
         type_name: rule.type_name,
         visibility: rule.visibility,
         case_names: case_names_for_rule(&rule.alternatives),
+        alt_labels: rule.alternatives.iter_ref().map(|a| a.label).collect(),
     };
 }
 
@@ -2764,7 +2763,7 @@ fn lower_op<S: AsStrSlice>(
             follow_is_exact,
             outer_suffix,
         ),
-        Group(g) => with_alt_actions(
+        Group(g) => with_surface_group(
             lower_group_op(
                 &g,
                 name_counts,
@@ -2778,6 +2777,7 @@ fn lower_op<S: AsStrSlice>(
                 outer_suffix,
             ),
             &g,
+            &mut ctx.analysis,
         ),
         Label(lab) => lower_label_op(
             &lab,
@@ -2794,22 +2794,36 @@ fn lower_op<S: AsStrSlice>(
     };
 }
 
-/// Lower a `Group` element into the `GroupShape` `classify_group` names.
-/// Inner ops share the surrounding alt's `name_counts` only for `Transparent`,
-/// whose wrapping is purely syntactic; every storable shape gets its own scope.
-/// `op`, lowered from `g`, with each alternative carrying the actions written
-/// in it, for the op-only walker, which has no surface alternative to read
-/// them from.
-fn with_alt_actions(op: Op, g: &GroupElement) -> Op {
+/// `op`, lowered from `g`, with `g`'s decision site, and each alternative
+/// carrying what emit would otherwise read off the surface alternative.
+fn with_surface_group(op: Op, g: &GroupElement, analysis: &mut GrammarAnalysis) -> Op {
     let Group(mut go) = op else {
         unreachable();
     };
+    go.atn_decision = g.atn_decision;
     for let alt of &mut go.alts {
-        alt.actions = g.alternatives[alt.alt_index].actions;
+        let surface = &g.alternatives[alt.alt_index];
+        alt.actions = surface.actions;
+        alt.nullable = analysis.tail_is_nullable_deep(&surface.elements, 0);
+        alt.match_rank = alt_match_rank(surface, analysis);
+        alt.scannable = surface.elements.iter_ref().all(|e| {
+            let mut visiting: List<String> = [];
+            return analysis.is_element_scannable(e, &mut visiting);
+        });
+        assert alt.ops.len() == surface.elements.len(), "a group alternative lowers one op per element";
+        for let i of 0..<alt.ops.len() {
+            if let Repeat(mut r) = alt.ops[i] {
+                r.rest_nullable = analysis.tail_is_nullable_deep(&surface.elements, i + 1);
+                alt.ops[i] = Op::Repeat(r);
+            }
+        }
     }
     return Op::Group(go);
 }
 
+/// Lower a `Group` element into the `GroupShape` `classify_group` names.
+/// Inner ops share the surrounding alt's `name_counts` only for `Transparent`,
+/// whose wrapping is purely syntactic; every storable shape gets its own scope.
 fn lower_group_op<S: AsStrSlice>(
     g: &GroupElement,
     name_counts: &mut List<[String, i32]>,
@@ -2941,16 +2955,11 @@ fn lower_transparent_group<S: AsStrSlice>(
         follow_is_exact,
         outer_suffix,
     );
-    // `dispatch` is meaningless for a one-alt Transparent group:
-    // emit recognises `GroupShape::Transparent` and skips the
-    // dispatch step, running the body unconditionally. The empty
-    // `Direct` placeholder is the cheapest valid `MultiAltDispatch`.
     let scan_body = alt_scan_body(alt, [walk], ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::Transparent,
         alts: [body],
         scan_group: group_op_scan_group(&[scan_body], &[*alt], &null, ctx),
-        dispatch: empty_direct_dispatch(),
         empty_alt_admits: null,
     });
 }
@@ -3101,7 +3110,8 @@ fn lower_single_alt_group<S: AsStrSlice>(
     // `lower_op` recursion.
 
     let struct_name = single_alt_group_type_name(alt);
-    let field = dedup_name(&single_alt_group_field_name(alt), name_counts);
+    let dedup_base = single_alt_group_field_name(alt);
+    let field = dedup_name(&dedup_base, name_counts);
 
     // Canonical owner for this single-alt struct: when the same body
     // appears in multiple rules CST emit deduplicates under the first
@@ -3137,20 +3147,15 @@ fn lower_single_alt_group<S: AsStrSlice>(
     let scan_body = alt_scan_body(alt, scan_elements, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::SingleAlt(SingleAltShape {
-            struct_name: struct_name,
-            field: field,
-            owner_rule: owner_rule,
+            struct_name,
+            field,
+            dedup_base,
+            owner_rule,
         }),
         alts: [body],
         scan_group: group_op_scan_group(&[scan_body], &[*alt], &null, ctx),
-        dispatch: empty_direct_dispatch(),
         empty_alt_admits: null,
     });
-}
-
-fn empty_direct_dispatch() -> MultiAltDispatch {
-    let branches: List<DispatchBranch> = [];
-    return MultiAltDispatch::Direct(DirectDispatch { branches });
 }
 
 /// Multi-alt group whose every alt is a single Token / Literal —
@@ -3171,7 +3176,6 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
 
     let mut bodies: List<AltBody> = [];
     let mut scan_bodies: List<ScanBody> = [];
-    let mut first_sets: List<List<i32>> = [];
     let mut inner_counts: List<[String, i32]> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
@@ -3191,14 +3195,15 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         let empty_follow: List<i32> = [];
         let token = lower_scan_element(elem, ctx, &empty_follow, FollowArg::NoFollow, false);
         scan_bodies.push(alt_scan_body(alt, [token], ctx));
-        first_sets.push([ctx.analysis.terminal_kind(elem)]);
     }
-    let dispatch = build_direct_dispatch(alts, &first_sets, ctx);
     return Op::Group(GroupOp {
-        shape: GroupShape::TokenOnly(TokenOnlyShape { field, dedup_base }),
+        shape: GroupShape::TokenOnly(TokenOnlyShape {
+            field,
+            dedup_base,
+            kinds: ctx.analysis.single_token_kinds(alts),
+        }),
         alts: bodies,
         scan_group: group_op_scan_group(&scan_bodies, alts, &null, ctx),
-        dispatch: dispatch,
         empty_alt_admits: null,
     });
 }
@@ -3237,7 +3242,8 @@ fn lower_simple_cst_group(
     outer_suffix: &List<Element>,
 ) -> Op {
     let type_name = group_variant_type_name(alts);
-    let field = dedup_name(&group_field_base_name(alts), name_counts);
+    let dedup_base = group_field_base_name(alts);
+    let field = dedup_name(&dedup_base, name_counts);
 
     let mut bodies: List<AltBody> = [];
     let mut scan_bodies: List<ScanBody> = [];
@@ -3262,7 +3268,7 @@ fn lower_simple_cst_group(
         site: DiagnosticSite::SimpleCstGroup,
     };
     return group_op(
-        GroupShape::SimpleCst(SimpleCstShape { type_name: type_name, field: field }),
+        GroupShape::SimpleCst(SimpleCstShape { type_name, field, dedup_base }),
         &owner,
         alts,
         bodies,
@@ -3688,11 +3694,7 @@ fn compute_body_second_position_first(elem: &Element, ctx: &mut LowerContext) ->
 
 /// Classify the body op into its `RepeatBodyShape`. The four cases
 /// cover every shape `lower_op` produces for a Repeat's inner; lower
-/// asserts on anything else so emit's exhaustive dispatch can drop
-/// the "did not cover this body shape" panics.
-///
-/// Mirrors emit's pre-shape checks (`is RuleCall(_)`, `op_is_leaf`,
-/// `let Group(g_op) = body && body_has_field`).
+/// asserts on anything else.
 fn classify_repeat_body_shape(body: &Op) -> RepeatBodyShape {
     return match body {
         RuleCall(_) => RepeatBodyShape::LeafRuleCall,
@@ -3795,8 +3797,7 @@ fn warn_optional_scan_guard(owner: &DiagnosticOwner, ctx: &mut LowerContext) {
 /// Fires when the inner is a single-alt Group with a non-empty
 /// leading run of fixed tokens (`TokenRef` / `Literal`); returns
 /// `null` for non-Group inners. Bare leaf Optionals stay at
-/// `Plain` — the Optional+leaf arm of
-/// `gen_op_repeat_with_follow_override` emits the single-token
+/// `Plain` — `gen_op_repeat_optional_leaf` emits the single-token
 /// guard directly from `body_admits`, so the specialisation is
 /// unnecessary there.
 fn try_optional_k_token_lookahead(inner: &Element, ctx: &mut LowerContext) -> Option<RepeatStrategy> {
@@ -3824,8 +3825,8 @@ fn try_optional_k_token_lookahead(inner: &Element, ctx: &mut LowerContext) -> Op
 ///
 /// Returns `[]` for non-Group inners and for a group with no leading
 /// fixed token — leaf Optionals (`TokenRef?` / `Literal?`) are handled by
-/// `gen_op_repeat_with_follow_override`'s Optional+leaf arm using
-/// `inner_first` directly, so we keep their strategy at `Plain`.
+/// `gen_op_repeat_optional_leaf` from `body_admits`, so we keep their
+/// strategy at `Plain`.
 fn collect_optional_entry_signature(inner: &Element, ctx: &mut LowerContext) -> List<List<i32>> {
     let mut sig: List<List<i32>> = [];
     if let Group(g) = inner {
@@ -4733,8 +4734,8 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 /// * `Group` shapes carry their outer field inside the shape payload
 ///   (`TokenOnly.field`, `SimpleCst.field`, etc.); the `Transparent`
 ///   shape has no field of its own and the label passes through to
-///   the inner op. Only `TokenOnly`, a leaf to emit, carries a
-///   `dedup_base`.
+///   the inner op. Every shape but `General` and `Transparent` carries a
+///   `dedup_base` too, rebound as a leaf's is.
 /// * `ListLabel` carries `dedup_base` itself; rebinding the outer
 ///   field here updates `dedup_base` to `new_dedup_base` for the same
 ///   reason as the leaf arms.
@@ -4791,10 +4792,12 @@ fn rebind_group_shape<S: AsStrSlice, S1: AsStrSlice>(shape: GroupShape, new_fiel
         },
         SimpleCst(mut scst) => {
             scst.field = new_field.to_string();
+            scst.dedup_base = new_dedup_base.to_string();
             GroupShape::SimpleCst(scst);
         },
         SingleAlt(mut sa) => {
             sa.field = new_field.to_string();
+            sa.dedup_base = new_dedup_base.to_string();
             GroupShape::SingleAlt(sa);
         },
         General(mut gen) => {

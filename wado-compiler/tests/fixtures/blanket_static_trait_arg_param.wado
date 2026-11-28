@@ -1,0 +1,84 @@
+// A blanket's block parameter that only the trait's argument names is settled
+// by the call: its arguments and the type expected of it. Each answer is an
+// instance of its own, as a call through an instance method keys them.
+
+trait Marked with () { fn mark(&self) -> i32; }
+struct S { v: i32 }
+struct Bx<V> { v: V }
+impl Marked for S { fn mark(&self) -> i32 { return 1; } }
+impl<V> Marked for Bx<V> { fn mark(&self) -> i32 { return 2; } }
+
+trait TakeIt<A> with () {
+    fn take(seed: Self, value: A) -> A;
+    fn pair(value: A) -> [A, A];
+}
+impl<A, T: Marked> TakeIt<A> for T {
+    fn take(seed: T, value: A) -> A {
+        assert seed.mark() > 0;
+        return value;
+    }
+    fn pair(value: A) -> [A, A] { return [value, value]; }
+}
+
+// `Bx` meets `Marked` alone, so `Rare`'s blanket supplies it no `keep`.
+trait Rare with () { fn rare(&self) -> i32; }
+trait Keep<A> with () { fn keep(seed: Self, value: A) -> A; }
+impl<A, T: Marked> Keep<A> for T {
+    fn keep(_seed: T, value: A) -> A { return value; }
+}
+trait KeepRare<A> with () { fn keep(seed: Self, value: A) -> A; }
+impl<A, T: Rare> KeepRare<A> for T {
+    fn keep(_seed: T, value: A) -> A { return value; }
+}
+
+fn through_param<T: Marked>(seed: T) -> i64 {
+    let n: i64 = T::take(seed, 5_000_000_000);
+    return n;
+}
+
+test "two instances on one receiver" {
+    let n: i64 = 5_000_000_000;
+    assert S::take(S { v: 1 }, n) == 5_000_000_000;
+    assert S::take(S { v: 1 }, "a") == "a";
+}
+
+test "a literal typed by what the call is expected to be" {
+    let n: i64 = S::take(S { v: 1 }, 5_000_000_000);
+    assert n == 5_000_000_000;
+    let [a, b]: [i64, i64] = S::pair(5_000_000_000);
+    assert a + b == 10_000_000_000;
+}
+
+test "a literal nothing else types" {
+    assert S::take(S { v: 1 }, 7) == 7;
+}
+
+test "a generic receiver spelled without its arguments" {
+    let n: i64 = 5_000_000_000;
+    assert Bx::take(Bx::<i32> { v: 1 }, n) == 5_000_000_000;
+}
+
+test "beside a blanket whose bound the receiver fails" {
+    let n: i64 = 5_000_000_000;
+    assert Bx::keep(Bx::<i32> { v: 1 }, n) == 5_000_000_000;
+    let m: i64 = Bx::keep(Bx::<i32> { v: 1 }, 5_000_000_000);
+    assert m == 5_000_000_000;
+}
+
+test "the trait named with its argument" {
+    let n: i64 = 5_000_000_000;
+    assert TakeIt::<i64, Self = S>::take(S { v: 1 }, n) == 5_000_000_000;
+    assert TakeIt::<String, Self = S>::take(S { v: 1 }, "a") == "a";
+    assert TakeIt::<i64, Self = S>::take(S { v: 1 }, 5_000_000_000) == 5_000_000_000;
+}
+
+test "the trait named, its argument left to the call" {
+    let n: i64 = 5_000_000_000;
+    assert TakeIt::<_, Self = S>::take(S { v: 1 }, n) == 5_000_000_000;
+    let m: i64 = TakeIt::<_, Self = S>::take(S { v: 1 }, 5_000_000_000);
+    assert m == 5_000_000_000;
+}
+
+test "a receiver that is a bound parameter" {
+    assert through_param(S { v: 1 }) == 5_000_000_000;
+}

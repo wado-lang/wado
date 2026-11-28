@@ -4,8 +4,7 @@
 //
 // A two-token optional (`( d '.' )? t` where FIRST(d) == FIRST(t)) inside a
 // left-recursive alternative's suffix. Deciding it needs the second token, the
-// `.`, so the op-only walker that drives LR-suffix bodies has to honour the
-// lowered Optional strategy: a one-token first-set check enters on the shared
+// `.`, so the LR-suffix body has to honour the lowered Optional strategy: a one-token first-set check enters on the shared
 // first token and then fails on the missing `'.'`.
 grammar LrOptTwoToken;
 
