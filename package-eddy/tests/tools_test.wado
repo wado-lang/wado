@@ -13,10 +13,12 @@ test "Write and Run are offered only with a runner" {
     assert names.contains_str("Write") && names.contains_str("Run");
 }
 
-test "only Run has a limit on its calls" {
-    let ws = Workspace { root: "src" };
-    assert ws.call_limit(&"Run") matches { Some(n) && n > 0 };
+test "only Run has a limit on its calls, its runner's" {
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "", runs: 5 };
+    let ws = Workspace { root: "src", runner: Some(runner) };
+    assert ws.call_limit(&"Run") matches { Some(5) };
     assert ws.call_limit(&"Read") matches { null };
+    assert Workspace { root: "src" }.call_limit(&"Run") matches { null };
 }
 
 test "Write creates the file and its directories inside the root" {

@@ -8,8 +8,10 @@ Eddy is a code review bot in Wado, on the Anthropic API for now. The
 
 ## Architecture
 
-A reviewer agent reads the branch through Eddy's tools (reading, searching and
-symbol lookup), and may write and run a test that reproduces a finding. A
+Reviewer agents, one per focus, read the branch through Eddy's tools
+(reading, searching and symbol lookup) and report candidates. One more merges
+the candidates, checks them, and may write and run a test that reproduces a
+finding. A
 smaller reporter model then turns the findings into structured records. Eddy
 tries each reproduction again alone in a clean checkout to set `verified`,
 writes the patches and comments under `scratchpad/eddy/<head>/`, records the

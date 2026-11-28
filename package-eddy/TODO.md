@@ -46,3 +46,6 @@ change, with a probe under `wado run -O2` timing each step with `wasi:clocks`
 - [ ] Reuse an entry's indexes across evaluation runs instead of rebuilding
   them with each snapshot. `rust-analyzer scip` dominates and cannot be made
   faster here.
+- [ ] Run a review's searches at once. They read and never write, so nothing
+  but the agent loop's blocking requests keeps them in turn, and a review now
+  takes about as long as its searches added up.

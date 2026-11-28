@@ -4,7 +4,7 @@ Eddy is a code review bot written in Wado. It runs on the Anthropic API for
 now; later, models from several providers will review a change together,
 exchanging opinions.
 
-What runs today is one reviewer over one branch, from the command line; the
+What runs today is one model over one branch, from the command line; the
 rest of the pipeline [the design notes](./docs/design.md) describe is not
 implemented yet.
 
@@ -13,9 +13,22 @@ implemented yet.
 From the repository root, with `CLAUDE_API_KEY` set and the branch committed:
 
 ```sh
-mise run eddy-review             # the reviewer reads, writes tests and runs them
-mise run eddy-review --no-run    # it reads the diff and the tree, and runs nothing
+mise run eddy-review             # the reviewers read; the last writes tests and runs them
+mise run eddy-review --no-run    # every reviewer reads the diff and the tree, and runs nothing
 ```
+
+A review takes two steps:
+
+1. Search. `--reviewers` reviewers (4, the most) each read the change for one
+   focus: the changed code itself, its callers, state and time, and the
+   toolchain as its users see it. They run nothing and report candidates, the
+   uncertain ones included.
+2. Confirm. One more reviewer reads every candidate. It merges those that name
+   one defect, drops those the code refutes, and reproduces the rest. Its Run
+   budget is three runs per candidate, up to ten candidates.
+
+The searches run one after another, so a review takes longer than a single
+reviewer would.
 
 The findings go to stdout as JSON. A finding the reviewer reproduced carries
 its `repro`:
@@ -48,10 +61,11 @@ Each finding is also written under `scratchpad/eddy/<head>/`, numbered from 1:
 A finding's `line` is a line the diff shows, which is where a pull request
 takes a comment on a line, or 0.
 
-The reviewer is asked for none of this. Its instructions hold the review
+The reviewers are asked for none of this. Their instructions hold the review
 alone: what to look for, and to reproduce a finding with a test that asserts
 the right behaviour. A second, smaller model (`--reporter`, Claude Haiku 5.5)
-then reads the findings, the files the reviewer wrote and the runs it made,
+then reads the findings, the files the confirming reviewer wrote and the runs
+it made,
 and names each finding's line, its test and the run that failed. Anything
 about how a finding is reported goes into that second prompt, so it cannot
 cost the review its attention. `--report-again` reports the last recorded

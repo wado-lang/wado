@@ -43,6 +43,12 @@ research points. The evidence behind them is in
 - [x] The strongest model sits where findings merge, not where work is split.
   It receives structured, verified findings, so that its context holds
   evidence rather than transcripts.
+- [x] Searching and reproducing are separate steps. Reviewers each search the
+  change for one focus, reading only, and one more merges their candidates,
+  checks them and reproduces them. A reviewer that reproduced as it searched
+  spent its turns on its first suspicion and reported about one finding. The
+  searches overlap in what they read, but not in what they run, which costs
+  the most.
 - [x] Part of the offline evaluation set stays out of learning's reach. The
   outcomes learning feeds on are what the metrics count, so only a set the
   learning never saw tells improvement from fitting.

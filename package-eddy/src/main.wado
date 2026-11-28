@@ -1,13 +1,14 @@
 //! Eddy's CLI: reviews what a branch changes, prints the findings as JSON, and
 //! adds the review to the record of its head commit.
 //!
-//! The reviewer reads the diff from the merge base of `--base` (`origin/main`)
-//! to `--head` (`HEAD`), and a checkout of the head under `scratchpad/`,
-//! through Read, Grep and Glob. It also writes tests into that checkout and
-//! runs them through Write and Run: with `cargo`, and where `mise` is set up,
-//! with it and each tool it installed for the project. That needs
+//! `--reviewers` (4) reviewers each search the diff from the merge base of
+//! `--base` (`origin/main`) to `--head` (`HEAD`) for one focus, and read a
+//! checkout of the head under `scratchpad/` through Read, Grep and Glob. One
+//! more merges what they found and checks it: it also writes tests into that
+//! checkout and runs them through Write and Run, with `cargo`, and where `mise`
+//! is set up, with it and each tool it installed for the project. That needs
 //! `--process-read` on the `cargo` and `rustup` homes, and for `mise` on its
-//! binary and its data directory; `--no-run` reviews by reading alone.
+//! binary and its data directory; `--no-run` checks by reading alone.
 //!
 //! A second model, `--reporter` (`claude-haiku-5-5`), then reads what the
 //! reviewer did and gives each finding its line and the test that reproduced
@@ -48,7 +49,7 @@ use { Credential, Usage } from "./anthropic.wado";
 use { comment, finding_id, review_comment } from "./comment.wado";
 use { cost_summary } from "./cost.wado";
 use { report } from "./report.wado";
-use { review, Submission, Finding, Reviewed } from "./review.wado";
+use { review, Submission, Finding, Reviewed, MAX_REVIEWERS } from "./review.wado";
 use { hold_tree, home_runner, with_mise_tools } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
 
@@ -58,7 +59,7 @@ global CLAUDE_MODEL: String = "claude-opus-5-5";
 #[param(name = "diff_limit")]
 global LIMIT: i32 = 2_000_000;
 
-global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--reporter <model>] [--report-again] [--max-turns <n>] [--effort <level>] [--reviews <dir>] [--out <dir>]";
+global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--reporter <model>] [--report-again] [--reviewers <n>] [--max-turns <n>] [--effort <level>] [--reviews <dir>] [--out <dir>]";
 
 struct Options {
     base: String = "origin/main",
@@ -66,6 +67,7 @@ struct Options {
     no_run: bool = false,
     reporter: String = "claude-haiku-5-5",
     report_again: bool = false,
+    reviewers: i32 = MAX_REVIEWERS,
     max_turns: i32 = 40,
     effort: String = "medium",
     reviews: String = "scratchpad/wiki/reviews",
@@ -81,6 +83,9 @@ struct Attempt {
     /// Empty in a record written before a second model reported.
     reporter: String = "",
     run: bool,
+    /// 0 in a record written before reviews were split: one reviewer searched
+    /// and reproduced alone.
+    reviewers: i32 = 0,
     max_turns: i32,
     /// Empty in a record written before it was sent: the API's default.
     effort: String = "",
@@ -101,6 +106,9 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Clie
     };
     if options.max_turns < 1 {
         fail(`--max-turns must be at least 1\n${USAGE}`);
+    }
+    if !(1 <= options.reviewers <= MAX_REVIEWERS) {
+        fail(`--reviewers must be from 1 to ${MAX_REVIEWERS}, one per focus\n${USAGE}`);
     }
     let mut credential = match Credential::from_env() {
         Ok(credential) => credential,
@@ -142,7 +150,7 @@ ${commits.trim()}`;
     let mut result = if let Some(earlier) = &earlier {
         reviewed_again(&w, &earlier.result);
     } else {
-        review(&mut credential, CLAUDE_MODEL, &change, &Some(w), options.max_turns, options.effort);
+        review(&mut credential, CLAUDE_MODEL, &change, &Some(w), options.reviewers, options.max_turns, options.effort);
     };
     // A report that fails leaves the findings as the reviewer worded them.
     let mut report_usage = Usage {};
@@ -162,6 +170,10 @@ ${commits.trim()}`;
         reviewer: CLAUDE_MODEL,
         reporter: options.reporter,
         run: !options.no_run,
+        reviewers: match &earlier {
+            Some(e) => e.reviewers,
+            null => options.reviewers,
+        },
         max_turns: options.max_turns,
         effort: options.effort,
         result,
@@ -172,11 +184,13 @@ ${commits.trim()}`;
     // ever add files. The name sorts by when the review ended.
     let path = fs::join(&records, `${Instant::now().epoch_milliseconds()}-${token_hex(4)}.json`);
     fs::write(&path, &to_bytes_pretty(&attempt).unwrap()).unwrap();
-    eprintln(`recorded in ${path}: ${result.turns} turns, ${result.calls.len()} tool calls`);
+    eprintln(
+        `recorded in ${path}: ${result.searches.len()} searches, ${result.total_turns()} turns, ${result.calls.len()} tool calls confirming`,
+    );
     // Computed here rather than recorded: a price changes, and the tokens a
     // review took do not.
     let cost = cost_summary(&[
-        [CLAUDE_MODEL, result.usage.unwrap_or(Usage {})],
+        [CLAUDE_MODEL, result.spent()],
         [options.reporter, report_usage],
     ]);
     eprintln(cost);
@@ -220,6 +234,7 @@ fn reviewed_again(w: &Workspace, earlier: &Reviewed) -> Reviewed with (Preopens,
     // The earlier attempt holds what the review took; this one took nothing.
     again.usage = null;
     again.requests = [];
+    again.searches = [];
     for let f of &mut again.findings {
         f.line = 0;
         f.repro = null;

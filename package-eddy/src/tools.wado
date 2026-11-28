@@ -48,6 +48,10 @@ pub struct Runner {
     pub programs: List<String> = ["cargo"],
     /// The directories of those tools, as a `PATH` to search first.
     pub tool_path: String = "",
+    /// The most Runs one review makes. Retrying a defect that does not
+    /// reproduce, such as a race, spends a review's turns on nothing, so past
+    /// this the reviewer answers from what it has.
+    pub runs: i32 = 12,
 }
 
 /// Shell that moves into the tree at `$0` and has `mise` read that tree's
@@ -70,11 +74,6 @@ pub struct Ran {
     pub succeeded: bool,
     pub report: String,
 }
-
-/// The most Runs one review makes. Retrying a defect that does not reproduce,
-/// such as a race, spends a review's turns on nothing, so past this the
-/// reviewer answers from what it has.
-global RUN_LIMIT: i32 = 12;
 
 /// How long one Run may take, in seconds, unless it asks for another time.
 pub global RUN_TIMEOUT: i32 = 900;
@@ -183,13 +182,14 @@ impl Workspace {
             );
         }
         if let Some(runner) = &self.runner {
-            out.extend(&running_tools(&runner.programs));
+            out.extend(&running_tools(runner));
         }
         return out;
     }
 }
 
-fn running_tools(programs: &List<String>) -> List<Tool> {
+fn running_tools(runner: &Runner) -> List<Tool> {
+    let programs = &runner.programs;
     let mise = if programs.contains_str("mise") {
         #"
 - mise is the project's task runner: ["tasks"] lists the tasks of mise.toml, and ["run", "<task>", "<argument>"] runs one. The other programs are the tools it installed for the project."#;
@@ -213,7 +213,7 @@ fn running_tools(programs: &List<String>) -> List<Tool> {
             `Runs a program at the repository root with the given arguments, cargo unless program names another, and returns how it ended and the end of its stderr and stdout.
 - Examples for cargo: ["test", "-p", "wado-lsp", "--test", "my_check"]; ["run", "--bin", "wado", "--", "run", "check.wado"]; ["test", "-p", "wado-compiler", "--lib", "some_test_name"].${mise}
 - The first build takes minutes; later ones reuse it. It stops after timeout seconds (default ${RUN_TIMEOUT}, at most ${RUN_TIMEOUT_LIMIT}).
-- A review makes at most ${RUN_LIMIT} runs.`,
+- A review makes at most ${runner.runs} runs.`,
             `{
   "type": "object",
   "properties": {
@@ -296,7 +296,10 @@ fn tool(name: String, description: String, schema: String) -> Tool {
 impl Workspace {
     /// The most calls of tool `name` one review makes, where it has a limit.
     pub fn call_limit(&self, name: &String) -> Option<i32> {
-        return if *name == "Run" { Some(RUN_LIMIT) } else { null };
+        return match &self.runner {
+            Some(runner) && *name == "Run" => Some(runner.runs),
+            _ => null,
+        };
     }
 
     /// Whether what tool `name` returns is an observation the tree cannot give

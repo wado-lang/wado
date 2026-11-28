@@ -1,9 +1,16 @@
-//! One review of a change: a model reads its diff, and the tree it leaves
-//! where a workspace gives one, and reports the defects it introduces. The
-//! reviewer is asked for nothing else: what a report needs beyond a finding's
-//! words is drawn from it afterwards, in `report.wado`.
+//! One review of a change, in two steps. Reviewers each search the diff for
+//! one focus, reading the tree it leaves where a workspace gives one and
+//! running nothing, and report candidates. One more merges the candidates that
+//! name one defect, checks each against the code, reproduces it where the
+//! workspace runs code, and reports what survives. The reviewers are asked for
+//! nothing else: what a report needs beyond a finding's words is drawn from it
+//! afterwards, in `report.wado`.
+//!
+//! A search spends no run, so the run budget goes to the candidates rather
+//! than to the first suspicion a single reviewer meets.
 
 use { Preopens } from "core:fs";
+use { to_string } from "core:json";
 use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
@@ -12,11 +19,20 @@ use { run_agent, Call, Request } from "./agent.wado";
 use { empty_index } from "./symbols.wado";
 use { Runner, Workspace } from "./tools.wado";
 
-global REVIEW: String = #"You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
-Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.
-Answer with one JSON object and nothing else:
+global ROLE: String = "You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
+Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.";
+
+/// The most findings one answer holds.
+global MAX_FINDINGS: i32 = 10;
+
+global ANSWER: String = `Answer with one JSON object and nothing else:
 {"findings": [{"file": "<path>", "summary": "<one sentence>", "detail": "<why it is wrong, and when it goes wrong>"}]}
-Report at most 10 findings, the most severe first. An empty list is a valid answer."#;
+Report at most ${MAX_FINDINGS} findings, the most severe first. An empty list is a valid answer.`;
+
+global SEARCH: String = "Several reviewers search this change, each for what one focus covers, and a later step checks and reproduces what they report. Report every defect your focus covers that you find, one you are not sure of included, and say in its detail what would confirm it. Report a defect outside your focus only if it is severe. You run nothing.";
+
+global CONFIRM: String = "Reviewers searched this change, each for one focus, and reported the CANDIDATES after the diff. They read without running anything, so two may name the same defect and some are wrong.
+Merge the candidates that name one defect into one finding. Check each against the code, and drop one the code refutes. Work through every candidate, the most severe first, and report the ones that survive.";
 
 global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your final reply is the JSON object.";
 
@@ -26,6 +42,39 @@ global RUNNING: String = "You can also run the code: Write a test or a small pro
 Before you report a finding, reproduce it: write a test that asserts the right behaviour, so that it fails now and would pass once the defect is fixed, and run it. A finding you are already sure of from reading is still one to reproduce, since reading can be wrong either way. A suspicion a run refutes is one to drop.
 A defect that depends on timing, such as a race with another process, is reproduced by making the interleaving happen in the test, for example by deleting a file between the two steps the race separates, never by running it again in the hope of hitting it.
 Give each finding at most three runs. One that does not reproduce by then is reported only if the code makes it certain, saying in its detail that it was not reproduced and why.";
+
+/// What the confirming reviewer's Runs are budgeted at, per candidate it may
+/// report; it also gets one turn more per run.
+global RUNS_PER_FINDING: i32 = 3;
+
+/// What one searching reviewer looks for. The foci part the defects a change
+/// can introduce so that reviewers of one change overlap little.
+struct Focus {
+    name: String,
+    covers: String,
+}
+
+global FOCI: List<Focus> = [
+    Focus {
+        name: "code",
+        covers: "the changed code itself: each branch, boundary and error path of what was added or rewritten, conversions, sizes and indices, and the result it gives on the inputs its own tests do not try",
+    },
+    Focus {
+        name: "callers",
+        covers: "what the change breaks elsewhere: each caller of a function, type or field it changed, each invariant or contract it moved, and what must agree with it by text, such as a generated file, its generator, a spec example or a test's expectation",
+    },
+    Focus {
+        name: "state",
+        covers: "state and time: what is cached, shared or kept between calls and goes stale, the order things happen in, a resource left open or released twice, processes and files, hangs, and input from outside the program that it trusts",
+    },
+    Focus {
+        name: "users",
+        covers: "the toolchain as its users see it: a Wado program the compiler now accepts that it should reject or rejects that it should accept, code it generates wrong, a diagnostic missed or misplaced, and a command or option that now behaves otherwise than its documentation says",
+    },
+];
+
+/// How many reviewers search a change at most: one per focus.
+pub global MAX_REVIEWERS: i32 = FOCI.len();
 
 pub struct Finding {
     pub file: String,
@@ -52,8 +101,9 @@ pub struct Repro {
     pub output: String,
 }
 
-/// What one review reported and what it took. A review that failed keeps what
-/// it spent before the error.
+/// What one reviewer reported and what it took: the confirming one, with the
+/// searches it confirmed, or one search. A review that failed keeps what it
+/// spent before the error.
 pub struct Reviewed {
     pub findings: List<Finding> = [],
     pub turns: i32 = 0,
@@ -62,6 +112,30 @@ pub struct Reviewed {
     /// Each request of an agent's review, in order.
     pub requests: List<Request> = [],
     pub error: Option<String> = null,
+    /// The focus of a search; empty for the confirming reviewer, and in a
+    /// record written before reviews were split.
+    pub focus: String = "",
+    /// The searches whose candidates the confirming reviewer read.
+    pub searches: List<Reviewed> = [],
+}
+
+impl Reviewed {
+    /// What this review and its searches took.
+    pub fn spent(&self) -> Usage {
+        let mut total = self.usage.unwrap_or(Usage {});
+        for let s of &self.searches {
+            total.add(&s.spent());
+        }
+        return total;
+    }
+
+    pub fn total_turns(&self) -> i32 {
+        let mut total = self.turns;
+        for let s of &self.searches {
+            total += s.total_turns();
+        }
+        return total;
+    }
 }
 
 struct Answer {
@@ -83,27 +157,111 @@ impl Submission {
 ${self.diff}
 </diff>`;
     }
+
+    /// The task with the candidates to confirm after the diff.
+    fn confirming(&self, candidates: &List<Finding>) -> String {
+        return `${self.task()}
+
+<candidates>
+${to_string(candidates).unwrap()}
+</candidates>`;
+    }
 }
 
-/// What a reviewer reading `w` is told: the task, and each kind of tool `w`
-/// offers.
-fn instructions(w: &Workspace) -> String {
-    let mut system = `${REVIEW}\n${READING}`;
+/// What a reviewer with `ws` is told of each kind of tool it offers.
+fn tools_told(ws: &Option<Workspace>) -> String {
+    let Some(w) = ws else {
+        return "";
+    };
+    let mut told = `\n${READING}`;
     if w.symbols matches { Some(_) } {
-        system.push_str(`\n${SYMBOL_READING}`);
+        told.push_str(`\n${SYMBOL_READING}`);
     }
     if w.runner matches { Some(_) } {
-        system.push_str(`\n${RUNNING}`);
+        told.push_str(`\n${RUNNING}`);
     }
-    return system;
+    return told;
 }
 
-/// `model`'s review of `change`, in one call, or by an agent that reads `ws`
-/// for up to `max_turns` turns at `effort` with every tool `ws` offers.
+fn searching(focus: &Focus, ws: &Option<Workspace>) -> String {
+    return `${ROLE}\n${SEARCH}\nYour focus is ${focus.covers}.\n${ANSWER}${tools_told(ws)}`;
+}
+
+fn confirming(ws: &Option<Workspace>) -> String {
+    return `${ROLE}\n${CONFIRM}\n${ANSWER}${tools_told(ws)}`;
+}
+
+/// `ws` with its Run budgeted for confirming `candidates` candidates, and the
+/// turns that budget adds.
+fn budgeted(ws: &Option<Workspace>, candidates: i32) -> [Option<Workspace>, i32] {
+    let Some(w) = ws else {
+        return [null, 0];
+    };
+    let mut out = *w;
+    let Some(runner) = &mut out.runner else {
+        return [Some(out), 0];
+    };
+    runner.runs = RUNS_PER_FINDING * i32::min(candidates, MAX_FINDINGS);
+    return [Some(out), runner.runs];
+}
+
+/// `model`'s review of `change` by `reviewers` searches, one per focus, and a
+/// reviewer that confirms what they found. Each reads `ws` for up to
+/// `max_turns` turns at `effort`, with every tool `ws` offers but Write and
+/// Run, which only the confirming reviewer has. Without a workspace each is
+/// one call.
 pub fn review(
     credential: &mut Credential,
     model: String,
     change: &Submission,
+    ws: &Option<Workspace>,
+    reviewers: i32,
+    max_turns: i32,
+    effort: String,
+) -> Reviewed with (Client, Preopens, Process, MonotonicClock) {
+    assert 1 <= reviewers <= MAX_REVIEWERS;
+    let reading: Option<Workspace> = match ws {
+        Some(w) => Some(Workspace { ..*w, runner: null }),
+        null => null,
+    };
+    let mut searches: List<Reviewed> = [];
+    let mut candidates: List<Finding> = [];
+    for let i of 0..<reviewers {
+        let focus = &FOCI[i];
+        let mut search = ask(credential, model, searching(focus, &reading), change.task(), &reading, max_turns, effort);
+        search.focus = focus.name;
+        let failed = search.error;
+        candidates.extend(&search.findings);
+        searches.push(search);
+        if let Some(e) = failed {
+            return Reviewed { searches, error: Some(`the search for ${focus.name} failed: ${e}`) };
+        }
+    }
+    if candidates.is_empty() {
+        return Reviewed { searches };
+    }
+    let [confirmer, extra_turns] = budgeted(ws, candidates.len());
+    let mut confirmed = ask(
+        credential,
+        model,
+        confirming(&confirmer),
+        change.confirming(&candidates),
+        &confirmer,
+        max_turns + extra_turns,
+        effort,
+    );
+    confirmed.searches = searches;
+    return confirmed;
+}
+
+/// `model`'s findings on `task` as `system` asks for them: in one call, or by
+/// an agent that reads `ws` for up to `max_turns` turns at `effort` with every
+/// tool `ws` offers.
+fn ask(
+    credential: &mut Credential,
+    model: String,
+    system: String,
+    task: String,
     ws: &Option<Workspace>,
     max_turns: i32,
     effort: String,
@@ -111,7 +269,7 @@ pub fn review(
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
         let mut usage = Usage {};
-        return match ask_json::<Answer>(credential, model, REVIEW, change.task(), 32_000, &mut usage) {
+        return match ask_json::<Answer>(credential, model, system, task, 32_000, &mut usage) {
             Ok(a) => Reviewed { findings: a.findings, usage: Some(usage) },
             Err(e) => Reviewed {
                 error: Some(e),
@@ -119,7 +277,7 @@ pub fn review(
             },
         };
     };
-    let agent = run_agent(credential, model, instructions(w), change.task(), w, max_turns, 32_000, effort);
+    let agent = run_agent(credential, model, system, task, w, max_turns, 32_000, effort);
     let mut reviewed = Reviewed {
         turns: agent.turns,
         calls: agent.calls,
@@ -137,23 +295,62 @@ pub fn review(
 }
 
 test "a reviewer is told of the tools its workspace offers, and no others" {
-    let reading = instructions(&Workspace { root: "src" });
+    let reading = confirming(&Some(Workspace { root: "src" }));
     assert reading.contains("Read, Grep and Glob");
     assert !reading.contains("FindSymbol") && !reading.contains("reproduce it");
+    assert !confirming(&null).contains("Read, Grep and Glob");
 
     let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
-    let running = instructions(&Workspace {
+    let running = confirming(&Some(Workspace {
         root: "src",
         symbols: Some(empty_index()),
         runner: Some(runner),
-    });
+    }));
     assert running.contains("FindSymbol") && running.contains("reproduce it");
 }
 
 test "a reviewer is asked for a finding's words and nothing a report adds" {
     let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
-    let told = instructions(&Workspace { root: "src", runner: Some(runner) });
-    assert !told.contains(#""line""#) && !told.contains(#""repro""#) && !told.contains(#""paths""#);
+    let ws: Option<Workspace> = Some(Workspace { root: "src", runner: Some(runner) });
+    for let told of [
+        confirming(&ws),
+        searching(&FOCI[0], &ws),
+    ] {
+        assert !told.contains(#""line""#) && !told.contains(#""repro""#) && !told.contains(#""paths""#);
+    }
+}
+
+test "each search is told its own focus" {
+    for let f of &FOCI {
+        let told = searching(f, &null);
+        assert told.contains(f.covers);
+        for let other of &FOCI {
+            assert other.name == f.name || !told.contains(other.covers);
+        }
+    }
+}
+
+test "the confirming reviewer's runs are budgeted by the candidates, up to the findings it may report" {
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
+    let ws: Option<Workspace> = Some(Workspace { root: "src", runner: Some(runner) });
+    let [few, few_turns] = budgeted(&ws, 2);
+    assert few.unwrap().runner.unwrap().runs == 2 * RUNS_PER_FINDING && few_turns == 2 * RUNS_PER_FINDING;
+    let [many, _] = budgeted(&ws, 40);
+    assert many.unwrap().runner.unwrap().runs == MAX_FINDINGS * RUNS_PER_FINDING;
+    assert budgeted(&Some(Workspace { root: "src" }), 5)[1] == 0;
+    assert budgeted(&null, 5)[1] == 0;
+}
+
+test "the review's cost and turns add its searches'" {
+    let r = Reviewed {
+        turns: 2,
+        usage: Some(Usage { input_tokens: 10 }),
+        searches: [
+            Reviewed { turns: 3, usage: Some(Usage { input_tokens: 5 }) },
+            Reviewed { turns: 1 },
+        ],
+    };
+    assert r.total_turns() == 6 && r.spent().input_tokens == 15;
 }
 
 test "a change is its heading and then its diff" {

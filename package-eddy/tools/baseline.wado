@@ -14,8 +14,9 @@
 //! tree with `cargo` into `scratchpad/eddy-target`; each run starts from the
 //! tree as checked out. Run needs the tree's toolchain installed and its crates
 //! fetched, since a child cannot write `~/.cargo` or `~/.rustup`.
-//! `-D only=<fix>` reviews that entry alone, and keeps what the output file
-//! holds for the others.
+//! `-D reviewers=<n>` (4) searches with that many foci before one reviewer
+//! confirms the candidates, as `review` does. `-D only=<fix>` reviews that
+//! entry alone, and keeps what the output file holds for the others.
 //!
 //! Run it from the repository root. The reviewer is a build input:
 //! `CLAUDE_MODEL` in the environment, or `-D CLAUDE_MODEL=...`.
@@ -49,7 +50,7 @@ use {
 } from "./eval.wado";
 use { ask_json, Credential, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
-use { review, Submission } from "../src/review.wado";
+use { review, Submission, MAX_REVIEWERS } from "../src/review.wado";
 use { hold_tree, Tree, home_runner, with_mise_tools, reset_snapshot, index } from "../src/snapshot.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
@@ -83,6 +84,9 @@ global ONLY: i32 = 0;
 #[param(name = "wado")]
 global WADO: String = "target/debug/wado";
 
+#[param(name = "reviewers")]
+global REVIEWERS: i32 = MAX_REVIEWERS;
+
 #[param(name = "max_turns")]
 global MAX_TURNS: i32 = 40;
 
@@ -115,6 +119,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client, MonotonicC
         tools: TOOLS,
         symbols: SYMBOLS,
         run: RUN,
+        reviewers: REVIEWERS,
         max_turns: MAX_TURNS,
         effort: if TOOLS { EFFORT } else { "" },
         diff_limit: LIMIT,
@@ -225,8 +230,14 @@ fn review_once(
     ws: &Option<Workspace>,
     grading: &mut Usage,
 ) -> Run with (Client, Preopens, Process, MonotonicClock) {
-    let r = review(credential, CLAUDE_MODEL, review_prompt, ws, MAX_TURNS, EFFORT);
-    let mut reviewed = Run { findings: r.findings, turns: r.turns, calls: r.calls, usage: r.usage, error: r.error };
+    let r = review(credential, CLAUDE_MODEL, review_prompt, ws, REVIEWERS, MAX_TURNS, EFFORT);
+    let mut reviewed = Run {
+        findings: r.findings,
+        turns: r.total_turns(),
+        calls: r.calls,
+        usage: Some(r.spent()),
+        error: r.error,
+    };
     if reviewed.error matches { Some(_) } {
         return reviewed;
     }
@@ -260,6 +271,7 @@ fn earlier_entries(path: &String) -> HashMap<i32, Entry> with Preopens {
         || earlier.tools != TOOLS
         || earlier.symbols != SYMBOLS
         || earlier.run != RUN
+        || earlier.reviewers != REVIEWERS
         || earlier.diff_limit != LIMIT
         || TOOLS && (earlier.max_turns != MAX_TURNS || earlier.effort != EFFORT) {
         assert ONLY == 0, `only= keeps the other entries of ${*path}, so it must hold runs with these settings`;
