@@ -13322,17 +13322,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0
             }
             p.expect(TK_OpenBracket, &SYNC_9, false);
             if !SYNC_9.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_9, &EXPECTED_9); }
-            let mut opt_scan_pos: i32 = -1;
-            opt_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                p.atn.stack.push(476);
-                pos = scan_primary_type(tokens, pos, &mut p.atn, &mut p.memo, follow_push(FOLLOW_SITE_6, follow), 0);
-                p.atn.stack.pop();
-                if pos < 0 { break opt_scan; }
-                opt_scan_pos = pos;
-            }
-            if opt_scan_pos >= 0 {
+            if _kind_set_7(p.peek_kind()) {
                 p.site = 30;
                 p.atn_ret_pending = 476;
                 _parse_primary_type(p, follow_push(FOLLOW_SITE_6, follow));

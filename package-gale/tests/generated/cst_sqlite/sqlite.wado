@@ -19004,7 +19004,6 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
                             opt_scan_pos = pos;
                         }
                         if opt_scan_pos >= 0 {
-                            if !SYNC_9.has(p.peek_kind()) { builtin::cold_path(); p.sync_alts(&SYNC_9, &EXPECTED_9); }
                             let grp_kind = p.peek_kind();
                             if _kind_set_34(grp_kind) {
                                 let gd_atn = atn_verified(189, 2, &mut p.atn, &p.kinds, p.pos, min_prec, atn_decide_189(&mut p.atn, &p.kinds, p.pos, min_prec));
@@ -19078,7 +19077,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
                                         }
                                     }
                                 }
-                            } else if _kind_set_35(grp_kind) {
+                            } else {
                                 p.site = 215;
                                 p.atn_ret_pending = 1911;
                                 _parse_expr(p, follow_push(FOLLOW_SITE_31, follow));
@@ -19090,8 +19089,6 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) {
                                     _parse_expr(p, follow_push(FOLLOW_SITE_31, follow));
                                     if !SYNC_21.has(p.peek_kind()) { builtin::cold_path(); p.sync_back(&SYNC_21, &EXPECTED_21); }
                                 }
-                            } else {
-                                p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_9);
                             }
                         }
                         p.expect(TK_CLOSE_PAR, &SYNC_78, true);

@@ -999,6 +999,10 @@ pub struct RepeatOp {
     /// `compute_iter_follow` should union the body's first set with
     /// the outer follow rather than using outer alone.
     pub body_is_single_alt_group: bool,
+    /// Whether what follows this repeat in its group alternative derives
+    /// empty, so the follow handed to the group reaches it. Unread outside a
+    /// group alternative.
+    pub rest_nullable: bool = false,
     /// True iff the inner element contributes a CST field — i.e.
     /// emit's Repeat surfaces a storable `Option<T>` (`Optional`) or
     /// `List<T>` (`Star` / `Plus`) field. False for `Transparent`

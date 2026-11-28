@@ -2811,6 +2811,13 @@ fn with_surface_group(op: Op, g: &GroupElement, analysis: &mut GrammarAnalysis) 
             let mut visiting: List<String> = [];
             return analysis.is_element_scannable(e, &mut visiting);
         });
+        assert alt.ops.len() == surface.elements.len(), "a group alternative lowers one op per element";
+        for let i of 0..<alt.ops.len() {
+            if let Repeat(mut r) = alt.ops[i] {
+                r.rest_nullable = analysis.tail_is_nullable_deep(&surface.elements, i + 1);
+                alt.ops[i] = Op::Repeat(r);
+            }
+        }
     }
     return Op::Group(go);
 }
