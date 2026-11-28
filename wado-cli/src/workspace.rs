@@ -273,7 +273,7 @@ struct MembersTable {
 
 /// `text` with `member` inserted into `[workspace].members` before the first
 /// entry that sorts after it, so a sorted list stays sorted. The array is
-/// written afresh on one line; the rest of the file stays as written.
+/// written afresh, one entry per line; the rest of the file stays as written.
 fn insert_member(text: &str, member: &str) -> Result<String, CliExit> {
     let doc: MembersDoc =
         toml::from_str(text).map_err(|e| CliExit::error(format!("{WORKSPACE_FILENAME}: {e}")))?;
@@ -285,10 +285,13 @@ fn insert_member(text: &str, member: &str) -> Result<String, CliExit> {
         .unwrap_or(members.len());
     members.insert(at, member.to_owned());
 
-    let entries: Vec<String> = members.iter().map(|entry| toml_string(entry)).collect();
-    let mut out = String::with_capacity(text.len() + member.len() + 4);
+    let mut out = String::with_capacity(text.len() + member.len() + 8);
     out.push_str(&text[..span.start]);
-    write!(out, "[{}]", entries.join(", ")).unwrap();
+    out.push_str("[\n");
+    for entry in &members {
+        writeln!(out, "    {},", toml_string(entry)).unwrap();
+    }
+    out.push(']');
     out.push_str(&text[span.end..]);
     Ok(out)
 }
@@ -348,24 +351,24 @@ mod tests {
         let text = "# tools\n[workspace]\nmembers = [\n    \"a\", # first\n    \"c\",\n]\n\n[registries]\ndefault = \"oci://x\"\n";
         assert_eq!(
             insert_member(text, "b").unwrap(),
-            "# tools\n[workspace]\nmembers = [\"a\", \"b\", \"c\"]\n\n[registries]\ndefault = \"oci://x\"\n"
+            "# tools\n[workspace]\nmembers = [\n    \"a\",\n    \"b\",\n    \"c\",\n]\n\n[registries]\ndefault = \"oci://x\"\n"
         );
     }
 
     #[test]
-    fn insert_lays_out_a_one_line_array() {
+    fn insert_writes_one_entry_per_line() {
         let text = "[workspace]\nmembers = [\"b\"]\n";
         assert_eq!(
             insert_member(text, "a").unwrap(),
-            "[workspace]\nmembers = [\"a\", \"b\"]\n"
+            "[workspace]\nmembers = [\n    \"a\",\n    \"b\",\n]\n"
         );
         assert_eq!(
             insert_member(text, "c").unwrap(),
-            "[workspace]\nmembers = [\"b\", \"c\"]\n"
+            "[workspace]\nmembers = [\n    \"b\",\n    \"c\",\n]\n"
         );
         assert_eq!(
             insert_member("[workspace]\nmembers = []\n", "a").unwrap(),
-            "[workspace]\nmembers = [\"a\"]\n"
+            "[workspace]\nmembers = [\n    \"a\",\n]\n"
         );
     }
 

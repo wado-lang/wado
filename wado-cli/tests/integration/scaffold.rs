@@ -272,7 +272,7 @@ fn new_under_a_workspace_adds_it_to_members() {
 
     assert_eq!(
         read(&tmp.path().join("wado-workspace.toml")),
-        "# the tools\n[workspace]\nmembers = [\"a\", \"b\", \"c\"]\n\n\
+        "# the tools\n[workspace]\nmembers = [\n    \"a\",\n    \"b\",\n    \"c\",\n]\n\n\
          [workspace.package]\nnamespace = \"acme\"\n\
          repository = \"https://example.com/acme/tools\"\n",
     );
@@ -383,7 +383,7 @@ fn workspace_new_then_new_member() {
 
     assert_eq!(
         read(&root.join("wado-workspace.toml")),
-        "[workspace]\nmembers = [\"geo\"]\n\n[workspace.package]\nnamespace = \"acme\"\n"
+        "[workspace]\nmembers = [\n    \"geo\",\n]\n\n[workspace.package]\nnamespace = \"acme\"\n"
     );
     assert!(!read(&root.join("geo/wado.toml")).contains("namespace ="));
 }
@@ -409,20 +409,15 @@ fn workspace_add_adds_an_existing_package() {
         .assert()
         .success()
         .stderr(predicate::str::contains("Added pkgs/geo"));
-    assert_eq!(
-        read(&tmp.path().join("wado-workspace.toml")),
-        "[workspace]\nmembers = [\"pkgs/geo\"]\n"
-    );
+    let joined = "[workspace]\nmembers = [\n    \"pkgs/geo\",\n]\n";
+    assert_eq!(read(&tmp.path().join("wado-workspace.toml")), joined);
 
     wado_in(&pkg)
         .args(["workspace", "add", "."])
         .assert()
         .success()
         .stderr(predicate::str::contains("already a member"));
-    assert_eq!(
-        read(&tmp.path().join("wado-workspace.toml")),
-        "[workspace]\nmembers = [\"pkgs/geo\"]\n"
-    );
+    assert_eq!(read(&tmp.path().join("wado-workspace.toml")), joined);
 }
 
 /// A package that sets what the workspace forces cannot join it, and the
