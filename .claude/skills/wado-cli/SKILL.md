@@ -1,6 +1,6 @@
 ---
 name: wado-cli
-description: How to drive the `wado` command — compile, run, test, serve, format, and publish a Wado program, target a Wasm world, pick an allocator, grant directories, and inspect the compiler with dump and query. Read before invoking the `wado` binary.
+description: How to drive the `wado` command — create a package or workspace, and compile, run, test, serve, format, and publish a Wado program, target a Wasm world, pick an allocator, grant directories, and inspect the compiler with dump and query. Read before invoking the `wado` binary.
 ---
 
 # The `wado` CLI
@@ -332,6 +332,30 @@ to `wado-compiler/tests/format.rs`.
 
 What the formatter decides — width, wrapping, comment placement — is in
 `docs/formatter.md`.
+
+## New Packages and Workspaces
+
+`wado init` lays out a package in the current directory, as the standard package
+layout says: `wado.toml`, `README.md`, `AGENTS.md`, `src/` and `tests/`.
+`wado new <dir>` is `mkdir -p <dir>` and then `init` there. Each keeps a file of
+the layout that is already there, except `wado.toml`, which `--force` replaces.
+
+```sh
+wado new geo --namespace acme         # a library: src/lib.wado and a test
+wado new tool --namespace acme --cli  # the wasi:cli/command world: src/main.wado
+wado new both --namespace acme --lib --cli
+wado workspace new tools --namespace acme  # wado-workspace.toml and AGENTS.md
+wado workspace add pkgs/geo           # a package already there joins `members`
+```
+
+The name is the directory's unless `--name` gives one. Under a workspace, the
+package leaves out what `[workspace.package]` sets, and a directory `members`
+misses joins it, one entry per line. A directory git ignores stays out, so
+`scratchpad/` makes a package of its own, which needs `--namespace`.
+
+In this repository a package's directory is `package-<name>`, so pass the name:
+`wado new package-foo --name foo` adds `package-foo` to the root workspace.
+The `wado-package-standard` skill says what else a new package needs.
 
 ## Publish
 
