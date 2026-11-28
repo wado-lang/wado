@@ -2,15 +2,15 @@
 //! the top of a module, read off the grammar
 //! rather than off bytes.
 
-use rust from "../tests/grammars/RustLexer.g4"
+use rust from "../assets/grammar/RustLexer.g4"
     with {
         generator: {
             module: "../src/generator.wado",
-            inputs: ["../tests/grammars/RustParser.g4"],
+            inputs: ["../assets/grammar/RustParser.g4"],
             output_dir: "../tests/generated/cst_rust",
         },
     };
-use { parse_rust } from "./rust_corpus.wado";
+use { parse_rust } from "../src/rust.wado";
 use { collect_paths, ratchet } from "../src/corpus.wado";
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";

@@ -54,4 +54,4 @@ wado run package-gale/tools/rust_corpus_check.wado -- --paths-from target/rs-cor
 
 Every `.rs` this repository tracks parses clean, so any `ng` line is a regression. Each failing file reports exactly one diagnostic — it dies once and recovery carries the rest — so the count is files, not errors.
 
-`tools/rust_inline_paths.wado`, which `mise run check-rust-paths` runs, is the parser's second consumer. It needs the same clean corpus, since a file it cannot parse is reported rather than counted. Both tools share `tools/rust_corpus.wado`, which holds the recognizer with its base ports installed.
+`tools/rust_inline_paths.wado`, which `mise run check-rust-paths` runs, is the parser's second consumer. It needs the same clean corpus, since a file it cannot parse is reported rather than counted. Both tools share `src/rust.wado`, which holds the recognizer with its base ports installed.

@@ -4,17 +4,17 @@
 /// failure narrowed to.
 ///
 /// The superClass predicates run through the base ports
-/// `tools/rust_corpus.wado` installs.
-use rust from "./grammars/RustLexer.g4"
+/// `src/rust.wado` installs.
+use rust from "../assets/grammar/RustLexer.g4"
     with {
         generator: {
             module: "../src/generator.wado",
-            inputs: ["./grammars/RustParser.g4"],
+            inputs: ["../assets/grammar/RustParser.g4"],
             output_dir: "./generated/cst_rust",
         },
     };
 use { normalize_tree } from "./support/tree_compare.wado";
-use { with_rust_bases } from "../tools/rust_corpus.wado";
+use { with_rust_bases } from "../src/rust.wado";
 
 fn rlex_tok<S: AsStrSlice>(input: S) -> rust::TokenStream {
     return with_rust_bases(|| rust::tokenize(input));
