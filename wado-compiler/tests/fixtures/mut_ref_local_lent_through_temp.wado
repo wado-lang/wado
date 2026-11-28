@@ -1,0 +1,47 @@
+// A `&mut` of a local of a replace type lasts for the call it is passed to, so
+// the call lends a temp and stores it back, and the local itself is no cell.
+
+use { println, Stdout } from "core:cli";
+
+variant Shape {
+    Dot,
+    Circle(i32),
+}
+
+#[inline("never")]
+fn bump(r: &mut i32) {
+    *r += 1;
+}
+
+#[inline("never")]
+fn peek(r: &mut i32) -> i32 {
+    return *r;
+}
+
+#[inline("never")]
+fn grow(s: &mut Shape) {
+    *s = Shape::Circle(5);
+}
+
+export fn run() with Stdout {
+    let mut n = builtin::black_box(1);
+    bump(&mut n);
+    bump(&mut n);
+    let seen = peek(&mut n);
+    let mut s = Shape::Dot;
+    grow(&mut s);
+    let r = match s {
+        Circle(k) => k,
+        _::Dot => 0,
+    };
+    println(`${n} ${seen} ${r}`);
+}
+
+__DATA__
+{
+    "stdout": "3 3 5\n",
+    "wir_expect:O2": ["let n_0: i32;", "let s: ref \"mut_ref_local_lent_through_temp.wado//Shape\";"],
+    "wir_contrast": {"O2": [
+        {"    grow(&mut s);\n": "    grow(&mut s);\n    let held = [&n, &s];\n    assert *held.0 == 3;\n"}
+    ]}
+}

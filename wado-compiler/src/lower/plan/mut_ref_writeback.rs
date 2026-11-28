@@ -50,6 +50,11 @@ pub fn insert_write_backs(
                 )
             })
             .unwrap_or_default();
+        let lent_to_calls = func
+            .body
+            .as_ref()
+            .map(|body| lent_only_to_calls(&type_table, whole_value_writes::Body::Block(body)))
+            .unwrap_or_default();
         let mut pass = WriteBack {
             type_table: &type_table,
             carrying: &carrying,
@@ -62,6 +67,7 @@ pub fn insert_write_backs(
             locals,
             detached_locals: IndexSet::default(),
             referenced_locals: func.address_taken_locals.clone(),
+            lent_to_calls,
             stand_ins: IndexSet::default(),
             lent_locals: IndexSet::default(),
             ref_temps: Vec::new(),
@@ -95,6 +101,74 @@ pub fn insert_write_backs(
         }
     }
     Ok(())
+}
+
+/// The locals of a replace type that nothing but a call argument takes a
+/// reference to. The call lends a temp and stores it back, as for a field, so
+/// the local itself needs no cell (WEP: Writable References).
+fn lent_only_to_calls(type_table: &TypeTable, body: whole_value_writes::Body<'_>) -> IndexSet<u32> {
+    struct Lending<'a> {
+        type_table: &'a TypeTable,
+        lent: IndexSet<u32>,
+        referenced: IndexSet<u32>,
+    }
+    impl Lending<'_> {
+        fn arg(&mut self, arg: &TirExpr) {
+            if let TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: place,
+            } = &arg.kind
+                && let TirExprKind::Local { index, .. } = place.kind
+                && self.type_table.is_boxed_reference_target(place.type_id)
+            {
+                self.lent.insert(index);
+            } else {
+                self.visit_expr(arg);
+            }
+        }
+    }
+    impl TirRefVisitor for Lending<'_> {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            match &expr.kind {
+                TirExprKind::Call { args, .. } => {
+                    for arg in args.iter() {
+                        self.arg(&arg.expr);
+                    }
+                }
+                TirExprKind::IndirectCall { callee, args } => {
+                    self.visit_expr(callee);
+                    for arg in args {
+                        self.arg(arg);
+                    }
+                }
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                    expr: place,
+                } if let TirExprKind::Local { index, .. } = place.kind => {
+                    self.referenced.insert(index);
+                }
+                TirExprKind::Closure { captures, .. } => {
+                    self.referenced
+                        .extend(captures.iter().filter_map(|capture| capture.source.local()));
+                }
+                _ => self.walk_expr_in_frame(expr),
+            }
+        }
+    }
+    let mut lending = Lending {
+        type_table,
+        lent: IndexSet::default(),
+        referenced: IndexSet::default(),
+    };
+    match body {
+        whole_value_writes::Body::Block(block) => lending.visit_block(block),
+        whole_value_writes::Body::Expr(expr) => lending.visit_expr(expr),
+    }
+    lending
+        .lent
+        .into_iter()
+        .filter(|local| !lending.referenced.contains(local))
+        .collect()
 }
 
 /// Whether `expr` is a `&mut` of one of `stand_ins`, or a local of
@@ -165,6 +239,9 @@ struct WriteBack<'a> {
     detached_locals: IndexSet<u32>,
     /// Locals this body references somewhere, which a reference value may name.
     referenced_locals: IndexSet<u32>,
+    /// Locals of a replace type only a call argument takes `&mut` of, each
+    /// lent through a temp, so no reference value names one.
+    lent_to_calls: IndexSet<u32>,
     /// Mutable locals bound `Aliased` to a value of a replace type: each holds
     /// a copy that stands in for storage elsewhere until its scope stores it
     /// back, as `reify` reads a scoped `&mut xs[i]`.
@@ -310,6 +387,11 @@ impl WriteBack<'_> {
         }
         self.stand_ins = bindings.stand_ins;
         self.lent_locals = bindings.lent_locals;
+        // A stand-in's own scope stores it back, and lending it keeps to that.
+        self.lent_to_calls
+            .retain(|local| !self.stand_ins.contains(local));
+        self.referenced_locals
+            .retain(|local| !self.lent_to_calls.contains(local));
     }
 
     /// Walk a closure body against its own local namespace, seeding its own
@@ -340,6 +422,7 @@ impl WriteBack<'_> {
             locals: std::mem::take(body_locals),
             detached_locals: IndexSet::default(),
             referenced_locals: address_taken_locals.clone(),
+            lent_to_calls: lent_only_to_calls(self.type_table, whole_value_writes::Body::Expr(body)),
             stand_ins: IndexSet::default(),
             lent_locals: IndexSet::default(),
             ref_temps: Vec::new(),
@@ -404,16 +487,17 @@ impl WriteBack<'_> {
         else {
             return None;
         };
-        let detached = matches!(
-            place.kind,
+        let detached = match place.kind {
             TirExprKind::FieldAccess { .. }
-                | TirExprKind::Index { .. }
-                | TirExprKind::Capture { .. }
-                | TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    ..
-                }
-        );
+            | TirExprKind::Index { .. }
+            | TirExprKind::Capture { .. }
+            | TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                ..
+            } => true,
+            TirExprKind::Local { index, .. } => self.lent_to_calls.contains(&index),
+            _ => false,
+        };
         (detached && self.detaches(place)).then_some(place.as_ref())
     }
 
@@ -432,7 +516,9 @@ impl WriteBack<'_> {
     fn detached_place<'e>(&self, arg: &'e TirExpr) -> Option<&'e TirExpr> {
         let place = self.detached_ref(arg)?;
         match &place.kind {
-            TirExprKind::FieldAccess { .. } | TirExprKind::Index { .. } => Some(place),
+            TirExprKind::Local { .. } | TirExprKind::FieldAccess { .. } | TirExprKind::Index { .. } => {
+                Some(place)
+            }
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
@@ -603,12 +689,16 @@ impl WriteBack<'_> {
         // `replaced` over-approximates, so gating on it never hides a write:
         // saying "replaces" where it does not costs a redundant store, and the
         // analysis has no path that says "does not" where it does.
+        // A local lent to a call is lent through its temp whatever the callee
+        // does, so the local needs no cell; only a replacement is stored back.
         let detached: Vec<bool> = args
             .iter()
             .enumerate()
             .map(|(position, arg)| {
-                replaced.contains(&u32::try_from(position).unwrap())
-                    && self.detached_place(arg).is_some()
+                self.detached_place(arg).is_some_and(|place| {
+                    replaced.contains(&u32::try_from(position).unwrap())
+                        || matches!(place.kind, TirExprKind::Local { .. })
+                })
             })
             .collect();
         // Until the store back the new value is in the temp alone, so a sibling
@@ -667,6 +757,13 @@ impl WriteBack<'_> {
                 continue;
             }
             let place = self.detached_place(arg).expect("detached above");
+            // A local the callee keeps, or a sibling reaches, stays its own cell
+            // for this call, which every route then shares.
+            if matches!(place.kind, TirExprKind::Local { .. })
+                && (escaping.contains(&u32::try_from(position).unwrap()) || shared[position])
+            {
+                continue;
+            }
             if escaping.contains(&u32::try_from(position).unwrap()) {
                 self.refuse(
                     arg.span,
@@ -700,21 +797,22 @@ impl WriteBack<'_> {
                 LetStorage::Aliased,
             );
             self.ref_temps.push(temp.index);
-            // Store back only what the callee replaced. An unconditional store
-            // would also undo a write the callee made through another route to
-            // the same place — `self`, or a sibling `&mut` argument. The witness
-            // aliases what the temp held, never copies it: a copy would make
-            // every call look like a whole-value write.
-            let before = self.bind(
-                &mut prefix,
-                "before_",
-                temp.read(),
-                false,
-                LetStorage::Aliased,
+            let lent_to = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::MutRef,
+                    expr: Box::new(temp.read()),
+                },
+                arg.type_id,
+                span,
             );
+            if !replaced.contains(&u32::try_from(position).unwrap()) {
+                *arg = lent_to;
+                continue;
+            }
             // The store is the temp's last read, so it hands the storage over
             // rather than copying the whole payload.
             let mut store_back: Vec<TirStmt> = Vec::new();
+            let lent_local = matches!(place.kind, TirExprKind::Local { .. });
             let moved = self.bind(
                 &mut store_back,
                 "moved_",
@@ -733,6 +831,25 @@ impl WriteBack<'_> {
                 )),
                 span,
             ));
+            // Nothing but the temp reaches a lent local, so its store needs no
+            // witness.
+            if lent_local {
+                write_backs.append(&mut store_back);
+                *arg = lent_to;
+                continue;
+            }
+            // Store back only what the callee replaced. An unconditional store
+            // would also undo a write the callee made through another route to
+            // the same place — `self`, or a sibling `&mut` argument. The witness
+            // aliases what the temp held, never copies it: a copy would make
+            // every call look like a whole-value write.
+            let before = self.bind(
+                &mut prefix,
+                "before_",
+                temp.read(),
+                false,
+                LetStorage::Aliased,
+            );
             // An `externref` has no `ref.eq`: its identity is the host's to
             // answer, unless a guest value backs it.
             let replaced = if self.type_table.is_externref(temp.type_id) {
@@ -759,14 +876,7 @@ impl WriteBack<'_> {
                 },
                 span,
             ));
-            *arg = TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::MutRef,
-                    expr: Box::new(temp.read()),
-                },
-                arg.type_id,
-                span,
-            );
+            *arg = lent_to;
         }
         if prefix.is_empty() {
             return;

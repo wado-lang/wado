@@ -161,14 +161,14 @@ fn "opt_call_writes_ref_pointee.wado/through_mut_ref"(r, c) {
 
 fn "opt_call_writes_ref_pointee.wado/across_call_with_mut_arg"(r, c) {
     let s: i32;
-    let n: ref "core:prelude//$Cell<i32>";
+    let $write_back_4: ref "core:prelude//$Cell<i32>";
     s = 0;
-    n = struct.new "core:prelude//$Cell<i32>" { value: 0 };
     if c {
         s = r.x * 100;
     }
-    "opt_call_writes_ref_pointee.wado/bump_global_and"(n);
-    return (s + r.x) + (n.value * 1000);
+    "opt_call_writes_ref_pointee.wado/bump_global_and"(local.tee $write_back_4(struct.new "core:prelude//$Cell<i32>" { value: 0 }));
+    c = $write_back_4.value;
+    return (s + r.x) + (c * 1000);
 }
 
 fn "opt_call_writes_ref_pointee.wado/stored_then_call"(r) {

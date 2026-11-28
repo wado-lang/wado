@@ -164,15 +164,16 @@ fn "move_referenced_local_after_reference_ends.wado/fill"(slot) {
 
 fn "move_referenced_local_after_reference_ends.wado/refill"(m) {
     let $load_3: i32;
-    let t: ref "core:prelude//$Cell<core:prelude/option.wado/Option<move_referenced_local_after_reference_ends.wado/Graph>>";
-    let v_2: ref null "move_referenced_local_after_reference_ends.wado//Graph";
-    let v_5: ref "core:prelude/list.wado//List<i32>";
-    "move_referenced_local_after_reference_ends.wado/fill"(local.tee t(struct.new "core:prelude//$Cell<core:prelude/option.wado/Option<move_referenced_local_after_reference_ends.wado/Graph>>" { value: (if ref.is_null(local.tee v_2(m.graph)) -> ref null "move_referenced_local_after_reference_ends.wado//Graph" {
-        v_2;
+    let $write_back_2: ref "core:prelude//$Cell<core:prelude/option.wado/Option<move_referenced_local_after_reference_ends.wado/Graph>>";
+    let v_5: ref null "move_referenced_local_after_reference_ends.wado//Graph";
+    let v_8: ref "core:prelude/list.wado//List<i32>";
+    "move_referenced_local_after_reference_ends.wado/fill"(local.tee $write_back_2(struct.new "core:prelude//$Cell<core:prelude/option.wado/Option<move_referenced_local_after_reference_ends.wado/Graph>>" { value: (if ref.is_null(local.tee v_5(m.graph)) -> ref null "move_referenced_local_after_reference_ends.wado//Graph" {
+        v_5;
     } else {
-        struct.new "move_referenced_local_after_reference_ends.wado//Graph" { data: v_5 = v_2.data; struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_5.repr; $load_3 = v_5.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_3)), 0, $array_clone_src_1, 0, $load_3); $array_clone_dst_2, used: $load_3 } };
+        struct.new "move_referenced_local_after_reference_ends.wado//Graph" { data: v_8 = v_5.data; struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_8.repr; $load_3 = v_8.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_3)), 0, $array_clone_src_1, 0, $load_3); $array_clone_dst_2, used: $load_3 } };
     }) }));
-    m.graph = t.value;
+    v_5 = $write_back_2.value;
+    m.graph = v_5;
 }
 
 fn "move_referenced_local_after_reference_ends.wado/ref_held_in_a_local"() with Stdout {

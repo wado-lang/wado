@@ -226,9 +226,9 @@ type "functype//extern_handle_mut_place.wado/$test_0_a_reference_to_a_resource_i
 
 type "functype//extern_handle_mut_place.wado/$test_0_a_reference_to_a_resource_is_one_to_what_it_extends$cold1" = fn(ref "core:prelude//$Cell<extern>");  // TypeId(43)
 
-type "functype//extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold0" = fn(ref "core:prelude//$Cell<extern>", ref extern);  // TypeId(44)
+type "functype//extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold0" = fn(ref extern, ref extern);  // TypeId(44)
 
-type "functype//extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold1" = fn(ref extern, ref "core:prelude//$Cell<extern>");  // TypeId(45)
+type "functype//extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold1" = fn(ref extern, ref extern);  // TypeId(45)
 
 type "functype//extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold2" = fn(ref extern, ref extern);  // TypeId(46)
 
@@ -631,16 +631,16 @@ holder.node.take(): "), used: 144 }, s1: struct.new "core:prelude/string.wado//S
 fn "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back"() {
     let a_0: ref extern;
     let b_1: ref extern;
-    let before_12: ref extern;
-    let $sroa_node_value_22: ref extern;
+    let node: ref extern;
+    let before_18: ref extern;
     a_0 = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: struct.new "extern_handle_mut_place.wado//Tag" { name: global:extern_handle_mut_place.wado::$const_obj_1 } });
     b_1 = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: struct.new "extern_handle_mut_place.wado//Tag" { name: global:extern_handle_mut_place.wado::$const_obj_4 } });
-    before_12 = a_0;
-    $sroa_node_value_22 = b_1;
+    before_18 = a_0;
+    node = b_1;
     if @unlikely($inline_handle_eq_3: block -> bool {
-        if ref.test "core:prelude//$BackedHandle"(extern.internalize(before_12)) {
+        if ref.test "core:prelude//$BackedHandle"(extern.internalize(before_18)) {
             if ref.test "core:prelude//$BackedHandle"(extern.internalize(a_0)) -> i32 {
-                ref.eq(ref.cast "core:prelude//$BackedHandle"(extern.internalize(before_12)).value, ref.cast "core:prelude//$BackedHandle"(extern.internalize(a_0)).value);
+                ref.eq(ref.cast "core:prelude//$BackedHandle"(extern.internalize(before_18)).value, ref.cast "core:prelude//$BackedHandle"(extern.internalize(a_0)).value);
             } else {
                 0;
             }
@@ -652,13 +652,13 @@ fn "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back"() {
         unreachable;
     } == 0) {
         cold_path;
-        "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold2"(a_0, before_12);
+        "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold2"(a_0, before_18);
         unreachable;
     }
     if @unlikely($inline_handle_eq_4: block -> bool {
-        if ref.test "core:prelude//$BackedHandle"(extern.internalize($sroa_node_value_22)) {
+        if ref.test "core:prelude//$BackedHandle"(extern.internalize(node)) {
             if ref.test "core:prelude//$BackedHandle"(extern.internalize(b_1)) -> i32 {
-                ref.eq(ref.cast "core:prelude//$BackedHandle"(extern.internalize($sroa_node_value_22)).value, ref.cast "core:prelude//$BackedHandle"(extern.internalize(b_1)).value);
+                ref.eq(ref.cast "core:prelude//$BackedHandle"(extern.internalize(node)).value, ref.cast "core:prelude//$BackedHandle"(extern.internalize(b_1)).value);
             } else {
                 0;
             }
@@ -670,27 +670,27 @@ fn "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back"() {
         unreachable;
     } == 0) {
         cold_path;
-        "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold1"(b_1, struct.new "core:prelude//$Cell<extern>" { value: $sroa_node_value_22 });
+        "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold1"(b_1, node);
         unreachable;
     }
-    a_0 = $sroa_node_value_22;
-    $sroa_node_value_22 = b_1;
+    a_0 = node;
+    node = b_1;
     if @unlikely($inline_handle_eq_6: block -> bool {
         if ref.test "core:prelude//$BackedHandle"(extern.internalize(a_0)) {
-            if ref.test "core:prelude//$BackedHandle"(extern.internalize($sroa_node_value_22)) -> i32 {
-                ref.eq(ref.cast "core:prelude//$BackedHandle"(extern.internalize(a_0)).value, ref.cast "core:prelude//$BackedHandle"(extern.internalize($sroa_node_value_22)).value);
+            if ref.test "core:prelude//$BackedHandle"(extern.internalize(node)) -> i32 {
+                ref.eq(ref.cast "core:prelude//$BackedHandle"(extern.internalize(a_0)).value, ref.cast "core:prelude//$BackedHandle"(extern.internalize(node)).value);
             } else {
                 0;
             }
             break $inline_handle_eq_6;
         }
-        if ref.test "core:prelude//$BackedHandle"(extern.internalize($sroa_node_value_22)) {
+        if ref.test "core:prelude//$BackedHandle"(extern.internalize(node)) {
             break $inline_handle_eq_6: 0;
         }
         unreachable;
     } == 0) {
         cold_path;
-        "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold0"(struct.new "core:prelude//$Cell<extern>" { value: $sroa_node_value_22 }, a_0);
+        "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold0"(node, a_0);
         unreachable;
     }
 }
@@ -874,7 +874,7 @@ element: "), used: 156 }, s1: struct.new "core:prelude/string.wado//String" { re
 
 fn "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold0"(node, same) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<extern_handle_mut_place.wado/$tmpl$d7572dcf7858f8ec,[extern_handle_mut_place.wado/Node,extern_handle_mut_place.wado/Node]>"(struct.new "extern_handle_mut_place.wado//$tmpl$d7572dcf7858f8ec" { h0: same, h1: node.value, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_replaced_handle_is_stored_back at extern_handle_mut_place.wado:53
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<extern_handle_mut_place.wado/$tmpl$d7572dcf7858f8ec,[extern_handle_mut_place.wado/Node,extern_handle_mut_place.wado/Node]>"(struct.new "extern_handle_mut_place.wado//$tmpl$d7572dcf7858f8ec" { h0: same, h1: node, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_replaced_handle_is_stored_back at extern_handle_mut_place.wado:53
 condition: same == node
 same: "), used: 126 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_replaced_handle_is_stored_back at extern_handle_mut_place.wado:53
 condition: same == node
@@ -886,7 +886,7 @@ node: "), used: 7 }, s2: struct.new "core:prelude/string.wado//String" { repr: a
 
 fn "extern_handle_mut_place.wado/$test_2_a_replaced_handle_is_stored_back$cold1"(b, node) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<extern_handle_mut_place.wado/$tmpl$d7572dcf7858f8ec,[extern_handle_mut_place.wado/Node,extern_handle_mut_place.wado/Node]>"(struct.new "extern_handle_mut_place.wado//$tmpl$d7572dcf7858f8ec" { h0: node.value, h1: b, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_replaced_handle_is_stored_back at extern_handle_mut_place.wado:51
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<extern_handle_mut_place.wado/$tmpl$d7572dcf7858f8ec,[extern_handle_mut_place.wado/Node,extern_handle_mut_place.wado/Node]>"(struct.new "extern_handle_mut_place.wado//$tmpl$d7572dcf7858f8ec" { h0: node, h1: b, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_replaced_handle_is_stored_back at extern_handle_mut_place.wado:51
 condition: node == b
 node: "), used: 123 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_replaced_handle_is_stored_back at extern_handle_mut_place.wado:51
 condition: node == b

@@ -789,21 +789,21 @@ fn "pattern_temp_no_alias.wado/$cm_export__$test_18_an_arm_binding_keeps_its_cop
 
 fn "pattern_temp_no_alias.wado/$cm_export__$test_19_a_match_binding_does_not_alias_the_payload_of_a__mut_parameter"() {
     let $load_1: i32;
-    let used_11: i32;
-    let $sroa_v_value_17: ref null "core:prelude/list.wado//List<i32>";
+    let v_0: ref null "core:prelude/list.wado//List<i32>";
+    let used_13: i32;
     let $vc_payload_0: ref "core:prelude/list.wado//List<i32>";
-    $vc_payload_0 = ref.as_non_null(local.tee $sroa_v_value_17(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }));
+    $vc_payload_0 = ref.as_non_null(local.tee v_0(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }));
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = $vc_payload_0.repr;
     $load_1 = $vc_payload_0.used;
     builtin::array_copy<i32>(builtin::array_new<i32>($load_1), 0, $array_clone_src_1, 0, $load_1);
-    if ref.is_null($sroa_v_value_17) == 0 {
-        if @unlikely(local.tee used_11(local.tee $vc_payload_0(ref.as_non_null($sroa_v_value_17)).used) >= builtin::array_len($vc_payload_0.repr)) {
+    if ref.is_null(v_0) == 0 {
+        if @unlikely(local.tee used_13(local.tee $vc_payload_0(ref.as_non_null(v_0)).used) >= builtin::array_len($vc_payload_0.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($vc_payload_0);
         }
-        builtin::array_set<i32>($vc_payload_0.repr, used_11, 9);
-        $vc_payload_0.used = used_11 + 1;
+        builtin::array_set<i32>($vc_payload_0.repr, used_13, 9);
+        $vc_payload_0.used = used_13 + 1;
     } else {
     }
     if @unlikely($load_1 != 1) {
@@ -823,15 +823,15 @@ fn "pattern_temp_no_alias.wado/$cm_export__$test_21_an_or_pattern_binding_does_n
 }
 
 fn "pattern_temp_no_alias.wado/$cm_export__$test_22_an_or_pattern_binding_does_not_alias_either_alternative_s_payload"() {
-    let $v_0: i32;
-    if @unlikely(local.tee $v_0("pattern_temp_no_alias.wado/or_arm_len_across_payload_write$sroa[slot.value]"(struct.new "pattern_temp_no_alias.wado//W::Q" { discriminant: 1, payload_0: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 } })) != 2) {
+    let $write_back_result_7: i32;
+    if @unlikely(local.tee $write_back_result_7("pattern_temp_no_alias.wado/or_arm_len_across_payload_write$sroa[slot.value]"(struct.new "pattern_temp_no_alias.wado//W::Q" { discriminant: 1, payload_0: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 } })) != 2) {
         cold_path;
-        "pattern_temp_no_alias.wado/$test_22_an_or_pattern_binding_does_not_alias_either_alternative_s_payload$cold1"($v_0);
+        "pattern_temp_no_alias.wado/$test_22_an_or_pattern_binding_does_not_alias_either_alternative_s_payload$cold1"($write_back_result_7);
         unreachable;
     }
-    if @unlikely(local.tee $v_0("pattern_temp_no_alias.wado/or_arm_len_across_payload_write$sroa[slot.value]"(struct.new "pattern_temp_no_alias.wado//W::P" { discriminant: 0, payload_0: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } })) != 1) {
+    if @unlikely(local.tee $write_back_result_7("pattern_temp_no_alias.wado/or_arm_len_across_payload_write$sroa[slot.value]"(struct.new "pattern_temp_no_alias.wado//W::P" { discriminant: 0, payload_0: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } })) != 1) {
         cold_path;
-        "pattern_temp_no_alias.wado/$test_22_an_or_pattern_binding_does_not_alias_either_alternative_s_payload$cold0"($v_0);
+        "pattern_temp_no_alias.wado/$test_22_an_or_pattern_binding_does_not_alias_either_alternative_s_payload$cold0"($write_back_result_7);
         unreachable;
     }
     "wasi/task-return"(0);

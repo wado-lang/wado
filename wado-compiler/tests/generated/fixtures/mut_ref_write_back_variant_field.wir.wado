@@ -311,7 +311,7 @@ type "functype//mut_ref_write_back_variant_field.wado/$test_10_payload_mutation_
 
 type "functype//mut_ref_write_back_variant_field.wado/$test_11_a_whole_value_write_through_a_capture_lands$cold0" = fn();  // TypeId(85)
 
-type "functype//mut_ref_write_back_variant_field.wado/$test_12___mut__r__over_a_mutable_reference_writes_back$cold0" = fn(ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>");  // TypeId(86)
+type "functype//mut_ref_write_back_variant_field.wado/$test_12___mut__r__over_a_mutable_reference_writes_back$cold0" = fn(ref null "core:prelude/string.wado//String");  // TypeId(86)
 
 type "functype//mut_ref_write_back_variant_field.wado/$test_13_a_destructuring_let_else_through_the_reference_lands$cold0" = fn();  // TypeId(87)
 
@@ -646,13 +646,13 @@ fn "mut_ref_write_back_variant_field.wado/takes_by_value"(xs, p) {
 fn "mut_ref_write_back_variant_field.wado/hoists_a_by_value_arg"(xs, b) {
     let $load_4: ref null "core:prelude/string.wado//String";
     let $write_back_3: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
-    let $before__4: ref null "core:prelude/string.wado//String";
+    let $before__5: ref null "core:prelude/string.wado//String";
     let $av_8: i32;
     $av_8 = xs.used;
     xs = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = xs.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($av_8)), 0, $array_clone_src_1, 0, $av_8); $array_clone_dst_2, used: $av_8 };
-    $before__4 = local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: b.item }).value;
+    $before__5 = local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: b.item }).value;
     "mut_ref_write_back_variant_field.wado/takes_by_value"(xs, $write_back_3);
-    if ref.eq(local.tee $load_4($write_back_3.value), $before__4) == 0 {
+    if ref.eq(local.tee $load_4($write_back_3.value), $before__5) == 0 {
         b.item = $load_4;
     }
 }
@@ -813,15 +813,15 @@ fn "mut_ref_write_back_variant_field.wado/$test_3_a_generic_variant_field_writes
     let $load_1: ref null "core:prelude/string.wado//String";
     let t: ref "core:prelude/string.wado//String";
     let $write_back_3: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Slot<core:prelude/string.wado/String>>";
-    let $before__4: ref null "core:prelude/string.wado//String";
+    let $before__5: ref null "core:prelude/string.wado//String";
     let a_end: i32;
     let i: i32;
     let $sroa_c_slot_18: ref null "core:prelude/string.wado//String";
     let $licm_repr_19: ref Array<u8>;
     $sroa_c_slot_18 = ref.null none;
-    $before__4 = local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Slot<core:prelude/string.wado/String>>" { value: ref.null none }).value;
+    $before__5 = local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Slot<core:prelude/string.wado/String>>" { value: ref.null none }).value;
     "mut_ref_write_back_variant_field.wado/refill"($write_back_3);
-    if ref.eq(local.tee $load_1($write_back_3.value), $before__4) == 0 {
+    if ref.eq(local.tee $load_1($write_back_3.value), $before__5) == 0 {
         $sroa_c_slot_18 = $load_1;
     }
     if @unlikely((if ref.is_null($sroa_c_slot_18) == 0 -> bool {
@@ -882,7 +882,7 @@ fn "mut_ref_write_back_variant_field.wado/$test_4_the_place_is_evaluated_once"()
     let $contract_arg_0: i32;
     let $write_back_place_16: ref "mut_ref_write_back_variant_field.wado//Bag";
     let $write_back_17: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
-    let $before__18: ref null "core:prelude/string.wado//String";
+    let $before__19: ref null "core:prelude/string.wado//String";
     let elements: ref "Array<mut_ref_write_back_variant_field.wado/Bag>";
     let i: i32;
     let $licm_repr_50: ref Array<u8>;
@@ -892,9 +892,9 @@ fn "mut_ref_write_back_variant_field.wado/$test_4_the_place_is_evaluated_once"()
         "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_variant_field.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mut_ref_write_back_variant_field.wado:170"), used: 41 });
         unreachable;
     }
-    $before__18 = local.tee $write_back_17(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_16(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(elements, $contract_arg_0)).item }).value;
+    $before__19 = local.tee $write_back_17(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_16(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(elements, $contract_arg_0)).item }).value;
     "mut_ref_write_back_variant_field.wado/replace"($write_back_17);
-    if ref.eq(local.tee $load_2($write_back_17.value), $before__18) == 0 {
+    if ref.eq(local.tee $load_2($write_back_17.value), $before__19) == 0 {
         $write_back_place_16.item = $load_2;
     }
     if @unlikely(local.tee $contract_arg_0(n.n) != 1) {
@@ -902,8 +902,8 @@ fn "mut_ref_write_back_variant_field.wado/$test_4_the_place_is_evaluated_once"()
         "mut_ref_write_back_variant_field.wado/$test_4_the_place_is_evaluated_once$cold1"($contract_arg_0);
         unreachable;
     }
-    if @unlikely((if ref.is_null(local.tee $before__18(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(elements, 0).item)) == 0 -> bool {
-        t = ref.as_non_null($before__18);
+    if @unlikely((if ref.is_null(local.tee $before__19(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(elements, 0).item)) == 0 -> bool {
+        t = ref.as_non_null($before__19);
         $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
             if local.tee $contract_arg_0(t.used) != 3 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
@@ -1024,18 +1024,18 @@ fn "mut_ref_write_back_variant_field.wado/$test_8_an_indirect_callee_runs_before
     let t: ref "core:prelude/string.wado//String";
     let $write_back_place_3: ref "canonical//CanonicalClosure_0";
     let $write_back_4: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
-    let $before__5: ref null "core:prelude/string.wado//String";
+    let $before__6: ref null "core:prelude/string.wado//String";
     let a_end: i32;
     let i: i32;
     let $licm_repr_19: ref Array<u8>;
     $write_back_place_3 = "mut_ref_write_back_variant_field.wado/pick"(local.tee b_0(struct.new "mut_ref_write_back_variant_field.wado//Bag" { item: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 }, tick: 0 }));
-    $before__5 = local.tee $write_back_4(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: b_0.item }).value;
+    $before__6 = local.tee $write_back_4(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: b_0.item }).value;
     call_ref "functype/$canonical_closure_fn_0"($write_back_place_3.func, $write_back_place_3.env, $write_back_4);
-    if ref.eq(local.tee $load_4($write_back_4.value), $before__5) == 0 {
+    if ref.eq(local.tee $load_4($write_back_4.value), $before__6) == 0 {
         b_0.item = $load_4;
     }
-    if @unlikely((if ref.is_null(local.tee $before__5(b_0.item)) == 0 -> bool {
-        t = ref.as_non_null($before__5);
+    if @unlikely((if ref.is_null(local.tee $before__6(b_0.item)) == 0 -> bool {
+        t = ref.as_non_null($before__6);
         $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
             if local.tee a_end(t.used) != 10 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
@@ -1534,16 +1534,16 @@ fn "mut_ref_write_back_variant_field.wado/$cm_export__$test_11_a_whole_value_wri
 }
 
 fn "mut_ref_write_back_variant_field.wado/$cm_export__$test_12___mut__r__over_a_mutable_reference_writes_back"() {
-    let p: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
+    let p: ref null "core:prelude/string.wado//String";
     let t: ref "core:prelude/string.wado//String";
-    let $local_3: ref null "core:prelude/string.wado//String";
+    let $write_back_3: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
-    let $licm_repr_14: ref Array<u8>;
-    "mut_ref_write_back_variant_field.wado/forwards_a_reference"(local.tee p(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 } }));
-    if @unlikely((if ref.is_null(local.tee $local_3(p.value)) == 0 -> bool {
-        t = ref.as_non_null($local_3);
+    let $licm_repr_17: ref Array<u8>;
+    "mut_ref_write_back_variant_field.wado/forwards_a_reference"(local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 } }));
+    if @unlikely((if ref.is_null(local.tee p($write_back_3.value)) == 0 -> bool {
+        t = ref.as_non_null(p);
         $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
             a_end = t.used;
             b = array.new_fixed<u8>(120, 121, 122);
@@ -1551,23 +1551,23 @@ fn "mut_ref_write_back_variant_field.wado/$cm_export__$test_12___mut__r__over_a_
                 break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
             }
             i = 0;
-            $licm_repr_14 = t.repr;
+            $licm_repr_17 = t.repr;
             b166: block {
                 l167: loop {
                     break_if b166 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
-                    if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
+                    if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(b, i) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
+                    if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(b, i) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
+                    if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(b, i) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
+                    if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(b, i) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                     }
                     i = i + 1;
@@ -1577,7 +1577,7 @@ fn "mut_ref_write_back_variant_field.wado/$cm_export__$test_12___mut__r__over_a_
             b172: block {
                 l173: loop {
                     break_if b172 i >= a_end;
-                    if builtin::array_get_value<u8>($licm_repr_14, i) != builtin::array_get_value<u8>(b, i) {
+                    if builtin::array_get_value<u8>($licm_repr_17, i) != builtin::array_get_value<u8>(b, i) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                     }
                     i = i + 1;
@@ -1700,7 +1700,7 @@ condition: replaces_through_a_capture() matches { Text(t) && t == `xyz` }
 
 fn "mut_ref_write_back_variant_field.wado/$test_12___mut__r__over_a_mutable_reference_writes_back$cold0"(p) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<mut_ref_write_back_variant_field.wado/$tmpl$c72a7b95ac16dc20,[mut_ref_write_back_variant_field.wado/Payload]>"(struct.new "mut_ref_write_back_variant_field.wado//$tmpl$c72a7b95ac16dc20" { h0: p.value, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12___mut__r__over_a_mutable_reference_writes_back at mut_ref_write_back_variant_field.wado:234
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<mut_ref_write_back_variant_field.wado/$tmpl$c72a7b95ac16dc20,[mut_ref_write_back_variant_field.wado/Payload]>"(struct.new "mut_ref_write_back_variant_field.wado//$tmpl$c72a7b95ac16dc20" { h0: p, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12___mut__r__over_a_mutable_reference_writes_back at mut_ref_write_back_variant_field.wado:234
 condition: p matches { Text(t) && t == `xyz` }
 p: "), used: 171 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12___mut__r__over_a_mutable_reference_writes_back at mut_ref_write_back_variant_field.wado:234
 condition: p matches { Text(t) && t == `xyz` }
@@ -1821,37 +1821,34 @@ fn "mut_ref_write_back_variant_field.wado/reads_a_local_before_the_place$spec0"(
     let $contract_arg_0: i32;
     let $write_back_place_8: ref "mut_ref_write_back_variant_field.wado//Bag";
     let $write_back_9: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
-    let $before__10: ref null "core:prelude/string.wado//String";
+    let $before__11: ref null "core:prelude/string.wado//String";
     if @unlikely(local.tee $contract_arg_0("mut_ref_write_back_variant_field.wado/first"(struct.new "mut_ref_write_back_variant_field.wado//Counter" { n: 0 })) >=u 1) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_variant_field.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mut_ref_write_back_variant_field.wado:69"), used: 40 });
         unreachable;
     }
-    $before__10 = local.tee $write_back_9(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_8(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, $contract_arg_0)).item }).value;
+    $before__11 = local.tee $write_back_9(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_8(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, $contract_arg_0)).item }).value;
     "mut_ref_write_back_variant_field.wado/takes_a_snapshot$sroa[seen.n]"(0, $write_back_9);
-    if ref.eq(local.tee $load_3($write_back_9.value), $before__10) == 0 {
+    if ref.eq(local.tee $load_3($write_back_9.value), $before__11) == 0 {
         $write_back_place_8.item = $load_3;
     }
 }
 
 fn "mut_ref_write_back_variant_field.wado/reads_the_callee_before_the_place$spec0"(bs) {
-    let $load_6: ref null "core:prelude/string.wado//String";
-    let via: ref "core:prelude//$Cell<fn(&mut mut_ref_write_back_variant_field.wado/Payload)->()>";
-    let $contract_arg_0: i32;
-    let $write_back_place_7: ref "canonical//CanonicalClosure_0";
-    let $write_back_place_8: ref "mut_ref_write_back_variant_field.wado//Bag";
-    let $write_back_9: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
-    let $before__10: ref null "core:prelude/string.wado//String";
-    $write_back_place_7 = local.tee via(struct.new "core:prelude//$Cell<fn(&mut mut_ref_write_back_variant_field.wado/Payload)->()>" { value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "mut_ref_write_back_variant_field.wado//$Closure_2" {}, func: ref.func "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_2" } }).value;
-    if @unlikely(local.tee $contract_arg_0("mut_ref_write_back_variant_field.wado/swap_to_appends"(via)) >=u 1) {
+    let $load_3: ref null "core:prelude/string.wado//String";
+    let $write_back_result_9: i32;
+    let $write_back_place_11: ref "mut_ref_write_back_variant_field.wado//Bag";
+    let $write_back_12: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
+    let $before__14: ref null "core:prelude/string.wado//String";
+    if @unlikely(local.tee $write_back_result_9("mut_ref_write_back_variant_field.wado/swap_to_appends"(struct.new "core:prelude//$Cell<fn(&mut mut_ref_write_back_variant_field.wado/Payload)->()>" { value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "mut_ref_write_back_variant_field.wado//$Closure_2" {}, func: ref.func "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_2" } })) >=u 1) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_variant_field.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mut_ref_write_back_variant_field.wado:97"), used: 40 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_variant_field.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($write_back_result_9, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mut_ref_write_back_variant_field.wado:97"), used: 40 });
         unreachable;
     }
-    $before__10 = local.tee $write_back_9(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_8(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, $contract_arg_0)).item }).value;
-    call_ref "functype/$canonical_closure_fn_0"($write_back_place_7.func, $write_back_place_7.env, $write_back_9);
-    if ref.eq(local.tee $load_6($write_back_9.value), $before__10) == 0 {
-        $write_back_place_8.item = $load_6;
+    $before__14 = local.tee $write_back_12(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_11(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, $write_back_result_9)).item }).value;
+    "mut_ref_write_back_variant_field.wado/replace"($write_back_12);
+    if ref.eq(local.tee $load_3($write_back_12.value), $before__14) == 0 {
+        $write_back_place_11.item = $load_3;
     }
 }
 

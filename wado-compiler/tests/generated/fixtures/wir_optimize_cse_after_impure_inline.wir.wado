@@ -159,7 +159,7 @@ type "functype//wir_optimize_cse_after_impure_inline.wado/$hole_fmt$wir_optimize
 
 type "functype//wir_optimize_cse_after_impure_inline.wado/$cm_export__$test_0" = fn();  // TypeId(26)
 
-type "functype//wir_optimize_cse_after_impure_inline.wado/$test_0$cold0" = fn(ref "core:prelude//$Cell<i32>");  // TypeId(27)
+type "functype//wir_optimize_cse_after_impure_inline.wado/$test_0$cold0" = fn(i32);  // TypeId(27)
 
 type "functype//wir_optimize_cse_after_impure_inline.wado/$test_0$cold1" = fn(i32, i32);  // TypeId(28)
 
@@ -419,21 +419,29 @@ fn "wir_optimize_cse_after_impure_inline.wado/$hole_fmt$wir_optimize_cse_after_i
 }
 
 fn "wir_optimize_cse_after_impure_inline.wado/$cm_export__$test_0"() {
-    let calls: ref "core:prelude//$Cell<i32>";
+    let calls: i32;
     let $v_0: i32;
-    let $v_1: i32;
-    calls = struct.new "core:prelude//$Cell<i32>" { value: 0 };
-    if @unlikely(local.tee $v_1("wir_optimize_cse_after_impure_inline.wado/sqrt_bound_after"(local.tee $v_0(black_box(100)), calls)) != 100) {
+    let $write_back_9: ref "core:prelude//$Cell<i32>";
+    let $write_back_result_11: i32;
+    $v_0 = black_box(100);
+    $write_back_9 = struct.new "core:prelude//$Cell<i32>" { value: 0 };
+    $write_back_result_11 = "wir_optimize_cse_after_impure_inline.wado/sqrt_bound_after"($v_0, $write_back_9);
+    calls = $write_back_9.value;
+    if @unlikely($write_back_result_11 != 100) {
         cold_path;
-        "wir_optimize_cse_after_impure_inline.wado/$test_0$cold2"($v_0, $v_1);
+        "wir_optimize_cse_after_impure_inline.wado/$test_0$cold2"($v_0, $write_back_result_11);
         unreachable;
     }
-    if @unlikely(local.tee $v_1("wir_optimize_cse_after_impure_inline.wado/sqrt_bound_after"(local.tee $v_0(black_box(99)), calls)) != 81) {
+    $v_0 = black_box(99);
+    $write_back_9 = struct.new "core:prelude//$Cell<i32>" { value: calls };
+    $write_back_result_11 = "wir_optimize_cse_after_impure_inline.wado/sqrt_bound_after"($v_0, $write_back_9);
+    calls = $write_back_9.value;
+    if @unlikely($write_back_result_11 != 81) {
         cold_path;
-        "wir_optimize_cse_after_impure_inline.wado/$test_0$cold1"($v_0, $v_1);
+        "wir_optimize_cse_after_impure_inline.wado/$test_0$cold1"($v_0, $write_back_result_11);
         unreachable;
     }
-    if @unlikely(calls.value != 2) {
+    if @unlikely(calls != 2) {
         cold_path;
         "wir_optimize_cse_after_impure_inline.wado/$test_0$cold0"(calls);
         unreachable;
@@ -443,7 +451,7 @@ fn "wir_optimize_cse_after_impure_inline.wado/$cm_export__$test_0"() {
 
 fn "wir_optimize_cse_after_impure_inline.wado/$test_0$cold0"(calls) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimize_cse_after_impure_inline.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "wir_optimize_cse_after_impure_inline.wado//$tmpl$ebaa20f4a908b504" { h0: calls.value, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at wir_optimize_cse_after_impure_inline.wado:32
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimize_cse_after_impure_inline.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "wir_optimize_cse_after_impure_inline.wado//$tmpl$ebaa20f4a908b504" { h0: calls, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at wir_optimize_cse_after_impure_inline.wado:32
 condition: calls == 2
 calls: "), used: 105 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at wir_optimize_cse_after_impure_inline.wado:32
 condition: calls == 2

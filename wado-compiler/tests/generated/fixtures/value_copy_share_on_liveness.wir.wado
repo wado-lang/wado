@@ -241,55 +241,55 @@ global global:core:prelude/traits.wado::$const_obj_16: ref "core:prelude/string.
 global global:core:prelude/traits.wado::$const_obj_18: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 };
 
 fn "value_copy_share_on_liveness.wado/run"() {
+    let slot_5: ref null "core:prelude/list.wado//List<i32>";
     let c_10: ref "Array<value_copy_share_on_liveness.wado/Cell>";
-    let self_45: i32;
-    let self_46: ref "core:prelude/list.wado//List<i32>";
-    let used_48: i32;
-    let $sroa_slot_value_88: ref null "core:prelude/list.wado//List<i32>";
-    let $sroa_$sroa_s_rows_87_repr_89: ref "Array<core:prelude/list.wado/List<i32>>";
-    self_45 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(local.tee $sroa_$sroa_s_rows_87_repr_89(array.new_fixed<ref "core:prelude/list.wado//List<i32>">(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 })), 0).used;
-    if @unlikely(local.tee used_48(local.tee self_46(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($sroa_$sroa_s_rows_87_repr_89, 0)).used) >= builtin::array_len(self_46.repr)) {
+    let self_47: i32;
+    let self_48: ref "core:prelude/list.wado//List<i32>";
+    let used_50: i32;
+    let $sroa_$sroa_s_rows_89_repr_91: ref "Array<core:prelude/list.wado/List<i32>>";
+    self_47 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(local.tee $sroa_$sroa_s_rows_89_repr_91(array.new_fixed<ref "core:prelude/list.wado//List<i32>">(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 })), 0).used;
+    if @unlikely(local.tee used_50(local.tee self_48(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($sroa_$sroa_s_rows_89_repr_91, 0)).used) >= builtin::array_len(self_48.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_46);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_48);
     }
-    builtin::array_set<i32>(self_46.repr, used_48, 99);
-    self_46.used = used_48 + 1;
-    used_48 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($sroa_$sroa_s_rows_87_repr_89, 0).used;
-    if @unlikely(self_45 != 3) {
+    builtin::array_set<i32>(self_48.repr, used_50, 99);
+    self_48.used = used_50 + 1;
+    used_50 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($sroa_$sroa_s_rows_89_repr_91, 0).used;
+    if @unlikely(self_47 != 3) {
         cold_path;
-        "value_copy_share_on_liveness.wado/run$cold4"(self_45);
+        "value_copy_share_on_liveness.wado/run$cold4"(self_47);
         unreachable;
     }
-    if @unlikely(used_48 != 4) {
+    if @unlikely(used_50 != 4) {
         cold_path;
-        "value_copy_share_on_liveness.wado/run$cold3"(used_48);
+        "value_copy_share_on_liveness.wado/run$cold3"(used_50);
         unreachable;
     }
-    self_45 = local.tee $sroa_slot_value_88(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }).used;
-    if ref.is_null($sroa_slot_value_88) == 0 {
-        if @unlikely(local.tee used_48(local.tee self_46(ref.as_non_null($sroa_slot_value_88)).used) >= builtin::array_len(self_46.repr)) {
+    self_47 = local.tee slot_5(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }).used;
+    if ref.is_null(slot_5) == 0 {
+        if @unlikely(local.tee used_50(local.tee self_48(ref.as_non_null(slot_5)).used) >= builtin::array_len(self_48.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_46);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_48);
         }
-        builtin::array_set<i32>(self_46.repr, used_48, 9);
-        self_46.used = used_48 + 1;
+        builtin::array_set<i32>(self_48.repr, used_50, 9);
+        self_48.used = used_50 + 1;
     } else {
     }
-    if @unlikely(self_45 != 2) {
+    if @unlikely(self_47 != 2) {
         cold_path;
-        "value_copy_share_on_liveness.wado/run$cold2"(self_45);
+        "value_copy_share_on_liveness.wado/run$cold2"(self_47);
         unreachable;
     }
     builtin::array_set<ref "value_copy_share_on_liveness.wado//Cell">(local.tee c_10(builtin::array_new<ref "value_copy_share_on_liveness.wado//Cell">(1)), 0, struct.new "value_copy_share_on_liveness.wado//Cell" { v: 1 });
-    if @unlikely(local.tee self_45(builtin::array_get_value<ref "value_copy_share_on_liveness.wado//Cell">(c_10, 0).v) != 1) {
+    if @unlikely(local.tee self_47(builtin::array_get_value<ref "value_copy_share_on_liveness.wado//Cell">(c_10, 0).v) != 1) {
         cold_path;
-        "value_copy_share_on_liveness.wado/run$cold0"(self_45);
+        "value_copy_share_on_liveness.wado/run$cold0"(self_47);
         unreachable;
     }
-    if @unlikely(local.tee self_45(builtin::array_get_value<ref "value_copy_share_on_liveness.wado//Cell">(c_10, 0).v) != 1) {
+    if @unlikely(local.tee self_47(builtin::array_get_value<ref "value_copy_share_on_liveness.wado//Cell">(c_10, 0).v) != 1) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_share_on_liveness.wado/$tmpl$f73ca6dc280be9c8,[Array<value_copy_share_on_liveness.wado/Cell>,i32]>"(struct.new "value_copy_share_on_liveness.wado//$tmpl$f73ca6dc280be9c8" { h0: c_10, h1: self_45, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_share_on_liveness.wado:94
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_share_on_liveness.wado/$tmpl$f73ca6dc280be9c8,[Array<value_copy_share_on_liveness.wado/Cell>,i32]>"(struct.new "value_copy_share_on_liveness.wado//$tmpl$f73ca6dc280be9c8" { h0: c_10, h1: self_47, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_share_on_liveness.wado:94
 condition: cell_value(&shared) == 1
 shared: "), used: 108 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_share_on_liveness.wado:94
 condition: cell_value(&shared) == 1

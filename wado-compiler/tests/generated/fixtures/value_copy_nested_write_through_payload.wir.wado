@@ -176,11 +176,11 @@ type "functype//value_copy_nested_write_through_payload.wado/$cm_export__$test_0
 
 type "functype//value_copy_nested_write_through_payload.wado/$cm_export__$test_1_a_field_read_out_of_the_payload_before_the_call_keeps_its_value" = fn();  // TypeId(30)
 
-type "functype//value_copy_nested_write_through_payload.wado/$test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it$cold0" = fn(ref "core:prelude//$Cell<value_copy_nested_write_through_payload.wado/Element>");  // TypeId(31)
+type "functype//value_copy_nested_write_through_payload.wado/$test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it$cold0" = fn(ref null "value_copy_nested_write_through_payload.wado//Named");  // TypeId(31)
 
 type "functype//value_copy_nested_write_through_payload.wado/$test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it$cold1" = fn(ref null "value_copy_nested_write_through_payload.wado//Named");  // TypeId(32)
 
-type "functype//value_copy_nested_write_through_payload.wado/$test_1_a_field_read_out_of_the_payload_before_the_call_keeps_its_value$cold0" = fn(ref "core:prelude//$Cell<value_copy_nested_write_through_payload.wado/Element>");  // TypeId(33)
+type "functype//value_copy_nested_write_through_payload.wado/$test_1_a_field_read_out_of_the_payload_before_the_call_keeps_its_value$cold0" = fn(ref null "value_copy_nested_write_through_payload.wado//Named");  // TypeId(33)
 
 type "functype//value_copy_nested_write_through_payload.wado/$hole_fmt$value_copy_nested_write_through_payload.wado/$tmpl$acc42078817a73e1$sroa[t.h0]" = fn(ref null "value_copy_nested_write_through_payload.wado//Named", i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
@@ -477,56 +477,56 @@ global global:core:prelude/numeric.wado::$const_obj_31: ref "core:prelude/string
 
 fn "value_copy_nested_write_through_payload.wado/$test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it"() {
     let $load_2: i32;
+    let e_0: ref null "value_copy_nested_write_through_payload.wado//Named";
     let snapshot: ref null "value_copy_nested_write_through_payload.wado//Named";
-    let r_8: ref "value_copy_nested_write_through_payload.wado//Named";
-    let i_20: i32;
-    let $sroa_e_value_31: ref null "value_copy_nested_write_through_payload.wado//Named";
-    let v_41: ref "core:prelude/string.wado//String";
-    snapshot = struct.new "value_copy_nested_write_through_payload.wado//Named" { name: v_41 = local.tee $sroa_e_value_31(struct.new "value_copy_nested_write_through_payload.wado//Named" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 } }).name; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_41.repr; $load_2 = v_41.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 } };
-    if @likely(ref.is_null($sroa_e_value_31) == 0) {
-        r_8 = ref.as_non_null($sroa_e_value_31);
+    let r_10: ref "value_copy_nested_write_through_payload.wado//Named";
+    let i_22: i32;
+    let v_43: ref "core:prelude/string.wado//String";
+    snapshot = struct.new "value_copy_nested_write_through_payload.wado//Named" { name: v_43 = local.tee e_0(struct.new "value_copy_nested_write_through_payload.wado//Named" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 } }).name; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_43.repr; $load_2 = v_43.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 } };
+    if @likely(ref.is_null(e_0) == 0) {
+        r_10 = ref.as_non_null(e_0);
         $array_clone_src_1 = array.new_data<u8>("renamed");
-        local.tee v_41(r_8.name).repr = $array_clone_src_1;
-        v_41.used = 7;
+        local.tee v_43(r_10.name).repr = $array_clone_src_1;
+        v_43.used = 7;
     } else {
         unreachable;
     }
-    r_8 = ref.as_non_null(snapshot);
+    r_10 = ref.as_non_null(snapshot);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-        if local.tee $load_2(local.tee v_41(r_8.name).used) != 8 {
+        if local.tee $load_2(local.tee v_43(r_10.name).used) != 8 {
             break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
-        i_20 = 0;
-        $array_clone_src_1 = v_41.repr;
+        i_22 = 0;
+        $array_clone_src_1 = v_43.repr;
         b3: block {
             l4: loop {
-                break_if b3 (builtin::i64_extend_i32_s(i_20) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_2, i_20) {
+                break_if b3 (builtin::i64_extend_i32_s(i_22) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
+                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_2, i_22) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i_20 = i_20 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_2, i_20) {
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_2, i_22) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i_20 = i_20 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_2, i_20) {
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_2, i_22) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i_20 = i_20 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_2, i_20) {
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_2, i_22) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i_20 = i_20 + 1;
+                i_22 = i_22 + 1;
                 continue l4;
             };
         };
         b9: block {
             l10: loop {
-                break_if b9 i_20 >= $load_2;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_2, i_20) {
+                break_if b9 i_22 >= $load_2;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_2, i_22) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i_20 = i_20 + 1;
+                i_22 = i_22 + 1;
                 continue l10;
             };
         };
@@ -536,49 +536,49 @@ fn "value_copy_nested_write_through_payload.wado/$test_0_a_value_taken_before_a_
         "value_copy_nested_write_through_payload.wado/$test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it$cold1"(snapshot);
         unreachable;
     }
-    r_8 = ref.as_non_null($sroa_e_value_31);
+    r_10 = ref.as_non_null(e_0);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        if local.tee $load_2(local.tee v_41(r_8.name).used) != 7 {
+        if local.tee $load_2(local.tee v_43(r_10.name).used) != 7 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
-        i_20 = 0;
-        $array_clone_src_1 = v_41.repr;
+        i_22 = 0;
+        $array_clone_src_1 = v_43.repr;
         b14: block {
             l15: loop {
-                break_if b14 (builtin::i64_extend_i32_s(i_20) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_20) {
+                break_if b14 (builtin::i64_extend_i32_s(i_22) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
+                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_22) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_20 = i_20 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_20) {
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_22) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_20 = i_20 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_20) {
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_22) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_20 = i_20 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_20) {
+                i_22 = i_22 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_22) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_20 = i_20 + 1;
+                i_22 = i_22 + 1;
                 continue l15;
             };
         };
         b20: block {
             l21: loop {
-                break_if b20 i_20 >= $load_2;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_20) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_20) {
+                break_if b20 i_22 >= $load_2;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_22) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_20 = i_20 + 1;
+                i_22 = i_22 + 1;
                 continue l21;
             };
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
-        "value_copy_nested_write_through_payload.wado/$test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it$cold0"(struct.new "core:prelude//$Cell<value_copy_nested_write_through_payload.wado/Element>" { value: $sroa_e_value_31 });
+        "value_copy_nested_write_through_payload.wado/$test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it$cold0"(e_0);
         unreachable;
     }
 }
@@ -586,16 +586,16 @@ fn "value_copy_nested_write_through_payload.wado/$test_0_a_value_taken_before_a_
 fn "value_copy_nested_write_through_payload.wado/$test_1_a_field_read_out_of_the_payload_before_the_call_keeps_its_value"() {
     let $load_2: i32;
     let $load_3: ref "core:prelude/string.wado//String";
-    let r_10: ref "value_copy_nested_write_through_payload.wado//Named";
-    let i_22: i32;
-    let $sroa_e_value_33: ref null "value_copy_nested_write_through_payload.wado//Named";
+    let e_0: ref null "value_copy_nested_write_through_payload.wado//Named";
+    let r_12: ref "value_copy_nested_write_through_payload.wado//Named";
+    let i_24: i32;
     let v: ref "core:prelude/string.wado//String";
-    v = local.tee $sroa_e_value_33(struct.new "value_copy_nested_write_through_payload.wado//Named" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 } }).name;
+    v = local.tee e_0(struct.new "value_copy_nested_write_through_payload.wado//Named" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 } }).name;
     v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; $load_2 = v.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
-    if @likely(ref.is_null($sroa_e_value_33) == 0) {
-        r_10 = ref.as_non_null($sroa_e_value_33);
+    if @likely(ref.is_null(e_0) == 0) {
+        r_12 = ref.as_non_null(e_0);
         $array_clone_src_1 = array.new_data<u8>("renamed");
-        local.tee $load_3(r_10.name).repr = $array_clone_src_1;
+        local.tee $load_3(r_12.name).repr = $array_clone_src_1;
         $load_3.used = 7;
     } else {
         unreachable;
@@ -604,38 +604,38 @@ fn "value_copy_nested_write_through_payload.wado/$test_1_a_field_read_out_of_the
         if local.tee $load_2(v.used) != 8 {
             break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
-        i_22 = 0;
+        i_24 = 0;
         $array_clone_src_1 = v.repr;
         $array_clone_dst_2 = global:value_copy_nested_write_through_payload.wado::$const_obj_4.repr;
         b26: block {
             l27: loop {
-                break_if b26 (builtin::i64_extend_i32_s(i_22) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
-                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>($array_clone_dst_2, i_22) {
+                break_if b26 (builtin::i64_extend_i32_s(i_24) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
+                if builtin::array_get_value<u8>($array_clone_src_1, i_24) != builtin::array_get_value<u8>($array_clone_dst_2, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i_22 = i_22 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>($array_clone_dst_2, i_22) {
+                i_24 = i_24 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_24) != builtin::array_get_value<u8>($array_clone_dst_2, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i_22 = i_22 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>($array_clone_dst_2, i_22) {
+                i_24 = i_24 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_24) != builtin::array_get_value<u8>($array_clone_dst_2, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i_22 = i_22 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>($array_clone_dst_2, i_22) {
+                i_24 = i_24 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_24) != builtin::array_get_value<u8>($array_clone_dst_2, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i_22 = i_22 + 1;
+                i_24 = i_24 + 1;
                 continue l27;
             };
         };
         b32: block {
             l33: loop {
-                break_if b32 i_22 >= $load_2;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>($array_clone_dst_2, i_22) {
+                break_if b32 i_24 >= $load_2;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_24) != builtin::array_get_value<u8>($array_clone_dst_2, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                i_22 = i_22 + 1;
+                i_24 = i_24 + 1;
                 continue l33;
             };
         };
@@ -651,49 +651,49 @@ held: "), used: 179 }, s1: struct.new "core:prelude/string.wado//String" { repr:
 `original`: "), used: 13 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v.used);
         unreachable;
     }
-    r_10 = ref.as_non_null($sroa_e_value_33);
+    r_12 = ref.as_non_null(e_0);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        if local.tee $load_2(local.tee v(r_10.name).used) != 7 {
+        if local.tee $load_2(local.tee v(r_12.name).used) != 7 {
             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
-        i_22 = 0;
+        i_24 = 0;
         $array_clone_src_1 = v.repr;
         b37: block {
             l38: loop {
-                break_if b37 (builtin::i64_extend_i32_s(i_22) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
-                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_22) {
+                break_if b37 (builtin::i64_extend_i32_s(i_24) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
+                if builtin::array_get_value<u8>($array_clone_src_1, i_24) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_22 = i_22 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_22) {
+                i_24 = i_24 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_24) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_22 = i_22 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_22) {
+                i_24 = i_24 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_24) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_22 = i_22 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_22) {
+                i_24 = i_24 + 1;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_24) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_22 = i_22 + 1;
+                i_24 = i_24 + 1;
                 continue l38;
             };
         };
         b43: block {
             l44: loop {
-                break_if b43 i_22 >= $load_2;
-                if builtin::array_get_value<u8>($array_clone_src_1, i_22) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_22) {
+                break_if b43 i_24 >= $load_2;
+                if builtin::array_get_value<u8>($array_clone_src_1, i_24) != builtin::array_get_value<u8>(global:value_copy_nested_write_through_payload.wado::$const_obj_1, i_24) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_22 = i_22 + 1;
+                i_24 = i_24 + 1;
                 continue l44;
             };
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
-        "value_copy_nested_write_through_payload.wado/$test_1_a_field_read_out_of_the_payload_before_the_call_keeps_its_value$cold0"(struct.new "core:prelude//$Cell<value_copy_nested_write_through_payload.wado/Element>" { value: $sroa_e_value_33 });
+        "value_copy_nested_write_through_payload.wado/$test_1_a_field_read_out_of_the_payload_before_the_call_keeps_its_value$cold0"(e_0);
         unreachable;
     }
 }
@@ -734,7 +734,7 @@ fn "value_copy_nested_write_through_payload.wado/$cm_export__$test_1_a_field_rea
 
 fn "value_copy_nested_write_through_payload.wado/$test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it$cold0"(e) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_nested_write_through_payload.wado/$tmpl$acc42078817a73e1,[value_copy_nested_write_through_payload.wado/Element]>"(struct.new "value_copy_nested_write_through_payload.wado//$tmpl$acc42078817a73e1" { h0: e.value, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it at value_copy_nested_write_through_payload.wado:30
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_nested_write_through_payload.wado/$tmpl$acc42078817a73e1,[value_copy_nested_write_through_payload.wado/Element]>"(struct.new "value_copy_nested_write_through_payload.wado//$tmpl$acc42078817a73e1" { h0: e, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it at value_copy_nested_write_through_payload.wado:30
 condition: e matches { Ref(r) && r.name == `renamed` }
 e: "), used: 212 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_value_taken_before_a_nested_write_through_a__mut_payload_does_not_see_it at value_copy_nested_write_through_payload.wado:30
 condition: e matches { Ref(r) && r.name == `renamed` }
@@ -754,7 +754,7 @@ snapshot: "), used: 227 }, s1: struct.new "core:prelude/string.wado//String" { r
 
 fn "value_copy_nested_write_through_payload.wado/$test_1_a_field_read_out_of_the_payload_before_the_call_keeps_its_value$cold0"(e) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_nested_write_through_payload.wado/$tmpl$acc42078817a73e1,[value_copy_nested_write_through_payload.wado/Element]>"(struct.new "value_copy_nested_write_through_payload.wado//$tmpl$acc42078817a73e1" { h0: e.value, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_field_read_out_of_the_payload_before_the_call_keeps_its_value at value_copy_nested_write_through_payload.wado:41
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_nested_write_through_payload.wado/$tmpl$acc42078817a73e1,[value_copy_nested_write_through_payload.wado/Element]>"(struct.new "value_copy_nested_write_through_payload.wado//$tmpl$acc42078817a73e1" { h0: e, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_field_read_out_of_the_payload_before_the_call_keeps_its_value at value_copy_nested_write_through_payload.wado:41
 condition: e matches { Ref(r) && r.name == `renamed` }
 e: "), used: 201 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_field_read_out_of_the_payload_before_the_call_keeps_its_value at value_copy_nested_write_through_payload.wado:41
 condition: e matches { Ref(r) && r.name == `renamed` }

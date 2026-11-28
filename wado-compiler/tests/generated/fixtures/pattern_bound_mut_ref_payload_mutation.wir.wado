@@ -557,13 +557,13 @@ fn "pattern_bound_mut_ref_payload_mutation.wado/$cm_export__$test_1_a_payload_is
 }
 
 fn "pattern_bound_mut_ref_payload_mutation.wado/$cm_export__$test_2_a_generic_body_replaces_an_in_place_payload"() {
+    let point: ref null "pattern_bound_mut_ref_payload_mutation.wado//Point";
     let $v_0: i32;
-    let $sroa_point_value_10: ref null "pattern_bound_mut_ref_payload_mutation.wado//Point";
-    if ref.is_null(local.tee $sroa_point_value_10(struct.new "pattern_bound_mut_ref_payload_mutation.wado//Point" { x: 1 })) == 0 {
-        $sroa_point_value_10.x = 5;
+    if ref.is_null(local.tee point(struct.new "pattern_bound_mut_ref_payload_mutation.wado//Point" { x: 1 })) == 0 {
+        point.x = 5;
     } else {
     }
-    if @unlikely(local.tee $v_0($sroa_point_value_10.x) != 5) {
+    if @unlikely(local.tee $v_0(point.x) != 5) {
         cold_path;
         "pattern_bound_mut_ref_payload_mutation.wado/$test_2_a_generic_body_replaces_an_in_place_payload$cold0"($v_0);
         unreachable;
