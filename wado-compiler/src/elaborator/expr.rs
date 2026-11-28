@@ -752,8 +752,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
             Expr::TupleComprehension(comp) => self.resolve_tuple_comprehension(comp, ctx),
             Expr::Call(call) => {
-                let scoped = scoped_subscripts(None, &call.args).map(|i| i.id).collect();
-                let ctx = &mut ctx.scoping_subscripts(scoped);
+                let ctx = &mut ctx.scoping_subscripts(None, &call.args);
                 let type_id = self.resolve_call(call, ctx, expected_type);
                 // A case holds its payload past the expression, so no point is
                 // late enough to store one back.
@@ -768,24 +767,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_id
             }
             Expr::MethodCall(method_call) => {
-                let scoped = scoped_subscripts(Some(&method_call.receiver), &method_call.args)
-                    .map(|i| i.id)
-                    .collect();
-                self.resolve_method_call(
-                    method_call,
-                    &mut ctx.scoping_subscripts(scoped),
-                    expected_type,
-                )
+                let ctx =
+                    &mut ctx.scoping_subscripts(Some(&method_call.receiver), &method_call.args);
+                self.resolve_method_call(method_call, ctx, expected_type)
             }
             Expr::StaticMethodCall(static_call) => {
-                let scoped = scoped_subscripts(None, &static_call.args)
-                    .map(|i| i.id)
-                    .collect();
-                self.resolve_static_method_call(
-                    static_call,
-                    &mut ctx.scoping_subscripts(scoped),
-                    expected_type,
-                )
+                let ctx = &mut ctx.scoping_subscripts(None, &static_call.args);
+                self.resolve_static_method_call(static_call, ctx, expected_type)
             }
             Expr::FieldAccess(field_access) => {
                 self.resolve_field_access(field_access, ctx, expected_type)

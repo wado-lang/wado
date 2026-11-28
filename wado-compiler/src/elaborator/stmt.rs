@@ -2707,10 +2707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 self.record_desugar(for_of.id, DesugarKind::ForOfIterator);
                 let item_type = walk.item_type;
-                self.sem
-                    .types
-                    .for_of_index_walks
-                    .insert(for_of.id, walk);
+                self.sem.types.for_of_index_walks.insert(for_of.id, walk);
                 let mut scope = ctx.enter_scope();
                 self.resolve_let_pattern(
                     &for_of.binding,
@@ -3192,7 +3189,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .any(|name| {
                     self.tysys
                         .trait_env
-                        .methodful_impls_by_receiver(&Receiver::RefTo(kind, name.head_only()), trait_)
+                        .methodful_impls_by_receiver(
+                            &Receiver::RefTo(kind, name.head_only()),
+                            trait_,
+                        )
                         .any(|entry| tt.impl_reaches_instance(entry, operand))
                 })
             })

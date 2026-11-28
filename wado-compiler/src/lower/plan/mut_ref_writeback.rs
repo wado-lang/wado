@@ -484,9 +484,9 @@ impl WriteBack<'_> {
         // until an argument is one of the few this pass has anything to say
         // about.
         let touched = match &call.kind {
-            TirExprKind::Call { args, .. } => args
-                .iter()
-                .any(|arg| self.takes_a_detached_ref(&arg.expr) || self.lends_a_stand_in(&arg.expr)),
+            TirExprKind::Call { args, .. } => args.iter().any(|arg| {
+                self.takes_a_detached_ref(&arg.expr) || self.lends_a_stand_in(&arg.expr)
+            }),
             TirExprKind::IndirectCall { args, .. } => args
                 .iter()
                 .any(|arg| self.takes_a_detached_ref(arg) || self.lends_a_stand_in(arg)),

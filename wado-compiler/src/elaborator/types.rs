@@ -3727,9 +3727,6 @@ pub(super) struct FunctionContext {
     pub(super) pack_walks: u32,
 }
 
-/// A stretch of the walk with one `FunctionContext` field replaced. Derefs to
-/// the context, and puts the enclosing value back on drop.
-#[must_use]
 /// The subscripts a call with `receiver` and `args` may take as a scoped `&mut`
 /// (WEP: Writable References): a receiver `xs[i]`, and an argument `&mut xs[i]`.
 /// Whether one is depends on its element, which the subscript's resolution
@@ -3752,6 +3749,9 @@ pub(super) fn scoped_subscripts<'e>(
     receiver.into_iter().chain(args)
 }
 
+/// A stretch of the walk with one `FunctionContext` field replaced. Derefs to
+/// the context, and puts the enclosing value back on drop.
+#[must_use]
 pub(super) struct FieldFrame<'c, T: Default> {
     ctx: &'c mut FunctionContext,
     field: fn(&mut FunctionContext) -> &mut T,
@@ -3926,11 +3926,14 @@ impl FunctionContext {
         )
     }
 
-    /// A call's arguments, which may take `subscripts` as a scoped `&mut`.
+    /// A call's receiver and arguments, which may take their
+    /// [`scoped_subscripts`] as a scoped `&mut`.
     pub(super) fn scoping_subscripts(
         &mut self,
-        subscripts: IndexSet<AstId>,
+        receiver: Option<&ast::Expr>,
+        args: &[ast::Expr],
     ) -> FieldFrame<'_, IndexSet<AstId>> {
+        let subscripts = scoped_subscripts(receiver, args).map(|i| i.id).collect();
         self.replacing(|ctx| &mut ctx.scoped_subscripts, subscripts)
     }
 

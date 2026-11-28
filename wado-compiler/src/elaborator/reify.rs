@@ -60,10 +60,11 @@ use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
-    BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIndexWalk, ForOfIteratorInfo, FromCallFacts,
-    ImplFacts, IndirectCallee, KeyValueCoercionFacts, ListViewConversion, LiteralCallee,
-    LiteralFromCall, MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts,
-    StaticMethodDispatch, dispatched_on_cell, impl_self_layers, with_body_facts,
+    BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIndexWalk, ForOfIteratorInfo,
+    FromCallFacts, ImplFacts, IndirectCallee, KeyValueCoercionFacts, ListViewConversion,
+    LiteralCallee, LiteralFromCall, MethodDispatch, MethodNames, OperatorDispatch,
+    SequenceCoercionFacts, StaticMethodDispatch, dispatched_on_cell, impl_self_layers,
+    with_body_facts,
 };
 use crate::elaborator::stmt::{
     RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
@@ -3755,27 +3756,7 @@ impl<'a> Reify<'a> {
         let operand = self.reify_expr(&for_of.iterable, ctx, None);
         let operand = tir::cell_as_mut_ref(operand, &mut self.tysys.type_table.borrow_mut());
         let container = bind_fresh(ctx, "walked", operand, &mut head);
-        let index_name = minted_name("index", ctx.fresh_serial());
-        let index_local = ctx.add_local(index_name.clone(), TypeTable::I32, true, None);
-        head.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: index_name.clone(),
-                local_index: index_local,
-                is_mut: true,
-                type_id: TypeTable::I32,
-                value: Some(i32_const(0)),
-                storage: LetStorage::Planned,
-            },
-            span,
-        ));
-        let index = TirExpr::new(
-            TirExprKind::Local {
-                index: index_local,
-                name: index_name,
-            },
-            TypeTable::I32,
-            span,
-        );
+        let (_, index) = bind_mut(ctx, "index", i32_const(0), LetStorage::Planned, &mut head);
         let ctx = &mut ctx.enter_label(label.clone());
 
         let len_receiver =
@@ -3791,35 +3772,20 @@ impl<'a> Reify<'a> {
         let in_range = binary(TirBinaryOp::Lt, index.clone(), len, TypeTable::BOOL);
         let mut turn = vec![break_unless(in_range, span, span)];
 
-        let element_type = walk.read.return_type;
-        let deref_type = self.tysys.index_deref_type(Some(element_type), &walk.read);
-        let read_receiver = self.adjust_operator_receiver(container.clone(), &walk.read, ctx);
-        let element = self.tysys.build_index_read_from_dispatch(
-            read_receiver,
+        let (_, held, store) = self.hold_element(
+            container,
             index.clone(),
-            walk.read.clone(),
-            deref_type,
+            &walk.read,
+            walk.write,
+            walk.read.return_type,
             span,
-        );
-        let (temp, held) = bind_shared(ctx, "element", element, true, &mut turn);
-        ctx.address_taken_locals.insert(temp);
-        let store_receiver = self.adjust_operator_receiver(container, &walk.write, ctx);
-        let store = TirStmt::new(
-            TirStmtKind::Expr(
-                WritePlace::IndexAssign {
-                    receiver: store_receiver,
-                    index: Box::new(index.clone()),
-                    dispatch: Box::new(walk.write),
-                }
-                .write(held.clone(), span),
-            ),
-            span,
+            ctx,
+            &mut turn,
         );
 
         let turn_label = for_body_label(ctx.fresh_serial());
         let (pattern, body) = {
-            let mut retarget =
-                ctx.pushing(|ctx| &mut ctx.for_continue_labels, turn_label.clone());
+            let mut retarget = ctx.pushing(|ctx| &mut ctx.for_continue_labels, turn_label.clone());
             let mut labeled = retarget.enter_label(turn_label.clone());
             let mut scope = labeled.enter_scope();
             let pattern = self.reify_pattern(&for_of.binding, walk.item_type, span, &mut scope);
@@ -3869,7 +3835,12 @@ impl<'a> Reify<'a> {
             )],
         };
         let mut turn_block = TirBlock::new(bound, span);
-        store_at_exits(&mut turn_block, &turn_label, std::slice::from_ref(&store), ctx);
+        store_at_exits(
+            &mut turn_block,
+            &turn_label,
+            std::slice::from_ref(&store),
+            ctx,
+        );
         turn.push(TirStmt::new(
             TirStmtKind::LabeledBlock {
                 label: turn_label,
@@ -6309,7 +6280,14 @@ impl<'a> Reify<'a> {
                 && let Some(assign) = self.ann_index_assign_dispatch(index.id)
                 && !self.is_affine_type(recorded_type)
             {
-                return self.reify_scoped_element(index, receiver, dispatch, assign, recorded_type, ctx);
+                return self.reify_scoped_element(
+                    index,
+                    receiver,
+                    dispatch,
+                    assign,
+                    recorded_type,
+                    ctx,
+                );
             }
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             let deref_type = self.tysys.index_deref_type(Some(recorded_type), &dispatch);
@@ -6374,14 +6352,50 @@ impl<'a> Reify<'a> {
         } else {
             bind_fresh(ctx, "scoped_key", key, &mut prefix)
         };
-        let deref_type = self.tysys.index_deref_type(Some(element_type), &read);
-        let read_receiver = self.adjust_operator_receiver(container.clone(), &read, ctx);
-        let element =
-            self.tysys
-                .build_index_read_from_dispatch(read_receiver, key.clone(), read, deref_type, span);
-        // A container handing out an element that is written in place lends
-        // it, so storing it back stores what is already there.
-        let (temp, held) = bind_shared(ctx, "scoped", element, true, &mut prefix);
+        let (temp, held, store) = self.hold_element(
+            container,
+            key,
+            &read,
+            assign,
+            element_type,
+            span,
+            ctx,
+            &mut prefix,
+        );
+        self.scoped_elements.push(ScopedElement {
+            temp,
+            prefix,
+            store,
+        });
+        held
+    }
+
+    /// `let mut $t = container[key]`, which a `&mut` is taken of, and the
+    /// `container[key] = $t` that stores it back. A container handing out an
+    /// element written in place lends it, so the store stores what is
+    /// already there.
+    #[allow(clippy::too_many_arguments)]
+    fn hold_element(
+        &mut self,
+        container: TirExpr,
+        key: TirExpr,
+        read: &OperatorDispatch,
+        assign: OperatorDispatch,
+        element_type: TypeId,
+        span: Span,
+        ctx: &mut FunctionContext,
+        stmts: &mut Vec<TirStmt>,
+    ) -> (u32, TirExpr, TirStmt) {
+        let deref_type = self.tysys.index_deref_type(Some(element_type), read);
+        let read_receiver = self.adjust_operator_receiver(container.clone(), read, ctx);
+        let element = self.tysys.build_index_read_from_dispatch(
+            read_receiver,
+            key.clone(),
+            read.clone(),
+            deref_type,
+            span,
+        );
+        let (temp, held) = bind_mut(ctx, "held", element, LetStorage::Aliased, stmts);
         ctx.address_taken_locals.insert(temp);
         let store_receiver = self.adjust_operator_receiver(container, &assign, ctx);
         let store = WritePlace::IndexAssign {
@@ -6390,12 +6404,7 @@ impl<'a> Reify<'a> {
             dispatch: Box::new(assign),
         }
         .write(held.clone(), span);
-        self.scoped_elements.push(ScopedElement {
-            temp,
-            prefix,
-            store: TirStmt::new(TirStmtKind::Expr(store), span),
-        });
-        held
+        (temp, held, TirStmt::new(TirStmtKind::Expr(store), span))
     }
 
     /// `{ ..; let r = call; stores; r }`: the arguments up to the last scoped
@@ -6413,7 +6422,11 @@ impl<'a> Reify<'a> {
             match &mut call.kind {
                 TirExprKind::Call { args, .. } => {
                     let has_receiver = args.receiver().is_some();
-                    (None, args.iter_mut().map(|arg| &mut arg.expr).collect(), has_receiver)
+                    (
+                        None,
+                        args.iter_mut().map(|arg| &mut arg.expr).collect(),
+                        has_receiver,
+                    )
                 }
                 TirExprKind::IndirectCall { callee, args } => {
                     (Some(callee), args.iter_mut().collect(), false)
@@ -6459,9 +6472,16 @@ impl<'a> Reify<'a> {
         } else {
             let result = bind_fresh(ctx, "scoped_result", returned, &mut stmts);
             stmts.extend(elements.into_iter().map(|e| e.store));
-            stmts.push(TirStmt::new(TirStmtKind::Expr(self.handed_on(result)), span));
+            stmts.push(TirStmt::new(
+                TirStmtKind::Expr(self.handed_on(result)),
+                span,
+            ));
         }
-        *call = TirExpr::new(TirExprKind::Block(TirBlock::new(stmts, span)), type_id, span);
+        *call = TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            type_id,
+            span,
+        );
         expr
     }
 
@@ -10464,29 +10484,32 @@ fn bind_fresh(
     bind_to_local(ctx, name, value, stmts)
 }
 
-/// [`bind_to_local`] for a binding that shares the storage `value` names.
-fn bind_shared(
+/// [`bind_fresh`] for a mutable binding, with its slot.
+fn bind_mut(
     ctx: &mut FunctionContext,
     what: &str,
     value: TirExpr,
-    is_mut: bool,
+    storage: LetStorage,
     stmts: &mut Vec<TirStmt>,
 ) -> (u32, TirExpr) {
     let (type_id, span) = (value.type_id, value.span);
     let name = minted_name(what, ctx.fresh_serial());
-    let index = ctx.add_local(name.clone(), type_id, is_mut, None);
+    let index = ctx.add_local(name.clone(), type_id, true, None);
     stmts.push(TirStmt::new(
         TirStmtKind::Let {
             name: name.clone(),
             local_index: index,
             value: Some(value),
-            is_mut,
+            is_mut: true,
             type_id,
-            storage: LetStorage::Aliased,
+            storage,
         },
         span,
     ));
-    (index, TirExpr::new(TirExprKind::Local { index, name }, type_id, span))
+    (
+        index,
+        TirExpr::new(TirExprKind::Local { index, name }, type_id, span),
+    )
 }
 
 /// A value no statement ahead of it can change.
@@ -10902,7 +10925,12 @@ fn breaks_out(body: &TirBlock) -> bool {
 /// block `label`: a `return`, and a `break` / `continue` past every loop and
 /// label entered inside it. A value the jump carries is bound first, so it is
 /// read before the stores run. A closure's jumps are its own.
-fn store_at_exits(block: &mut TirBlock, label: &str, stores: &[TirStmt], ctx: &mut FunctionContext) {
+fn store_at_exits(
+    block: &mut TirBlock,
+    label: &str,
+    stores: &[TirStmt],
+    ctx: &mut FunctionContext,
+) {
     let mut walker = ExitStores {
         scope: ExitScope::default(),
         stores,
