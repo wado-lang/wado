@@ -777,20 +777,37 @@ fn guard_block(engine: &Engine, loop_body: BlockId) -> BlockId {
     block
 }
 
-/// How many times `block`'s statements write `var`.
-fn writes_in(engine: &Engine, block: BlockId, var: u32) -> usize {
-    engine.body.blocks[block]
-        .stmts
-        .iter()
-        .map(|&s| write_count(engine, s, var))
-        .sum()
+/// Whether a statement of `loop_body` outside [`guard_block`]'s `head` may
+/// change `var`: one that follows a labeled block on the way down to `head`.
+fn modified_outside_guard_block(
+    engine: &Engine,
+    loop_body: BlockId,
+    head: BlockId,
+    var: u32,
+) -> bool {
+    let mut block = loop_body;
+    while block != head {
+        let stmts = &engine.body.blocks[block].stmts;
+        if stmts[1..]
+            .iter()
+            .any(|&s| node_modifies(engine, NodeRef::Stmt(s), var, BoundKey::Const(0)))
+        {
+            return true;
+        }
+        let StmtKind::LabeledBlock { block: inner, .. } = engine.body.stmts[stmts[0]].kind else {
+            unreachable!("guard_block descends through a leading labeled block");
+        };
+        block = inner;
+    }
+    false
 }
 
 /// The loop-guard head both structural BCE and loop versioning recognise:
 /// after any leading `let`s, the first statement is `if !<cond> { break }` with
 /// a single-statement break then-block. Returns the guard's statement index and
-/// the (still-negated) condition operand. One shared definition keeps the two
-/// passes from drifting on what a loop guard looks like.
+/// the (still-negated) condition operand. Structural BCE also finds it inside
+/// the labeled blocks opening the body ([`guard_block`]); loop versioning,
+/// which clones the body around the guard, reads the body's own head only.
 pub(super) fn parse_break_guard_head(
     engine: &Engine,
     loop_body: BlockId,
@@ -1171,7 +1188,7 @@ fn structural_loop_guard(
     };
     let floor = (goff == 0
         && (alone || matches!(strategy, GuardStrategy::LeLocal(_)))
-        && writes_in(engine, loop_body, var) == writes_in(engine, head, var))
+        && !modified_outside_guard_block(engine, loop_body, head, var))
     .then(|| induction_entry(engine, binds, parent, loop_stmt, head, var))
     .flatten()
     .map(|lo| Floor { var, lo, alone, hi });
