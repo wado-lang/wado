@@ -19,10 +19,14 @@ mise run eddy-review --no-run    # the candidates are reported unreproduced
 
 A review takes three steps:
 
-1. Search. `--reviewers` reviewers (4, the most) each read the change for one
-   focus: the changed code itself, its callers, state and time, and the
-   toolchain as its users see it. They run nothing and report candidates, the
-   uncertain ones included.
+1. Search. Eddy cuts the change into units: each definition it touched, read
+   whole from the head with the lines it added and removed marked, and the
+   functions it calls in the same file. The code comes before the tests and
+   the most changed first. Up to `--reviewers` reviewers (10) each read a
+   batch of about 15k tokens of them, and the units past the last batch go
+   unread. Each reviews the logic as it stands, so a defect the change left in
+   place is a candidate too. They run nothing and report candidates, the
+   uncertain ones included. `tools/units.wado` prints the units of a merge.
 2. Triage. One call merges the candidates that name one defect and keeps the
    ten most severe. It reads the candidates alone, not the diff, and judges
    none of them right or wrong.
@@ -37,7 +41,9 @@ The steps run one after another, so a review takes longer than a single
 reviewer would.
 
 The findings go to stdout as JSON. Each carries its `repro`, and only a finding
-whose test reproduced it again alone is reported; the record keeps the others:
+whose test reproduced it again alone is reported; the record keeps the others.
+The test then runs on the merge base too, which tells a defect the change
+brought in from one it left in place:
 
 - `patch` is the test it wrote, as a diff against the reviewed commit.
 - `run` is the command that runs it: `cargo`, `mise` for a task of the
@@ -49,6 +55,9 @@ whose test reproduced it again alone is reported; the record keeps the others:
   patch alone in a clean checkout, after the review. The reviewer's word is not
   taken for it.
 - `output` is what that run reported.
+- `on_base` says whether the test fails the same way on the merge base, which
+  makes the defect one the change left in place. It is absent where the patch
+  does not apply there.
 
 The test asserts the right behaviour, so `git apply` and that command give
 the failing test to fix against.

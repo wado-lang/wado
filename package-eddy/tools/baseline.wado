@@ -14,8 +14,8 @@
 //! tree with `cargo` into `scratchpad/eddy-target`; each run starts from the
 //! tree as checked out. Run needs the tree's toolchain installed and its crates
 //! fetched, since a child cannot write `~/.cargo` or `~/.rustup`.
-//! `-D reviewers=<n>` (4) searches with that many foci before the triage, as
-//! `review` does. With `run`, the reporter `-D reporter=<model>`
+//! `-D reviewers=<n>` (10) searches at most that many batches of the units
+//! the culprit touched before the triage, as `review` does. With `run`, the reporter `-D reporter=<model>`
 //! (`claude-haiku-5-5`) then reports each reproduction as `main.wado` does, and
 //! the findings graded are those reproduced alone; the candidates are graded
 //! too. `-D only=<fix>` reviews that entry alone, and keeps what the output
@@ -253,6 +253,7 @@ fn review_once(
             REPORTER,
             review_prompt,
             w,
+            &`${*commit}^1`,
             commit,
             &mut r,
             &mut report_usage,

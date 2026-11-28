@@ -52,18 +52,19 @@ struct Answer {
     findings: List<Placed>,
 }
 
-/// Reports `reviewed`, a review of `change` in the tree at `w` checked out at
-/// `commit`, by its steps: each reproduction that reports a finding, in the
+/// Reports `reviewed`, a review of `change` from `base` to `commit` in the
+/// tree at `w`, by its steps: each reproduction that reports a finding, in the
 /// tree as its reproducer left it, and then the review keeps as findings only
-/// those a test reproduced again alone. A review with no reproductions, which
-/// ran nothing, is reported whole. A step that fails to report is named in the
-/// error and the others are still reported. What `model` took is added to
-/// `spent`.
+/// those a test reproduced again alone, each tried on `base` too. A review
+/// with no reproductions, which ran nothing, is reported whole. A step that
+/// fails to report is named in the error and the others are still reported.
+/// What `model` took is added to `spent`.
 pub fn report_all(
     credential: &mut Credential,
     model: String,
     change: &Submission,
     w: &Workspace,
+    base: &String,
     commit: &String,
     reviewed: &mut Reviewed,
     spent: &mut Usage,
@@ -86,6 +87,15 @@ pub fn report_all(
         for let f of &tried.findings {
             if f.repro matches { Some(r) && r.verified } {
                 verified.push(*f);
+            }
+        }
+    }
+    // After every run on `commit`, so the build switches trees once each way.
+    for let f of &mut verified {
+        if let Some(r) = &mut f.repro {
+            reset_snapshot(&w.repo, &w.root, base);
+            if let Ok(ran) = run_alone(w, r) {
+                r.on_base = Some(reproduced(&ran, &r.expect));
             }
         }
     }

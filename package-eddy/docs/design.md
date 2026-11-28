@@ -43,13 +43,20 @@ research points. The evidence behind them is in
 - [x] The strongest model sits where findings merge, not where work is split.
   It receives structured, verified findings, so that its context holds
   evidence rather than transcripts.
-- [x] Searching and reproducing are separate steps. Reviewers each search the
-  change for one focus, reading only, one call merges their candidates and
+- [x] Searching and reproducing are separate steps. Reviewers each search a
+  batch of the change's units, reading only, one call merges their candidates and
   keeps the ten most severe, and a reproducer per candidate tries it with three
   runs. A reviewer that reproduced as it searched spent its turns on its first
   suspicion and reported about one finding, and one reviewer confirming every
   candidate dropped most by reading. The searches overlap in what they read,
   but not in what they run, which costs the most.
+- [x] A reviewer reads the definitions a change touched, whole, not the diff.
+  Eddy picks them from the diff, so the reviewer's tokens go to logic rather
+  than to a diff of hundreds of thousands of tokens, which cost each search
+  most of its price. A defect the change left in place is a finding too: it
+  is worth as much, and the run on the base tells it apart. On #1697 the
+  culprit's defect lay in a whole function's logic that no diff-reading search
+  named.
 - [x] Only a finding a test reproduced is reported. One nobody reproduced
   leaves the reproduction to whoever reads it, and when that reader fails to
   reproduce it the review cost them twice; the reviewer and the programmer are

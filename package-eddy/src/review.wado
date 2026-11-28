@@ -1,6 +1,8 @@
-//! One review of a change, in three steps. Reviewers each search the diff for
-//! one focus, reading the tree it leaves where a workspace gives one and
-//! running nothing, and report candidates. One call merges the candidates that
+//! One review of a change, in three steps. Reviewers each search a batch of
+//! the definitions the change touched, read whole from the tree it leaves
+//! (`units.wado`), or the diff where no workspace gives a tree. They run
+//! nothing and report candidates, a defect the change left in place among
+//! them. One call merges the candidates that
 //! name one defect and keeps the most severe. Then, where the workspace runs
 //! code, a reproducer tries each kept candidate with a test, and only one a run
 //! shows is a finding. The reviewers are asked for nothing else: what a report
@@ -11,6 +13,8 @@
 //! the reproduction it skipped, so a run decides each candidate, and each
 //! candidate gets runs of its own rather than the leftovers of the first.
 
+use { HashMap } from "core:collections";
+use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { to_string } from "core:json";
 use { Process } from "core:process";
@@ -24,9 +28,10 @@ use { numbered } from "./diff.wado";
 use { reset_snapshot } from "./snapshot.wado";
 use { empty_index } from "./symbols.wado";
 use { Runner, Workspace } from "./tools.wado";
+use { units, Unit } from "./units.wado";
 
 global ROLE: String = "You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
-Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.";
+Report defects: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.";
 
 /// The most findings one answer holds, and so the most candidates a review
 /// tries to reproduce.
@@ -34,12 +39,17 @@ global MAX_FINDINGS: i32 = 10;
 
 global ANSWER: String = `Report at most ${MAX_FINDINGS} findings, the most severe first. An empty list is a valid answer.`;
 
-global SEARCH: String = "Several reviewers search this change, each for what one focus covers, and a later step tries to reproduce what they report. Your focus follows the diff. Report every defect your focus covers that you find, one you are not sure of included, and say in its detail what would show it. Report a defect outside your focus only if it is severe. You run nothing.";
+global SEARCH: String = "Several reviewers search this change, each a part of the code it touched, and a later step tries to reproduce what they report. Your part follows. Review its logic as it stands now: report every defect in it, whether this change brought it in or left it in place, one you are not sure of included, and say in its detail what would show it. Lines marked + are what the change added, and lines marked - what it removed. Look at:
+- each branch, boundary and error path, conversions, sizes and indices, and the result on the inputs its own tests do not try;
+- what must agree with it elsewhere: each caller of what changed, each invariant or contract it moved, and what must match it by text, such as a generated file, its generator, a spec example or a test's expectation;
+- state and time: what is cached, shared or kept between calls and goes stale, the order things happen in, a resource left open or released twice, hangs, and input from outside the program that it trusts;
+- the toolchain as its users see it: a Wado program the compiler accepts that it should reject or rejects that it should accept, code it generates wrong, a diagnostic missed or misplaced, and a command or option that behaves otherwise than its documentation says.
+You run nothing.";
 
-global TRIAGE: String = "Reviewers searched this change, each for one focus, reading without running anything, and reported the CANDIDATES below. Two may name the same defect, and some are wrong.
+global TRIAGE: String = "Reviewers searched this change, each a part of the code it touched, reading without running anything, and reported the CANDIDATES below. Two may name the same defect, and some are wrong.
 Merge the candidates that name one defect into one, worded as the clearest of them and holding what each adds. Do not judge whether a candidate is right: a later step tries each with a test, and only one a run shows is reported. Leave out only a candidate that names no wrong behaviour, such as one on style, naming or documentation.";
 
-global REPRODUCE: String = "A reviewer reported the CANDIDATE after the diff from reading the change, without running anything. Settle it with a run: write a test that asserts the right behaviour, so that it fails now and would pass once the defect is fixed, and run it. Reading settles nothing either way: a candidate the code seems to make certain is still one to run, and so is one it seems to refute.
+global REPRODUCE: String = "A reviewer reported the CANDIDATE after the diff from reading the code the change touched, without running anything; the defect may be one the change left in place. Settle it with a run: write a test that asserts the right behaviour, so that it fails now and would pass once the defect is fixed, and run it. Reading settles nothing either way: a candidate the code seems to make certain is still one to run, and so is one it seems to refute.
 A defect that depends on timing, such as a race with another process, is reproduced by making the interleaving happen in the test, for example by deleting a file between the two steps the race separates, never by running it again in the hope of hitting it.
 Answer reproduced true only when a run failed showing the defect, and give the defect as that run showed it. Answer false when a run passed where the candidate says it fails, or when no run showed the defect.";
 
@@ -52,34 +62,12 @@ global RUNNING: String = "You can also run the code: Write a test or a small pro
 /// The Runs one reproducer has; it also gets one turn more per run.
 global RUNS_PER_FINDING: i32 = 3;
 
-/// What one searching reviewer looks for. The foci part the defects a change
-/// can introduce so that reviewers of one change overlap little.
-struct Focus {
-    name: String,
-    covers: String,
-}
+/// How many reviewers search a change at most, each a batch of units. The
+/// units past what they hold, the least changed, go unread.
+pub global MAX_REVIEWERS: i32 = 10;
 
-global FOCI: List<Focus> = [
-    Focus {
-        name: "code",
-        covers: "the changed code itself: each branch, boundary and error path of what was added or rewritten, conversions, sizes and indices, and the result it gives on the inputs its own tests do not try",
-    },
-    Focus {
-        name: "callers",
-        covers: "what the change breaks elsewhere: each caller of a function, type or field it changed, each invariant or contract it moved, and what must agree with it by text, such as a generated file, its generator, a spec example or a test's expectation",
-    },
-    Focus {
-        name: "state",
-        covers: "state and time: what is cached, shared or kept between calls and goes stale, the order things happen in, a resource left open or released twice, processes and files, hangs, and input from outside the program that it trusts",
-    },
-    Focus {
-        name: "users",
-        covers: "the toolchain as its users see it: a Wado program the compiler now accepts that it should reject or rejects that it should accept, code it generates wrong, a diagnostic missed or misplaced, and a command or option that now behaves otherwise than its documentation says",
-    },
-];
-
-/// How many reviewers search a change at most: one per focus.
-pub global MAX_REVIEWERS: i32 = FOCI.len();
+/// The most bytes of units one search reads, about 15k tokens.
+global BATCH_BYTES: i32 = 60_000;
 
 pub struct Finding {
     pub file: String,
@@ -111,6 +99,10 @@ pub struct Repro {
     pub verified: bool,
     /// What that run reported, or why there was none.
     pub output: String,
+    /// Whether the test fails the same way on the change's base, so the
+    /// change left the defect in place rather than brought it in. Absent
+    /// where it was not tried there, or the patch does not apply there.
+    pub on_base: Option<bool> = null,
 }
 
 /// What one step of a review reported and what it took. A whole review is
@@ -125,7 +117,8 @@ pub struct Reviewed {
     /// Each request of an agent's review, in order.
     pub requests: List<Request> = [],
     pub error: Option<String> = null,
-    /// The focus of a search; empty elsewhere.
+    /// What a search read: its batch of units, or `diff`, or in a record
+    /// written before units its focus; empty elsewhere.
     pub focus: String = "",
     /// The searches whose candidates the triage read.
     pub searches: List<Reviewed> = [],
@@ -228,10 +221,14 @@ ${self.diff}
 </diff>`;
     }
 
-    /// What a search for `focus` is asked: the change, which every search
-    /// shares, and then its focus.
-    fn searched_for(&self, focus: &Focus) -> Task {
-        return Task { shared: self.task(), own: `Your focus is ${focus.covers}.` };
+    /// What a search of `batch` is asked: what the change is, and then the
+    /// units it reads.
+    fn searched_in(&self, batch: &List<Unit>) -> Task {
+        let mut own = "";
+        for let u of batch {
+            own.push_str(`<unit file="${u.file}" lines="${u.start}-${u.end}" name="${u.name}">\n${u.text}</unit>\n`);
+        }
+        return Task { shared: self.heading, own };
     }
 
     /// What the triage is asked: what the change is and the candidates, in
@@ -282,8 +279,7 @@ fn tools_told(ws: &Option<Workspace>) -> String {
     return told;
 }
 
-/// What every search is told. It names no focus, so that the searches share
-/// it and the diff after it in the cache.
+/// What every search is told, which they share in the cache.
 fn searching(ws: &Option<Workspace>) -> String {
     return `${ROLE}\n${SEARCH}\n${ANSWER}${tools_told(ws)}`;
 }
@@ -293,10 +289,11 @@ fn reproducing(ws: &Option<Workspace>) -> String {
 }
 
 /// `model`'s review of `change`, in the tree at `ws` checked out at `commit`:
-/// `reviewers` searches, one per focus, the triage of what they found, and a
-/// reproducer per candidate it keeps where `ws` runs code. Each search and
-/// reproducer reads `ws` for up to `max_turns` turns at `effort`; only a
-/// reproducer writes and runs. Without a workspace each search is one call.
+/// up to `reviewers` searches, each a batch of the units the change touched,
+/// the triage of what they found, and a reproducer per candidate it keeps
+/// where `ws` runs code. Each search and reproducer reads `ws` for up to
+/// `max_turns` turns at `effort`; only a reproducer writes and runs. Without
+/// a workspace one search reads the diff, in one call.
 pub fn review(
     credential: &mut Credential,
     model: String,
@@ -312,29 +309,36 @@ pub fn review(
         Some(w) => Some(Workspace { ..*w, runner: null }),
         null => null,
     };
+    let parts: List<List<Unit>> = match &reading {
+        Some(w) => batches(&units(&change.diff, &sources(w, &change.diff)), reviewers),
+        null => [],
+    };
+    let mut tasks: List<[String, Task]> = [];
+    for let [i, b] of parts.into_iter().enumerate() {
+        tasks.push([`batch ${i + 1}: ${names_of(&b)}`, change.searched_in(&b)]);
+    }
+    if tasks.is_empty() {
+        tasks.push([
+            "diff",
+            Task { shared: change.task() },
+        ]);
+    }
+    // A search that fails spent what it spent; the others still search.
     let mut searches: List<Reviewed> = [];
     let mut candidates: List<Finding> = [];
-    for let i of 0..<reviewers {
-        let focus = &FOCI[i];
-        let mut search = ask::<Answer>(
-            credential,
-            model,
-            searching(&reading),
-            &change.searched_for(focus),
-            &reading,
-            max_turns,
-            effort,
-        );
-        search.focus = focus.name;
-        let failed = search.error;
+    for let [focus, task] of tasks {
+        let mut search = ask::<Answer>(credential, model, searching(&reading), &task, &reading, max_turns, effort);
+        search.focus = focus;
         candidates.extend(&search.findings);
         searches.push(search);
-        if let Some(e) = failed {
-            return Reviewed { searches, error: Some(`the search for ${focus.name} failed: ${e}`) };
-        }
     }
     if candidates.is_empty() {
-        return Reviewed { searches };
+        let error: Option<String> = if searches.into_iter().all(|s| s.error matches { Some(_) }) {
+            Some("every search failed");
+        } else {
+            null;
+        };
+        return Reviewed { searches, error };
     }
     let mut triage = triaged(credential, model, change, &candidates);
     triage.searches = searches;
@@ -366,6 +370,49 @@ pub fn review(
         triage.reproductions.push(tried);
     }
     return triage;
+}
+
+/// The text of each file `diff` shows, as the tree at `w` holds it; a file the
+/// change deleted has none.
+fn sources(w: &Workspace, diff: &String) -> HashMap<String, String> with Preopens {
+    let mut out = HashMap::<String, String>::new();
+    for let l of diff.lines() {
+        if let Some(path) = l.strip_prefix("+++ b/") && let Ok(text) = fs::read_to_string(fs::join(&w.root, path)) {
+            out[path.to_string()] = text;
+        }
+    }
+    return out;
+}
+
+/// `units`, in their order, packed into at most `most` batches of up to
+/// `BATCH_BYTES` each: a unit goes into the first batch it fits, so the most
+/// changed are read and the least changed are left out.
+fn batches(units: &List<Unit>, most: i32) -> List<List<Unit>> {
+    let mut out: List<List<Unit>> = [];
+    let mut sizes: List<i32> = [];
+    for let u of units {
+        let n = u.text.len();
+        let mut placed = false;
+        for let i of 0..<out.len() {
+            if sizes[i] + n <= BATCH_BYTES {
+                out[i].push(*u);
+                sizes[i] += n;
+                placed = true;
+                break;
+            }
+        }
+        if !placed && out.len() < most {
+            out.push([*u]);
+            sizes.push(n);
+        }
+    }
+    return out;
+}
+
+/// What a batch reads, as `file name` for each unit, for the record.
+fn names_of(batch: &List<Unit>) -> String {
+    let names: List<String> = batch.into_iter().map(|u| `${u.file}:${u.start} ${u.name}`).collect();
+    return names.join(", ");
 }
 
 /// The `candidates` merged and ordered by `model` in one call, kept in the
@@ -483,16 +530,23 @@ test "a reviewer is asked for a finding's words and nothing a report adds" {
     }
 }
 
-test "the searches share the system prompt and the diff, and each is told its own focus after them" {
-    let change = Submission { heading: "PULL REQUEST #1: t", diff: "+a" };
-    for let f of &FOCI {
-        let task = change.searched_for(f);
-        assert task.shared == change.task() && task.own.contains(f.covers);
-        assert !searching(&null).contains(f.covers);
-        for let other of &FOCI {
-            assert other.name == f.name || !task.own.contains(other.covers);
-        }
-    }
+test "the units are packed into batches the most changed first, and those past the last batch go unread" {
+    let unit = |name: String, bytes: i32| Unit { file: "f.rs", name, start: 1, end: 2, changed: 1, text: "x".repeat(
+        bytes,
+    ) };
+    let found = batches(&[
+        unit("a", BATCH_BYTES - 10),
+        unit("b", 20),
+        unit("c", 5),
+        unit("d", BATCH_BYTES),
+        unit("e", 30),
+    ], 2);
+    assert found.len() == 2;
+    assert names_of(&found[0]) == "f.rs:1 a, f.rs:1 c";
+    assert names_of(&found[1]) == "f.rs:1 b, f.rs:1 e";
+    let task = Submission { heading: "PULL REQUEST #1: t", diff: "+a" }.searched_in(&found[0]);
+    assert task.shared == "PULL REQUEST #1: t"
+        && task.own.starts_with("<unit file=\"f.rs\" lines=\"1-2\" name=\"a\">\nx");
 }
 
 test "a reproducer reads its candidate's file of the diff, or all of it where the file is not in it" {

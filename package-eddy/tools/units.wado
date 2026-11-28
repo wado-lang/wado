@@ -1,0 +1,39 @@
+//! Prints the units a review of merge `<sha>` reads, the most changed first:
+//! each one's file, lines, name, changed lines and size. `-D show=<n>` prints
+//! the text of the first `n` too.
+//!
+//! ```sh
+//! wado run package-eddy/tools/units.wado -- <sha>
+//! ```
+
+use { args, println, Stdout, Environment } from "core:cli";
+use { HashMap } from "core:collections";
+use { Process } from "core:process";
+use { changed_paths, source_diff } from "./eval.wado";
+use { git } from "../src/git.wado";
+use { units } from "../src/units.wado";
+
+#[param(name = "show")]
+global SHOW: i32 = 0;
+
+export fn run() with (Stdout, Environment, Process) {
+    let sha = args()[0];
+    let paths = changed_paths(&sha);
+    let diff = source_diff(&sha, &paths, "culprit", 2_000_000).unwrap();
+    let mut sources = HashMap::<String, String>::new();
+    for let p of &paths {
+        if diff.contains(`+++ b/${*p}\n`) {
+            sources[*p] = git(["show", `${sha}:${*p}`]);
+        }
+    }
+    let found = units(&diff, &sources);
+    let mut bytes = 0;
+    for let [i, u] of found.into_iter().enumerate() {
+        bytes += u.text.len();
+        println(`${i + 1}. ${u.file}:${u.start}-${u.end} ${u.name}: ${u.changed} changed, ${u.text.len()} bytes`);
+        if i < SHOW {
+            println(u.text);
+        }
+    }
+    println(`${found.len()} units, ${bytes} bytes; the diff is ${diff.len()} bytes`);
+}

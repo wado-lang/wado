@@ -1,0 +1,405 @@
+//! The parts of a tree a review reads: each definition a change touched,
+//! whole, with the lines the change added and removed marked in it, and the
+//! definitions it calls in the same file. A reviewer reads a definition's
+//! logic as it stands, so it finds a defect the change brought in and one it
+//! left in place alike, where a diff shows only what moved.
+//!
+//! Definitions are found by layout, which `rustfmt` and `wado format` fix: a
+//! header line starts an item, together with the comments and attributes
+//! right above it, and the first line after it that closes a brace at the
+//! header's indent ends it.
+
+use { HashMap } from "core:collections";
+
+/// The most lines one unit shows; a longer definition shows the window of its
+/// changed lines.
+global MAX_UNIT_LINES: i32 = 400;
+
+/// The lines a window shows on each side of a changed line.
+global WINDOW: i32 = 30;
+
+/// The most bytes of called definitions one unit shows.
+global CALLED_BYTES: i32 = 24_000;
+
+/// What a change did to one file, by the line numbers of the file it leaves,
+/// from 1: the lines it added, and the lines it removed just before each line.
+struct Touched {
+    added: List<i32>,
+    removed: HashMap<i32, List<String>>,
+}
+
+impl Touched {
+    fn touches(&self, line: i32) -> bool {
+        return self.added.contains(&line) || self.removed.contains_key(line);
+    }
+}
+
+/// An item in a source file, by its lines from 1.
+struct Item {
+    name: String,
+    start: i32,
+    end: i32,
+    is_fn: bool,
+}
+
+/// One part of a file to review.
+pub struct Unit {
+    pub file: String,
+    /// The definition, as `fn name` or `struct Name`, or empty for a window
+    /// outside any.
+    pub name: String,
+    pub start: i32,
+    pub end: i32,
+    /// How many of its lines the change added, or removed lines before.
+    pub changed: i32,
+    /// The lines, numbered, those the change added marked `+` and those it
+    /// removed shown unnumbered as `-`, then the definitions it calls.
+    pub text: String,
+}
+
+impl Unit {
+    /// Whether the unit is a test, which a review reads after the code.
+    pub fn is_test(&self) -> bool {
+        return self.name.starts_with("test")
+            || self.file.contains("/tests/")
+            || self.file.ends_with("_test.wado")
+            || self.file.ends_with("_test.rs");
+    }
+}
+
+/// The units of `diff`'s files, the definitions it touched in `sources` (each
+/// file's text as the change leaves it, by path): the code before the tests,
+/// and the most changed first in each.
+pub fn units(diff: &String, sources: &HashMap<String, String>) -> List<Unit> {
+    let mut out: List<Unit> = [];
+    for let [file, touched] of touched_files(diff).entries() {
+        let Some(source) = sources.get(*file) else {
+            continue;
+        };
+        let lines: List<String> = source.lines().map(|l| l.to_string()).collect();
+        let items = items_of(&lines);
+        let mut spans: List<[i32, i32]> = [];
+        for let line of 1..=lines.len() {
+            if !touched.touches(line) || lines[line - 1].trim().is_empty() && !touched.removed.contains_key(line) {
+                continue;
+            }
+            if spans.into_iter().any(|s| s[0] <= line && line <= s[1]) {
+                continue;
+            }
+            let [name, start, end] = span_of(&items, line, lines.len());
+            spans.push([start, end]);
+            out.push(unit(file, &name, start, end, &lines, &items, touched));
+        }
+    }
+    out.sort_by(|a, b| if a.is_test() != b.is_test() {
+        a.is_test().cmp(&b.is_test());
+    } else {
+        b.changed.cmp(&a.changed);
+    });
+    return out;
+}
+
+fn unit(
+    file: &String,
+    name: &String,
+    start: i32,
+    end: i32,
+    lines: &List<String>,
+    items: &List<Item>,
+    touched: &Touched,
+) -> Unit {
+    let mut text = "";
+    let mut changed = 0;
+    for let n of start..=end {
+        if touched.touches(n) {
+            changed += 1;
+        }
+        for let l of touched.removed.get(n).unwrap_or([]) {
+            text.push_str(`       -${l}\n`);
+        }
+        let mark = if touched.added.contains(&n) { "+" } else { " " };
+        text.push_str(`${n:>6}${mark}${lines[n - 1]}\n`);
+    }
+    let called = called_text(lines, items, start, end);
+    if !called.is_empty() {
+        text.push_str(`\nIt calls, in this file:\n${called}`);
+    }
+    return Unit { file: *file, name: *name, start, end, changed, text };
+}
+
+/// The definitions of the functions lines `start..=end` call by name, in the
+/// file of `lines`, up to `CALLED_BYTES`.
+fn called_text(lines: &List<String>, items: &List<Item>, start: i32, end: i32) -> String {
+    let mut names: List<String> = [];
+    for let n of start..=end {
+        for let name of called_names(&lines[n - 1]) {
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+    }
+    let mut out = "";
+    for let it of items {
+        let outside = it.end < start || end < it.start;
+        if !it.is_fn || !outside || !names.contains(&it.name.trim_prefix("fn ").to_string()) {
+            continue;
+        }
+        let mut body = "";
+        for let n of it.start..=i32::min(it.end, it.start + MAX_UNIT_LINES - 1) {
+            body.push_str(`${n:>6} ${lines[n - 1]}\n`);
+        }
+        if out.len() + body.len() > CALLED_BYTES {
+            break;
+        }
+        out.push_str(&body);
+    }
+    return out;
+}
+
+/// The names `line` calls: an identifier right before `(`.
+fn called_names(line: &String) -> List<String> {
+    let mut out: List<String> = [];
+    let mut word = "";
+    for let c of line.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            word.push(c);
+            continue;
+        }
+        if c == '(' && !word.is_empty() && !word.chars().next().unwrap().is_ascii_digit() {
+            out.push(word);
+        }
+        word = "";
+    }
+    return out;
+}
+
+/// The unit that holds line `line` of a file of `count` lines: the innermost
+/// function around it, or the innermost item, or a window, each held to
+/// `MAX_UNIT_LINES`.
+fn span_of(items: &List<Item>, line: i32, count: i32) -> [String, i32, i32] {
+    let mut best: Option<Item> = null;
+    for let it of items {
+        if !(it.start <= line && line <= it.end) {
+            continue;
+        }
+        let better = match &best {
+            null => true,
+            Some(b) => it.is_fn && !b.is_fn || it.is_fn == b.is_fn && it.start >= b.start,
+        };
+        if better {
+            best = Some(*it);
+        }
+    }
+    if let Some(it) = best && it.end - it.start < MAX_UNIT_LINES {
+        return [it.name, it.start, it.end];
+    }
+    let name = match best {
+        Some(it) => it.name,
+        null => "",
+    };
+    return [
+        name,
+        i32::max(1, line - WINDOW),
+        i32::min(count, line + WINDOW),
+    ];
+}
+
+/// The items of a formatted Rust or Wado file of `lines`.
+fn items_of(lines: &List<String>) -> List<Item> {
+    let mut out: List<Item> = [];
+    for let i of 0..<lines.len() {
+        let line = &lines[i];
+        let body = line.trim_start();
+        let Some(name) = item_name(&body.to_string()) else {
+            continue;
+        };
+        let indent = line.substr_bytes(0, line.len() - body.len());
+        let mut end = i;
+        if !ends_item(line) {
+            let close = `${indent}}`;
+            for let j of i + 1..<lines.len() {
+                if lines[j].starts_with(&close) {
+                    end = j;
+                    break;
+                }
+            }
+        }
+        let mut start = i;
+        while start > 0 && is_preamble(&lines[start - 1]) {
+            start -= 1;
+        }
+        out.push(Item {
+            is_fn: name.starts_with("fn ") || name.starts_with("test"),
+            name,
+            start: start + 1,
+            end: end + 1,
+        });
+    }
+    return out;
+}
+
+/// Whether `line` belongs to the item below it: a comment or an attribute.
+fn is_preamble(line: &String) -> bool {
+    let t = line.trim_start();
+    return t.starts_with("//") || t.starts_with("#[");
+}
+
+/// Whether `line`, a header, holds its whole item.
+fn ends_item(line: &String) -> bool {
+    let t = line.trim_end();
+    return t.ends_with(";") || t.ends_with("}") && t.contains("{");
+}
+
+/// The kind and name of the item a line `body`, without its indent, starts,
+/// as `fn name`, or none.
+fn item_name(body: &String) -> Option<String> {
+    let mut rest = body.as_str_slice();
+    loop {
+        let before = rest.len();
+        for let m of ["internal ", "export ", "async ", "const ", "unsafe ", "default ", "extern \"C\" ", "affine "] {
+            rest = rest.trim_prefix(m);
+        }
+        for let m of ["pub(", "export("] {
+            if rest.starts_with(m) && let Some([_, after]) = rest.split_once(") ") {
+                rest = after;
+            }
+        }
+        rest = rest.trim_prefix("pub ");
+        if rest.len() == before {
+            break;
+        }
+    }
+    if rest.starts_with("test ") || rest.starts_with("test{") {
+        return Some(rest.to_string().trim_suffix("{").trim_end().to_string());
+    }
+    if rest.starts_with("impl ") || rest.starts_with("impl<") {
+        return Some(rest.to_string().trim_suffix("{").trim_end().to_string());
+    }
+    for let kind of [
+        "fn", "struct", "enum", "variant", "flags", "trait", "mod", "interface", "resource", "type", "global",
+        "macro_rules!",
+    ] {
+        if let Some(after) = rest.strip_prefix(`${kind} `) {
+            let mut name = "";
+            for let c of after.chars() {
+                if !(c.is_ascii_alphanumeric() || c == '_') {
+                    break;
+                }
+                name.push(c);
+            }
+            return Some(`${kind} ${name}`);
+        }
+    }
+    return null;
+}
+
+/// What `diff` did to each file it shows, by the path the change leaves.
+fn touched_files(diff: &String) -> HashMap<String, Touched> {
+    let mut out = HashMap::<String, Touched>::new();
+    let [mut file, mut n] = ["", 0];
+    let mut pending: List<String> = [];
+    for let l of diff.lines() {
+        if l.starts_with("diff --git ") {
+            file = "";
+        } else if let Some(path) = l.strip_prefix("+++ b/") {
+            file = path.to_string();
+            out.try_insert(file, Touched { added: [], removed: HashMap::<i32, List<String>>::new() });
+        } else if file.is_empty() || l.starts_with("--- ") || l.starts_with("\\") {
+            continue;
+        } else if let Some(hunk) = l.strip_prefix("@@ ") {
+            n = new_start(hunk.to_string());
+            pending = [];
+        } else if let Some(gone) = l.strip_prefix("-") {
+            pending.push(gone.to_string());
+        } else {
+            let t = &mut out[file];
+            if !pending.is_empty() {
+                t.removed.try_insert(n, pending);
+                pending = [];
+            }
+            if l.starts_with("+") {
+                t.added.push(n);
+            }
+            n += 1;
+        }
+    }
+    return out;
+}
+
+/// The first line of the new side of a hunk header's ranges, `-a,b +c,d @@`.
+fn new_start(ranges: String) -> i32 {
+    let new = ranges.split(" ").collect()[1];
+    let first = new.trim_prefix("+").split(",").collect()[0];
+    return i32::from_str(first).unwrap();
+}
+
+test "a change is read by the definitions it touched, whole, with what it added and removed marked" {
+    let source = "use x;
+
+/// Adds one.
+pub fn small(a: i32) -> i32 {
+    let b = helper(a);
+    return b + 1;
+}
+
+fn helper(a: i32) -> i32 {
+    return a;
+}
+
+impl Thing {
+    pub(crate) async fn method(&self) {
+        go();
+    }
+}
+
+test \"t\" {
+    assert small(1) == 2;
+}
+";
+    let diff = "diff --git a/f.rs b/f.rs
+--- a/f.rs
++++ b/f.rs
+@@ -3,5 +3,5 @@
+-/// Adds.
++/// Adds one.
+ pub fn small(a: i32) -> i32 {
+-    let b = a;
++    let b = helper(a);
+     return b + 1;
+ }
+@@ -15 +15 @@
+-        stop();
++        go();
+@@ -20 +20 @@
+-    assert small(1) == 1;
++    assert small(1) == 2;
+";
+    let mut sources = HashMap::<String, String>::new();
+    sources["f.rs"] = source;
+    let found = units(&diff, &sources);
+    assert found.len() == 3;
+    let small = &found[0];
+    assert small.name == "fn small" && small.start == 3 && small.end == 7 && small.changed == 2;
+    assert small.text.contains("       -    let b = a;\n     5+    let b = helper(a);\n");
+    assert small.text.contains("It calls, in this file:\n     9 fn helper(a: i32) -> i32 {\n");
+    assert found[1].name == "fn method" && found[1].start == 14 && found[1].end == 16;
+    assert found[2].name == "test \"t\"" && found[2].is_test();
+}
+
+test "an item header is read past its modifiers, and a line holding a whole item ends it" {
+    assert item_name(&"pub(crate) async fn go<T>(x: T) {") == Some("fn go");
+    assert item_name(&"export(Command::run) fn main() with Stdout {") == Some("fn main");
+    assert item_name(&"impl<T: Ord> Display for List<T> {") == Some("impl<T: Ord> Display for List<T>");
+    assert item_name(&"test \"adds\" {") == Some("test \"adds\"");
+    assert item_name(&"let fn_x = 1;") matches { null };
+    assert ends_item(&"struct A;") && ends_item(&"fn f() {}") && ends_item(&"fn f() { return 1; }");
+    assert !ends_item(&"fn f() {");
+}
+
+test "a line outside every definition, or in one too long, is read in a window" {
+    let items: List<Item> = [
+        Item { name: "impl X", start: 1, end: 1000, is_fn: false },
+    ];
+    assert span_of(&items, 500, 1000) == ["impl X", 470, 530];
+    assert span_of(&[], 5, 20) == ["", 1, 20];
+}
