@@ -13,7 +13,9 @@ The key insight: **libraries should keep loose version specs** (giving consumers
 ### Command Overview
 
 ```sh
-wado init                          # create wado.toml interactively
+wado init                          # lay out a package in the current directory
+wado new <dir>                     # mkdir -p <dir>, then init there
+wado workspace init | new | add    # create a workspace, or add a package to it
 wado add <name> [options]          # add dependency
 wado remove <name>                 # remove dependency
 wado update [name]                 # update lock file (within version specs)
@@ -84,7 +86,7 @@ still sees dependencies and builds real files; it just never does the resolving.
 | Compiler primitives   | `compile` `check` `dump` `query` `format` `doc` `wit` `syntax` `lsp` | No (consumes a resolved index) |
 | Project build & run   | `build` `run` `serve` `test` `publish`                               | Yes                            |
 | Dependency management | `add` `remove` `update` `fetch` `list` `clean` `exec`                | Yes                            |
-| Scaffolding           | `init`                                                               | —                              |
+| Scaffolding           | `init` `new` `workspace`                                             | —                              |
 
 This supersedes the earlier model where a bare `wado compile` (no argument or a
 directory) performed the manifest-driven project build. That behavior moves to
@@ -103,30 +105,32 @@ plays exactly one role toward the dependency graph:
 - cache — reads the on-disk dependency cache only
 - none — touches no dependency state
 
-| wado      | cargo analog                | tier         | dependency role                 |
-| --------- | --------------------------- | ------------ | ------------------------------- |
-| `init`    | `cargo new` / `init`        | scaffold     | none                            |
-| `add`     | `cargo add`                 | manifest-op  | resolve (+ edit toml)           |
-| `remove`  | `cargo remove`              | manifest-op  | resolve (+ edit toml)           |
-| `update`  | `cargo update`              | manifest-op  | resolve                         |
-| `fetch`   | `cargo fetch`               | manifest-op  | resolve if no lock, + download  |
-| `list`    | `cargo tree` (cache view)   | inspect      | cache                           |
-| `clean`   | `cargo clean` (cache scope) | inspect      | cache (evicts derived state)    |
-| `build`   | `cargo build`               | orchestrator | consume (auto-resolve if stale) |
-| `run`     | `cargo run`                 | driver       | consume                         |
-| `serve`   | `cargo run` (service world) | driver       | consume                         |
-| `test`    | `cargo test`                | driver       | consume                         |
-| `publish` | `cargo publish`             | driver       | consume (needs a full lock)     |
-| `exec`    | `cargo run -p` / a tool     | driver       | consume                         |
-| `check`   | `cargo check`               | analyze      | consume                         |
-| `doc`     | `cargo doc` / `rustdoc`     | analyze      | consume¹                        |
-| `wit`     | — (emit component contract) | analyze      | consume                         |
-| `dump`    | `rustc -Z unpretty`         | analyze      | consume                         |
-| `query`   | rust-analyzer queries       | analyze      | consume                         |
-| `compile` | `rustc`                     | primitive    | consume (never resolves)        |
-| `format`  | `cargo fmt` / rustfmt       | file tool    | none                            |
-| `lsp`     | rust-analyzer               | server       | consume (on demand)             |
-| `syntax`  | — (grammar codegen)         | tooling      | none                            |
+| wado        | cargo analog                    | tier         | dependency role                 |
+| ----------- | ------------------------------- | ------------ | ------------------------------- |
+| `init`      | `cargo init`                    | scaffold     | none                            |
+| `new`       | `cargo new`                     | scaffold     | none                            |
+| `workspace` | — (edits `wado-workspace.toml`) | scaffold     | none                            |
+| `add`       | `cargo add`                     | manifest-op  | resolve (+ edit toml)           |
+| `remove`    | `cargo remove`                  | manifest-op  | resolve (+ edit toml)           |
+| `update`    | `cargo update`                  | manifest-op  | resolve                         |
+| `fetch`     | `cargo fetch`                   | manifest-op  | resolve if no lock, + download  |
+| `list`      | `cargo tree` (cache view)       | inspect      | cache                           |
+| `clean`     | `cargo clean` (cache scope)     | inspect      | cache (evicts derived state)    |
+| `build`     | `cargo build`                   | orchestrator | consume (auto-resolve if stale) |
+| `run`       | `cargo run`                     | driver       | consume                         |
+| `serve`     | `cargo run` (service world)     | driver       | consume                         |
+| `test`      | `cargo test`                    | driver       | consume                         |
+| `publish`   | `cargo publish`                 | driver       | consume (needs a full lock)     |
+| `exec`      | `cargo run -p` / a tool         | driver       | consume                         |
+| `check`     | `cargo check`                   | analyze      | consume                         |
+| `doc`       | `cargo doc` / `rustdoc`         | analyze      | consume¹                        |
+| `wit`       | — (emit component contract)     | analyze      | consume                         |
+| `dump`      | `rustc -Z unpretty`             | analyze      | consume                         |
+| `query`     | rust-analyzer queries           | analyze      | consume                         |
+| `compile`   | `rustc`                         | primitive    | consume (never resolves)        |
+| `format`    | `cargo fmt` / rustfmt           | file tool    | none                            |
+| `lsp`       | rust-analyzer                   | server       | consume (on demand)             |
+| `syntax`    | — (grammar codegen)             | tooling      | none                            |
 
 ¹ `doc` today parses one module and extracts docs from its AST — it resolves no
 imports, so it cannot follow dependency-referenced types or `pub use`
@@ -213,7 +217,8 @@ Consistency TODOs (do not implement piecemeal — land them together in Phase 3)
   resolve (`update`, `add`, `remove`, `fetch`), orchestrator (`build`),
   driver (`run`, `serve`, `test`, `publish`, `exec`), and analyze (`check`,
   `doc`, `wit`, `dump`, `query`). Reject them on the primitives (`compile`,
-  `format`, `init`, `syntax`, `lsp`) so the flag surface stays honest.
+  `format`, `init`, `new`, `workspace`, `syntax`, `lsp`) so the flag surface
+  stays honest.
 - [ ] `publish` must verify against a full, fresh lock before uploading (a stale
   or partial lock is an error, like `cargo publish`'s verification build).
 - [ ] `exec` consumes the same resolved graph (lock + cache) as the other
@@ -221,14 +226,24 @@ Consistency TODOs (do not implement piecemeal — land them together in Phase 3)
 - [ ] Decide whether `doc` gains a resolving mode or stays syntactic; record the
   choice in the [doc WEP](./wep-2026-02-28-doc-command.md).
 
-### `wado init`
+### `wado init`, `wado new` and `wado workspace`
 
-Create a new `wado.toml` interactively.
+`wado init` lays out a package in the current directory, in
+[the standard layout](./spec-package-standard.md). `wado new <dir>` is
+`mkdir -p <dir> && cd <dir> && wado init`. `wado workspace init | new | add`
+creates a workspace and adds an existing package to its `members`. None of
+them prompts: a flag gives what the directory and the workspace do not.
 
 ```sh
-wado init                          # interactive prompts
-wado init --name my-app            # non-interactive with defaults
+wado new geo --namespace acme      # a library, named after its directory
+wado new tool --cli                # under a workspace that sets the namespace
+wado workspace new tools --namespace acme
 ```
+
+`wado workspace` is a family of its own because it edits `wado-workspace.toml`;
+a command on one member, such as `publish`, stays top-level. A package created under a workspace joins its
+`members`, unless git ignores its directory.
+[Tools](./spec-packages.md#tools) holds the rules.
 
 ### `wado add`
 
@@ -523,9 +538,9 @@ The lock file's `command` field for the dependency determines which source file 
 
 ## Roadmap
 
-- [ ] `wado scaffold`: create a package in
-  [the standard layout](./spec-package-standard.md). Done when a package it
-  creates holds the required root files and passes `wado test`.
+- [x] `wado new`: create a package in
+  [the standard layout](./spec-package-standard.md). A package it creates holds
+  the required root files and passes `wado test`.
 
 ## Consequences
 
