@@ -20,6 +20,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 // The hit case: the suffix has to be taken, which it is not while the scan holds
 // a `noStruct` the parse never sets.
+
 test "the precedence loop takes a suffix whose gate action never runs" {
     assert_tree("x + x", "(start (stmt (e (e x) + (e x))))");
 }
@@ -30,6 +31,7 @@ test "and keeps taking it as the chain grows" {
 
 // The rejection case: the atom's own gate still holds where the parse does set
 // it, so a repair that simply stopped simulating the field would fail here.
+
 test "a gate the parse does run still refuses the atom" {
     assert_tree("( x )", "(start (stmt (e ( (e x) ))))");
 }

@@ -50,6 +50,7 @@ export fn run() with (Stdout, SystemClock, Timezone) {
 // (`±HH:MM`) that `ZonedDateTime` can interpret. Seconds are dropped, since a
 // Temporal offset zone has minute precision; the sign is taken after, so a
 // sub-minute offset is `+00:00` rather than the `-00:00` Temporal refuses.
+
 fn offset_zone(offset_secs: i64) -> String {
     let minutes = offset_secs / 60;
     let sign = if minutes < 0 { "-" } else { "+" };

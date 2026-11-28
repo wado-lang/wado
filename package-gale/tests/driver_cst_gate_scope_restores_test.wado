@@ -19,6 +19,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 // The hit case: the ban resumes after the `)`, so `a { b }` is not the braced
 // form and the `{ b }` is the block the `if` owes.
+
 test "the ban resumes after a scope inside the head" {
     assert_tree(
         "if f(x) || a { b }",
@@ -28,6 +29,7 @@ test "the ban resumes after a scope inside the head" {
 
 // The rejection cases: inside the scope the ban really is lifted, and outside
 // any head it was never on.
+
 test "inside the scope the braced form is allowed" {
     assert_tree(
         "if f(a { b }) { c }",

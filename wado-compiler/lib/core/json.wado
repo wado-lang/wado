@@ -60,7 +60,6 @@
 //! - A byte-order mark or anything but whitespace after the value is an error.
 //! - Nesting deeper than `max_depth` is an error.
 
-
 use {
     Serialize,
     Deserialize,
@@ -113,6 +112,7 @@ test {
         x: i32,
         y: i32,
     }
+
     impl Serialize for Point;
     impl Deserialize for Point;
 
@@ -2254,6 +2254,7 @@ impl Deserializer for JsonKeyDeserializer {
 
     // Read straight into place: going through `text()` like the other
     // scalars copies the key once more.
+
     fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
         return self.de.read_json_string();
     }

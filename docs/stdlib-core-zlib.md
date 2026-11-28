@@ -462,6 +462,10 @@ Error type for zlib/gzip decompression operations.
 
 #### `InvalidDeflateData`
 
+The DEFLATE stream itself is malformed: a reserved block type (RFC 1951
+section 3.2.3, BTYPE=11), an invalid Huffman code, a back-reference past
+the start of the output, or a stream that ends before its final block.
+
 #### `impl Display for ZlibError`
 
 ##### `fn fmt(&self, f: &mut Formatter)`

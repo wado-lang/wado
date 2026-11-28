@@ -294,13 +294,11 @@ test "router: generic over String handler" {
     assert r.match_path(Method::Get, &"/hello").unwrap().handler == "hi";
 }
 
-
 #[expect_trap]
 test "router: panic on missing leading slash" {
     let mut r = Router::<i32>::new();
     r.get("foo", 1);
 }
-
 
 #[expect_trap]
 test "router: panic on empty pattern" {
@@ -308,13 +306,11 @@ test "router: panic on empty pattern" {
     r.get("", 1);
 }
 
-
 #[expect_trap]
 test "router: panic on wildcard not last" {
     let mut r = Router::<i32>::new();
     r.get("/a/*x/b", 1);
 }
-
 
 #[expect_trap]
 test "router: panic on empty param name" {
@@ -322,13 +318,11 @@ test "router: panic on empty param name" {
     r.get("/:", 1);
 }
 
-
 #[expect_trap]
 test "router: panic on empty wildcard name" {
     let mut r = Router::<i32>::new();
     r.get("/*", 1);
 }
-
 
 #[expect_trap]
 test "router: panic on trailing slash in pattern" {
@@ -336,13 +330,11 @@ test "router: panic on trailing slash in pattern" {
     r.get("/foo/", 1);
 }
 
-
 #[expect_trap]
 test "router: panic on doubled slash in pattern" {
     let mut r = Router::<i32>::new();
     r.get("/a//b", 1);
 }
-
 
 #[expect_trap]
 test "router: panic on conflicting param names at same node" {
@@ -351,20 +343,17 @@ test "router: panic on conflicting param names at same node" {
     r.get("/users/:name/profile", 2);
 }
 
-
 #[expect_trap]
 test "router: panic on a repeated param name" {
     let mut r = Router::<i32>::new();
     r.get("/a/:id/:id", 1);
 }
 
-
 #[expect_trap]
 test "router: panic on a wildcard named like a param" {
     let mut r = Router::<i32>::new();
     r.get("/a/:id/*id", 1);
 }
-
 
 #[expect_trap]
 test "router: panic on conflicting wildcard names at same node" {
@@ -376,53 +365,63 @@ test "router: panic on conflicting wildcard names at same node" {
 struct GetUserParams {
     id: u64,
 }
+
 impl Deserialize for GetUserParams;
 
 struct PostParams {
     user_id: i32,
     post_id: u32,
 }
+
 impl Deserialize for PostParams;
 
 struct StaticOnly {
 }
+
 impl Deserialize for StaticOnly;
 
 struct StringParam {
     slug: String,
 }
+
 impl Deserialize for StringParam;
 
 struct InnerParam {
     id: u64,
 }
+
 impl Deserialize for InnerParam;
 
 struct NestedParam {
     inner: InnerParam,
 }
+
 impl Deserialize for NestedParam;
 
 struct UuidParam {
     id: Uuid,
 }
+
 impl Deserialize for UuidParam;
 
 struct InstantParam {
     at: Instant,
 }
+
 impl Deserialize for InstantParam;
 
 struct FlagParams {
     on: bool,
     grade: char,
 }
+
 impl Deserialize for FlagParams;
 
 struct HalfParams {
     scale: f16,
     gain: bf16,
 }
+
 impl Deserialize for HalfParams;
 
 test "router: deserialize a half param rounds its text once" {
@@ -585,6 +584,7 @@ struct WideParams {
     e: f64,
     f: Option<i32>,
 }
+
 impl Deserialize for WideParams;
 
 test "router: deserialize every numeric param type" {
@@ -605,16 +605,19 @@ test "router: deserialize skips a param the struct does not name" {
 struct ListParam {
     id: List<i32>,
 }
+
 impl Deserialize for ListParam;
 
 struct MapParam {
     id: HashMap<String, i32>,
 }
+
 impl Deserialize for MapParam;
 
 struct VariantParam {
     id: Option<Result<i32, i32>>,
 }
+
 impl Deserialize for VariantParam;
 
 test "router: deserialize rejects compound param types" {
@@ -684,6 +687,7 @@ test "router: re-registering a dynamic route" {
 // What a request for `path` matches. Its trailers end is written once the
 // request is dropped: an end dropped unwritten traps, and a write waits for its
 // reader.
+
 fn match_get(
     r: &Router<i32>,
     path: Option<String>,

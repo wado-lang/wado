@@ -177,7 +177,6 @@ impl<T> AsSlice for Slice<T> {
     }
 }
 
-
 impl<T: Eq> Slice<T> {
     pub fn contains(&self, value: &T) -> bool {
         for let mut i = self.start; i < self.end; i += 1 {
@@ -204,6 +203,7 @@ impl<T> IndexValue<i32> for Slice<T> {
 
 // A slice holds a shared `&Array<T>`, so it can alias elements (`IndexRef`) but
 // cannot hand out `&mut` into the backing (no `IndexRefMut`).
+
 impl<T: Ref> IndexRef<i32> for Slice<T> {
     type Output = T;
 
@@ -233,6 +233,7 @@ impl<T> IndexValue<RangeInclusive<i32>> for Slice<T> {
 // A view compares and renders by its elements. Structural derivation would
 // compare the backing reference and print the three fields, which is never what
 // a slice means.
+
 impl<T: Eq> Eq for Slice<T> {
     pub fn eq(&self, other: &Self) -> bool {
         return seq_eq(self.repr, self.start, self.end, other.repr, other.start, other.end);

@@ -438,7 +438,6 @@ test "same_code compares what two writers hold" {
     assert !build("f").same_code(&build("g"));
 }
 
-
 test "StructSpec basic" {
     let mut s = StructSpec::new("Point");
     s.add_field({ name: "x", type: "i32" });
@@ -481,7 +480,6 @@ test "StructSpec with a pub field" {
     s.emit(&mut w);
     assert w.to_string() == "struct Foo {\n    pub x: f64,\n}\n";
 }
-
 
 test "a field's attributes precede it, one a line" {
     let mut s = StructSpec::new("Foo");
@@ -667,7 +665,6 @@ test "VariantSpec with payloads" {
     assert w.to_string() == expected;
 }
 
-
 test "EnumSpec basic" {
     let mut e = EnumSpec::new("Color", Vis::Pub);
     e.add_member({ name: "Red" });
@@ -679,7 +676,6 @@ test "EnumSpec basic" {
     let expected = "pub enum Color {\n    Red,\n    Green,\n    Blue,\n}\n";
     assert w.to_string() == expected;
 }
-
 
 test "FnSpec simple" {
     let mut f = FnSpec::new("add");
@@ -753,6 +749,7 @@ test "FnSpec export with effects" {
 }
 
 // A row of one goes bare; only a row of more than one takes parentheses.
+
 test "FnSpec with a single effect" {
     let mut f = FnSpec::new("run");
     f.set_export();
@@ -780,7 +777,6 @@ test "FnSpec multiple generics" {
 
     assert signature_of(&f) == "fn zip<A, B>(a: A, b: B) -> [A, B]";
 }
-
 
 test "GlobalSpec basic" {
     let g = GlobalSpec::new("TK_EOF", "i32", "0");
@@ -857,7 +853,6 @@ test "chaining builder methods" {
     let expected = "pub struct Pair {\n    pub first: i32,\n    pub second: i32,\n}\n";
     assert w.to_string() == expected;
 }
-
 
 test "wado writes a code hole verbatim" {
     let name = "expr_list";

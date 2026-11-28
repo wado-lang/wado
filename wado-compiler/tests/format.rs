@@ -146,6 +146,32 @@ fn normalize_ast_debug(debug: &str) -> String {
     String::from_utf8(result).expect("Debug output should be valid UTF-8")
 }
 
+/// The Debug renderings of an AST and of its formatted reparse, normalized,
+/// with the one change to a doc the formatter makes taken back out of
+/// `formatted`: a `///` block a blank line kept off its declaration closes up
+/// to it, and its `doc: None` becomes `Some`. Any other change to a doc stays.
+fn normalized_pair(original: &str, formatted: &str) -> (String, String) {
+    let original = normalize_ast_debug(original);
+    let formatted = normalize_ast_debug(formatted);
+    let mut kept: Vec<&str> = Vec::new();
+    let mut original_lines = original.lines();
+    let mut lines = formatted.lines();
+    while let Some(line) = lines.next() {
+        let theirs = original_lines.next();
+        if let Some(theirs) = theirs
+            && theirs.trim() == "doc: None,"
+            && line.trim() == "doc: Some("
+        {
+            lines.by_ref().find(|rest| rest.trim() == "),");
+            kept.push(theirs);
+            continue;
+        }
+        kept.push(line);
+    }
+    let formatted = kept.join("\n");
+    (original, formatted)
+}
+
 /// Assert that formatting preserves AST semantics: parse(source) ≡ parse(format(source)).
 ///
 /// This catches bugs where the formatter changes program meaning (e.g., dropping
@@ -169,8 +195,10 @@ fn assert_format_preserves_ast(source: &str) {
         ))
         .ast;
 
-    let original_debug = normalize_ast_debug(&format!("{original_ast:#?}"));
-    let formatted_debug = normalize_ast_debug(&format!("{formatted_ast:#?}"));
+    let (original_debug, formatted_debug) = normalized_pair(
+        &format!("{original_ast:#?}"),
+        &format!("{formatted_ast:#?}"),
+    );
 
     if original_debug != formatted_debug {
         // Find first differing line for a useful error message
@@ -2832,17 +2860,87 @@ fn test_format_doc_comment_before_attribute_no_extra_blank() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
-/// A blank line detaches a `///` block from the declaration below it, so the
-/// formatter keeping it is what keeps `Reflect::doc()` answering `null`.
+/// A blank line under a `///` block is taken for a slip: the block closes up
+/// to the declaration it was written over, and documents it.
 #[test]
-fn test_format_keeps_the_blank_line_that_detaches_a_doc_comment() {
-    for source in [
-        "/// Detached.\n\ntype A = i32;\n",
-        "/// Detached.\n\n#[wire(name_policy = \"camelCase\")]\ntype A = i32;\n",
+fn test_format_closes_a_doc_comment_up_to_its_declaration() {
+    for [source, expected] in [
+        [
+            "/// Detached.\n\ntype A = i32;\n",
+            "/// Detached.\ntype A = i32;\n",
+        ],
+        [
+            "/// Detached.\n\n#[wire(name_policy = \"camelCase\")]\ntype A = i32;\n",
+            "/// Detached.\n#[wire(name_policy = \"camelCase\")]\ntype A = i32;\n",
+        ],
+        // Only the block nearest the declaration is its doc; one further up,
+        // past a blank line, documents nothing.
+        [
+            "/// One.\n\n/// Two.\n\nfn f();\n",
+            "// One.\n\n/// Two.\nfn f();\n",
+        ],
     ] {
         let formatted = wado_compiler::format(source).expect("format failed");
-        assert_eq!(formatted, source);
+        assert_eq!(formatted, expected);
     }
+}
+
+/// A comment written inside a declaration's head moves out ahead of its doc
+/// comment, which stays on the declaration.
+#[test]
+fn test_format_keeps_a_doc_comment_on_its_declaration_past_a_head_comment() {
+    let source = "/// Doc.\npub // Head.\ntrait T {\n    type Item;\n}\n";
+    let expected = "// Head.\n\n/// Doc.\npub trait T {\n    type Item;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+/// A `///` or `//!` line that documents nothing is written as `//`: before a
+/// statement, before a `}`, at the end of a line, ahead of a `//` comment, or a
+/// `//!` past the module's first item.
+#[test]
+fn test_format_writes_a_doc_comment_that_documents_nothing_as_a_comment() {
+    let source = concat!(
+        "//! Module.\n",
+        "fn f() {\n",
+        "    /// Not a doc.\n",
+        "    let x = 1;  /// Trailing.\n",
+        "    /// Local doc.\n",
+        "    struct L { v: i32 }\n",
+        "    /// Tail.\n",
+        "}\n",
+        "/// Before a comment.\n",
+        "// Note.\n",
+        "fn g();\n",
+        "//! Late.\n",
+    );
+    let expected = concat!(
+        "//! Module.\n",
+        "\n",
+        "fn f() {\n",
+        "    // Not a doc.\n",
+        "    let x = 1;  // Trailing.\n",
+        "\n",
+        "    /// Local doc.\n",
+        "    struct L {\n",
+        "        v: i32,\n",
+        "    }\n",
+        "\n",
+        "    // Tail.\n",
+        "}\n",
+        "\n",
+        "// Before a comment.\n",
+        "// Note.\n",
+        "\n",
+        "fn g();\n",
+        "\n",
+        "// Late.\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
 #[test]
@@ -3728,8 +3826,10 @@ fn test_roundtrip_ast_all_fixtures() {
             }
         };
 
-        let original_debug = normalize_ast_debug(&format!("{original_ast:#?}"));
-        let formatted_debug = normalize_ast_debug(&format!("{formatted_ast:#?}"));
+        let (original_debug, formatted_debug) = normalized_pair(
+            &format!("{original_ast:#?}"),
+            &format!("{formatted_ast:#?}"),
+        );
 
         if original_debug != formatted_debug {
             let orig_lines: Vec<&str> = original_debug.lines().collect();
@@ -3880,8 +3980,10 @@ fn test_roundtrip_ast_all_stdlib() {
                 }
             };
 
-            let original_debug = normalize_ast_debug(&format!("{original_ast:#?}"));
-            let formatted_debug = normalize_ast_debug(&format!("{formatted_ast:#?}"));
+            let (original_debug, formatted_debug) = normalized_pair(
+                &format!("{original_ast:#?}"),
+                &format!("{formatted_ast:#?}"),
+            );
 
             if original_debug != formatted_debug {
                 let orig_lines: Vec<&str> = original_debug.lines().collect();
@@ -3976,6 +4078,58 @@ fn foo() {
 
 /// A bracket inside a quoted name is text, so stripping the spelling stops at
 /// the spelling and still compares the value after it.
+/// A doc the formatter gains by closing a detached block up is the one doc
+/// change the round-trip check accepts; a doc lost or rewritten still fails it.
+#[test]
+fn test_normalized_pair_accepts_only_a_gained_doc() {
+    let debug = |source: &str| {
+        let ast = wado_compiler::parse(source)
+            .into_fail_fast()
+            .expect("parse failed")
+            .ast;
+        format!("{ast:#?}")
+    };
+    let [bare, documented, other] =
+        ["fn f();\n", "/// A.\nfn f();\n", "/// B.\nfn f();\n"].map(debug);
+    let agree = |original: &str, formatted: &str| {
+        let (original, formatted) = normalized_pair(original, formatted);
+        original == formatted
+    };
+    assert!(agree(&bare, &documented));
+    assert!(!agree(&documented, &bare));
+    assert!(!agree(&documented, &other));
+}
+
+/// A world entry has no id to hold a comment, so one before it, or on its line,
+/// stays there rather than gathering after the last entry.
+#[test]
+fn test_format_keeps_comments_on_world_entries() {
+    let source = concat!(
+        "pub world W {\n",
+        "    // The out.\n",
+        "    import Stdout;  // Trailing.\n",
+        "    import Stderr;\n",
+        "    // The run.\n",
+        "    export fn run();\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "pub world W {\n",
+        "    // The out.\n",
+        "\n",
+        "    import Stdout;  // Trailing.\n",
+        "    import Stderr;\n",
+        "\n",
+        "    // The run.\n",
+        "\n",
+        "    export fn run();\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
 #[test]
 fn test_normalize_ast_debug_reads_brackets_in_strings_as_text() {
     let ast = |source: &str| {
@@ -4214,13 +4368,100 @@ fn test_format_lone_semicolon_leaves_a_blank_line() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// One blank line sets apart a declaration with a body, and a `//` run from
+/// the declarations around it; a run of another kind of comment is a unit of
+/// its own. A `///` run is spaced as the declaration it documents. Two blank
+/// lines become one, and a body opens with none.
+#[test]
+fn test_format_blank_lines_between_units() {
+    let source = concat!(
+        "//! Module.\n",
+        "use { a } from \"./a.wado\";\n",
+        "// Group b.\n",
+        "use { b } from \"./b.wado\";\n",
+        "// Note.\n",
+        "/// Documented.\n",
+        "fn f() {\n",
+        "\n",
+        "    // Explains the let.\n",
+        "    let x = 1;\n",
+        "\n",
+        "\n",
+        "    let y = 2;\n",
+        "    struct L { v: i32 }\n",
+        "    let z = 3;\n",
+        "}\n",
+        "fn g() {}\n",
+        "struct S {\n",
+        "    a: i32,\n",
+        "    // Undocumented b.\n",
+        "    b: i32,\n",
+        "    c: i32,\n",
+        "    /// Documented d.\n",
+        "    d: i32,\n",
+        "}\n",
+        "use { c } from \"./c.wado\";\n",
+        "/// Spaced as its function.\n",
+        "fn h() {}\n",
+    );
+    let expected = concat!(
+        "//! Module.\n",
+        "\n",
+        "use { a } from \"./a.wado\";\n",
+        "\n",
+        "// Group b.\n",
+        "\n",
+        "use { b } from \"./b.wado\";\n",
+        "\n",
+        "// Note.\n",
+        "\n",
+        "/// Documented.\n",
+        "fn f() {\n",
+        "    // Explains the let.\n",
+        "    let x = 1;\n",
+        "\n",
+        "    let y = 2;\n",
+        "\n",
+        "    struct L {\n",
+        "        v: i32,\n",
+        "    }\n",
+        "\n",
+        "    let z = 3;\n",
+        "}\n",
+        "\n",
+        "fn g() {\n",
+        "}\n",
+        "\n",
+        "struct S {\n",
+        "    a: i32,\n",
+        "\n",
+        "    // Undocumented b.\n",
+        "\n",
+        "    b: i32,\n",
+        "    c: i32,\n",
+        "    /// Documented d.\n",
+        "    d: i32,\n",
+        "}\n",
+        "\n",
+        "use { c } from \"./c.wado\";\n",
+        "\n",
+        "/// Spaced as its function.\n",
+        "fn h() {\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// A `with` row of one goes bare and a row of more than one is parenthesised,
 /// in every position a row can appear.
 #[test]
 fn test_format_effect_row_parentheses() {
     let source = concat!(
-        "fn one() with Stdout {\n}\n",
-        "fn many() with (Stdout, Stderr) {\n}\n",
+        "fn one() with Stdout {\n}\n\n",
+        "fn many() with (Stdout, Stderr) {\n}\n\n",
         "fn nested(f: fn() with (A, B), x: i32) {\n}\n",
     );
     let formatted = wado_compiler::format(source).expect("format failed");
@@ -4441,6 +4682,7 @@ fn test_format_keeps_an_attribute_on_a_local_item() {
         "    struct Size {\n",
         "        w: i32,\n",
         "    }\n",
+        "\n",
         "    assert Size { w: 1 }.w == 1;\n",
         "}\n"
     );
@@ -4983,6 +5225,7 @@ fn test_format_trait_contract_clauses() {
         "    fn pick(&self, i: i32) -> i32\n",
         "        contract i >= 0, \"negative\"\n",
         "        contract i < 9;\n",
+        "\n",
         "    fn first(&self) -> i32\n",
         "        contract true\n",
         "    {\n",

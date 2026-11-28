@@ -48,6 +48,7 @@ global MIX_C1: u64 = 0xBF58476D1CE4E5B9;
 global MIX_C2: u64 = 0x94D049BB133111EB;
 
 // SplitMix64's finalizer, cut loose from its state.
+
 fn mix64(value: u64) -> u64 {
     let mut z = value;
     z = (z ^ z >> 30) * MIX_C1;
@@ -128,6 +129,7 @@ impl Seed {
 
     // Two rounds is what every input bit reaching every word costs: the first
     // carries the whole state into w3, the second carries w3 back into w0..w2.
+
     fn diffuse(&mut self) {
         for let mut round = 0; round < 2; round += 1 {
             self.w0 = mix64(self.w0 ^ self.w3);
@@ -226,6 +228,7 @@ pub trait SampleUniform with () {
 
 // Lemire's multiply-shift: one draw, one 64x64 multiply, and a rejection whose
 // probability is at most `span / 2^64`. See arXiv:1805.10941.
+
 fn sample_span<R: Rng>(rng: &mut R, span: u64) -> u64 {
     if span == u64::MAX {
         return rng.next_u64();
@@ -245,6 +248,7 @@ fn sample_span<R: Rng>(rng: &mut R, span: u64) -> u64 {
 
 // The distance between two signed bounds is unsigned, and stays exact at the
 // full width where `high - low` would overflow.
+
 fn sample_i64_inclusive<R: Rng>(rng: &mut R, low: i64, high: i64) -> i64
     contract low <= high, "the range given random_range must not be empty"
 {
@@ -354,6 +358,7 @@ fn rotl(x: u64, n: u64) -> u64 {
 }
 
 // The jump polynomials are the reference's, from prng.di.unimi.it.
+
 global JUMP: List<u64> = [0x180EC6D33CFD0ABA, 0xD5A61266F0C9392C, 0xA9582618E03FC9AA, 0x39ABDC4529B1661C];
 
 global LONG_JUMP: List<u64> = [0x76E15D3EFEFDCBBF, 0xC5004E441C522FB3, 0x77710069854EE241, 0x39109BB02ACBE635];
@@ -402,6 +407,7 @@ impl Xoshiro256pp {
 
     // The state transition is linear over F2, so a jump is a polynomial there:
     // each set bit of `polynomial` names a term, and the terms accumulate by xor.
+
     fn jump_by(&mut self, polynomial: &List<u64>) {
         let mut j0: u64 = 0;
         let mut j1: u64 = 0;
@@ -469,6 +475,7 @@ impl Squares64 {
 
 // A small or digit-sparse key makes Squares emit a run of zeros first.
 // Widynski's keys.h avoids it by construction; this rejects it by test.
+
 fn key_is_usable(key: u64) -> bool {
     if key & 0xF == 0 || key >> 32 == 0 {
         return false;
@@ -566,6 +573,7 @@ impl VectorRng for XoshiroSimd {
 impl XoshiroSimd {
     // Every operation is vertical, so there is no permute. Wasm has no vector
     // rotate, which is the whole reason each `vrotl` is three instructions.
+
     fn step(&mut self) -> [u64x2, u64x2, u64x2, u64x2] {
         let o0 = vrotl(self.s0a + self.s3a, 23) + self.s0a;
         let o1 = vrotl(self.s0b + self.s3b, 23) + self.s0b;
@@ -627,6 +635,7 @@ pub struct Shishua {
 impl Seedable for Shishua {
     // SplitMix64 replaces the reference's table of phi digits, so the stream
     // differs from it. One stream per word, or two seeds could share a state.
+
     fn from_seed(seed: Seed) -> Shishua {
         let mut w0 = seed.w0;
         let mut w1 = seed.w1;
@@ -660,6 +669,7 @@ impl VectorRng for Shishua {
 impl Shishua {
     // 128 bytes of output, and a state no input of which is read twice. The
     // order below is the reference's, which that property depends on.
+
     fn round(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2] {
         self.s1l += self.counter_l;
         self.s1h += self.counter_h;
@@ -712,6 +722,7 @@ fn splitmix_pair(state: &mut u64) -> u64x2 {
 
 // A 256-bit state vector is a `lo`/`hi` pair of Wasm's 128-bit ones, so its
 // word rotate is a byte selection across both, at indices Wasm needs literal.
+
 fn shu0_lo(lo: u64x2, hi: u64x2) -> u64x2 {
     return builtin::i8x16_shuffle(
         20,
@@ -806,6 +817,7 @@ fn shu1_hi(lo: u64x2, hi: u64x2) -> u64x2 {
 
 // A `Seed`'s words are private, so the one test that has to build two seeds
 // differing in exactly one of them lives here rather than in the sibling.
+
 test "every seed word reaches every engine's state" {
     let base = Seed::from_u64(31);
     let moved: List<Seed> = [

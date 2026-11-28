@@ -17,11 +17,12 @@ use { List } from "core:prelude/list.wado";
 use { Option } from "core:prelude/option.wado";
 use { ByteSlice } from "core:prelude/bytes.wado";
 
-
 // The f64 bit pattern of -0.0: the sign bit alone.
+
 global NEG_ZERO_BITS: u64 = 0x8000000000000000;
 
 // Powers of 10 from 10^0 to 10^19
+
 global POW10: List<u64> = [
     1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000, 1000000000000,
     10000000000000, 100000000000000, 1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000,
@@ -33,27 +34,32 @@ pub fn pow10(n: i32) -> u64 {
 }
 
 // Returns the bit length of x (position of highest set bit + 1)
+
 pub fn u64_bit_len(x: u64) -> i32 {
     return 64 - builtin::i64_clz(x as i64) as i32;
 }
 
 // log10_pow2(x) returns floor(log10(2^x)) = floor(x * log10(2))
+
 pub fn log10_pow2(x: i32) -> i32 {
     return x * 78913 >> 18;
 }
 
 // log2_pow10(x) returns floor(log2(10^x)) = floor(x * log2(10))
+
 pub fn log2_pow10(x: i32) -> i32 {
     return x * 108853 >> 15;
 }
 
 // Result of unpacking a float64
+
 pub struct UnpackResult {
     pub mantissa: u64,
     pub exponent: i32,
 }
 
 // unpack64 returns (mantissa, exponent) such that f = mantissa * 2^exponent
+
 pub fn unpack64(f: f64) -> UnpackResult {
     let bits = f.to_bits();
 
@@ -83,6 +89,7 @@ pub fn unpack64(f: f64) -> UnpackResult {
 
 // unpack32 returns (mantissa, exponent) such that f = mantissa * 2^exponent
 // The mantissa is left-aligned in 64 bits (top 24 bits significant).
+
 pub fn unpack32(f: f32) -> UnpackResult {
     let bits = f.to_bits();
 
@@ -142,6 +149,7 @@ pub struct PmHiLo {
 
 // The coarse factors, 192 bits each, most significant word first, rounded up:
 // at 128 bits the product lands up to 3 units above ⌈10^p⌉, `uscale` takes 1.
+
 global POW10_COARSE: List<u64> = [
     0x8049a4ac0c5811ae, 0x205b896d777d6278, 0xac261e9f5141430c, 0xcf42894a5dce35ea, 0x52064cac828675b9,
     0x475f2b7d7df1ad7b, 0xa76c582338ed2621, 0xaf2af2b80af6f24e, 0x657c8f4d43323a37, 0x873e4f75e2224e68,
@@ -163,6 +171,7 @@ global POW10_COARSE: List<u64> = [
 
 // The fine factors are an indexed load, not a `match`: the jump table a 27-arm
 // match lowers to costs an unpredictable indirect branch on the hot path.
+
 global POW10_FINE: List<u64> = [
     0x8000000000000000, 0xa000000000000000, 0xc800000000000000, 0xfa00000000000000, 0x9c40000000000000,
     0xc350000000000000, 0xf424000000000000, 0x9896800000000000, 0xbebc200000000000, 0xee6b280000000000,
@@ -177,10 +186,12 @@ fn pow10_fine(i: i32) -> u64 {
 }
 
 // Coarse/fine split of the pow10 decomposition; see mul_pow10.
+
 global POW10_K: i32 = 27;
 
 // mul_pow10 computes the PmHiLo representation of ceil(10^p), normalized to
 // 128 bits, by decomposing p = q*K + r (where K=27) into coarse[q] * fine[r].
+
 pub fn mul_pow10(p: i32) -> PmHiLo {
     let K = POW10_K;
     let Q_MIN = -13;
@@ -244,6 +255,7 @@ pub fn get_pow10(p: i32) -> PmHiLo {
 }
 
 // uscale computes unround(x * 2^e * 10^p) using the pow10 table
+
 pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
     // Note: i64_mul_wide_u returns [low, high] but Go's bits.Mul64 returns (high, low)
     let [mid_i64, hi_tmp] = builtin::i64_mul_wide_u(x as i64, pm_hi as i64);
@@ -267,6 +279,7 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
 }
 
 // Result of formatting
+
 pub struct FormatResult {
     pub digits: u64,
     pub exponent: i32,
@@ -274,6 +287,7 @@ pub struct FormatResult {
 }
 
 // FixedWidth returns the n-digit decimal form of f
+
 pub fn fixed_width(f: f64, n: i32) -> FormatResult
     contract n <= 18
 {
@@ -298,6 +312,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult
 
 // Fixed-point form of f at the given precision: 1×unpack64 + 1×uscale, against
 // the short() + fixed_width() two-pass this replaced.
+
 pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let unpack = unpack64(f);
     let m = unpack.mantissa;
@@ -326,6 +341,7 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
 // `fixed_width_for_prec` where scaling by 10^precision alone would not land the
 // digits in a u64: the value is below the last printed place, or wider than 17
 // digits. Split out so the conversion path above stays one scaling long.
+
 fn fixed_width_out_of_range(m: u64, e: i32, log10_e63: i32, precision: i32) -> FormatResult {
     // Phase 1: Determine exact decimal position using floor of 1-digit scaling.
     // One uscale + floor check resolves the ambiguity exactly.
@@ -384,6 +400,7 @@ fn fixed_width_out_of_range(m: u64, e: i32, log10_e63: i32, precision: i32) -> F
 }
 
 // Short computes the shortest formatting of f that round-trips
+
 pub fn short(f: f64) -> FormatResult {
     let min_exp = -1085;
 
@@ -435,6 +452,7 @@ pub fn short(f: f64) -> FormatResult {
 
 // short32 computes the shortest formatting of f32 that round-trips through f32.
 // Uses f32's 24-bit mantissa (z=40) instead of f64's 53-bit mantissa (z=11).
+
 pub fn short32(f: f32) -> FormatResult {
     let min_exp = -189;
 
@@ -488,6 +506,7 @@ pub fn skewed(e: i32) -> i32 {
 }
 
 // Unsigned multiply (low 64 bits only, modular)
+
 pub fn u64_mul(a: u64, b: u64) -> u64 {
     // Use wide multiply and take the low part
     let [lo, _] = builtin::i64_mul_wide_u(a as i64, b as i64);
@@ -549,6 +568,7 @@ pub fn rotate_right(x: u64, n: u64) -> u64 {
 }
 
 // digits returns the number of decimal digits in d
+
 pub fn digits(d: u64) -> i32 {
     let nd = log10_pow2(u64_bit_len(d));
     return nd + (d >= pow10(nd)) as i32;
@@ -564,6 +584,7 @@ fn i2a_second(n: i32) -> char {
 
 // Write nd decimal digits of val into buf at offset, right-to-left.
 // buf must already have space (pre-filled with '0' chars).
+
 fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
     let mut v = val;
     let mut idx = offset + nd - 1;
@@ -575,6 +596,7 @@ fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
 }
 
 // Fill n bytes of '0' at `offset`. The span must already be reserved.
+
 fn zeros_at(buf: &mut String, offset: i32, n: i32) {
     if n <= 0 {
         return;
@@ -587,11 +609,13 @@ fn zeros_at(buf: &mut String, offset: i32, n: i32) {
 // Every writer below reserves its whole output in one call and then fills the
 // span in place: a reserve per fragment costs a capacity check and a non-inlined
 // call each, and the no-op fills (a zero-length run) are the common case.
+
 fn reserve_uninit(buf: &mut String, n: i32) -> i32 {
     return buf.internal_reserve_uninit(n);
 }
 
 // Write decimal representation directly into buf (appends to existing content).
+
 pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
     let decimal_pos = nd + p;
 
@@ -620,6 +644,7 @@ pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
 }
 
 // Format result to decimal string (no exponent)
+
 pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
     let decimal_pos = nd + p;
     let total = if decimal_pos <= 0 {
@@ -635,6 +660,7 @@ pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
 }
 
 // Write exponential representation directly into buf (appends to existing content).
+
 pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
     let exp = p + nd - 1;
 
@@ -670,14 +696,15 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
 }
 
 // Format result to exponential string (upper: true for 'E', false for 'e')
+
 pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
     let mut buf = String::with_capacity(30);
     write_exp(&mut buf, d, p, nd, upper);
     return buf;
 }
 
-
 // Write decimal with specified precision directly into buf (appends to existing content).
+
 pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32) {
     if precision < 0 {
         write_decimal(buf, d, p, nd);
@@ -759,6 +786,7 @@ pub fn format_decimal_prec(d: u64, p: i32, nd: i32, precision: i32) -> String {
 }
 
 // Write exponential with precision directly into buf (appends to existing content).
+
 pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32, upper: bool) {
     if precision < 0 {
         write_exp(buf, d, p, nd, upper);
@@ -821,6 +849,7 @@ pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> 
 }
 
 // Encodes the kind of special floating-point value detected by check_special.
+
 pub enum SpecialKind {
     NotSpecial,
     Zero,
@@ -834,6 +863,7 @@ pub enum SpecialKind {
 //   is_neg:     true if f is negative (for use on either the special or non-special path)
 //   kind:       SpecialKind enum (NotSpecial, Zero, Inf, or NaN)
 // On the non-special path (is_special=false), kind is SpecialKind::NotSpecial.
+
 pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     let bits = f.to_bits();
 
@@ -945,6 +975,7 @@ pub fn parse_bits(d: u64, p: i32, format: &BinaryFormat) -> u64
 
 // parse rounds d * 10^p to the nearest f64.
 // d must have at most PARSE_DIGITS_MAX digits.
+
 pub fn parse(d: u64, p: i32) -> f64 {
     return f64::from_bits(parse_bits(d, p, &BINARY64));
 }

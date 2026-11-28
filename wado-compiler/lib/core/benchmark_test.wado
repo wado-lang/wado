@@ -157,6 +157,7 @@ impl MonotonicClock for CallClock {
 
 // One call takes 0.3 ms of a 1 ms budget, so calibration asks for 3. Three take
 // 0.9 ms, and 3 * 1 / 0.9 rounds down to the 3 already run, so it stops there.
+
 test "auto mode calibrates toward the budget and stops where it converges" {
     let clock = CallClock {};
     let mut b = Benchmark { name: "calibrated", target_ms: 1 };

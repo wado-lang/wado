@@ -20,12 +20,14 @@ use { Client } from "wasi:http";
 
 // Ends a message's trailers. An end dropped unwritten traps, and a write waits
 // for its reader, so it is written once the message is done.
+
 fn end_trailers(end: FutureWritable<Result<Option<Trailers>, ErrorCode>>) with FutureWritable {
     end.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 // A tiny gateway: `/status` reports the upstream health-check status in an
 // `x-upstream-status` response header, mapping upstream failures to 502.
+
 fn gateway(req: Request) -> [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>] with Client {
     let path = match req.get_path_with_query() {
         Some(p) => p,
@@ -69,6 +71,7 @@ fn respond(
 
 // A Wado call runs the handler to its end, where it writes the trailers nothing
 // reads yet, so the tests call `gateway` rather than this.
+
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with Client {
     let [response, trailers] = gateway(request);
     task return Result::<Response, ErrorCode>::Ok(response);
@@ -78,6 +81,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Cli
 // Send-side mock: records every outgoing request path and replays a canned
 // status. Installed with `with Client => &mut mock do { ... }`. It keeps the
 // trailers end of each response it makes, for `end_writes`.
+
 affine struct MockUpstream {
     hits: List<String> = [],
     status: StatusCode = 200,
@@ -106,6 +110,7 @@ impl Client for MockUpstream {
 }
 
 // Failure-mode mock: every send is refused at the connection level.
+
 struct DeadUpstream {
 }
 
@@ -118,6 +123,7 @@ impl Client for DeadUpstream {
 
 // Serve-side mock: a real `Request` resource, constructed instead of
 // received from the network.
+
 fn get(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorCode>>] with Request {
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _req_future] = Request::new(Headers::new(), null, trailers_rx, null);
@@ -126,6 +132,7 @@ fn get(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorC
 }
 
 // Drops a response the gateway answered, then ends what nothing reads any more.
+
 fn finish(
     answer: [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>],
     request_end: FutureWritable<Result<Option<Trailers>, ErrorCode>>,

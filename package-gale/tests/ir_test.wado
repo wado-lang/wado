@@ -735,6 +735,7 @@ test "alias_parser_literals: an action does not block the alias" {
 // The jar maps `'}'` to TypeScriptLexer's `CloseBrace : '}' {…}`, not to the
 // earlier `TemplateCloseBrace : {…}? '}' -> popMode`: code ahead of the literal
 // blocks the alias, code after it does not.
+
 test "alias_parser_literals: an action or predicate ahead of the literal blocks the alias" {
     let mut pred = parsed("grammar T; s : 'kw'; P : {true}? 'kw'; K : 'kw'; WS : ' ' -> skip;");
     alias_parser_literals(&mut pred);
