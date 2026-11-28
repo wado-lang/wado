@@ -40,6 +40,7 @@ use { Level } from "core:log";
 use { Visibility, GrammarOption, NamedAction, LexerRule, RepeatKind, ActionSource, AltAction } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { AltBinding } from "./attr_resolve.wado";
+use { GateScope } from "./scan_gate.wado";
 use { sets_overlap } from "./token_kinds.wado";
 
 // ==========================================================================
@@ -324,6 +325,9 @@ pub struct RuleHeader {
     pub single_token_alts: Option<List<i32>> = null,
     /// What the rule can start with: the union of its alternatives' first sets.
     pub first: List<i32> = [],
+    /// The scan gate member the rule sets for its own extent and puts back
+    /// after (`scan_gate::runnable_gate_scope`), where the scan simulates it.
+    pub scan_gate_scope: Option<GateScope> = null,
 }
 
 impl RuleHeader {

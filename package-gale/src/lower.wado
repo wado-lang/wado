@@ -57,7 +57,7 @@ use {
     identity_slots,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
-use { gate_assignment } from "./scan_gate.wado";
+use { GateScope, gate_assignment, runnable_gate_scope } from "./scan_gate.wado";
 use { rule_type_name, literal_field_name, dedup_name } from "./gen_util.wado";
 use {
     not_element_field_name,
@@ -2918,7 +2918,20 @@ fn lower_header(rule: &ParserRule, ctx: &mut LowerContext) -> RuleHeader {
             null;
         },
         first,
+        scan_gate_scope: scan_gate_scope(rule, &ctx.settings),
     };
+}
+
+/// The gate scope `rule` opens, or `null` where the scan cannot run it. A field
+/// the scan does not simulate has no scan gate slot to save.
+fn scan_gate_scope(rule: &ParserRule, settings: &GenSettings) -> Option<GateScope> {
+    if !settings.emit_scan_gate() {
+        return null;
+    }
+    let Some(scope) = runnable_gate_scope(rule, &settings.gate_bodies) else {
+        return null;
+    };
+    return if settings.scan_gate_fields.contains(&scope.field) { Option::Some(scope) } else { null };
 }
 
 /// Cumulative `general_group` counter starts per alternative.

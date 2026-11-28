@@ -3,7 +3,7 @@
 //! Not here: scaffolding (`parser_runtime_gen`), actions (`action_gen`),
 //! token-set tables (`kind_set_gen`), naming leaves (`ir_shape`, `gen_util`).
 
-use { Grammar, ParserRule, Element, RepeatKind, AltAction, ActionSource } from "./ir.wado";
+use { Grammar, ParserRule, RepeatKind, AltAction, ActionSource } from "./ir.wado";
 use { general_group_field_name, gen_visibility_comment, rule_alts_labeled } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use {
@@ -21,7 +21,7 @@ use {
 } from "./gen_util.wado";
 use { bits_set, bits_test, sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM, VALS_LOCAL } from "./ident.wado";
-use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
+use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_name } from "./emit_context.wado";
 use { MetPredicate } from "./gate_conditions.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, GlobalSpec, wado } from "wado-lang:wadopoet";
@@ -274,7 +274,7 @@ pub fn gen_parser(
         gen_recover_helpers(&mut parse_w, &entries, ctx);
     }
     gen_parse_entry(&mut parse_w, lowered, ctx);
-    for let chunk of &gen_called_scan_functions(grammar, lowered, ctx) {
+    for let chunk of &gen_called_scan_functions(lowered, ctx) {
         if let Some(scans) = chunk {
             w.append(scans);
         }
@@ -359,32 +359,16 @@ fn lr_mid_operand_gated(lowered_rule: &Rule) -> bool {
     return false;
 }
 
-/// Returns the number of leading elements in the alternative that are scannable.
-/// Stops at the first unscannable element (e.g., a RuleRef to `expr`).
-fn scannable_prefix_len(elements: &List<Element>, ctx: &mut EmitContext) -> i32 {
-    let mut count: i32 = 0;
-    for let elem of elements {
-        let mut visiting: List<String> = [];
-        if !ctx.analysis.is_element_scannable(elem, &mut visiting) {
-            break;
-        }
-        count += 1;
-    }
-    return count;
-}
-
 /// Emit the scan function of `rule`'s `alt_index`, unless the rule already
 /// has one. The scan side and the parse side share it, whichever reaches it
 /// first.
-fn ensure_alt_scan_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, alt_index: i32, ctx: &mut EmitContext) {
+fn ensure_alt_scan_fn(w: &mut CodeWriter, lowered_rule: &Rule, alt_index: i32, ctx: &mut EmitContext) {
     if ctx.cursor.alt_scan_fn(alt_index) matches { Some(_) } {
         return;
     }
-    assert alt_scan_is_full(&rule.alternatives[alt_index].elements, ctx);
-    let Some(scan_body) = rule_alt_scan_body(lowered_rule, alt_index) else {
-        panic(`ensure_alt_scan_fn: no scan body for alt ${alt_index}`);
-    };
-    gen_alt_scan_fn(w, `scan_${rule.snake_name}__alt_${alt_index}`, scan_body, alt_index, ctx);
+    assert rule_alt_body(lowered_rule, alt_index).unwrap().scannable, "a scan helper covers its whole alternative";
+    let scan_body = rule_alt_scan_body(lowered_rule, alt_index).unwrap();
+    gen_alt_scan_fn(w, `scan_${rule_header(lowered_rule).snake_name}__alt_${alt_index}`, scan_body, alt_index, ctx);
 }
 
 /// The one emitter of a whole-alternative scan function, which both the scan
@@ -521,12 +505,6 @@ fn add_scan_state_params(f: &mut FnSpec, ctx: &EmitContext) {
     }
 }
 
-/// Returns true if the scan function covers the entire alternative (all elements are scannable).
-/// When true, a scan success guarantees parse success so no fallthrough is needed.
-fn alt_scan_is_full(elements: &List<Element>, ctx: &mut EmitContext) -> bool {
-    return scannable_prefix_len(elements, ctx) == elements.len();
-}
-
 // Scan functions recognize parser rules by walking token kinds without building
 // CST nodes or constructing error messages. They return the token position after
 // successful recognition, or -1 on failure. Used to disambiguate Ambiguous
@@ -535,21 +513,14 @@ fn alt_scan_is_full(elements: &List<Element>, ctx: &mut EmitContext) -> bool {
 /// Per rule, its scan functions where emitted code calls one of them. Emitting
 /// a rule's scan functions can call another rule's, so this drains the calls
 /// until none is left unemitted.
-fn gen_called_scan_functions(
-    grammar: &Grammar,
-    lowered: &LoweredGrammar,
-    ctx: &mut EmitContext,
-) -> List<Option<CodeWriter>> {
+fn gen_called_scan_functions(lowered: &LoweredGrammar, ctx: &mut EmitContext) -> List<Option<CodeWriter>> {
     let was_scan = ctx.cursor.set_in_scan_fn(true);
-    let mut chunks: List<Option<CodeWriter>> = [];
-    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
-        chunks.push(null);
-    }
+    let mut chunks: List<Option<CodeWriter>> = List::filled(lowered.parser_rules.len(), null);
     while let Some(i) = ctx.cursor.next_called_scan() {
         ctx.enter_rule(i);
         ctx.cursor.set_lr_continuation(lr_continuation_of(&lowered.parser_rules[i]));
         let mut w = CodeWriter::with_capacity(1024);
-        gen_scan_function(&mut w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
+        gen_scan_function(&mut w, &lowered.parser_rules[i], ctx);
         chunks[i] = Option::Some(w);
     }
     ctx.cursor.set_lr_continuation([]);
@@ -570,9 +541,15 @@ fn lr_continuation_of(lowered_rule: &Rule) -> List<i32> {
     return continuation;
 }
 
-fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut EmitContext) {
-    let name = `scan_${rule.snake_name}`;
-    if let Some(scope) = scan_gate_scope(rule, lowered_rule, ctx) {
+fn gen_scan_function(w: &mut CodeWriter, lowered_rule: &Rule, ctx: &mut EmitContext) {
+    let header = rule_header(lowered_rule);
+    let name = scan_fn_name(&header.snake_name);
+    // The left-recursive case is settled in `runnable_gate_scope`: such a
+    // rule's scope is unrunnable everywhere, not only in the wrapper that would
+    // have carried it, so the field is dropped from the set.
+    assert !(lowered_rule matches { LeftRecursive(_) } && header.scan_gate_scope matches { Some(_) }),
+        "lowering calls this rule left-recursive and the surface predicate does not";
+    if let Some(scope) = &header.scan_gate_scope {
         // A rule that sets a gate for its own extent and puts it back after
         // (`locals` + `@init` / `@after`) is a *scope*, not a write, and the
         // scan's own call stack is where its saved value belongs. A wrapper is
@@ -580,37 +557,11 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule,
         // places, and one that skipped the restore would leave the gate holding
         // a value the parse never does.
         let inner = `${name}__scoped`;
-        gen_scan_gate_scope_wrapper(w, ctx, &name, &inner, &scope);
-        gen_scan_function_named(w, rule, lowered_rule, ctx, &inner);
+        gen_scan_gate_scope_wrapper(w, ctx, &name, &inner, scope);
+        gen_scan_function_named(w, lowered_rule, ctx, &inner);
         return;
     }
-    gen_scan_function_named(w, rule, lowered_rule, ctx, &name);
-}
-
-/// The gate scope `rule` opens, or `null` where the scan cannot run it. A field
-/// the scan does not simulate has no scan gate slot to save.
-///
-/// The left-recursive case is settled before this, in `runnable_gate_scope`:
-/// such a rule's scope is unrunnable everywhere, not only in the wrapper that
-/// would have carried it, so the field is dropped from the set rather than
-/// dropped here. The assert is that `rule_is_left_recursive` really does mirror
-/// lowering's classification, which is the whole claim its doc makes.
-fn scan_gate_scope(rule: &ParserRule, lowered_rule: &Rule, ctx: &EmitContext) -> Option<GateScope> {
-    if !ctx.settings.emit_scan_gate() {
-        return null;
-    }
-    let scope = match runnable_gate_scope(rule, &ctx.settings.gate_bodies) {
-        Some(s) => if ctx.settings.scan_gate_fields.contains(&s.field) {
-            s;
-        } else {
-            return null;
-        },
-        null => {
-            return null;
-        },
-    };
-    assert !lowered_rule matches { LeftRecursive(_) }, "scan_gate_scope: lowering calls this rule left-recursive and the surface predicate does not";
-    return Option::Some(scope);
+    gen_scan_function_named(w, lowered_rule, ctx, &name);
 }
 
 fn gen_scan_gate_scope_wrapper<S: AsStrSlice, S1: AsStrSlice>(
@@ -662,13 +613,8 @@ fn scan_element_can_match_empty(se: &ScanElement, ctx: &mut EmitContext) -> bool
 
 /// A rule's scan function. A left-recursive rule's is the family
 /// `gen_scan_lr_functions` emits; every other shape gets one `scan_<rule>`.
-fn gen_scan_function_named<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    lowered_rule: &Rule,
-    ctx: &mut EmitContext,
-    fn_name: S,
-) {
+fn gen_scan_function_named<S: AsStrSlice>(w: &mut CodeWriter, lowered_rule: &Rule, ctx: &mut EmitContext, fn_name: S) {
+    let header = rule_header(lowered_rule);
     if let LeftRecursive(l) = lowered_rule {
         // LR rule: project the atom's alt indices into the
         // surface-rule numbering so `gen_scan_lr_functions` can
@@ -682,13 +628,12 @@ fn gen_scan_function_named<S: AsStrSlice>(
         // rule call brackets with the scan caller stack via
         // `gen_scan_op_element`.
         let atn_loop_dec = if l.atn_class && ctx.plan.needs_atn {
-            ctx.plan.lr_loop_entry_decision(ctx.analysis.rule_index_of(&rule.name));
+            ctx.plan.lr_loop_entry_decision(ctx.cursor.current_rule_index());
         } else {
             -1;
         };
         gen_scan_lr_functions(
             w,
-            rule,
             lowered_rule,
             &l.lr_alts,
             &l.lr_dispatch,
@@ -702,9 +647,8 @@ fn gen_scan_function_named<S: AsStrSlice>(
         return;
     }
 
-    if rule.alternatives.len() > 1 {
-        assert lowered_rule matches { MultiAlt(_) }, "gen_scan_function_named: lowering gives a multi-alt rule a MultiAlt body";
-        gen_group_alt_scan_fns(w, rule, lowered_rule, ctx);
+    if lowered_rule matches { MultiAlt(_) } {
+        gen_group_alt_scan_fns(w, lowered_rule, ctx);
     }
 
     // Only a left-recursive rule climbs precedence, so only its `scan_X`
@@ -716,7 +660,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
     f.set_return_type("i32");
     // A gate scope's `__scoped` body is called by name from its wrapper, and so
     // is a memo's walk.
-    let prunable = fn_name.to_string() == scan_fn_name(&rule.snake_name);
+    let prunable = fn_name.to_string() == scan_fn_name(&header.snake_name);
     if memoized {
         let mut entry = f;
         if prunable {
@@ -732,18 +676,8 @@ fn gen_scan_function_named<S: AsStrSlice>(
         ctx,
         &f,
         |w| {
-            if rule.alternatives.len() == 1 {
-                // `lower_rule` maps every single-alt surface rule to
-                // `Rule::Simple` — multi-alt and LR shapes require 2+ surface
-                // alts. The pattern is therefore total over the shape we observe
-                // here.
-                let scan_body = if let Simple(s) = lowered_rule {
-                    &s.scan_body;
-                } else {
-                    panic(
-                        "gen_scan_function_named: single-alt rule but lowered_rule is not Simple — lower_rule invariant violated",
-                    );
-                };
+            if let Simple(s) = lowered_rule {
+                let scan_body = &s.scan_body;
                 // A rule that cannot derive the empty string must not report a
                 // zero-token match. Its body's mandatory group scans `lenient` by
                 // default, so a gate miss rewinds to the entry position and the rule
@@ -752,7 +686,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
                 // entering on a trailing `';'`). Leniency inside the body is kept:
                 // only the whole-rule result is checked.
                 let mut nullable_visiting: List<String> = [];
-                let non_nullable = !ctx.analysis.rule_is_nullable(&rule.name, &mut nullable_visiting)
+                let non_nullable = !ctx.analysis.rule_is_nullable(&header.name, &mut nullable_visiting)
                     && scan_body_can_match_empty(&scan_body.elements, ctx);
                 if non_nullable {
                     w.line("let scan_start = pos;");
@@ -784,7 +718,6 @@ fn gen_scan_function_named<S: AsStrSlice>(
 ///     Callers without a precedence context omit min_prec and get 0.
 fn gen_scan_lr_functions<S: AsStrSlice>(
     w: &mut CodeWriter,
-    rule: &ParserRule,
     lowered_rule: &Rule,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
@@ -800,7 +733,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     let was_in_atom = ctx.cursor.set_lr_cont_in_atom(mid_operand_gated);
 
     if non_lr_indices.len() > 1 {
-        gen_group_alt_scan_fns(w, rule, lowered_rule, ctx);
+        gen_group_alt_scan_fns(w, lowered_rule, ctx);
     }
 
     // scan_X_atom: the choice among the non-LR alternatives.
@@ -1651,14 +1584,14 @@ fn gen_scan_pick<S: AsStrSlice>(w: &mut CodeWriter, lowered_rule: &Rule, ctx: &m
 
 /// The scan function of every alternative a contested overlap group chooses
 /// between, emitted before the scan that calls them.
-fn gen_group_alt_scan_fns(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut EmitContext) {
+fn gen_group_alt_scan_fns(w: &mut CodeWriter, lowered_rule: &Rule, ctx: &mut EmitContext) {
     let decision = rule_decision(lowered_rule);
     for let group of &decision.groups {
         if group.len() < 2 {
             continue;
         }
         for let gi of group {
-            ensure_alt_scan_fn(w, rule, lowered_rule, decision.non_lr_indices[*gi], ctx);
+            ensure_alt_scan_fn(w, lowered_rule, decision.non_lr_indices[*gi], ctx);
         }
     }
 }
@@ -3232,7 +3165,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     // Emit the per-alt scan helper only when the dispatch
                     // actually calls it; a token-led group leaves it dead.
                     if referenced_scans.contains(&alt_index) {
-                        ensure_alt_scan_fn(w, rule, lowered_rule, alt_index, ctx);
+                        ensure_alt_scan_fn(w, lowered_rule, alt_index, ctx);
                     }
                 }
             }
