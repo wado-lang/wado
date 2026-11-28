@@ -17,7 +17,9 @@ use crate::const_eval::{format_float_repr, truncate_int};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::cast::lower_cast;
 use crate::lower::contract_checks::is_contract_clause;
-use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
+use crate::lower::plan::value_copy::place::{
+    is_place, is_source_place, source_place_subscripts_mut,
+};
 use crate::lower::wide_int_literal::{create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
@@ -94,8 +96,8 @@ use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
     assign, bare_cast, binary, bool_lit, builtin_call, class_in, cold_path_stmt, deref_expr,
-    field_access, handle_class, handle_eq, i32_const, local_ref, marker_stmt_mark, mut_ref_expr, not_expr,
-    ord_bool_from_cmp, rt_call,
+    field_access, handle_class, handle_eq, i32_const, local_ref, marker_stmt_mark, mut_ref_expr,
+    not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, ExitScope, SourceStmt, StructDef, TemplateId, TirEffectOp, TirField, TirImpl,
@@ -3879,7 +3881,7 @@ impl<'a> Reify<'a> {
         let mut turn_block = TirBlock::new(bound, span);
         store_at_exits(
             &mut turn_block,
-            &turn_label,
+            Some(&turn_label),
             std::slice::from_ref(&store),
             ctx,
         );
@@ -10081,8 +10083,7 @@ impl<'a> Reify<'a> {
         let (true, Some((_, true))) = (self.in_arm_pattern, self.pattern_path.last()) else {
             return false;
         };
-        let ResolvedType::MutRef(value_type) =
-            *self.tysys.type_table.borrow().get(binding_type)
+        let ResolvedType::MutRef(value_type) = *self.tysys.type_table.borrow().get(binding_type)
         else {
             return false;
         };
@@ -10103,8 +10104,7 @@ impl<'a> Reify<'a> {
         binding_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> TirPattern {
-        let ResolvedType::MutRef(value_type) =
-            *self.tysys.type_table.borrow().get(binding_type)
+        let ResolvedType::MutRef(value_type) = *self.tysys.type_table.borrow().get(binding_type)
         else {
             unreachable!("`holds_binding` admits a `&mut` alone")
         };
@@ -10118,7 +10118,11 @@ impl<'a> Reify<'a> {
             user_is_mut: is_mut,
             held: local_ref(held, &held_name, value_type),
             value_type,
-            path: self.pattern_path.iter().map(|(step, _)| step.clone()).collect(),
+            path: self
+                .pattern_path
+                .iter()
+                .map(|(step, _)| step.clone())
+                .collect(),
         });
         TirPattern::Binding {
             name: held_name,
@@ -10174,8 +10178,8 @@ impl<'a> Reify<'a> {
     }
 
     /// The scrutinee to match, and the place a store back writes. A `&mut` of
-    /// a place re-evaluated without effect is written there; any other `&mut`
-    /// is bound once and written through.
+    /// a place, which evaluates without effect, is written there; any other
+    /// `&mut` is bound once and written through.
     fn matched_place(
         &self,
         scrutinee: TirExpr,
@@ -10186,7 +10190,7 @@ impl<'a> Reify<'a> {
             op: TirUnaryOp::MutRef,
             expr,
         } = &scrutinee.kind
-            && is_stable_place(expr)
+            && is_place(expr)
         {
             let place = (**expr).clone();
             return (scrutinee, place);
@@ -10212,10 +10216,7 @@ impl<'a> Reify<'a> {
         place: &TirExpr,
         ctx: &mut FunctionContext,
     ) -> Vec<TirMatchArm> {
-        let held_locals: IndexSet<u32> = held
-            .iter()
-            .filter_map(|h| scoped_temp(&h.held))
-            .collect();
+        let held_locals: IndexSet<u32> = held.iter().filter_map(|h| scoped_temp(&h.held)).collect();
         let mut seen = 0;
         let alternatives = alternatives_holding(&arm.pattern, &held_locals, &mut seen);
         assert_eq!(seen, held.len(), "each held binding is one pattern binding");
@@ -10276,26 +10277,28 @@ impl<'a> Reify<'a> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let Some((step, rest)) = path.split_first() else {
-            return assign(place, value);
-        };
-        let PathStep::Case {
-            variant_type,
-            case_index,
-            ref case_name,
-            payload_type,
-        } = *step
-        else {
-            let PathStep::Field {
-                index,
-                ref name,
-                type_id,
-            } = *step
-            else {
-                unreachable!()
-            };
-            let field = field_access(place, index, name.clone(), type_id, span);
-            return self.store_along(field, rest, value, span, ctx);
+        let (variant_type, case_index, case_name, payload_type, rest) = match path.split_first() {
+            None => return assign(place, value),
+            Some((
+                PathStep::Field {
+                    index,
+                    name,
+                    type_id,
+                },
+                rest,
+            )) => {
+                let field = field_access(place, *index, name.clone(), *type_id, span);
+                return self.store_along(field, rest, value, span, ctx);
+            }
+            Some((
+                PathStep::Case {
+                    variant_type,
+                    case_index,
+                    case_name,
+                    payload_type,
+                },
+                rest,
+            )) => (*variant_type, *case_index, case_name, *payload_type, rest),
         };
         if rest
             .iter()
@@ -10348,7 +10351,10 @@ impl<'a> Reify<'a> {
             let store = self.store_along(payload_ref.clone(), rest, value, span, ctx);
             stmts.push(TirStmt::new(TirStmtKind::Expr(store), span));
             let rebuilt = construct_case(variant_type, case_index, case_name, payload_ref, span);
-            stmts.push(TirStmt::new(TirStmtKind::Expr(assign(place, rebuilt)), span));
+            stmts.push(TirStmt::new(
+                TirStmtKind::Expr(assign(place, rebuilt)),
+                span,
+            ));
         }
         let pattern = TirPattern::Variant {
             enum_type: variant_type,
@@ -11391,19 +11397,6 @@ fn breaks_out(body: &TirBlock) -> bool {
     finder.found
 }
 
-/// A place whose evaluation has no effect, so a store back may name it again.
-fn is_stable_place(expr: &TirExpr) -> bool {
-    match &expr.kind {
-        TirExprKind::Local { .. } => true,
-        TirExprKind::FieldAccess { expr, .. }
-        | TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            expr,
-        } => is_stable_place(expr),
-        _ => false,
-    }
-}
-
 /// The alternatives of `pattern` with no `|` holding a binding of
 /// `held_locals`, each with the indices of the held bindings it binds, which
 /// count those met so far in `seen`. Held bindings are met in the order reify
@@ -11518,13 +11511,14 @@ fn store_back_at_exits(
         Some(bind_fresh(ctx, "arm_value", body, &mut stmts))
     };
     let mut block = TirBlock::new(stmts, span);
-    let label = minted_name("arm", ctx.fresh_serial());
-    store_at_exits(&mut block, &label, stores, ctx);
+    store_at_exits(&mut block, None, stores, ctx);
     if type_id != TypeTable::NEVER {
         block.stmts.extend(stores.iter().cloned());
     }
     if let Some(value) = value {
-        block.stmts.push(TirStmt::new(TirStmtKind::Expr(value), span));
+        block
+            .stmts
+            .push(TirStmt::new(TirStmtKind::Expr(value), span));
     }
     TirExpr::new(TirExprKind::Block(block), type_id, span)
 }
@@ -11549,12 +11543,12 @@ fn construct_case(
 }
 
 /// Put `stores` ahead of every jump out of `block`, the body of the labeled
-/// block `label`: a `return`, and a `break` / `continue` past every loop and
-/// label entered inside it. A value the jump carries is bound first, so it is
-/// read before the stores run. A closure's jumps are its own.
+/// block `label` if any: a `return`, and a `break` / `continue` past every
+/// loop and label entered inside it. A value the jump carries is bound first,
+/// so it is read before the stores run. A closure's jumps are its own.
 fn store_at_exits(
     block: &mut TirBlock,
-    label: &str,
+    label: Option<&str>,
     stores: &[TirStmt],
     ctx: &mut FunctionContext,
 ) {
@@ -11563,7 +11557,9 @@ fn store_at_exits(
         stores,
         ctx,
     };
-    walker.scope.enter_label(label);
+    if let Some(label) = label {
+        walker.scope.enter_label(label);
+    }
     walker.visit_block(block);
 }
 
