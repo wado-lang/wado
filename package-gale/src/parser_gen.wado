@@ -60,8 +60,6 @@ use {
     alt_class_of,
     alt_classes,
     classes_union,
-    direct_dispatch_branches,
-    dispatch_branches,
     fallback_last,
     group_branch_admits,
     has_multi_alt_groups,
@@ -90,7 +88,6 @@ use {
     LrCont,
     LrContRest,
     LrDispatchData,
-    MultiAltDispatch,
     AltBody,
     Op,
     RuleCallOp,
@@ -99,7 +96,6 @@ use {
     RepeatOp,
     OptionalShapeLookaheadStrategy,
     GroupOp,
-    SingleAltShape,
     TokenOnlyShape,
     ListLabelOp,
     ScanBody,
@@ -4187,24 +4183,8 @@ fn gen_op(
     }
 }
 
-/// If every alt is a single terminal, the kind constants; else `None`.
-fn group_token_only_kinds(alts: &List<AltBody>) -> Option<List<i32>> {
-    let mut kinds: List<i32> = [];
-    for let alt of alts {
-        if alt.ops.len() != 1 {
-            return null;
-        }
-        match &alt.ops[0] {
-            Token(t) => kinds.push(t.kind),
-            Literal(l) => kinds.push(l.kind),
-            _ => {
-                return null;
-            },
-        }
-    }
-    return Option::Some(kinds);
-}
-
+/// The op-only walker's group: required where nothing decided it, committing
+/// to `decided` where a caller's scan did.
 fn gen_group_body(
     w: &mut CodeWriter,
     g: &GroupOp,
@@ -4213,46 +4193,8 @@ fn gen_group_body(
     decided: Option<String> = null,
     proven: &List<i32> = &NO_KINDS,
 ) {
-    if let Some(kinds) = group_token_only_kinds(&g.alts) {
-        if let TokenOnly(to) = &g.shape {
-            gen_consume_token_group_op(w, to, &kinds, ctx, nc, proven);
-        } else if proves(proven, &kinds) {
-            w.line("p.take();");
-        } else {
-            w.line(`let _ = ${expect_set_call(ctx, &kinds)};`);
-        }
-        return;
-    }
-    if g.alts.len() == 1 {
-        gen_group_alt_body(w, &g.alts[0], ctx, nc, proven);
-        return;
-    }
-    if decided matches { Some(_) } {
-        gen_alt_dispatch(w, &g.alts, &g.scan_group.alts, &g.dispatch, ctx, nc, decided);
-        return;
-    }
-    if let Decides([dec, site, shadowed]) = group_atn(g, ctx) {
-        let var = gen_group_atn_pick(w, dec, site, ctx, nc);
-        if shadowed {
-            let mut lines = CodeWriter::with_capacity(512);
-            let [winner, _] = gen_group_decide(
-                &mut lines,
-                &dispatch_branches(&g.dispatch),
-                &g.scan_group.alts,
-                ctx,
-                nc,
-            );
-            gen_group_shadow(w, dec, &var, &winner, lines, ctx);
-        }
-        w.begin(`if ${var} < 0`);
-        w.line(&NO_VIABLE_HERE);
-        w.else_begin("else");
-        let order: List<i32> = g.alts.iter_ref().map(|a| a.alt_index).collect();
-        gen_alt_commit(w, &g.alts, &order, &var, ctx, nc);
-        w.end();
-        return;
-    }
-    gen_alt_dispatch(w, &g.alts, &g.scan_group.alts, &g.dispatch, ctx, nc);
+    let entry = if decided matches { Some(_) } { GroupEntry::Guaranteed } else { GroupEntry::Required };
+    gen_group_entered(w, g, null, entry, ctx, nc, decided, proven);
 }
 
 /// Record where `winner`, the tournament's pick that `lines` computes, differs
@@ -4270,71 +4212,6 @@ fn gen_group_shadow(
     gen_shadow_block(w, `${var} >= 0`, body, ctx);
 }
 
-fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody {
-    for let a of alts {
-        if a.alt_index == idx {
-            return a;
-        }
-    }
-    panic(`gen_group_body: no alt with index ${idx}`);
-}
-
-/// Group-alt dispatch under the GIR walker (used for LR-suffix group bodies).
-/// A `decided` caller names the winner and this commits to it; otherwise
-/// `Direct` emits a token-led chain and `Tournament` the longest-match scan.
-fn gen_alt_dispatch(
-    w: &mut CodeWriter,
-    alts: &List<AltBody>,
-    scan_alts: &List<ScanBody>,
-    dispatch: &MultiAltDispatch,
-    ctx: &mut EmitContext,
-    nc: &mut List<[String, i32]>,
-    decided: Option<String> = null,
-) {
-    if let Some(var) = decided {
-        gen_alt_commit(w, alts, &dispatch_alt_order(dispatch), &var, ctx, nc);
-        return;
-    }
-    let dd = match *dispatch {
-        Direct(d) => d,
-        Tournament(td) => {
-            let winner = gen_scan_winner_tournament(w, &td.alts, scan_alts, ctx, nc, td.alts[td.alts.len() - 1]);
-            gen_alt_commit(w, alts, &td.alts, &winner, ctx, nc);
-            return;
-        },
-    };
-    let mut dispatch_classes: List<AltClass> = [];
-    for let br of &dd.branches {
-        dispatch_classes.push(br.alt_class);
-    }
-    let all_first = classes_union(&dispatch_classes);
-    let branches = direct_dispatch_branches(&dd);
-    assert !branches.is_empty(), "a Direct dispatch decides between alternatives, so it has branches";
-    if decision_reads_lookahead(&branches) {
-        w.line("let _gk = p.peek_kind();");
-    }
-    let mut bodies: List<CodeWriter> = [];
-    for let mut i = 0; i < branches.len(); i += 1 {
-        let mut body = CodeWriter::with_capacity(256);
-        let picked = &branches[i].alts;
-        if picked.len() == 1 {
-            gen_group_alt_body(&mut body, alt_by_index(alts, picked[0]), ctx, nc, &branch_proven_first(&branches, i));
-        } else {
-            let winner = gen_scan_winner_tournament(&mut body, picked, scan_alts, ctx, nc, picked[picked.len() - 1]);
-            gen_alt_commit(&mut body, alts, picked, &winner, ctx, nc);
-        }
-        bodies.push(body);
-    }
-    let emitted = emit_decision_arms(w, &branches, &bodies, "_gk", ctx);
-    let last = &emitted[emitted.len() - 1];
-    assert !admits_tests_nothing(&last.test) || is_decision_fallback(last), "a Direct chain's last branch admits everything, so no `if` was emitted for the `else` to follow";
-    if !is_decision_fallback(last) {
-        w.else_begin("else");
-        w.line(`let _ = ${expect_set_call(ctx, &all_first)};`);
-    }
-    close_decision_chain(w, &emitted);
-}
-
 /// Ask the simulator for group decision `dec` at surface site `site`, into a
 /// local whose name this returns.
 fn gen_group_atn_pick(
@@ -4348,54 +4225,6 @@ fn gen_group_atn_pick(
     let met = *ctx.decisions.at_site(site);
     w.line(`let ${var} = ${atn_predict_call(dec, &met, PickSide::Parse, ctx)};`);
     return var;
-}
-
-/// The alternatives a baked dispatch decides between, in emission order.
-fn dispatch_alt_order(dispatch: &MultiAltDispatch) -> List<i32> {
-    return match dispatch {
-        Direct(dd) => {
-            let mut order: List<i32> = [];
-            for let br of &dd.branches {
-                order.push(br.alt_index);
-            }
-            order;
-        },
-        Tournament(td) => td.alts,
-    };
-}
-
-/// Commit to the alternative `winner` names: one arm per candidate, the last
-/// unconditional. The decision is already taken, so nothing here re-tests it.
-fn gen_alt_commit<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    alts: &List<AltBody>,
-    order: &List<i32>,
-    winner: S,
-    ctx: &mut EmitContext,
-    nc: &mut List<[String, i32]>,
-)
-    contract order.len() > 1, "a dispatch decides between two alternatives or more"
-{
-    for let mut k = 0; k < order.len(); k += 1 {
-        open_winner_arm(w, &winner, order, k);
-        gen_group_alt_body(w, alt_by_index(alts, order[k]), ctx, nc);
-    }
-    w.end();
-}
-
-/// A group alternative's ops under the op-only walker, with the actions
-/// written between them, as `gen_general_alt_parse_and_store` runs them under
-/// the surface walker.
-fn gen_group_alt_body(
-    w: &mut CodeWriter,
-    alt: &AltBody,
-    ctx: &mut EmitContext,
-    nc: &mut List<[String, i32]>,
-    proven: &List<i32> = &NO_KINDS,
-) {
-    let outer = ctx.cursor.enter_group_body(true);
-    gen_ops_with_actions(w, &alt.ops, &alt.actions, 0, ctx, nc, proven);
-    ctx.cursor.leave_group_body(outer);
 }
 
 /// `ops` with `actions` run between them, where op `i` stands at surface
@@ -5251,7 +5080,7 @@ fn gen_op_inner_for_storable_repeat(
             let Group(g_elem) = peel_labels(elem) else {
                 unreachable();
             };
-            gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, outer_follow, decided, proven, group_atn(
+            gen_group_shape(w, g_op, Option::Some(g_elem), entry, ctx, name_counts, outer_follow, decided, proven, group_atn(
                 g_op,
                 ctx,
             ));
@@ -5977,13 +5806,28 @@ fn gen_op_group(
     // `peel_scalar_label` helper handles theoretical multi-level
     // scalar Label nesting; lower does not produce that today, but
     // the loop costs nothing.
+    let Group(g_elem) = peel_scalar_label(elem) else {
+        unreachable();
+    };
+    gen_group_entered(w, g_op, Option::Some(g_elem), entry, ctx, name_counts, decided, proven);
+}
+
+/// `g_op` at a position `entry` describes: its sync and what the entry owes,
+/// then its shape.
+fn gen_group_entered(
+    w: &mut CodeWriter,
+    g_op: &GroupOp,
+    g_elem: Option<&GroupElement>,
+    entry: GroupEntry,
+    ctx: &mut EmitContext,
+    name_counts: &mut List<[String, i32]>,
+    decided: Option<String>,
+    proven: &List<i32>,
+) {
     if entry matches { _::Required } {
         gen_decision_sync(w, ctx, ctx.plan.decision_entry_expect(g_op.atn_decision), "sync_alts", proven);
     }
     let entry = open_group_entry(w, Option::Some(g_op), ctx, entry);
-    let Group(g_elem) = peel_scalar_label(elem) else {
-        unreachable();
-    };
     gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, &NO_KINDS, decided, proven, group_atn(g_op, ctx));
 }
 
@@ -6009,7 +5853,7 @@ fn group_atn(g_op: &GroupOp, ctx: &EmitContext) -> GroupAtn {
 fn gen_group_shape(
     w: &mut CodeWriter,
     g_op: &GroupOp,
-    g_elem: &GroupElement,
+    g_elem: Option<&GroupElement>,
     entry: GroupEntry,
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
@@ -6018,37 +5862,53 @@ fn gen_group_shape(
     proven: &List<i32>,
     atn: GroupAtn,
 ) {
+    let alts = g_elem.map(|g| &g.alternatives);
     match &g_op.shape {
         TokenOnly(to) => gen_consume_token_group_op(w, to, &to.kinds, ctx, name_counts, proven),
-        SingleAlt(sa) => gen_consume_single_alt_group_op(
-            w,
-            sa,
-            &g_op.alts[0],
-            &g_elem.alternatives[0],
-            ctx,
-            name_counts,
-            outer_follow,
-            proven,
-        ),
-        SimpleCst(_) | General(_) => gen_alt_group(
-            w,
-            g_op,
-            &g_elem.alternatives,
-            entry,
-            ctx,
-            name_counts,
-            decided,
-            atn,
-        ),
+        SingleAlt(sa) => {
+            let _ = dedup_name(&sa.dedup_base, name_counts);
+            let outer = ctx.cursor.enter_group_body(false);
+            gen_body_walk(w, &g_op.alts[0], surface_alt(alts, 0), ctx, name_counts, outer_follow, proven);
+            ctx.cursor.leave_group_body(outer);
+        },
+        SimpleCst(_) | General(_) => gen_alt_group(w, g_op, alts, entry, ctx, name_counts, decided, atn),
         _::Transparent => {
             // The inner alt is inlined, actions included, so inside a Repeat
             // they run once per iteration.
-            let body = &g_op.alts[0];
-            let alt = &g_elem.alternatives[0];
             let outer = ctx.cursor.enter_group_body(false);
-            gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, &NO_KINDS, &alt.actions, proven);
+            gen_body_walk(w, &g_op.alts[0], surface_alt(alts, 0), ctx, name_counts, &NO_KINDS, proven);
             ctx.cursor.leave_group_body(outer);
         },
+    }
+}
+
+fn surface_alt(alts: Option<&List<Alternative>>, i: i32) -> Option<&Alternative> {
+    return alts.map(|a| &a[i]);
+}
+
+/// A group alternative's ops with the actions written between them, walked
+/// beside its surface elements where the caller has them.
+fn gen_body_walk(
+    w: &mut CodeWriter,
+    body: &AltBody,
+    surface: Option<&Alternative>,
+    ctx: &mut EmitContext,
+    name_counts: &mut List<[String, i32]>,
+    outer_follow: &List<i32>,
+    proven: &List<i32>,
+) {
+    match surface {
+        Some(alt) => gen_elements_with_non_greedy(
+            w,
+            &alt.elements,
+            &body.ops,
+            ctx,
+            name_counts,
+            outer_follow,
+            &alt.actions,
+            proven,
+        ),
+        null => gen_ops_with_actions(w, &body.ops, &body.actions, 0, ctx, name_counts, proven),
     }
 }
 
@@ -6073,29 +5933,6 @@ fn gen_consume_token_group_op(
         return;
     }
     w.line(`${bind}${expect_set_call(ctx, kinds)};`);
-}
-
-/// Single-alt group emit `(e1 e2 …)`: parse each inner element (each appends
-/// its tokens / sub-nodes to the builder). Inner element parsing walks surface
-/// IR via `gen_elements_with_non_greedy`.
-fn gen_consume_single_alt_group_op(
-    w: &mut CodeWriter,
-    shape: &SingleAltShape,
-    body: &AltBody,
-    alt: &Alternative,
-    ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
-    outer_follow: &List<i32>,
-    proven: &List<i32>,
-) {
-    let _ = dedup_name(&shape.dedup_base, name_counts);
-    // Nested General-group emitters consume `GeneralShape.variant_type`
-    // / `alt_struct_names` baked by `lower_single_alt_group` under
-    // the SingleAlt's owner rule, so no walker-field swap is needed here.
-    let outer = ctx.cursor.enter_group_body(false);
-    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow, &alt.actions, proven);
-    ctx.cursor.leave_group_body(outer);
-    // the inner elements already appended; no struct.
 }
 
 /// Emit `name+=elem` outside a Repeat: parse the inner op once. Lower
@@ -8007,7 +7844,7 @@ fn unrefused_fallback(sorted_group: &List<i32>, refusable: bool) -> i32 {
 /// one (`refusable`), the winner may be none, which is no viable alternative.
 fn gen_group_scan_dispatch(
     w: &mut CodeWriter,
-    alts: &List<Alternative>,
+    alts: Option<&List<Alternative>>,
     g_op_alts: &List<AltBody>,
     scan_alts: &List<ScanBody>,
     sorted_group: &List<i32>,
@@ -8071,7 +7908,7 @@ fn gen_group_dispatch(
     w: &mut CodeWriter,
     branches: &List<DecisionBranch>,
     classes: &List<AltClass>,
-    alts: &List<Alternative>,
+    alts: Option<&List<Alternative>>,
     g_op_alts: &List<AltBody>,
     g_op_scan_alts: &List<ScanBody>,
     kind: GroupBranchKind,
@@ -8242,7 +8079,7 @@ fn branch_emit_order(group: &List<i32>, alts: &List<AltBody>) -> List<i32> {
 fn gen_group_branch_body(
     w: &mut CodeWriter,
     group: &List<i32>,
-    alts: &List<Alternative>,
+    alts: Option<&List<Alternative>>,
     g_op_alts: &List<AltBody>,
     g_op_scan_alts: &List<ScanBody>,
     kind: GroupBranchKind,
@@ -8403,7 +8240,7 @@ fn atn_gated_verdict<S: AsStrSlice>(decision: i32, met: &List<MetPredicate>, pos
 fn gen_alt_group(
     w: &mut CodeWriter,
     g_op: &GroupOp,
-    alts: &List<Alternative>,
+    alts: Option<&List<Alternative>>,
     entry: GroupEntry,
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
@@ -8445,19 +8282,17 @@ fn group_partition(g: &GroupOp) -> [List<AltClass>, List<AltBranch>] {
 /// Repeat (required group store) and as a plain `if`/`else` arm body.
 fn gen_general_alt_parse_and_store(
     w: &mut CodeWriter,
-    alts: &List<Alternative>,
+    alts: Option<&List<Alternative>>,
     body: &AltBody,
     alt_index: i32,
     ctx: &mut EmitContext,
     proven: &List<i32> = &NO_KINDS,
 ) {
-    let alt = &alts[alt_index];
-
     let mut nc: List<[String, i32]> = [];
     // An alt-initial predicate in here selects this alternative, so one the
     // dispatch could not gate must be reported rather than guarded inline.
     let outer = ctx.cursor.enter_group_body(true);
-    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &NO_KINDS, &alt.actions, proven);
+    gen_body_walk(w, body, surface_alt(alts, alt_index), ctx, &mut nc, &NO_KINDS, proven);
     ctx.cursor.leave_group_body(outer);
 }
 

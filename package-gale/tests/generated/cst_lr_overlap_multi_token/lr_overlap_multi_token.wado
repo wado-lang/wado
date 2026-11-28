@@ -1711,15 +1711,15 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
-                        let _gk = p.peek_kind();
-                        if _gk == TK_LIT_LT {
+                        let grp_kind = p.peek_kind();
+                        if grp_kind == TK_LIT_LT {
                             p.site = 1;
                             _parse_shl(p);
-                        } else if _gk == TK_LIT_GT {
+                        } else if grp_kind == TK_LIT_GT {
                             p.site = 2;
                             _parse_shr(p);
                         } else {
-                            let _ = p.expect_set(&SYNC_1, &EXPECTED_1);
+                            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1);
                         }
                         p.site = 3;
                         _parse_e(p, 3);
@@ -1749,15 +1749,15 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
-                        let _gk = p.peek_kind();
-                        if _gk == TK_LIT_LT {
+                        let grp_kind_2 = p.peek_kind();
+                        if grp_kind_2 == TK_LIT_LT {
                             p.site = 1;
                             _parse_shl(p);
-                        } else if _gk == TK_LIT_GT {
+                        } else if grp_kind_2 == TK_LIT_GT {
                             p.site = 2;
                             _parse_shr(p);
                         } else {
-                            let _ = p.expect_set(&SYNC_1, &EXPECTED_1);
+                            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1);
                         }
                         p.site = 3;
                         _parse_e(p, 3);
@@ -1898,7 +1898,6 @@ fn _kind_set_0(k: i32) -> bool {
 global EMPTY_SYNC: KindSet = [];
 global NO_EXPECTED: List<i32> = [];
 global EXPECTED_0: List<i32> = [TK_INT];
-global SYNC_1: KindSet = [48];
 global EXPECTED_1: List<i32> = [TK_LIT_GT, TK_LIT_LT];
 global SYNC_2: KindSet = [16];
 global SYNC_3: KindSet = [32];

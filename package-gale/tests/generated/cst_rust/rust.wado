@@ -19452,17 +19452,17 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
         } else if _atn_alt == 10 {
             p.b.start_node_at(_cp, RK_EXPRESSION, _start);
             p.b.set_alt(17);
-            let _gk = p.peek_kind();
-            if _gk == TK_LT {
+            let grp_kind = p.peek_kind();
+            if grp_kind == TK_LT {
                 p.site = 255;
                 p.atn_ret_pending = 1942;
                 _parse_shl(p);
-            } else if _gk == TK_GT {
+            } else if grp_kind == TK_GT {
                 p.site = 256;
                 p.atn_ret_pending = 1944;
                 _parse_shr(p);
             } else {
-                let _ = p.expect_set(&SYNC_107, &EXPECTED_107);
+                p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_107);
             }
             p.site = 257;
             p.atn_ret_pending = 1946;
@@ -26331,7 +26331,6 @@ global EXPECTED_104: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_ST
 global SYNC_105: KindSet = [-1446671077, 123207692, -245792, -768671745, 10];
 global SYNC_106: KindSet = [-1446671078, 123207692, 2087469024, -1842733056, 14];
 global EXPECTED_106: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_C_STRING_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RAW, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_C_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RSQUAREBRACKET, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_107: KindSet = [0, 0, 0, 12288];
 global EXPECTED_107: List<i32> = [TK_GT, TK_LT];
 global SYNC_108: KindSet = [0, 0, 0, 64512];
 global EXPECTED_108: List<i32> = [TK_EQEQ, TK_GE, TK_GT, TK_LE, TK_LT, TK_NE];
