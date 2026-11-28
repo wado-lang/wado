@@ -5,14 +5,11 @@ use { Alternative } from "./ir.wado";
 use { GrammarAnalysis, is_nullable } from "./grammar_analysis.wado";
 use {
     Admits,
-    admits_everything,
     admits_is_untestable,
     admits_or_untestable,
     admits_kinds_of,
     AltClass,
     alt_class_is_nullable,
-    DirectDispatch,
-    MultiAltDispatch,
     ScanGroupElement,
     alt_class_first_set,
     alt_class_is_open_ended,
@@ -23,9 +20,7 @@ use { sets_overlap } from "./token_kinds.wado";
 
 /// One branch of a decision: what admits it, the predicate gating it, and the
 /// alternatives it holds. `alts` are in the index space of whatever the
-/// branches were built over — partition slots from `class_decision_branches`,
-/// and `DispatchBranch.alt_index` from `direct_dispatch_branches`, which an LR
-/// atom's dispatch numbers by the rule's own alternatives.
+/// branches were built over.
 pub struct DecisionBranch {
     pub test: Admits,
     /// Rendered `&& (…)` suffix, empty where the branch has no predicate.
@@ -158,30 +153,6 @@ fn split_by_token(group: &List<i32>, classes: &List<AltClass>) -> List<AltBranch
 /// the interning and the rendering read this list, so they cannot disagree.
 pub fn scan_decision_branches(ge: &ScanGroupElement) -> List<DecisionBranch> {
     return class_decision_branches(&ge.alt_classes);
-}
-
-/// The branches a baked `Direct` dispatch takes, one alternative each.
-pub fn direct_dispatch_branches(dd: &DirectDispatch) -> List<DecisionBranch> {
-    let mut branches: List<DecisionBranch> = [];
-    for let br of &dd.branches {
-        branches.push(DecisionBranch {
-            test: group_branch_admits(&[0], &[br.alt_class]),
-            gate: "",
-            alts: [br.alt_index],
-        });
-    }
-    return fallback_last(&branches);
-}
-
-/// The branches a baked dispatch takes, whichever kind it is. A `Tournament`
-/// is one branch admitting everything: the scan lengths decide.
-pub fn dispatch_branches(d: &MultiAltDispatch) -> List<DecisionBranch> {
-    return match d {
-        Direct(dd) => direct_dispatch_branches(dd),
-        Tournament(td) => [
-            DecisionBranch { test: admits_everything(), gate: "", alts: td.alts },
-        ],
-    };
 }
 
 /// The one classifier. Nullability and open-endedness are asked here and only

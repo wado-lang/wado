@@ -1403,17 +1403,6 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClas
     };
 }
 
-/// Build a `Direct` dispatch over alternatives whose first sets are disjoint
-/// by construction — a token-only group's.
-fn build_direct_dispatch(
-    alts: &List<Alternative>,
-    first_sets: &List<List<i32>>,
-    ctx: &mut LowerContext,
-) -> MultiAltDispatch {
-    let slots = identity_slots(alts.len());
-    return direct_dispatch(&alt_classes(&slots, alts, false, first_sets, &mut ctx.analysis), &slots);
-}
-
 /// The token-led chain itself: one branch per class, in `indices` order. Emit
 /// translates it into `if / else if` and an error fallback.
 fn direct_dispatch(classes: &List<AltClass>, indices: &List<i32>) -> MultiAltDispatch
@@ -1444,14 +1433,35 @@ fn build_overlap_dispatch(
     classes: &List<AltClass>,
     ctx: &mut LowerContext,
 ) -> MultiAltDispatch {
-    let n_classes = classes.len();
-    let n_indices = indices.len();
-    assert n_classes == n_indices, "classes is parallel to indices";
+    if !warn_overlap_tournament(owner, alts, indices, classes, ctx) {
+        return direct_dispatch(classes, indices);
+    }
+    let mut sorted: List<i32> = [];
+    for let k of 0..<indices.len() {
+        if !classes[k] matches { _::Subsumed } {
+            sorted.push(indices[k]);
+        }
+    }
+    sort_group_by_element_count(&mut sorted, alts);
+    return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });
+}
 
+/// Whether the alternatives `indices` selects overlap, so only a scan
+/// tournament decides between them, reported as an advisory diagnostic where
+/// they do.
+fn warn_overlap_tournament(
+    owner: &DiagnosticOwner,
+    alts: &List<Alternative>,
+    indices: &List<i32>,
+    classes: &List<AltClass>,
+    ctx: &mut LowerContext,
+) -> bool
+    contract classes.len() == indices.len(), "classes is parallel to indices"
+{
     // A lone alternative overlaps nothing, whatever it admits, so there is no
     // tournament to run and none to report.
-    if n_indices < 2 {
-        return direct_dispatch(classes, indices);
+    if indices.len() < 2 {
+        return false;
     }
 
     // Overlap is `compute_overlap_groups_of`'s answer, as at every emitted
@@ -1460,7 +1470,7 @@ fn build_overlap_dispatch(
     // An open-ended alt reads as disjoint by its static set, and a Direct
     // chain would give it an unreachable empty-token branch.
     if disjoint && !any_open_ended(classes) {
-        return direct_dispatch(classes, indices);
+        return false;
     }
 
     for let idx of indices {
@@ -1481,15 +1491,7 @@ fn build_overlap_dispatch(
         DiagnosticKind::OverlapTournament,
         `alts ${join_kind_list(indices)} ${cause}; resolved by longest-match scan tournament, not a token-led branch`,
     );
-
-    let mut sorted: List<i32> = [];
-    for let k of 0..<n_indices {
-        if !classes[k] matches { _::Subsumed } {
-            sorted.push(indices[k]);
-        }
-    }
-    sort_group_by_element_count(&mut sorted, alts);
-    return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });
+    return true;
 }
 
 /// Collect the token kinds that appear in more than one alt's first
@@ -1940,14 +1942,9 @@ fn group_op(
     ctx: &mut LowerContext,
 ) -> Op {
     let empty_alt_admits = group_empty_alt_admits(alts, outer_follow, follow_is_exact, ctx);
-    let classes = group_alt_classes(alts, &empty_alt_admits, &mut ctx.analysis);
-    return Op::Group(GroupOp {
-        shape: shape,
-        alts: bodies,
-        scan_group: group_op_scan_group(scan_bodies, alts, &empty_alt_admits, ctx),
-        dispatch: build_overlap_dispatch(owner, alts, &identity_slots(alts.len()), &classes, ctx),
-        empty_alt_admits: empty_alt_admits,
-    });
+    let scan_group = group_op_scan_group(scan_bodies, alts, &empty_alt_admits, ctx);
+    let _ = warn_overlap_tournament(owner, alts, &identity_slots(alts.len()), &scan_group.alt_classes, ctx);
+    return Op::Group(GroupOp { shape, alts: bodies, scan_group, empty_alt_admits });
 }
 
 /// Whether a required scan group is emitted `lenient` — bailing out at its entry
@@ -2952,16 +2949,11 @@ fn lower_transparent_group<S: AsStrSlice>(
         follow_is_exact,
         outer_suffix,
     );
-    // `dispatch` is meaningless for a one-alt Transparent group:
-    // emit recognises `GroupShape::Transparent` and skips the
-    // dispatch step, running the body unconditionally. The empty
-    // `Direct` placeholder is the cheapest valid `MultiAltDispatch`.
     let scan_body = alt_scan_body(alt, [walk], ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::Transparent,
         alts: [body],
         scan_group: group_op_scan_group(&[scan_body], &[*alt], &null, ctx),
-        dispatch: empty_direct_dispatch(),
         empty_alt_admits: null,
     });
 }
@@ -3156,14 +3148,8 @@ fn lower_single_alt_group<S: AsStrSlice>(
         }),
         alts: [body],
         scan_group: group_op_scan_group(&[scan_body], &[*alt], &null, ctx),
-        dispatch: empty_direct_dispatch(),
         empty_alt_admits: null,
     });
-}
-
-fn empty_direct_dispatch() -> MultiAltDispatch {
-    let branches: List<DispatchBranch> = [];
-    return MultiAltDispatch::Direct(DirectDispatch { branches });
 }
 
 /// Multi-alt group whose every alt is a single Token / Literal —
@@ -3184,7 +3170,6 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
 
     let mut bodies: List<AltBody> = [];
     let mut scan_bodies: List<ScanBody> = [];
-    let mut first_sets: List<List<i32>> = [];
     let mut inner_counts: List<[String, i32]> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let alt = &alts[i];
@@ -3204,9 +3189,7 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         let empty_follow: List<i32> = [];
         let token = lower_scan_element(elem, ctx, &empty_follow, FollowArg::NoFollow, false);
         scan_bodies.push(alt_scan_body(alt, [token], ctx));
-        first_sets.push([ctx.analysis.terminal_kind(elem)]);
     }
-    let dispatch = build_direct_dispatch(alts, &first_sets, ctx);
     return Op::Group(GroupOp {
         shape: GroupShape::TokenOnly(TokenOnlyShape {
             field,
@@ -3215,7 +3198,6 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
         }),
         alts: bodies,
         scan_group: group_op_scan_group(&scan_bodies, alts, &null, ctx),
-        dispatch: dispatch,
         empty_alt_admits: null,
     });
 }
