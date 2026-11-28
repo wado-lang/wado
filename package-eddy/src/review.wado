@@ -391,18 +391,18 @@ fn sources(w: &Workspace, diff: &String) -> HashMap<String, String> with Preopen
     return out;
 }
 
-/// `units`, in their order, packed into at most `most` batches of up to
+/// `ranked`, in their order, packed into at most `most` batches of up to
 /// `BATCH_BYTES` each: a unit goes into the first batch it fits that does not
 /// hold it already, so the most changed are read and the least changed are
 /// left out. The first `READ_TWICE` are placed twice.
-fn batches(units: &List<Unit>, most: i32) -> List<List<Unit>> {
-    let twice = i32::min(READ_TWICE, units.len());
+fn batches(ranked: &List<Unit>, most: i32) -> List<List<Unit>> {
+    let twice = i32::min(READ_TWICE, ranked.len());
     let mut order: List<i32> = (0..<twice).collect();
-    order.extend(&(0..<units.len()).collect());
+    order.extend(&(0..<ranked.len()).collect());
     let mut held: List<List<i32>> = [];
     let mut sizes: List<i32> = [];
     for let k of order {
-        let n = units[k].text.len();
+        let n = ranked[k].text.len();
         let mut placed = false;
         for let i of 0..<held.len() {
             if sizes[i] + n <= BATCH_BYTES && !held[i].contains(&k) {
@@ -417,7 +417,7 @@ fn batches(units: &List<Unit>, most: i32) -> List<List<Unit>> {
             sizes.push(n);
         }
     }
-    return held.into_iter().map(|ks| ks.into_iter().map(|k| units[k]).collect()).collect();
+    return held.into_iter().map(|ks| ks.into_iter().map(|k| ranked[k]).collect()).collect();
 }
 
 /// What a batch reads, as `file name` for each unit, for the record.
