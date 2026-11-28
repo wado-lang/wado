@@ -27,6 +27,10 @@ fn get_and_modify(x: &mut i32) -> i32 {
     return original;
 }
 
+fn set_i32(r: &mut i32, v: i32) {
+    *r = v;
+}
+
 fn set_i64(r: &mut i64, v: i64) {
     *r = v;
 }
@@ -180,39 +184,48 @@ fn ref_deref_assign_variant() with Stdout {
     let mut c: Option<i32> = Option::<i32>::Some(10);
     println(maybe_read(&c));
 
-    let cr = &mut c;
-    *cr = null;
+    clear(&mut c);
     println(maybe_read(&c));
+}
+
+fn clear(r: &mut Option<i32>) {
+    *r = null;
 }
 
 fn ref_deref_reassign() with Stdout {
     let mut original = 42;
-    let r = &mut original;
+    reassign_through(&mut original);
+    println(`original: ${original}`);
+}
 
+fn reassign_through(r: &mut i32) with Stdout {
     let val = *r;
     *r = val * 2 + 1;
-    println(`modified: ${original}`);
+    println(`modified: ${*r}`);
 
     let val2 = *r;
     let r2 = &val2;
     *r = 0;
-    println(`original: ${original}`);
     println(`copy: ${*r2}`);
 }
 
+struct Tally {
+    n: i32,
+}
+
 fn ref_alias_mut() with Stdout {
-    let mut x = 0;
+    let mut x = Tally { n: 0 };
     let r1 = &mut x;
     let r2 = &mut x;
 
-    *r1 = 10;
-    println(`after r1: ${x}`);
+    r1.n = 10;
+    println(`after r1: ${x.n}`);
 
-    *r2 = 20;
-    println(`after r2: ${x}`);
+    r2.n = 20;
+    println(`after r2: ${x.n}`);
 
-    *r1 = *r1 + *r2 + 5;
-    println(`final: ${x}`);
+    r1.n = r1.n + r2.n + 5;
+    println(`final: ${x.n}`);
 }
 
 fn ref_swap_test() with Stdout {
@@ -234,10 +247,8 @@ fn ref_reassign_test() with Stdout {
     r = &b;
     println(`${*r}`);
 
-    let mut mr = &mut a;
-    *mr = 100;
-    mr = &mut b;
-    *mr = 200;
+    set_i32(&mut a, 100);
+    set_i32(&mut b, 200);
 
     println(`${a}`);
     println(`${b}`);
@@ -387,11 +398,14 @@ fn ref_loop_mut_test() with Stdout {
     println(`sum 0..4: ${sum}`);
 
     let mut count = 0;
-    let r = &mut count;
+    count_to_five(&mut count);
+    println(`count: ${count}`);
+}
+
+fn count_to_five(r: &mut i32) {
     while *r < 5 {
         *r = *r + 1;
     }
-    println(`count: ${count}`);
 }
 
 fn ref_conditional_mut_test() with Stdout {
@@ -618,10 +632,16 @@ fn ref_edge_coercion() with Stdout {
 
 fn ref_edge_double_deref() with Stdout {
     let mut a = 42;
-    let mut r = &mut a;
-    let rr = &mut r;
-    **rr = 99;
+    write_twice_removed(&mut a);
     println(`${a}`);
+}
+
+fn write_twice_removed(mut r: &mut i32) {
+    write_through(&mut r);
+}
+
+fn write_through(rr: &mut &mut i32) {
+    **rr = 99;
 }
 
 fn ref_edge_multi_mut() with Stdout {
@@ -634,8 +654,14 @@ fn ref_edge_multi_mut() with Stdout {
 
 fn ref_edge_nested() with Stdout {
     let mut a = 42;
-    let r = &mut a;
-    let rr = &r;
+    print_nested(&mut a);
+}
+
+fn print_nested(r: &mut i32) with Stdout {
+    show_nested(&r);
+}
+
+fn show_nested(rr: &&mut i32) with Stdout {
     println(`${**rr}`);
 }
 
@@ -686,4 +712,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "10\n11\n42\noriginal=42\nmodified=999\ni64: 100\ni64: 200\nf64: 3.14\nf64: 2.718\nbool: true\nbool: false\nhello\ngoodbye\n10,20\n0,0\nsome(42)\nnone\nsome(10)\nnone\nmodified: 85\noriginal: 0\ncopy: 85\nafter r1: 10\nafter r2: 20\nfinal: 45\nbefore: 1, 2\nafter: 2, 1\n10\n20\n100\n200\nbefore: 1\nafter: 100\nvalue=4\n42\n42\nlen: 3\nlen: 5\n2\n4\n6\n8\n10\nHello, World!\nabb\nsum 0..4: 10\ncount: 5\nclamped 50: 50\nclamped -10: 0\nclamped 200: 100\npos: 3\nbefore: 0, initial\nafter: 42, updated\nlen: 5\n65\n66\n67\n66\n67\n10,20\n11,22\n42\n100\nAlice, 30\nBob, 31\nbefore: 1\nafter: 100\nref element: 20\narr[1]: 999\nref still: 20\ndoubled: 84\ntripled: 126\nmodified: 15\nget: 0\nafter increment: 3\n42\n99\n13\n42\n3\n"}
+{"stdout": "10\n11\n42\noriginal=42\nmodified=999\ni64: 100\ni64: 200\nf64: 3.14\nf64: 2.718\nbool: true\nbool: false\nhello\ngoodbye\n10,20\n0,0\nsome(42)\nnone\nsome(10)\nnone\nmodified: 85\ncopy: 85\noriginal: 0\nafter r1: 10\nafter r2: 20\nfinal: 45\nbefore: 1, 2\nafter: 2, 1\n10\n20\n100\n200\nbefore: 1\nafter: 100\nvalue=4\n42\n42\nlen: 3\nlen: 5\n2\n4\n6\n8\n10\nHello, World!\nabb\nsum 0..4: 10\ncount: 5\nclamped 50: 50\nclamped -10: 0\nclamped 200: 100\npos: 3\nbefore: 0, initial\nafter: 42, updated\nlen: 5\n65\n66\n67\n66\n67\n10,20\n11,22\n42\n100\nAlice, 30\nBob, 31\nbefore: 1\nafter: 100\nref element: 20\narr[1]: 999\nref still: 20\ndoubled: 84\ntripled: 126\nmodified: 15\nget: 0\nafter increment: 3\n42\n99\n13\n42\n3\n"}

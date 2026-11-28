@@ -1,10 +1,10 @@
 // A copy the clause binds shares what a `&mut` in the original points to, so
 // a `&mut self` method on the copy writes the caller's state.
-struct Holder { r: &mut i32 }
+struct Holder { r: &mut Counter }
 
 impl Holder {
     fn poke(&mut self) -> bool {
-        *self.r += 1;
+        self.r.n += 1;
         return true;
     }
 }
@@ -12,11 +12,13 @@ impl Holder {
 fn poked(h: Holder) -> i32
     contract poking: { let mut copy = h; copy.poke() }
 {
-    return *h.r;
+    return h.r.n;
 }
 
+struct Counter { n: i32 }
+
 export fn run() {
-    let mut n = 1;
+    let mut n = Counter { n: 1 };
     let _ = poked(Holder { r: &mut n });
 }
 

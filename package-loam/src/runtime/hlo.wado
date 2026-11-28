@@ -122,8 +122,9 @@ pub struct Quantized {
 }
 
 /// What runs a pass: it records the pass once per shape class and compiles
-/// it, and `compute` then runs the program it compiled.
-pub affine trait Backend: Graph with _ {
+/// it, and `compute` then runs the program it compiled. `RefMut`, so a model
+/// can lend the backend it holds.
+pub affine trait Backend: Graph + RefMut with _ {
     /// What [`Self::compiled`] makes of a recorded pass.
     type Program;
 

@@ -1,7 +1,7 @@
 // A variant element taken as a call argument or a receiver is stored back once
 // the call returns, so a callee that replaces the whole value reaches the list:
 // through an inherent method, a trait method, a newtype container's `[]`, and a
-// callee that replaces through an alias of its parameter.
+// callee that hands its parameter on.
 
 variant Payload {
     Text(String),
@@ -27,9 +27,8 @@ impl Clear for Payload {
 type Row = List<Payload>;
 
 #[inline("never")]
-fn replace_via_alias(p: &mut Payload) {
-    let q = p;
-    *q = Payload::Text(`alias`);
+fn replace_via_forward(p: &mut Payload) {
+    p.replace();
 }
 
 fn is_text(p: &Payload, text: String) -> bool {
@@ -55,8 +54,8 @@ test "a method replaces a newtype container's element" {
     assert is_text(&row[0], "xyz");
 }
 
-test "a callee replaces through an alias of its parameter" {
+test "a callee replaces through the parameter it hands on" {
     let mut xs: List<Payload> = [Payload::Empty];
-    replace_via_alias(&mut xs[0]);
-    assert is_text(&xs[0], "alias");
+    replace_via_forward(&mut xs[0]);
+    assert is_text(&xs[0], "xyz");
 }

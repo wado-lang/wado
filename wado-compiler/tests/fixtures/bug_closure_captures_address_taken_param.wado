@@ -2,9 +2,13 @@
 // locals but left the callee's address-taken annotation behind, and the frame
 // held a constant for a box a call could write through, so both reads folded
 // to the value the parameter came in with.
+
+fn set(r: &mut i32, v: i32) {
+    *r = v;
+}
+
 fn read_back(mut n: i32) -> i32 {
-    let r = &mut n;
-    *r = 5;
+    set(&mut n, 5);
     let read = || {
         return n;
     };
@@ -12,16 +16,16 @@ fn read_back(mut n: i32) -> i32 {
 }
 
 fn write_through(mut n: i32) -> i32 {
-    let r = &mut n;
     let mut bump = || {
         n = n + 1;
     };
     bump();
+    set(&mut n, n + 1);
     bump();
-    return *r;
+    return n;
 }
 
 test "a closure names an address-taken parameter" {
     assert read_back(0) == 5;
-    assert write_through(10) == 12;
+    assert write_through(10) == 13;
 }

@@ -260,20 +260,6 @@ test "an if-let binding survives a whole-value write through a &mut parameter" {
     assert replace_then_len(&mut v) == 1;
 }
 
-test "a match binding does not alias the payload of a &mut local" {
-    let mut v = V::A([1]);
-    let r = &mut v;
-    match *r {
-        V::A(xs) => {
-            if let V::A(ys) = r {
-                ys.push(9);
-            }
-            assert xs.len() == 1;
-        }
-        V::B => {}
-    }
-}
-
 // Or-pattern alternatives bind one name between them but project different
 // cases, so the binding names only the value the whole pattern matched. Reading
 // it as one alternative's payload lets a write to the other's be called

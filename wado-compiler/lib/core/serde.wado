@@ -345,8 +345,10 @@ pub trait SerializeVariant with () {
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
+/// `RefMut`, as every serde state is, so one a call is handed can be held by
+/// another: an internally tagged case's serializer holds the outer one.
 #[compiler_item("serializer")]
-pub trait Serializer with () {
+pub trait Serializer: RefMut with () {
     type SeqSerializer: SerializeSeq;
     type MapSerializer: SerializeMap;
     type StructSerializer: SerializeStruct;
@@ -519,7 +521,7 @@ pub trait DeserializeVariant with () {
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
-pub trait Visitor with () {
+pub trait Visitor: RefMut with () {
     type Value;
 
     fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>;
@@ -573,7 +575,7 @@ pub trait Visitor with () {
 }
 
 #[compiler_item("deserializer")]
-pub trait Deserializer with () {
+pub trait Deserializer: RefMut with () {
     type SeqAccess: DeserializeSeq;
     type MapAccess: DeserializeMap;
     type StructAccess: DeserializeStruct;

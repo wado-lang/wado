@@ -9,6 +9,10 @@ fn call(f: fn() -> i32) -> i32 {
     return f();
 }
 
+fn set(r: &mut i32, v: i32) {
+    *r = v;
+}
+
 export fn run() {
     let mut m = 10;
     let get_m = || m;
@@ -66,8 +70,7 @@ export fn run() {
 
     let mut referenced = 0;
     let read_referenced = || referenced;
-    let r = &mut referenced;
-    *r = 4;
+    set(&mut referenced, 4);
     assert read_referenced() == 4;
 
     // A `for` header's update acts on the next iteration's binding.

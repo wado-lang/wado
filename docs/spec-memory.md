@@ -281,8 +281,8 @@ errors. A destructuring `let` and a `let … else` bind variables with no arm to
 end, so such a binding under a `&mut` scrutinee is an error too. State that outlives a scope is a [shared cell](#shared-cells). The rule
 is by type alone: a local, a field and an element take the same `&mut`.
 
-A generic body that only uses a `p: &mut T` takes every `T`. One that stores or
-returns a `&mut T` needs `T: RefMut`. A `&mut self` method called on a reference
+A generic body that only uses a `p: &mut T` takes every `T`. One that binds,
+stores or returns a `&mut T` needs `T: RefMut`. A `&mut self` method called on a reference
 field reaches the referent, so it takes no `&mut` of the field.
 
 A scope stores back at every exit, whether or not its binding was written: its
@@ -305,13 +305,9 @@ A write the compiler cannot place warns under the lint
 [`lost_write`](./spec-diagnostics.md#the-lost_write-lint), and the read warns
 under `stale_reference`.
 
-> Not yet implemented: a `&mut` of a local of such a type is an ordinary
-> reference, which a variable holds and a function returns. A `&mut` of a
-> field, or of a `variant` element, that a variable holds or a callee keeps is
-> an error only where something replaces the value through it. A generic
-> body's pattern binding of a `&mut T` is not held for its arm, and is an error
-> only where something replaces the value through it. None of the errors in
-> the list above is reported.
+> Not yet implemented: a generic body's pattern binding of a `&mut T` is not
+> held for its arm, and is an error only where something replaces the value
+> through it. None of the errors in the list above is reported.
 
 Rationale: [WEP: Writable References](./wep-2026-11-27-writable-references.md).
 

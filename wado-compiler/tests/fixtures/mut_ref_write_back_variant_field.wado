@@ -97,18 +97,9 @@ fn reads_the_callee_before_the_place(bs: &mut List<Bag>) {
     via(&mut bs[swap_to_appends(&mut via)].item)
 }
 
-struct View {
-    slot: &mut Payload,
-}
-
 #[inline("never")]
 fn forwards_a_reference(r: &mut Payload) {
     replace(&mut *r);
-}
-
-#[inline("never")]
-fn forwards_a_reference_field(v: &mut View) {
-    replace(&mut *v.slot);
 }
 
 #[inline("never")]
@@ -240,13 +231,6 @@ test "a whole-value write through a capture lands" {
 test "`&mut *r` over a mutable reference writes back" {
     let mut p = Payload::Text(`ab`);
     forwards_a_reference(&mut p);
-    assert p matches { Text(t) && t == `xyz` };
-}
-
-test "`&mut *v.slot` through a reference field writes back" {
-    let mut p = Payload::Text(`ab`);
-    let mut v = View { slot: &mut p };
-    forwards_a_reference_field(&mut v);
     assert p matches { Text(t) && t == `xyz` };
 }
 

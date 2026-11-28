@@ -2,16 +2,6 @@
 // rebinds that binding and leaves the old referent alone. The reference was
 // represented as its referent's handle, so the write overwrote `x` instead.
 
-test "a write through `&mut &T` rebinds the reference" {
-    let x = builtin::black_box(1);
-    let y = builtin::black_box(2);
-    let mut r = &x;
-    let rr = &mut r;
-    *rr = &y;
-    assert *r == 2;
-    assert x == 1;
-}
-
 fn retarget(rr: &mut &i32, to: &i32) {
     *rr = to;
 }
@@ -25,23 +15,29 @@ test "a call rebinds the reference it is handed" {
     assert x == 1;
 }
 
-test "a closure reads a reference rebound after it was built" {
-    let mut a = builtin::black_box(1);
-    let mut b = builtin::black_box(2);
-    let mut r = &mut a;
-    let read = || *r;
-    r = &mut b;
-    assert read() == 2;
-    assert a == 1;
+struct P {
+    v: i32,
+}
+
+fn retarget_struct(rr: &mut &P, to: &P) {
+    *rr = to;
 }
 
 test "a struct reference rebinds through `&mut &T`" {
-    struct P { v: i32 }
     let p = P { v: 1 };
     let q = P { v: 2 };
     let mut r = &p;
-    let rr = &mut r;
-    *rr = &q;
+    retarget_struct(&mut r, &q);
     assert r.v == 2;
     assert p.v == 1;
+}
+
+test "a closure reads a reference rebound after it was built" {
+    let mut a = P { v: builtin::black_box(1) };
+    let mut b = P { v: builtin::black_box(2) };
+    let mut r = &mut a;
+    let read = || r.v;
+    r = &mut b;
+    assert read() == 2;
+    assert a.v == 1;
 }

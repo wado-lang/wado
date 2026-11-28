@@ -1,0 +1,42 @@
+// A loop over `&mut it` keeps the reference across its turns, so the iterator
+// must be `RefMut`. `IntoIterator` dispatches through the `&mut` to the
+// iterator itself, and the loop advanced a copy, leaving the caller's iterator
+// where it was.
+
+variant Once {
+    Ready(i32),
+    Done,
+}
+
+impl Iterator for Once {
+    type Item = i32;
+    fn next(&mut self) -> Option<i32> {
+        if let Ready(n) = *self {
+            *self = Once::Done;
+            return Option::Some(n);
+        }
+        return null;
+    }
+}
+
+fn first<I: Iterator<Item = i32>>(it: &mut I) -> i32 with _ {
+    for let x of it {
+        return x;
+    }
+    return -1;
+}
+
+test "unreachable" {
+    let mut r = 0..<5;
+    assert first(&mut r) == 0;
+    let mut o = Once::Ready(3);
+    for let x of &mut o {
+        assert x == 3;
+    }
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": ":23:5: analysis error: a loop over an iterator cannot hold a `&mut I`: a `&mut` of a type that is not `RefMut` lasts only for a call, a pattern's arm or a loop's turn; bound `I: RefMut`, or hold a `Shared<I>` instead; 33:5: a loop over an iterator cannot hold a `&mut Once`: a `&mut` of a type that is not `RefMut` lasts only for a call, a pattern's arm or a loop's turn; hold a `Shared<Once>` instead"
+}

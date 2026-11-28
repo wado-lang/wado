@@ -52,13 +52,16 @@ test "unit" {
     assert `${u:?}` == "()";
 }
 
+fn inspected(mr: &mut i32) -> String {
+    return `${mr:?}`;
+}
+
 test "ref" {
     let x = 42;
     let r = &x;
     assert `${r:?}` == "&42";
     let mut y = 100;
-    let mr = &mut y;
-    assert `${mr:?}` == "&mut 100";
+    assert inspected(&mut y) == "&mut 100";
     let s = "hello";
     let rs = &s;
     assert `${rs:?}` == "&\"hello\"";

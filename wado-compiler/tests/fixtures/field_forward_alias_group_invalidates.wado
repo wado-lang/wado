@@ -1,28 +1,23 @@
 // Regression test: a chain of `let r = source` Local→Local copies of
-// a reference-typed local (e.g. a cell, `&mut T`) forms an alias
-// group. Writing through any member must invalidate the same field
-// across every alias.
-//
-// Pattern:
-//
-//   let mut x = 0;       // boxed → x: &mut i32, a cell
-//   let r1 = &mut x;     // r1, x in same alias group
-//   let r2 = r1;         // r2 joins the group
-//   *r2 = 7;             // observable as `*r1 == 7` and `x == 7`
-//   assert *r1 == 7;     // must NOT fold to 0
+// a reference-typed local forms an alias group. Writing through any
+// member must invalidate the same field across every alias.
 //
 // If field_forward's alias-group widening misses this, the read of
-// `*r1` (i.e. `r1.value`) folds to 0 (the value at `&mut x`'s
-// inception), and the assert panics. The box escapes at the end, so `sroa`
-// keeps it whole and the forwarding sees the writes through its aliases.
+// `r1.value` folds to 0 (the value at `&mut x`'s inception), and the
+// assert panics. The object escapes at the end, so `sroa` keeps it whole
+// and the forwarding sees the writes through its aliases.
+
+struct Count {
+    value: i32,
+}
 
 export fn run() {
-    let mut x = 0;
+    let mut x = Count { value: 0 };
     let r1 = &mut x;
     let r2 = r1;
-    *r2 = 7;
-    assert *r1 == 7;
-    assert x == 7;
+    r2.value = 7;
+    assert r1.value == 7;
+    assert x.value == 7;
     builtin::black_box(r2);
 }
 

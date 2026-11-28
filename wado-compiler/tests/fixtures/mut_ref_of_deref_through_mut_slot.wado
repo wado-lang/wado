@@ -5,9 +5,12 @@ struct S {
     v: i32,
 }
 
-fn swap_in(slot: &mut &S, other: &S) {
-    let r = &mut *slot;
+fn assign(r: &mut &S, other: &S) {
     *r = other;
+}
+
+fn swap_in(slot: &mut &S, other: &S) {
+    assign(&mut *slot, other);
 }
 
 test {

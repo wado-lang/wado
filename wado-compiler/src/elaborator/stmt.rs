@@ -2752,20 +2752,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
+            let implements =|this: &Self, ty: TypeId, item: CompilerItem| {
+                this.tysys.compiler_trait(item).is_some_and(|trait_| {
+                    this.tysys
+                        .type_implements_trait(&this.annotate_ctx, ty, &trait_)
+                })
+            };
+            // A loop over `&mut I` keeps the reference across its turns, and
+            // `&mut I` is an iterator only where `I: RefMut`. `IntoIterator`
+            // dispatches through the `&mut` to `I`, so the loop would advance
+            // a copy.
+            if matches!(
+                self.tysys.type_table.borrow().get(iterable_type_id),
+                ResolvedType::MutRef(_)
+            ) && implements(self, inner_type_id, CompilerItem::Iterator)
+                && !implements(self, iterable_type_id, CompilerItem::Iterator)
+                && !implements(self, iterable_type_id, CompilerItem::ForOf)
+            {
+                self.refuse_held_mut_ref(
+                    iterable_type_id,
+                    Holder::Held("a loop over an iterator"),
+                    for_of.span,
+                );
+            }
             // An affine operand walks `ForOf`, which `IntoIterator`'s
             // unmarked impls do not reach (WEP: Affine Types).
-            let walkable = [CompilerItem::IntoIterator, CompilerItem::ForOf];
-            let implements_into_iter = walkable.into_iter().any(|item| {
-                self.tysys.compiler_trait(item).is_some_and(|trait_| {
-                    self.tysys
-                        .type_implements_trait(&self.annotate_ctx, iterable_type_id, &trait_)
-                        || self.tysys.type_implements_trait(
-                            &self.annotate_ctx,
-                            inner_type_id,
-                            &trait_,
-                        )
-                })
-            }) || matches!(
+            let walks = |ty: TypeId| {
+                implements(self, ty, CompilerItem::IntoIterator)
+                    || implements(self, ty, CompilerItem::ForOf)
+            };
+            let implements_into_iter = walks(iterable_type_id)
+                || walks(inner_type_id)
+                || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
                 ResolvedType::Unknown | ResolvedType::TypeParam { .. }
             );

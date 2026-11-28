@@ -71,8 +71,7 @@ test "match over a reference" {
 
 test "a &mut scrutinee writes through in if let" {
     let mut opt = Option::<Hits>::Some(Hits { hits: [1] });
-    let rmo = &mut opt;
-    if let Some(c) = rmo {
+    if let Some(c) = &mut opt {
         c.hits.push(2);
     }
     if let Some(c) = &opt {
@@ -82,8 +81,7 @@ test "a &mut scrutinee writes through in if let" {
 
 test "a &mut scrutinee writes through in match" {
     let mut opt = Option::<Hits>::Some(Hits { hits: [10] });
-    let rmo = &mut opt;
-    let val = match rmo {
+    let val = match &mut opt {
         Some(c) => {
             c.hits.push(20);
             c.hits.len()

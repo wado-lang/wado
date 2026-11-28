@@ -34,9 +34,12 @@ test "a nested payload is mutated through a payload binding" {
 
 test "a payload is mutated through a destructured field" {
     let mut holder = Holder { shape: Shape::Circle(Point { x: 1 }), count: 0 };
-    let { shape, .. } = &mut holder;
-    if let Circle(point) = shape {
-        point.x = 7;
+    match &mut holder {
+        { shape, .. } => {
+            if let Circle(point) = shape {
+                point.x = 7;
+            }
+        },
     }
     assert holder.shape matches { Circle(point) && point.x == 7 };
 }

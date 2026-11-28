@@ -2,18 +2,22 @@
 // writes what the struct reads. Folding the read from the literal the struct
 // was built with lost the write.
 
-struct Slot {
-    held: &mut Option<i32>,
+struct Cell {
+    value: Option<i32>,
 }
 
-fn fresh() -> &mut Option<i32> {
-    let mut held: Option<i32> = null;
+struct Slot {
+    held: &mut Cell,
+}
+
+fn fresh() -> &mut Cell {
+    let mut held = Cell { value: null };
     return &mut held;
 }
 
 impl Slot {
     fn get(&self) -> i32 {
-        let Some(value) = *self.held else {
+        let Some(value) = self.held.value else {
             return -1;
         };
         return value;
@@ -21,12 +25,12 @@ impl Slot {
 
     fn setter(&self, v: i32) -> fn() {
         let target = *self;
-        return || { *target.held = Option::Some(v); };
+        return || { target.held.value = Option::Some(v); };
     }
 }
 
 fn store(target: Slot, v: i32) {
-    *target.held = Option::Some(v);
+    target.held.value = Option::Some(v);
 }
 
 test "a write through a closure holding a copy is read back" {
@@ -45,6 +49,6 @@ test "a write through a copy passed by value is read back" {
 test "a write through a tuple holding the reference is read back" {
     let pair = [fresh(), 1];
     let copy = pair;
-    *copy.0 = Option::Some(5);
-    assert (*pair.0).unwrap() == 5;
+    copy.0.value = Option::Some(5);
+    assert pair.0.value.unwrap() == 5;
 }

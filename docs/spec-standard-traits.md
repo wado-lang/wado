@@ -68,14 +68,15 @@ test "a loop over `&mut it` advances it" {
 ```
 
 So a function handed a `&mut I` advances its caller's iterator, by a loop or
-by an adapter, and a function taking any `I: Iterator` accepts `&mut it`.
-There is no `it.by_ref()`: it would return a `&mut Self`, which only a
-[`RefMut`](#dispatch) `Self` may.
+by an adapter, and a function taking any `I: Iterator` accepts `&mut it`. An
+adapter holds the `&mut`, so `&mut I` is an iterator only where `I` is
+[`RefMut`](#dispatch), as every `struct` is. For the same reason there is no
+`it.by_ref()`: it would return a `&mut Self`.
 
 <!-- {"fixture":"iterator_through_mut_reference.wado"} -->
 
 ```wado
-fn first_two<I: Iterator<Item = i32>>(it: &mut I) -> List<i32> with _ {
+fn first_two<I: Iterator<Item = i32> + RefMut>(it: &mut I) -> List<i32> with _ {
     return it.take(2).collect();
 }
 

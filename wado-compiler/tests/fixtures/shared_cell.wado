@@ -179,7 +179,7 @@ test "a qualified call takes a cell as the receiver it holds" {
 }
 
 struct Slot {
-    r: &mut i32,
+    r: &mut Point,
 }
 
 struct Holder {
@@ -187,14 +187,14 @@ struct Holder {
 }
 
 fn poke(h: &Holder) {
-    *h.c.r = 7;
+    h.c.r.x = 7;
 }
 
 test "a &mut a cell holds is written under a &" {
-    let mut n = 0;
-    let h = Holder { c: Shared::new(Slot { r: &mut n }) };
+    let mut p = Point { x: 0, y: 0 };
+    let h = Holder { c: Shared::new(Slot { r: &mut p }) };
     poke(&h);
-    assert n == 7;
+    assert p.x == 7;
 }
 
 type Tally = Shared<i32>;

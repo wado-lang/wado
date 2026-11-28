@@ -7,7 +7,7 @@ fn bumped<I: Iterator<Item = i32>>(it: I) -> List<i32> with _ {
     return it.take(2).map(|x| x + 1).collect();
 }
 
-fn bumped_through<I: Iterator<Item = i32>>(it: &mut I) -> List<i32> with _ {
+fn bumped_through<I: Iterator<Item = i32> + RefMut>(it: &mut I) -> List<i32> with _ {
     return it.map(|x| x + 1).take(2).collect();
 }
 

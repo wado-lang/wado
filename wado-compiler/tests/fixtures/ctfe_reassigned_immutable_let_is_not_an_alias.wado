@@ -7,19 +7,23 @@
 
 use { println, Stdout } from "core:cli";
 
+struct Count {
+    n: i32,
+}
+
 struct Holder {
-    f: &mut &mut i32,
+    f: &mut &mut Count,
 }
 
 fn make() -> i32 {
-    let mut x = 41;
-    let mut y = 7;
+    let mut x = Count { n: 41 };
+    let mut y = Count { n: 7 };
     let mut rx = &mut x;
     let h = Holder { f: &mut rx };
     let r = *h.f;
     *h.f = &mut y;
-    *r += 1;
-    return x * 100 + y;
+    r.n += 1;
+    return x.n * 100 + y.n;
 }
 
 global FOLDED: i32 = make();

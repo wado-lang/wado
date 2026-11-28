@@ -7,11 +7,14 @@ fn bump(x: &mut i32) {
     *x += 1;
 }
 
+fn bump_twice(rc: &mut i32) {
+    bump(&mut *rc);
+    bump(&mut *rc);
+}
+
 export fn run() with Stdout {
     let mut c = 0;
-    let rc = &mut c;
-    bump(&mut *rc);
-    bump(&mut *rc);
+    bump_twice(&mut c);
     println(`c=${c}`);
 }
 

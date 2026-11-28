@@ -26,14 +26,13 @@ impl Counter {
 }
 
 struct Tally {
-    n: &mut i32,
+    c: &mut Counter,
 }
 
 impl Tally {
     fn bump(&self) -> i32 {
         let t = *self;
-        *t.n += 1;
-        return *t.n;
+        return t.c.bump();
     }
 }
 
@@ -90,8 +89,8 @@ export fn run() with Stdout {
     let r = &mut c;
     assert advance(r) != advance(r);     // no warning: `r` is a `&mut` argument
     assert r.peek() == r.peek();         // warns: a `&self` method writes nothing
-    let mut k = 0;
-    let t = Tally { n: &mut k };
+    let mut k = Counter { n: 0 };
+    let t = Tally { c: &mut k };
     assert t.bump() != t.bump();         // no warning: `t` holds a `&mut`
     let ts: List<Tally> = [t];
     assert bump_first(&ts) != bump_first(&ts); // no warning: an element holds one

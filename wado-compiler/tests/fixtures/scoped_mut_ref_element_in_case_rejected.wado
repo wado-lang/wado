@@ -1,5 +1,5 @@
-// A case holds its payload past the expression that builds it, so it is no
-// call to store an element back after.
+// A case holds its payload past the expression that builds it, so a returned
+// case cannot hold a scoped `&mut`.
 
 fn held(xs: &mut List<i32>) -> Option<&mut i32> {
     return Some(&mut xs[0]);
@@ -13,5 +13,5 @@ test "unreachable" {
 __DATA__
 {
     "test": {},
-    "compile_error": ":5:22: analysis error: a `&mut` to an element the container hands out as a copy lasts for one call"
+    "compile_error": "a returned value cannot hold a `&mut i32`"
 }

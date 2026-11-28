@@ -1,12 +1,10 @@
 // A `&mut` to a variant field or element is a fresh box, not the place's
-// storage, so no storage outliving the expression that took it may hold one.
-// Using it where it is taken stays legal — ref_field_ref_variant and
+// storage, so no storage outliving the scope that took it may hold one. Using
+// it where it is taken stays legal — ref_field_ref_variant and
 // value_copy_variant_in_aggregate guard that side.
 //
-// The refusal runs after monomorphization, so it only sees reachable code: each
-// shape below is called from the test. Only the first refusal is reported, so
-// this fixture pins the message; the sinks that carry their own wording get
-// their own fixture.
+// Each shape below holds one, by a variable, a field, a payload or a returned
+// value; the report names the field first.
 
 variant Payload {
     Text(String),
@@ -124,5 +122,5 @@ test "unreachable" {
 __DATA__
 {
     "test": {},
-    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+    "compile_error": "a struct field cannot hold a `&mut Payload`"
 }

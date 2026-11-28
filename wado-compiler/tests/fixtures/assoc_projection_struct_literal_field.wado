@@ -12,11 +12,11 @@ struct Wrap<A> {
     inner: A,
 }
 
-struct Holder<S: Src> {
+struct Holder<S: Src + RefMut> {
     src: &mut S,
 }
 
-impl<S: Src> Holder<S> {
+impl<S: Src + RefMut> Holder<S> {
     fn wrap(&mut self) -> Wrap<S::Item> {
         return Wrap { inner: self.src.get() };
     }

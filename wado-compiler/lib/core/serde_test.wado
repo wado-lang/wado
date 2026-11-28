@@ -698,16 +698,8 @@ struct FlakySeq<A: DeserializeSeq> {
     inner: A,
 }
 
-struct FlakySeqRef<A: DeserializeSeq> {
-    inner: &mut A,
-}
-
 struct FlakyMap<A: DeserializeMap> {
     inner: A,
-}
-
-struct FlakyMapRef<A: DeserializeMap> {
-    inner: &mut A,
 }
 
 struct FlakyStruct<A: DeserializeStruct> {
@@ -736,38 +728,7 @@ impl<A: DeserializeSeq> DeserializeSeq for FlakySeq<A> {
 }
 
 #[coverage(off)]
-impl<A: DeserializeSeq> DeserializeSeq for FlakySeqRef<A> {
-    fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
-        gate()?;
-        return self.inner.next_element();
-    }
-
-    fn end(&mut self) -> Result<(), DeserializeError> {
-        gate()?;
-        return self.inner.end();
-    }
-}
-
-#[coverage(off)]
 impl<A: DeserializeMap> DeserializeMap for FlakyMap<A> {
-    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
-        gate()?;
-        return self.inner.next_key();
-    }
-
-    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
-        gate()?;
-        return self.inner.next_value();
-    }
-
-    fn end(&mut self) -> Result<(), DeserializeError> {
-        gate()?;
-        return self.inner.end();
-    }
-}
-
-#[coverage(off)]
-impl<A: DeserializeMap> DeserializeMap for FlakyMapRef<A> {
     fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
         gate()?;
         return self.inner.next_key();
@@ -859,12 +820,20 @@ impl<V: Visitor> Visitor for FlakyVisitor<V> {
         return self.inner.visit_string(v);
     }
 
+    // A wrapper cannot hold the `&mut A` past the call, so it holds `A` and
+    // stores it back.
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<V::Value, DeserializeError> {
-        return self.inner.visit_seq(&mut FlakySeqRef { inner: seq });
+        let mut flaky = FlakySeq { inner: *seq };
+        let visited = self.inner.visit_seq(&mut flaky);
+        *seq = flaky.inner;
+        return visited;
     }
 
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<V::Value, DeserializeError> {
-        return self.inner.visit_map(&mut FlakyMapRef { inner: map });
+        let mut flaky = FlakyMap { inner: *map };
+        let visited = self.inner.visit_map(&mut flaky);
+        *map = flaky.inner;
+        return visited;
     }
 }
 

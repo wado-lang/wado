@@ -5,10 +5,13 @@ fn or_zero(o: &&mut Option<i32>) -> i32 {
     return o.unwrap_or(0);
 }
 
+fn check(m: &mut Option<i32>) {
+    assert or_zero(&m) == 1;
+}
+
 export fn run() {
     let mut o = Option::Some(1);
-    let m = &mut o;
-    assert or_zero(&m) == 1;
+    check(&mut o);
 }
 
 __DATA__

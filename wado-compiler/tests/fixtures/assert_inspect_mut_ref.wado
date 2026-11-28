@@ -1,10 +1,13 @@
 // Test: Assert inspect output for mutable reference intermediates
 // &mut T should show "&mut value" in assert failure messages
 
+fn check(mr: &mut i32) {
+    assert *mr == 99;
+}
+
 export fn run() {
     let mut y = 100;
-    let mr = &mut y;
-    assert *mr == 99;
+    check(&mut y);
 }
 
 __DATA__

@@ -1,4 +1,4 @@
-// A sink is asked before the walk reaches a `match` inside the value it holds.
+// A `&mut` a pattern binds lasts for its arm, so a function cannot return one.
 
 variant Shape {
     Circle(i32),
@@ -21,5 +21,5 @@ test "a write through a binding a match returns" {
 __DATA__
 {
     "test": {},
-    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+    "compile_error": "a returned value cannot hold a `&mut Shape`"
 }

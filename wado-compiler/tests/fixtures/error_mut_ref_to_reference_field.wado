@@ -1,6 +1,6 @@
 // A reference is replaced on assign, as a primitive is, so a `&mut` to a field
-// holding one is a copy the variable holds past any point a store could go
-// back: the write `*p = &b` replaces through it, and would be lost.
+// holding one is a copy, and a variable holding it would lose the write
+// `*p = &b`.
 
 struct H {
     r: &i32,
@@ -16,4 +16,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": ":13:18: analysis error: a mutable reference to a field or element of a replace-on-assign type is a detached copy, so a whole-value write through it would be lost: a variable holds it past the reference"}
+{"compile_error": "a variable cannot hold a `&mut &i32`"}
