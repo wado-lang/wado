@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 
 use glob::Pattern;
 use lexopt::Arg::Value;
-use toml_edit::{Array, DocumentMut, Value as TomlValue};
+use serde::Deserialize;
+use toml::Spanned;
 
 use wado_lsp::host::discovery::{Disk, nearest_workspace};
 use wado_manifest::workspace::workspace_governs;
@@ -18,7 +19,7 @@ use wado_manifest::{
 };
 
 use crate::args::{self, CliExit};
-use crate::init::{self, Scaffold, write_scaffold};
+use crate::init::{self, Scaffold, toml_string, write_scaffold};
 
 #[derive(Debug)]
 pub enum WorkspaceCommand {
@@ -217,7 +218,7 @@ fn init_workspace(dir: &Path, opts: &WorkspaceInitOptions) -> Result<(), CliExit
         writeln!(
             text,
             "\n[workspace.package]\nnamespace = {}",
-            init::toml_string(namespace)
+            toml_string(namespace)
         )
         .unwrap();
     }
@@ -260,44 +261,36 @@ pub(crate) fn member_entry(root: &Path, member_dir: &Path) -> String {
     parts.join("/")
 }
 
-/// `text` with `member` inserted into `[workspace].members` before the first
-/// entry that sorts after it, so a sorted list stays sorted. A multi-line
-/// array keeps its layout; a one-line array is laid out afresh.
-fn insert_member(text: &str, member: &str) -> Result<String, CliExit> {
-    let invalid = |reason: &str| CliExit::error(format!("{WORKSPACE_FILENAME}: {reason}"));
-    let mut doc = text
-        .parse::<DocumentMut>()
-        .map_err(|e| invalid(&e.to_string()))?;
-    let members: &mut Array = doc
-        .get_mut("workspace")
-        .and_then(|workspace| workspace.get_mut("members"))
-        .and_then(|members| members.as_array_mut())
-        .ok_or_else(|| invalid("`[workspace].members` must be an array"))?;
+#[derive(Deserialize)]
+struct MembersDoc {
+    workspace: MembersTable,
+}
 
+#[derive(Deserialize)]
+struct MembersTable {
+    members: Spanned<Vec<String>>,
+}
+
+/// `text` with `member` inserted into `[workspace].members` before the first
+/// entry that sorts after it, so a sorted list stays sorted. The array is
+/// written afresh on one line; the rest of the file stays as written.
+fn insert_member(text: &str, member: &str) -> Result<String, CliExit> {
+    let doc: MembersDoc =
+        toml::from_str(text).map_err(|e| CliExit::error(format!("{WORKSPACE_FILENAME}: {e}")))?;
+    let span = doc.workspace.members.span();
+    let mut members = doc.workspace.members.into_inner();
     let at = members
         .iter()
-        .position(|entry| entry.as_str().is_some_and(|entry| entry > member))
+        .position(|entry| entry.as_str() > member)
         .unwrap_or(members.len());
-    let multi_line = members.iter().any(|entry| {
-        entry
-            .decor()
-            .prefix()
-            .and_then(|prefix| prefix.as_str())
-            .is_some_and(|prefix| prefix.contains('\n'))
-    });
-    let mut value = TomlValue::from(member);
-    if multi_line {
-        let model = members
-            .get(at)
-            .or_else(|| members.iter().last())
-            .expect("a multi-line array has an entry");
-        *value.decor_mut() = model.decor().clone();
-        members.insert_formatted(at, value);
-    } else {
-        members.insert_formatted(at, value);
-        members.fmt();
-    }
-    Ok(doc.to_string())
+    members.insert(at, member.to_owned());
+
+    let entries: Vec<String> = members.iter().map(|entry| toml_string(entry)).collect();
+    let mut out = String::with_capacity(text.len() + member.len() + 4);
+    out.push_str(&text[..span.start]);
+    write!(out, "[{}]", entries.join(", ")).unwrap();
+    out.push_str(&text[span.end..]);
+    Ok(out)
 }
 
 fn add(dir: &Path) -> Result<(), CliExit> {
@@ -351,15 +344,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn insert_keeps_a_multi_line_layout() {
-        let text = "[workspace]\nmembers = [\n    \"a\",\n    \"c\",\n]\n";
+    fn insert_rewrites_only_the_members_array() {
+        let text = "# tools\n[workspace]\nmembers = [\n    \"a\", # first\n    \"c\",\n]\n\n[registries]\ndefault = \"oci://x\"\n";
         assert_eq!(
             insert_member(text, "b").unwrap(),
-            "[workspace]\nmembers = [\n    \"a\",\n    \"b\",\n    \"c\",\n]\n"
-        );
-        assert_eq!(
-            insert_member(text, "d").unwrap(),
-            "[workspace]\nmembers = [\n    \"a\",\n    \"c\",\n    \"d\",\n]\n"
+            "# tools\n[workspace]\nmembers = [\"a\", \"b\", \"c\"]\n\n[registries]\ndefault = \"oci://x\"\n"
         );
     }
 
