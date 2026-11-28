@@ -1,0 +1,377 @@
+use { read_rust, read_wado, find_similar, Group, Site, Tree, Measure } from "../src/lib.wado";
+
+fn tree(path: String, source: String) -> Tree {
+    return read_rust(path, source).unwrap();
+}
+
+global COPY_A: String = "fn total(items: &[Item]) -> i64 {
+    let mut sum = 0;
+    for item in items {
+        if item.active && item.weight > 3 {
+            sum += item.weight * item.count;
+        }
+        if item.flagged {
+            sum -= item.penalty;
+        }
+    }
+    sum
+}";
+
+global COPY_B: String = "fn weighed(rows: &[Item]) -> i64 {
+    let mut acc = 0;
+    for row in rows {
+        if row.active && row.weight > 7 {
+            acc += row.weight * row.count;
+        }
+        if row.flagged {
+            acc -= row.penalty;
+        }
+    }
+    acc
+}";
+
+global OTHER: String = "fn first(rows: &[Row]) -> Option<&Row> {
+    let found = rows.iter().find(|r| r.enabled);
+    match found {
+        Some(r) => Some(r),
+        None => None,
+    }
+}";
+
+test "two functions equal up to names and constants are one group" {
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("b.rs", COPY_B),
+        tree("c.rs", OTHER),
+    ];
+    let groups = find_similar(&trees, 20, 1.0);
+    assert groups.len() == 1;
+    assert groups[0].similarity == 1.0;
+    assert groups[0].sites.len() == 2;
+    assert groups[0].sites[0].tree == 0;
+    assert groups[0].sites[1].tree == 1;
+}
+
+test "a group is reported at the largest node that is alike" {
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("b.rs", COPY_B),
+    ];
+    let groups = find_similar(&trees, 10, 0.9);
+    assert groups.len() == 1;
+    for let site of &groups[0].sites {
+        assert site.start(&trees) == 0;
+        assert site.end(&trees) == trees[site.tree].source.len();
+    }
+}
+
+test "a changed operator lowers the similarity below one" {
+    let changed = COPY_B.replace("row.weight * row.count", "row.weight + row.count");
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("b.rs", changed),
+    ];
+    assert find_similar(&trees, 40, 1.0).is_empty();
+    let groups = find_similar(&trees, 40, 0.6);
+    assert groups.len() == 1;
+    assert groups[0].similarity < 1.0;
+}
+
+test "a group's inner nodes join no other group together" {
+    let loop_only = "fn other(xs: &[X], log: &mut Log) -> Report {
+    log.start(\"other\", 1, 2, 3);
+    let mut acc = 0;
+    for x in xs {
+        if x.active && x.weight > 1 {
+            acc += x.weight * x.count;
+        }
+        if x.flagged {
+            acc -= x.penalty;
+        }
+    }
+    log.finish(acc, \"done\");
+    Report::new(acc, log.lines(), 0, 1)
+}";
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("b.rs", COPY_B),
+        tree("c.rs", loop_only),
+    ];
+    let groups = find_similar(&trees, 20, 0.8);
+    let mut joining_a_and_b = 0;
+    for let g of &groups {
+        let in_a = g.sites.iter_ref().any(|s| s.tree == 0);
+        let in_b = g.sites.iter_ref().any(|s| s.tree == 1);
+        if in_a && in_b {
+            joining_a_and_b += 1;
+        }
+    }
+    assert joining_a_and_b == 1;
+    assert groups.iter_ref().any(|g| g.sites.iter_ref().any(|s| s.tree == 2));
+}
+
+test "a group holds no two members too different in size to pair" {
+    // Repeating a statement its block already repeats adds no run, so the
+    // three functions are all alike, and only their sizes tell them apart.
+    let with_drops = |name: String, drops: i32| {
+        let mut body = "";
+        for let _ of 0..<drops {
+            body.push_str("        acc -= row.penalty;\n");
+        }
+        return `fn ${name}(rows: &[Item]) -> i64 {
+    let mut acc = 0;
+    for row in rows {
+        if row.active && row.weight > 7 {
+            acc += row.weight * row.count;
+        }
+${body}    }
+    acc
+}`;
+    };
+    let trees: List<Tree> = [
+        tree("a.rs", with_drops("a", 2)),
+        tree("b.rs", with_drops("b", 4)),
+        tree("c.rs", with_drops("c", 6)),
+    ];
+    let groups = find_similar(&trees, 20, 0.8);
+    let whole = |s: &Site| s.start(&trees) == 0;
+    for let g of &groups {
+        let in_a = g.sites.iter_ref().any(|s| s.tree == 0 && whole(s));
+        let in_c = g.sites.iter_ref().any(|s| s.tree == 2 && whole(s));
+        assert !(in_a && in_c);
+    }
+    assert groups.iter_ref().any(|g| g.sites.iter_ref().any(|s| s.tree == 1 && whole(s)));
+}
+
+test "a copy shared by two larger copies is reported" {
+    let shared = "    for item in items {
+        if item.active && item.weight > 3 {
+            sum += item.weight * item.count;
+        }
+        if item.flagged {
+            sum -= item.penalty;
+        }
+    }
+";
+    let with_head = `fn f(items: &[Item], log: &mut Log) -> i64 {
+    let mut sum = log.start(\"f\", 1, 2, 3);
+    log.note(sum, \"begin\", items.len());
+${shared}    sum
+}`;
+    let with_tail = `fn g(items: &[Item]) -> Report {
+    let mut sum = 0;
+${shared}    let r = Report::new(sum, items.first(), 0, 1);
+    r.finish(\"done\", true)
+}`;
+    let trees: List<Tree> = [
+        tree("a.rs", with_head),
+        tree("b.rs", with_head),
+        tree("c.rs", with_tail),
+        tree("d.rs", with_tail),
+    ];
+    let groups = find_similar(&trees, 20, 0.9);
+    let in_tree = |g: &Group, t: i32| g.sites.iter_ref().any(|s| s.tree == t);
+    assert groups.iter_ref().any(|g| (in_tree(g, 0) || in_tree(g, 1)) && (in_tree(g, 2) || in_tree(g, 3)));
+}
+
+test "a node repeating one small shape is not compared" {
+    let a = "fn f(t: &T) { match t { A::B { .. } | A::C(_) | A::D | A::E { .. } | A::F(_) | A::G | A::H { .. } | A::I(_) | A::J => {} } }";
+    let b = "fn g(u: &U) { match u { X::Y(_) | X::Z { .. } | X::W | X::V(_) | X::Q { .. } | X::R | X::S(_) | X::P { .. } | X::O => 1 } }";
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    assert find_similar(&trees, 30, 0.5).is_empty();
+}
+
+test "a run of statements in a longer block is compared" {
+    let a = "fn f(p: &P, c: &C) -> G {
+    let n = p.width() * 2;
+    log(n);
+    let mut gen = TypeGen::with_hint(&p.path);
+    register_outer_codes(&mut gen, p, c);
+    gen.finish(n)
+}";
+    let b = "fn g(q: &P, d: &C, e: &E) -> G {
+    if e.ready { return G::empty(); }
+    let mut tg = TypeGen::with_hint(&q.path);
+    register_outer_codes(&mut tg, q, d);
+    tg.finish(e.size)
+}";
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    let groups = find_similar(&trees, 20, 0.6);
+    assert groups.len() >= 1;
+    let site = groups[0].sites[0];
+    assert trees[0].line_of(site.start(&trees)) >= 4;
+}
+
+test "a run may start at a statement long enough alone" {
+    let shared = "    let total = rows.iter().map(|r| r.weight * r.count + r.bonus - r.penalty + r.extra * 2).sum::<i64>();
+    report(total, \"sum\", rows.len());
+";
+    let a = `fn f(rows: &[Row]) {
+    let a = 1;
+    prepare(a);
+${shared}}`;
+    let b = `fn g(rows: &[Row], z: &mut Z) {
+    z.reset(0, 1);
+    if z.done { return; }
+${shared}    z.close();
+}`;
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    let reaches_report = |s: &Site| trees[s.tree].line_of(s.end(&trees)) == 5;
+    let groups = find_similar(&trees, 40, 0.9);
+    assert groups.iter_ref().any(|g| g.sites.len() == 2 && g.sites.iter_ref().all(reaches_report));
+}
+
+test "names that resolve elsewhere keep their spelling" {
+    let a = "fn f(xs: &[X]) -> i64 { let mut s = 0; for x in xs { s += x.weight.total() * compute_rank(x.id); } s }";
+    let b = "fn g(ys: &[Y]) -> i64 { let mut t = 0; for y in ys { t += y.height.mean() * derive_order(y.key); } t }";
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    assert find_similar(&trees, 20, 0.9).is_empty();
+}
+
+test "one logic in two syntaxes is alike by the names it calls" {
+    let a = "fn f(xs: &[Entry], table: &mut Table) {
+    for x in xs {
+        if x.is_visible() && x.has_owner() {
+            table.insert_row(x.key_name(), x.render_cell(), Style::plain());
+        }
+    }
+}";
+    let b = "fn g(ys: &[Entry], t: &mut Table) {
+    ys.iter().filter(|y| y.is_visible() && y.has_owner()).for_each(|y| t.insert_row(y.key_name(), y.render_cell(), Style::plain()));
+}";
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    let groups = find_similar(&trees, 20, 0.65, Measure::ShapeOrNames);
+    assert groups.len() == 1;
+    assert groups[0].sites.iter_ref().all(|s| s.start(&trees) == 0);
+    assert find_similar(&trees, 20, 0.65).iter_ref().all(|g| g.sites[0].start(&trees) > 0);
+}
+
+test "one name called many times is too few names to compare by" {
+    let a = "fn f(a: i64, b: i64) {
+    log(a + b);
+    log(a * b);
+    log(a - b);
+    log(a / b);
+    log(a % b);
+}";
+    let b = "fn g(c: i64, d: i64) {
+    log(c + d);
+    log(c * d);
+    log(c - d);
+    if c > d { log(c); } else { log(d); }
+}";
+    let trees: List<Tree> = [
+        tree("a.rs", a),
+        tree("b.rs", b),
+    ];
+    let by_shape = find_similar(&trees, 20, 0.6);
+    let by_names = find_similar(&trees, 20, 0.6, Measure::ShapeOrNames);
+    assert by_names.len() == by_shape.len();
+    for let mut i = 0; i < by_shape.len(); i += 1 {
+        assert by_names[i].similarity == by_shape[i].similarity;
+        assert by_names[i].sites[0].row == by_shape[i].sites[0].row;
+    }
+}
+
+test "wado code is compared, its test blocks left out" {
+    let a = "fn total(items: &List<Item>) -> i64 {
+    let mut sum = 0;
+    for let item of items {
+        if item.active && item.weight > 3 {
+            sum += item.weight * item.count;
+        }
+    }
+    return sum;
+}";
+    let b = "fn weighed(rows: &List<Item>) -> i64 {
+    let mut acc = 0;
+    for let row of rows {
+        if row.active && row.weight > 7 {
+            acc += row.weight * row.count;
+        }
+    }
+    return acc;
+}";
+    let trees: List<Tree> = [
+        read_wado("a.wado", a).unwrap(),
+        read_wado("b.wado", b).unwrap(),
+        read_wado("c.wado", "test {
+    let mut acc = 0;
+    for let row of rows {
+        if row.active && row.weight > 7 {
+            acc += row.weight * row.count;
+        }
+    }
+    assert acc == 0;
+}").unwrap(),
+    ];
+    let groups = find_similar(&trees, 20, 1.0);
+    assert groups.len() == 1;
+    assert groups[0].sites.iter_ref().all(|s| s.tree < 2);
+    let without_b: List<Tree> = [trees[0], trees[2]];
+    assert find_similar(&without_b, 20, 0.8).is_empty();
+}
+
+test "test code is not compared" {
+    let as_test = `#[cfg(test)]\nmod tests {\n${COPY_B}\n}`;
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("b.rs", as_test),
+        tree("c.rs", `#[test]\n${COPY_B}`),
+    ];
+    assert find_similar(&trees, 20, 0.9).is_empty();
+}
+
+test "a cfg marks test code only by the test predicate" {
+    let skipped: List<String> = [
+        `#[cfg(all(test, unix))]\n${COPY_B}`, `#![cfg(test)]\n${COPY_B}`, `#[cfg(\ttest\r\n)]\n${COPY_B}`,
+        `#[cfg(any(test))]\nmod helpers {\n${COPY_B}\n}`, `#[cfg(any(test, all(unix, test)))]\n${COPY_B}`,
+    ];
+    for let source of skipped {
+        let trees: List<Tree> = [
+            tree("a.rs", COPY_A),
+            tree("b.rs", source),
+        ];
+        assert find_similar(&trees, 20, 0.9).is_empty(), source;
+    }
+    let compared: List<String> = [
+        `#[cfg(test_utils)]\n${COPY_B}`, `#[cfg(not(test))]\n${COPY_B}`, `#[cfg(any(test, feature = "x"))]\n${COPY_B}`,
+        `#[cfg(any(test, mode = "("))]\n${COPY_B}`, `#[cfg(all(unix, x = ",test,"))]\n${COPY_B}`,
+        #`#[cfg(all(unix, x = "\",test,"))]
+${COPY_B}`#, #`#[cfg(all(unix, x = r#"\",test"#))]
+${COPY_B}`#, #`#[cfg(all(unix, x = r"\", y = ",test,"))]
+${COPY_B}`#, #`#[cfg(any(test, mode = "\
+"))]
+${COPY_B}`#,
+    ];
+    for let source of compared {
+        let trees: List<Tree> = [
+            tree("a.rs", COPY_A),
+            tree("b.rs", source),
+        ];
+        assert find_similar(&trees, 20, 0.9).len() == 1, source;
+    }
+}
+
+test "unrelated code is not alike" {
+    let trees: List<Tree> = [
+        tree("a.rs", COPY_A),
+        tree("c.rs", OTHER),
+    ];
+    assert find_similar(&trees, 20, 0.5).is_empty();
+}

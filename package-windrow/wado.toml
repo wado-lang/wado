@@ -1,0 +1,17 @@
+[package]
+name = "windrow"
+description = "Windrow — finds code that repeats one shape, read off a Gale grammar's tree"
+repository-directory = "package-windrow"
+# version / repository / namespace / license / authors inherited from [workspace.package]
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+
+[dependencies]
+"wado-lang:gale" = { path = "../package-gale" }
+"wado-lang:gale-rust" = { path = "../package-gale-rust" }
+"wado-lang:wado" = { path = "../package-wado" }
+
+[test]
+# `build/` holds Kiln intermediates; not source.
+exclude = ["build/**"]

@@ -1,0 +1,114 @@
+//! Every `crate::` / `super::` path a Rust file writes outside a `use` item at
+//! the top of a module, read off the grammar rather than off bytes.
+
+use rust from "../assets/grammar/RustLexer.g4"
+    with {
+        generator: {
+            module: "wado-lang:gale",
+            inputs: ["../assets/grammar/RustParser.g4"],
+        },
+    };
+use { parse_rust } from "./lib.wado";
+
+/// One path written outside a module-level `use`, at a 1-based line and column.
+internal struct InlinePath {
+    internal line: i32,
+    internal column: i32,
+    internal text: String,
+}
+
+/// The character offset of every `crate` / `super` that opens a path outside a
+/// module-level `use`, paired with the text a report quotes for it.
+fn path_roots(result: &rust::ParseResult) -> List<[i32, String]> {
+    let cst = &result.cst;
+    let toks = &result.tokens;
+    let mut out: List<[i32, String]> = [];
+    let mut depth = 0;
+    // A `use` item at the top of a module is where a path belongs, and a
+    // `pub(in ...)` names a scope rather than reading an item, so Rust admits
+    // no import there. Neither nests the other, so one depth marks where the
+    // exempt subtree closes. A `use` inside a block (a function body among
+    // them) is not at the top of its module, unless a module nearer it is.
+    let mut exempt_depth = -1;
+    let mut scopes: List<[i32, bool]> = [];
+    for let mut row = 0; row < cst.row_count(); row += 1 {
+        match cst.tag[row] {
+            _::Open => {
+                depth += 1;
+                let kind = cst.kind(row);
+                if kind == rust::RK_BLOCK_EXPRESSION || kind == rust::RK_MODULE {
+                    scopes.push([depth, kind == rust::RK_MODULE]);
+                }
+                let at_module_top = match scopes.last() {
+                    Some([_, is_module]) => is_module,
+                    null => true,
+                };
+                if exempt_depth < 0
+                    && (kind == rust::RK_USE_DECLARATION && at_module_top || kind == rust::RK_VISIBILITY) {
+                    exempt_depth = depth;
+                }
+            },
+            _::Close => {
+                if exempt_depth == depth {
+                    exempt_depth = -1;
+                }
+                if let Some([opened, _]) = scopes.last() && opened == depth {
+                    scopes.pop();
+                }
+                depth -= 1;
+            },
+            _::Tok => {
+                if exempt_depth < 0 {
+                    let tok = cst.token_index(row);
+                    let kind = toks.kind_at(tok);
+                    let root = kind == rust::TK_KW_CRATE || kind == rust::TK_KW_SUPER;
+                    if root && tok + 1 < toks.len() && toks.kind_at(tok + 1) == rust::TK_PATHSEP {
+                        let text = if kind == rust::TK_KW_CRATE { "crate::" } else { "super::" };
+                        out.push([toks.span_at(tok).start, text]);
+                    }
+                }
+            },
+            _::Miss => {
+            },
+            _::Skip => {
+            },
+        }
+    }
+    return out;
+}
+
+/// Each root's line and column, the column counted in chars. The roots are byte
+/// offsets into `src`.
+fn locate(src: &StrSlice, roots: &List<[i32, String]>) -> List<InlinePath> {
+    let mut out: List<InlinePath> = List::with_capacity(roots.len());
+    let mut line = 1;
+    let mut column = 1;
+    let mut i = 0;
+    for let mut k = 0; k < roots.len(); k += 1 {
+        let at = roots[k].0;
+        assert at >= i, "path roots must arrive in source order";
+        while i < at {
+            let b = src.byte_at(i);
+            if b == b'\n' {
+                line += 1;
+                column = 1;
+            } else if src.is_char_boundary(i) {
+                column += 1;
+            }
+            i += 1;
+        }
+        out.push(InlinePath { line, column, text: roots[k].1 });
+    }
+    return out;
+}
+
+/// Every inline path in `source`, or why it could not be parsed: recovery drops
+/// tokens, so a count taken from a broken tree would license what it missed.
+internal fn find_inline_paths<S: AsStrSlice>(source: S) -> Result<List<InlinePath>, String> {
+    let result = parse_rust(source);
+    if result.diagnostics.len() > 0 {
+        let first = result.diagnostics[0];
+        return Result::Err(`${first.message} at ${first.rule_path()}`);
+    }
+    return Result::Ok(locate(&result.tokens.src, &path_roots(&result)));
+}

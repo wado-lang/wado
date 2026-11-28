@@ -180,6 +180,7 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 - `package-gale/` — a parser generator compatible with ANTLR4 (`.g4`) in Wado.
 - `package-gale-highlight-html/` — a syntax highlighter for HTML that highlights embedded CSS and JavaScript as those languages, built with `package-gale` on the grammars-v4 grammars.
 - `package-gale-highlight-wado/` — a syntax highlighter for Wado source code, built with `package-gale` from `package-wado`'s grammar.
+- `package-gale-rust/` — a Rust parser, built with `package-gale` from the grammars-v4 grammar, and the repository's Rust corpus checks.
 - `package-grog/` — a Protocol Buffers compiler in Wado: a `.proto` becomes Wado declarations, and the runtime library encodes them.
 - `package-jade/` — a JSON Schema 2020-12 validator in Wado.
 - `package-marl/` — a CommonMark subset in Wado.
@@ -189,6 +190,7 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 - `package-wado/` — the Wado language as a package: `Wado.g4`, the grammar of Wado's whole syntax, and the parser Gale builds from it; the seed of a self-hosted compiler.
 - `package-wadopoet/` — builders for generated Wado source, and the reserved vocabulary a minted name must avoid.
 - `package-web/` — `wado-lang:web`: the web platform bindings, their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.
+- `package-windrow/` — finds code that repeats one shape across Rust and Wado files, read off Gale's syntax trees: the copies a refactor should fold.
 - `package-cm-catalog/` — a catalog of Wasm Component Model modules for demo and testing purposes.
 - `vendor/` — reference specs and runtimes, as git submodules; the `vendor-submodules` skill locates and syncs them.
 

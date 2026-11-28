@@ -1,0 +1,557 @@
+//! Nodes alike across a set of trees. A node's similarity to another is the
+//! Jaccard index of their sets of `K`-token runs, each token as its shape keeps
+//! it. A MinHash signature of `H` values estimates it, and banding the
+//! signatures (locality-sensitive hashing) finds the pairs worth estimating, so
+//! no pass compares every node with every other.
+
+use { Tree } from "./tree.wado";
+use { Shapes, shapes, is_spelled } from "./shape.wado";
+use { HashMap } from "core:collections";
+
+global K: i32 = 6;
+global H: i32 = 64;
+global ROWS: i32 = 4;
+/// A band shared by more nodes than this is a shape too common to mean a copy,
+/// and pairing all of them would cost the square of their count.
+global BUCKET_CAP: i32 = 32;
+global EMPTY: u64 = 0xFFFF_FFFF_FFFF_FFFF;
+global SLOT_MIX: u64 = 0xD6E8_FEB8_6659_FD93;
+/// Below this many distinct runs per run, a node repeats one small shape, such
+/// as a long or-pattern of enum cases. Its few runs make any two such nodes
+/// look alike, so it is not compared. A list measures 0.24 to 0.36, ordinary
+/// code about 1.
+global MIN_DISTINCT: f64 = 0.5;
+/// A node with this many distinct runs is compared however much it repeats:
+/// what inflates a list's similarity is how few runs it has. The lists that
+/// matched by accident hold 15 to 35; a visitor's exhaustive match over an IR,
+/// whose `&` and `&mut` twins drift apart when one is edited, holds about 180.
+global RICH_RUNS: f64 = 128.0;
+/// Fewer spelled names than this are shared by chance: `new`, `push`, `Some`.
+global MIN_NAMES: i32 = 8;
+/// Two nodes of a file share its vocabulary, so names count only between
+/// nodes somewhat alike in shape too. Over Wado's history this floor halved
+/// the matches on feature commits and kept most on deduplications.
+global SHAPE_FLOOR: f64 = 0.4;
+
+/// What is compared: a node, or a run of the children of a sequence node. It
+/// is in the tree at `tree`, an index into the scanned list, and spans the
+/// rows from `row` to `last`'s close; `last == row` for a node.
+pub struct Site {
+    pub tree: i32,
+    pub row: i32,
+    pub last: i32,
+}
+
+impl Site {
+    pub fn start(&self, trees: &List<Tree>) -> i32 {
+        return trees[self.tree].start[self.row];
+    }
+
+    pub fn end(&self, trees: &List<Tree>) -> i32 {
+        return trees[self.tree].end[self.last];
+    }
+}
+
+/// Nodes alike: the largest spans `tokens` tokens, and every pair the group
+/// joins is at least `similarity` alike.
+pub struct Group {
+    pub tokens: i32,
+    pub similarity: f64,
+    pub sites: List<Site>,
+}
+
+fn splitmix(x: u64) -> u64 {
+    let mut v = x + 0x9E37_79B9_7F4A_7C15;
+    v = (v ^ v >> 30) * 0xBF58_476D_1CE4_E5B9;
+    v = (v ^ v >> 27) * 0x94D0_49BB_1331_11EB;
+    return v ^ v >> 31;
+}
+
+fn run_hash(word: &List<u64>, at: i32) -> u64 {
+    let mut h: u64 = 14695981039346656037;
+    for let mut i = at; i < at + K; i += 1 {
+        h = (h ^ word[i]) * 1099511628211;
+    }
+    return splitmix(h);
+}
+
+/// The `H` hash functions of a signature, and whether names are gathered at
+/// all: a measure that ignores them leaves their signatures empty.
+struct Hasher {
+    seeds: List<u64>,
+    /// The inverse of `SLOT_MIX`, which undoes it.
+    unmix: u64,
+    names: bool,
+}
+
+impl Hasher {
+    fn new(measure: Measure) -> Hasher {
+        let mut seeds: List<u64> = [];
+        for let mut j = 0; j < H; j += 1 {
+            seeds.push(splitmix(j as u64 + 1));
+        }
+        // `SLOT_MIX` is odd, so it has an inverse modulo 2^64: each Newton
+        // step doubles the low bits it is right in, from 3 to past 64.
+        let mut unmix = SLOT_MIX;
+        for let _ of 0..<5 {
+            unmix *= 2 - SLOT_MIX * unmix;
+        }
+        assert SLOT_MIX * unmix == 1;
+        return Hasher { seeds, unmix, names: measure matches { _::ShapeOrNames } };
+    }
+
+    /// Takes the run at token `at` into a signature.
+    fn take_run(&self, signature: &mut List<u64>, word: &List<u64>, at: i32) {
+        self.take(signature, run_hash(word, at));
+    }
+
+    /// Takes the token at `at` into a signature of names, if it is a spelled one.
+    fn take_name(&self, signature: &mut List<u64>, word: &List<u64>, at: i32) {
+        if self.names && is_spelled(word[at]) {
+            self.take(signature, splitmix(word[at]));
+        }
+    }
+
+    fn take(&self, signature: &mut List<u64>, h: u64) {
+        for let mut j = 0; j < H; j += 1 {
+            let v = (h ^ self.seeds[j]) * SLOT_MIX;
+            if v < signature[j] {
+                signature[j] = v;
+            }
+        }
+    }
+
+    /// The hash that `take` put in slot `j` as `v`.
+    fn taken(&self, v: u64, j: i32) -> u64 {
+        return v * self.unmix ^ self.seeds[j];
+    }
+}
+
+/// The nodes compared, across every tree: each one at least `min_tokens`
+/// long and spanning more than the node of that kind just inside it, so a
+/// chain of nodes over one span is compared once, at its top.
+struct Units {
+    site: List<Site>,
+    tokens: List<i32>,
+    /// The nearest enclosing unit, or -1.
+    parent: List<i32>,
+    /// `H` values per unit, of its runs and of its spelled names.
+    signature: List<u64>,
+    names: List<u64>,
+    /// Whether a unit spells enough names to compare by them.
+    named: List<bool>,
+}
+
+impl Units {
+    fn push(&mut self, site: Site, tokens: i32, parent: i32, signature: &List<u64>, names: &List<u64>) {
+        self.site.push(site);
+        self.tokens.push(tokens);
+        self.parent.push(parent);
+        for let mut j = 0; j < H; j += 1 {
+            self.signature.push(signature[j]);
+            self.names.push(names[j]);
+        }
+    }
+}
+
+/// An open node a signature is being gathered for.
+struct Frame {
+    row: i32,
+    /// The unit it became, or -1 while it is still open or if it is not one.
+    unit: i32,
+    signature: List<u64>,
+    names: List<u64>,
+    /// The token ranges of the gathered nodes directly inside it, in order.
+    inner: List<[i32, i32]>,
+}
+
+fn gather(units: &mut Units, hasher: &Hasher, t: i32, tree: &Tree, s: &Shapes, min_tokens: i32) {
+    let mut frames: List<Frame> = [];
+    let mut unclaimed: List<i32> = [];
+    for let mut i = 0; i < tree.len(); i += 1 {
+        let opens = tree.row[i] matches { _::Open } && s.tokens[i] >= min_tokens;
+        if opens {
+            frames.push(Frame {
+                row: i,
+                unit: -1,
+                signature: List::filled(H, EMPTY),
+                names: List::filled(H, EMPTY),
+                inner: [],
+            });
+            continue;
+        }
+        if !tree.row[i] matches { _::Close } || frames.is_empty() || s.close[frames[frames.len() - 1].row] != i {
+            continue;
+        }
+        let mut frame = frames.pop().unwrap();
+        let start = s.first[frame.row];
+        let end = start + s.tokens[frame.row];
+        let mut next_inner = 0;
+        let mut at = start;
+        while at + K <= end {
+            if next_inner < frame.inner.len() && at == frame.inner[next_inner].0 {
+                at = frame.inner[next_inner].1 - K + 1;
+                next_inner += 1;
+                continue;
+            }
+            hasher.take_run(&mut frame.signature, &s.word, at);
+            at += 1;
+        }
+        next_inner = 0;
+        at = start;
+        while at < end {
+            if next_inner < frame.inner.len() && at == frame.inner[next_inner].0 {
+                at = frame.inner[next_inner].1;
+                next_inner += 1;
+                continue;
+            }
+            hasher.take_name(&mut frame.names, &s.word, at);
+            at += 1;
+        }
+        let spans_more = frames.is_empty() || s.tokens[frames[frames.len() - 1].row] > s.tokens[frame.row];
+        if spans_more {
+            units.push(
+                Site { tree: t, row: frame.row, last: frame.row },
+                s.tokens[frame.row],
+                -1,
+                &frame.signature,
+                &frame.names,
+            );
+            frame.unit = units.tokens.len() - 1;
+        }
+        // Units close inside out, so the ones closed since this one opened
+        // are on top of `unclaimed`, and this one encloses them.
+        if frame.unit >= 0 {
+            while let Some(inner) = unclaimed.last() && s.first[units.site[inner].row] >= start {
+                units.parent[inner] = frame.unit;
+                unclaimed.pop();
+            }
+            unclaimed.push(frame.unit);
+        }
+        if !frames.is_empty() {
+            let top = frames.len() - 1;
+            for let mut j = 0; j < H; j += 1 {
+                frames[top].signature[j] = u64::min(frames[top].signature[j], frame.signature[j]);
+                frames[top].names[j] = u64::min(frames[top].names[j], frame.names[j]);
+            }
+            frames[top].inner.push([start, end]);
+        }
+    }
+}
+
+/// Each shortest run of a sequence's children, two or more, spanning at
+/// least `min_tokens`: a copy is often a few statements of a longer block,
+/// which no single node holds. Each run is enclosed by the nearest unit
+/// enclosing its sequence. `first_unit` is the first unit `gather` made for
+/// this tree.
+fn gather_runs(units: &mut Units, hasher: &Hasher, t: i32, tree: &Tree, s: &Shapes, min_tokens: i32, first_unit: i32) {
+    let mut unit_of_row: List<i32> = List::filled(tree.len(), -1);
+    for let mut u = first_unit; u < units.tokens.len(); u += 1 {
+        unit_of_row[units.site[u].row] = u;
+    }
+    let mut children: List<List<i32>> = List::filled(tree.len(), []);
+    for let mut i = 0; i < tree.len(); i += 1 {
+        let p = s.parent[i];
+        if tree.row[i] matches { _::Open } && p >= 0 && tree.sequence[p] {
+            children[p].push(i);
+        }
+    }
+    for let mut p = 0; p < tree.len(); p += 1 {
+        if !tree.sequence[p] {
+            continue;
+        }
+        let mut enclosing = p;
+        while enclosing >= 0 && unit_of_row[enclosing] < 0 {
+            enclosing = s.parent[enclosing];
+        }
+        let parent = if enclosing >= 0 { unit_of_row[enclosing] } else { -1 };
+        let kids = &children[p];
+        let end_of = |k: i32| s.first[kids[k]] + s.tokens[kids[k]];
+        // The shortest run from each start ends no earlier than the one from
+        // the start before it, so `j` only moves forward.
+        let mut j = 0;
+        for let mut i = 0; i + 1 < kids.len(); i += 1 {
+            let start = s.first[kids[i]];
+            j = i32::max(j, i + 1);
+            while j + 1 < kids.len() && end_of(j) - start < min_tokens {
+                j += 1;
+            }
+            let end = end_of(j);
+            if end - start < min_tokens {
+                break;
+            }
+            let mut signature: List<u64> = List::filled(H, EMPTY);
+            let mut names: List<u64> = List::filled(H, EMPTY);
+            for let mut at = start; at < end; at += 1 {
+                if at + K <= end {
+                    hasher.take_run(&mut signature, &s.word, at);
+                }
+                hasher.take_name(&mut names, &s.word, at);
+            }
+            units.push(Site { tree: t, row: kids[i], last: kids[j] }, end - start, parent, &signature, &names);
+        }
+    }
+}
+
+/// How many distinct runs a signature's set holds, estimated: the least of
+/// `n` uniform hashes falls near `2^64 / (n + 1)`.
+fn distinct_runs(units: &Units, u: i32) -> f64 {
+    let mut sum = 0.0;
+    for let mut j = 0; j < H; j += 1 {
+        sum += units.signature[u * H + j] as f64 / 18446744073709551616.0;
+    }
+    return H as f64 / sum - 1.0;
+}
+
+fn pair_key(a: i32, b: i32) -> u64 {
+    return a as u32 as u64 << 32 | b as u32 as u64;
+}
+
+/// The similarity of two units: of their runs, or of their spelled names
+/// where both call on enough of them that sharing those means one logic,
+/// however differently written.
+fn estimate(units: &Units, a: i32, b: i32) -> f64 {
+    let by_shape = agreement(&units.signature, a, b);
+    if !units.named[a] || !units.named[b] || by_shape < SHAPE_FLOOR {
+        return by_shape;
+    }
+    return f64::max(by_shape, agreement(&units.names, a, b));
+}
+
+/// How alike two units are, where they may pair at all: apart, of sizes within
+/// `similarity` of each other, and at least that alike.
+fn pair_similarity(trees: &List<Tree>, units: &Units, a: i32, b: i32, similarity: f64) -> Option<f64> {
+    let small = i32::min(units.tokens[a], units.tokens[b]);
+    let large = i32::max(units.tokens[a], units.tokens[b]);
+    if (small as f64) < similarity * large as f64 || overlaps(trees, units, a, b) {
+        return null;
+    }
+    let estimated = estimate(units, a, b);
+    return if estimated >= similarity { Some(estimated) } else { null };
+}
+
+fn agreement(signatures: &List<u64>, a: i32, b: i32) -> f64 {
+    let mut equal = 0;
+    for let mut j = 0; j < H; j += 1 {
+        if signatures[a * H + j] == signatures[b * H + j] {
+            equal += 1;
+        }
+    }
+    return equal as f64 / H as f64;
+}
+
+/// Whether a unit spells `MIN_NAMES` distinct names. Each of a few names is the
+/// least in some of the `H` slots, so its signature holds every one, though
+/// in each slot as a different value.
+fn has_names(units: &Units, hasher: &Hasher, u: i32) -> bool {
+    let mut seen: List<u64> = [];
+    for let mut j = 0; j < H && seen.len() < MIN_NAMES; j += 1 {
+        let v = units.names[u * H + j];
+        if v == EMPTY {
+            continue;
+        }
+        let name = hasher.taken(v, j);
+        if !seen.contains(&name) {
+            seen.push(name);
+        }
+    }
+    return seen.len() >= MIN_NAMES;
+}
+
+fn overlaps(trees: &List<Tree>, units: &Units, a: i32, b: i32) -> bool {
+    return sites_overlap(trees, &units.site[a], &units.site[b]);
+}
+
+fn sites_overlap(trees: &List<Tree>, x: &Site, y: &Site) -> bool {
+    return x.tree == y.tree && x.start(trees) < y.end(trees) && y.start(trees) < x.end(trees);
+}
+
+/// The unit and every unit enclosing it.
+fn self_and_enclosing(units: &Units, u: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut at = u; at >= 0; at = units.parent[at] {
+        out.push(at);
+    }
+    return out;
+}
+
+/// What two nodes are alike by: their runs alone, or their spelled names too.
+pub enum Measure {
+    Shape,
+    ShapeOrNames,
+}
+
+pub fn find_similar(
+    trees: &List<Tree>,
+    min_tokens: i32,
+    similarity: f64,
+    measure: Measure = Measure::Shape,
+) -> List<Group> {
+    assert min_tokens >= K, "a node shorter than one run has no runs to compare";
+    let hasher = Hasher::new(measure);
+    let mut units = Units { site: [], tokens: [], parent: [], signature: [], names: [], named: [] };
+    for let mut t = 0; t < trees.len(); t += 1 {
+        let s = shapes(&trees[t]);
+        let first_unit = units.tokens.len();
+        gather(&mut units, &hasher, t, &trees[t], &s, min_tokens);
+        gather_runs(&mut units, &hasher, t, &trees[t], &s, min_tokens, first_unit);
+    }
+    for let mut u = 0; u < units.tokens.len(); u += 1 {
+        units.named.push(has_names(&units, &hasher, u));
+    }
+
+    let mut buckets = HashMap::<u64, List<i32>>::new();
+    for let mut u = 0; u < units.tokens.len(); u += 1 {
+        let runs = distinct_runs(&units, u);
+        if runs < RICH_RUNS && runs < MIN_DISTINCT * (units.tokens[u] - K + 1) as f64 {
+            continue;
+        }
+        band(&mut buckets, &units.signature, u, 0);
+        if units.named[u] {
+            band(&mut buckets, &units.names, u, H / ROWS);
+        }
+    }
+
+    let mut alike = HashMap::<u64, f64>::new();
+    for let [_, members] of buckets.entries() {
+        if members.len() < 2 || members.len() > BUCKET_CAP {
+            continue;
+        }
+        for let mut i = 0; i < members.len(); i += 1 {
+            for let mut k = i + 1; k < members.len(); k += 1 {
+                let a = members[i];
+                let b = members[k];
+                let key = pair_key(a, b);
+                if alike.contains_key(key) {
+                    continue;
+                }
+                if let Some(estimated) = pair_similarity(trees, &units, a, b, similarity) {
+                    alike[key] = estimated;
+                }
+            }
+        }
+    }
+
+    let mut outermost: List<[u64, f64]> = [];
+    for let [key, sim] of alike.entries() {
+        if !inside_alike(&units, &alike, (*key >> 32) as i32, *key as i32) {
+            outermost.push([*key, *sim]);
+        }
+    }
+    outermost.sort_by(|p, q| q.1.cmp(&p.1));
+    return join(trees, &units, &alike, &outermost, similarity);
+}
+
+/// Files unit `u` under each band of its signature. Bands of different
+/// signatures take different numbers, from `first_band` on.
+fn band(buckets: &mut HashMap<u64, List<i32>>, signatures: &List<u64>, u: i32, first_band: i32) {
+    for let mut b = 0; b < H / ROWS; b += 1 {
+        let mut key = splitmix((first_band + b) as u64);
+        for let mut r = 0; r < ROWS; r += 1 {
+            key = splitmix(key ^ signatures[u * H + b * ROWS + r]);
+        }
+        if !buckets.contains_key(key) {
+            buckets[key] = [];
+        }
+        buckets[key].push(u);
+    }
+}
+
+/// Whether `a` and `b` lie inside a pair of nodes that is alike too, so the
+/// pair is reported as part of that one: at its largest.
+fn inside_alike(units: &Units, alike: &HashMap<u64, f64>, a: i32, b: i32) -> bool {
+    for let x of self_and_enclosing(units, a) {
+        for let y of self_and_enclosing(units, b) {
+            let outer = if x < y { pair_key(x, y) } else { pair_key(y, x) };
+            if (x != a || y != b) && alike.contains_key(outer) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Groups in which every two members are alike, joined from the most alike
+/// pair down: chaining pairs instead would let a group drift from its first
+/// member one small step at a time.
+fn join(
+    trees: &List<Tree>,
+    units: &Units,
+    alike: &HashMap<u64, f64>,
+    pairs: &List<[u64, f64]>,
+    similarity: f64,
+) -> List<Group> {
+    let mut group_of: List<i32> = List::filled(units.tokens.len(), -1);
+    let mut members: List<List<i32>> = [];
+    let mut lowest: List<f64> = [];
+    for let [key, sim] of pairs {
+        let a = (*key >> 32) as i32;
+        let b = *key as i32;
+        if group_of[a] >= 0 && group_of[a] == group_of[b] {
+            continue;
+        }
+        let side_a: List<i32> = if group_of[a] >= 0 { members[group_of[a]] } else { [a] };
+        let side_b: List<i32> = if group_of[b] >= 0 { members[group_of[b]] } else { [b] };
+        let mut low = *sim;
+        let mut all_alike = true;
+        for let x of &side_a {
+            for let y of &side_b {
+                match pair_similarity(trees, units, *x, *y, similarity) {
+                    Some(e) && !inside_alike(units, alike, *x, *y) => low = f64::min(low, e),
+                    _ => all_alike = false,
+                }
+            }
+        }
+        if !all_alike {
+            continue;
+        }
+        if group_of[a] < 0 {
+            members.push([a]);
+            lowest.push(1.0);
+            group_of[a] = members.len() - 1;
+        }
+        let g = group_of[a];
+        if group_of[b] >= 0 {
+            low = f64::min(low, lowest[group_of[b]]);
+            members[group_of[b]] = [];
+        }
+        for let y of &side_b {
+            members[g].push(*y);
+            group_of[*y] = g;
+        }
+        lowest[g] = f64::min(lowest[g], low);
+    }
+    let mut groups: List<Group> = [];
+    for let mut g = 0; g < members.len(); g += 1 {
+        if members[g].is_empty() {
+            continue;
+        }
+        let mut group = Group { tokens: 0, similarity: lowest[g], sites: [] };
+        let mut ids = members[g];
+        ids.sort();
+        for let u of &ids {
+            group.tokens = i32::max(group.tokens, units.tokens[*u]);
+            group.sites.push(units.site[*u]);
+        }
+        groups.push(group);
+    }
+    groups.sort_by(|a, b| weight(b).cmp(&weight(a)));
+    // Runs of one sequence overlap, so one copy is found as several groups of
+    // runs. A group whose every member overlaps one heavier group's says
+    // nothing that group does not; one whose members fall in two links them.
+    let mut kept: List<Group> = [];
+    for let group of &groups {
+        let covered_by = |k: &Group| {
+            return group.sites.iter_ref().all(|x| k.sites.iter_ref().any(|y| sites_overlap(trees, x, y)));
+        };
+        if !kept.iter_ref().any(covered_by) {
+            kept.push(*group);
+        }
+    }
+    return kept;
+}
+
+/// The tokens a group's copies repeat.
+fn weight(g: &Group) -> i32 {
+    return g.tokens * (g.sites.len() - 1);
+}

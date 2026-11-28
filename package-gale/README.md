@@ -170,6 +170,14 @@ wado test package-gale/example/eval_test.wado
 A handy debugging aid: `to_string_tree(&result)` renders the tree as an
 ANTLR4-style S-expression, e.g. `1 + 2 * 3` →
 `(prog (expr (expr (expr 1)) + (expr (expr (expr 2)) * (expr (expr 3)))))`.
+A test can write the tree it expects indented across lines, and compare it
+through `normalize_tree` from `wado-lang:gale`, which collapses the whitespace:
+
+```wado
+assert to_string_tree(&parse("1 + 2")) == normalize_tree("
+    (prog (expr
+        (expr 1) + (expr 2)))");
+```
 
 ## Beyond LL: an ALL(\*) example
 

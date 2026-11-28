@@ -1,0 +1,72 @@
+//! The structure a comparison reads off a tree: each node's place and token
+//! range, and each token as its shape keeps it, a name or a literal standing
+//! for any other of its class.
+
+use { Tree } from "./tree.wado";
+
+/// Per row of a tree, read only at its `Open` rows: how many tokens the node
+/// spans, the index of its first token, its parent's row (-1 at a root), and
+/// its `Close` row. `word` holds each token, in order, as its shape keeps it.
+pub struct Shapes {
+    pub tokens: List<i32>,
+    pub first: List<i32>,
+    pub parent: List<i32>,
+    pub close: List<i32>,
+    pub word: List<u64>,
+}
+
+global SPELLED: u64 = 1 << 63;
+
+fn word_of(tree: &Tree, row: i32) -> u64 {
+    let kind = tree.kind[row] as u32 as u64;
+    return match tree.class[row] {
+        _::Name => 1 << 32,
+        _::Literal => 2 << 32 | kind,
+        _::Fixed => 3 << 32 | kind,
+        _::Spelled => spelling_hash(&tree.source, tree.start[row], tree.end[row]) | SPELLED,
+    };
+}
+
+/// Whether a word keeps its token's spelling.
+pub fn is_spelled(word: u64) -> bool {
+    return word & SPELLED != 0;
+}
+
+fn spelling_hash(source: &String, start: i32, end: i32) -> u64 {
+    let mut h: u64 = 14695981039346656037;
+    for let mut i = start; i < end; i += 1 {
+        h = (h ^ unchecked source.byte_at(i) as u64) * 1099511628211;
+    }
+    return h;
+}
+
+pub fn shapes(tree: &Tree) -> Shapes {
+    let n = tree.len();
+    let mut out = Shapes {
+        tokens: List::filled(n, 0),
+        first: List::filled(n, 0),
+        parent: List::filled(n, -1),
+        close: List::filled(n, -1),
+        word: [],
+    };
+    let mut open: List<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        match tree.row[i] {
+            _::Open => {
+                if let Some(p) = open.last() {
+                    out.parent[i] = p;
+                }
+                out.first[i] = out.word.len();
+                open.push(i);
+            },
+            _::Token => out.word.push(word_of(tree, i)),
+            _::Close => {
+                let node = open.pop().unwrap();
+                out.close[node] = i;
+                out.tokens[node] = out.word.len() - out.first[node];
+            },
+        }
+    }
+    assert open.is_empty(), "every Open row must have its Close";
+    return out;
+}

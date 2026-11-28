@@ -17,6 +17,8 @@ use { SystemClock } from "wasi:clocks";
 use { jar_or_exit, parse_request, run_request, Jar, Ran, PINNED_VERSION } from "./antlr4_oracle.wado";
 
 global GRAMMARS: String = "package-gale/tests/grammars";
+/// The superClass grammar the checks run: Rust's lexer, with its Java base.
+global RUST: String = "package-gale-rust";
 global FIXTURES: String = "package-gale/build/oracle-selftest";
 
 /// One oracle run and what it must answer. An empty `stdout` asserts stdout is
@@ -64,7 +66,8 @@ fn mismatch(check: &Check, ran: &Ran) -> Option<String> {
 }
 
 fn checks() -> List<Check> {
-    let rust_base = grammar("java/RustLexerBase.java");
+    let rust_lexer = `${RUST}/assets/grammar/RustLexer.g4`;
+    let rust_base = `${RUST}/tools/java/RustLexerBase.java`;
     let ts_lexer_base = grammar("java/TypeScriptLexerBase.java");
     let ts_parser_base = grammar("java/TypeScriptParserBase.java");
     return [
@@ -97,7 +100,7 @@ fn checks() -> List<Check> {
             code: 1,
             stdout: "",
             stderr: ["declares 'options { superClass = RustLexerBase; }'"],
-            args: ["--tokens", grammar("RustLexer.g4")],
+            args: ["--tokens", rust_lexer],
         },
         Check {
             name: "probe-super without superClass",
@@ -113,7 +116,7 @@ fn checks() -> List<Check> {
             code: 1,
             stdout: "",
             stderr: ["mutually exclusive"],
-            args: ["--tokens", "--probe-super", "--super", rust_base, grammar("RustLexer.g4")],
+            args: ["--tokens", "--probe-super", "--super", rust_base, rust_lexer],
         },
         // --super is the only path that answers. `1.` is the case the base
         // class decides: FLOAT_LITERAL only because FloatDotPossible() says so.
@@ -122,14 +125,14 @@ fn checks() -> List<Check> {
             input: "0x1f",
             code: 0,
             stdout: "'0x1f',<INTEGER_LITERAL>",
-            args: ["--tokens", "--super", rust_base, grammar("RustLexer.g4")],
+            args: ["--tokens", "--super", rust_base, rust_lexer],
         },
         Check {
             name: "super float dot",
             input: "1.",
             code: 0,
             stdout: "'1.',<FLOAT_LITERAL>",
-            args: ["--tokens", "--super", rust_base, grammar("RustLexer.g4")],
+            args: ["--tokens", "--super", rust_base, rust_lexer],
         },
         // --probe-super reports, never answers: exit 3 and empty stdout every
         // time, so no caller can pin it.
@@ -139,7 +142,7 @@ fn checks() -> List<Check> {
             code: 3,
             stdout: "",
             stderr: ["NOT an oracle", "FloatDotPossible", "with every predicate true", "with every predicate false"],
-            args: ["--tokens", "--probe-super", grammar("RustLexer.g4")],
+            args: ["--tokens", "--probe-super", rust_lexer],
         },
         Check {
             name: "probe reports agreement",
@@ -147,7 +150,7 @@ fn checks() -> List<Check> {
             code: 3,
             stdout: "",
             stderr: ["same answer under both predicate polarities"],
-            args: ["--tokens", "--probe-super", grammar("RustLexer.g4")],
+            args: ["--tokens", "--probe-super", rust_lexer],
         },
         Check {
             name: "probe reports reached members",

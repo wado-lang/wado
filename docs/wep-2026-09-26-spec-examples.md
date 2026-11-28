@@ -139,7 +139,7 @@ The checker is `package-wado/tools/spec_examples.wado`, beside
 the `Wado.g4` grammar it lexes with, so it counts an `assert` keyword only where
 the lexer finds one, not in a comment or a string. It reads the Markdown with
 Marl. `mise run check-spec-examples` runs it with `wado run`, as
-`mise run check-rust-paths` runs `package-gale/tools/rust_inline_paths.wado`.
+`mise run check-rust-paths` runs `package-gale-rust/tools/inline_paths.wado`.
 
 A block that breaks any rule, naming nothing among them, fails the check.
 

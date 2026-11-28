@@ -1,0 +1,77 @@
+//! A syntax tree in no grammar's types: the rows of a Gale CST, each token
+//! sorted into what its shape keeps of it. A language adapter builds one from
+//! its parser's result; nothing after that knows which grammar it came from.
+
+use { line_of } from "wado-lang:gale";
+
+/// What a token's shape keeps of it. A local name and a literal stand for any
+/// other of their class, so two copies that renamed a variable or changed a
+/// constant keep one shape. A `Spelled` name is kept as written: what it names
+/// (a function, a field, a type) is what two copies of one logic share.
+pub enum TokenClass {
+    Name,
+    Spelled,
+    Literal,
+    Fixed,
+}
+
+pub enum Row {
+    Open,
+    Close,
+    Token,
+}
+
+/// One file's tree, as parallel columns over its rows. `kind` is the node kind
+/// of an `Open` row and the token kind of a `Token` row; `start` is a byte
+/// offset into the file. `sequence` marks a node whose children are a
+/// sequence, such as a block's statements, where a run of them is compared
+/// as well as each one.
+pub struct Tree {
+    pub path: String,
+    pub source: String,
+    pub row: List<Row> = [],
+    pub kind: List<i32> = [],
+    pub class: List<TokenClass> = [],
+    pub start: List<i32> = [],
+    pub end: List<i32> = [],
+    pub sequence: List<bool> = [],
+}
+
+impl Tree {
+    pub fn open(&mut self, kind: i32, start: i32, end: i32) {
+        self.push(Row::Open, kind, TokenClass::Fixed, start, end);
+    }
+
+    /// Marks the node opened last as a sequence.
+    pub fn mark_sequence(&mut self) {
+        let last = self.row.len() - 1;
+        assert self.row[last] matches { _::Open }, "only a node opened last is marked";
+        self.sequence[last] = true;
+    }
+
+    pub fn close(&mut self) {
+        self.push(Row::Close, 0, TokenClass::Fixed, 0, 0);
+    }
+
+    pub fn token(&mut self, kind: i32, class: TokenClass, start: i32, end: i32) {
+        self.push(Row::Token, kind, class, start, end);
+    }
+
+    fn push(&mut self, row: Row, kind: i32, class: TokenClass, start: i32, end: i32) {
+        self.row.push(row);
+        self.kind.push(kind);
+        self.class.push(class);
+        self.start.push(start);
+        self.end.push(end);
+        self.sequence.push(false);
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.row.len();
+    }
+
+    /// The 1-based line holding byte offset `at`.
+    pub fn line_of(&self, at: i32) -> i32 {
+        return line_of(&self.source, at);
+    }
+}
