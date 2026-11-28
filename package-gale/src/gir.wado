@@ -416,7 +416,11 @@ impl RuleDecision {
     pub fn slots_of(&self, alts: &List<i32>) -> List<i32> {
         return alts
             .iter_ref()
-            .map(|a| self.non_lr_indices.position(|i| i == *a).expect("a decision chooses only among its own alternatives"))
+            .map(
+                |a| self.non_lr_indices
+                    .position(|i| i == *a)
+                    .expect("a decision chooses only among its own alternatives"),
+            )
             .collect();
     }
 }

@@ -418,8 +418,7 @@ impl EmitContext {
         if sets_overlap(&exit.kinds, kinds) {
             return true;
         }
-        return exit.reaches_end
-            && self.follow.caller_may_continue_on(&self.rules[exit.rule].name, kinds);
+        return exit.reaches_end && self.follow.caller_may_continue_on(&self.rules[exit.rule].name, kinds);
     }
 
     /// Where an alternative of the rule being emitted renders its predicates.
