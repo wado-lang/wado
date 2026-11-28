@@ -62,7 +62,7 @@ fn without_string_values(s: StrSlice) -> String {
             i = j;
             continue;
         }
-        while j < s.len() && (unchecked s.byte_at(j) as char).is_whitespace() {
+        while j < s.len() && (unchecked s.byte_at(j)).is_ascii_whitespace() {
             j += 1;
         }
         let raw = j < s.len() && unchecked s.byte_at(j) == b'r';
