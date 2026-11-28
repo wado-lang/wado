@@ -6376,7 +6376,7 @@ impl<'a> Reify<'a> {
     /// already there.
     #[allow(clippy::too_many_arguments)]
     fn hold_element(
-        &mut self,
+        &self,
         container: TirExpr,
         key: TirExpr,
         read: &OperatorDispatch,
@@ -6411,7 +6411,7 @@ impl<'a> Reify<'a> {
     /// element bound in order ahead of the call, each element read where its
     /// argument stands, and each stored back once the call returns.
     fn store_back_after(
-        &mut self,
+        &self,
         mut expr: TirExpr,
         mut elements: Vec<ScopedElement>,
         ctx: &mut FunctionContext,
