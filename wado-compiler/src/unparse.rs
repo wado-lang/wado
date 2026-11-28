@@ -280,9 +280,15 @@ impl Unit {
         }
     }
 
+    fn of_function(f: &Function) -> Unit {
+        Unit::Item {
+            braced: f.body.is_some(),
+        }
+    }
+
     fn of_item(item: &Item) -> Unit {
         let braced = match item {
-            Item::Function(f) => f.body.is_some(),
+            Item::Function(f) => return Unit::of_function(f),
             Item::Impl(i) => !i.is_synthesize_request,
             Item::Resource(r) => !r.methods.is_empty(),
             Item::Struct(_)
@@ -1505,24 +1511,18 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    fn method_unit(method: &Function) -> Unit {
-        Unit::Item {
-            braced: method.body.is_some(),
-        }
-    }
-
     /// [`Self::open_member`] for `method`, and the blank lines above it.
     fn open_method(&mut self, method: &Function) {
         self.open_member(method.id, method.span.start, &method.attrs);
         self.emit_blank_lines_to(
             effective_start_line(&method.attrs, method.span.line),
-            Self::method_unit(method),
+            Unit::of_function(method),
         );
     }
 
     fn close_method(&mut self, method: &Function) {
         self.last_source_line = method.span.end_line();
-        self.last_unit = Some(Self::method_unit(method));
+        self.last_unit = Some(Unit::of_function(method));
     }
 
     fn unparse_world(&mut self, w: &WorldDecl) {
