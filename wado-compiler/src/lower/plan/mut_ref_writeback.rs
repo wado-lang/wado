@@ -63,6 +63,7 @@ pub fn insert_write_backs(
             detached_locals: IndexSet::default(),
             referenced_locals: func.address_taken_locals.clone(),
             stand_ins: IndexSet::default(),
+            lent_locals: IndexSet::default(),
             ref_temps: Vec::new(),
             refused: None,
         };
@@ -96,6 +97,42 @@ pub fn insert_write_backs(
     Ok(())
 }
 
+/// Whether `expr` is a `&mut` of one of `stand_ins`, or a local of
+/// `lent_locals` holding one.
+fn lends(stand_ins: &IndexSet<u32>, lent_locals: &IndexSet<u32>, expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::MutRef,
+            expr,
+        } => matches!(expr.kind, TirExprKind::Local { index, .. } if stand_ins.contains(&index)),
+        TirExprKind::Local { index, .. } => lent_locals.contains(index),
+        _ => false,
+    }
+}
+
+/// What `leaf` answers for `expr`, or for a value it yields through a block's
+/// tail or a branch.
+fn yielded(expr: &TirExpr, leaf: &dyn Fn(&TirExpr) -> Option<Span>) -> Option<Span> {
+    if let Some(span) = leaf(expr) {
+        return Some(span);
+    }
+    match &expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            block.tail_expr().and_then(|value| yielded(value, leaf))
+        }
+        TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => std::iter::once(then_branch)
+            .chain(else_branch)
+            .filter_map(TirBlock::tail_expr)
+            .find_map(|value| yielded(value, leaf)),
+        TirExprKind::Match { arms, .. } => arms.iter().find_map(|arm| yielded(&arm.body, leaf)),
+        _ => None,
+    }
+}
+
 struct WriteBack<'a> {
     type_table: &'a TypeTable,
     carrying: &'a RefCarrying<'a>,
@@ -125,6 +162,8 @@ struct WriteBack<'a> {
     /// a copy that stands in for storage elsewhere until its scope stores it
     /// back, as `reify` reads a scoped `&mut xs[i]`.
     stand_ins: IndexSet<u32>,
+    /// Locals bound to a `&mut` of a stand-in, such as a binding a scope lends.
+    lent_locals: IndexSet<u32>,
     ref_temps: Vec<u32>,
     /// The first detached reference with no write-back point, and why.
     refused: Option<(Span, String)>,
@@ -199,8 +238,13 @@ impl WriteBack<'_> {
 
     /// Refuse a detached reference put into storage outliving the expression
     /// that took it, which no point in this body is late enough to write back.
+    /// So is a `&mut` of a [`Self::stand_ins`] local, which its scope stores
+    /// back.
     fn refuse_stored(&mut self, expr: &TirExpr, sink: &str) {
-        if let Some(place) = self.detached_in_value_position(expr) {
+        if let Some(place) = self
+            .detached_in_value_position(expr)
+            .or_else(|| self.lent_in_value_position(expr))
+        {
             self.refuse(place, format!("{sink} holds it past the reference"));
         }
     }
@@ -209,29 +253,23 @@ impl WriteBack<'_> {
     /// reaches storage through. The first is the whole answer, since only the
     /// first refusal is reported.
     fn detached_in_value_position(&self, expr: &TirExpr) -> Option<Span> {
-        if let Some(place) = self.detached_ref(expr) {
-            return Some(place.span);
-        }
-        match &expr.kind {
-            TirExprKind::Local { index, .. } => {
-                self.detached_locals.contains(index).then_some(expr.span)
+        yielded(expr, &|expr| {
+            if let Some(place) = self.detached_ref(expr) {
+                return Some(place.span);
             }
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => block
-                .tail_expr()
-                .and_then(|value| self.detached_in_value_position(value)),
-            TirExprKind::If {
-                then_branch,
-                else_branch,
-                ..
-            } => std::iter::once(then_branch)
-                .chain(else_branch)
-                .filter_map(TirBlock::tail_expr)
-                .find_map(|value| self.detached_in_value_position(value)),
-            TirExprKind::Match { arms, .. } => arms
-                .iter()
-                .find_map(|arm| self.detached_in_value_position(&arm.body)),
-            _ => None,
-        }
+            match &expr.kind {
+                TirExprKind::Local { index, .. } => {
+                    self.detached_locals.contains(index).then_some(expr.span)
+                }
+                _ => None,
+            }
+        })
+    }
+
+    /// A `&mut` of a stand-in `expr` can yield, as
+    /// [`Self::detached_in_value_position`] follows the value positions.
+    fn lent_in_value_position(&self, expr: &TirExpr) -> Option<Span> {
+        yielded(expr, &|expr| self.lends_a_stand_in(expr).then_some(expr.span))
     }
 
     /// Note that `local` holds a detached reference. Only a binding something
@@ -246,13 +284,15 @@ impl WriteBack<'_> {
     }
 
     /// Note every pattern binding of `body` that holds a detached reference,
-    /// ahead of the walk: a sink is asked before the walk reaches a `match`
-    /// inside the value it holds.
+    /// and every stand-in and local lent one, ahead of the walk: a sink is
+    /// asked before the walk reaches a `match` inside the value it holds.
     fn hold_pattern_bindings(&mut self, body: whole_value_writes::Body<'_>) {
         let mut bindings = PatternBindings {
             type_table: self.type_table,
             carrying: self.carrying,
             detached: Vec::new(),
+            stand_ins: IndexSet::default(),
+            lent_locals: IndexSet::default(),
         };
         match body {
             whole_value_writes::Body::Block(block) => bindings.visit_block(block),
@@ -261,6 +301,8 @@ impl WriteBack<'_> {
         for (local, span) in bindings.detached {
             self.hold_detached(local, span, "a pattern binding");
         }
+        self.stand_ins = bindings.stand_ins;
+        self.lent_locals = bindings.lent_locals;
     }
 
     /// Walk a closure body against its own local namespace, seeding its own
@@ -292,6 +334,7 @@ impl WriteBack<'_> {
             detached_locals: IndexSet::default(),
             referenced_locals: address_taken_locals.clone(),
             stand_ins: IndexSet::default(),
+            lent_locals: IndexSet::default(),
             ref_temps: Vec::new(),
             refused: None,
         };
@@ -334,14 +377,10 @@ impl WriteBack<'_> {
     }
 
     /// Whether `arg` is `&mut` of a [`Self::stand_ins`] local, which its scope
-    /// stores back once the call returns: a reference the callee keeps would
-    /// write a copy no store reaches.
+    /// stores back once the call returns, or a local holding one: a reference
+    /// the callee keeps would write a copy no store reaches.
     fn lends_a_stand_in(&self, arg: &TirExpr) -> bool {
-        matches!(
-            &arg.kind,
-            TirExprKind::Unary { op: TirUnaryOp::MutRef, expr }
-                if matches!(expr.kind, TirExprKind::Local { index, .. } if self.stand_ins.contains(&index))
-        )
+        lends(&self.stand_ins, &self.lent_locals, arg)
     }
 
     /// The place a detached `&mut` references, if `arg` is one. Of the places only
@@ -785,6 +824,8 @@ struct PatternBindings<'a> {
     type_table: &'a TypeTable,
     carrying: &'a RefCarrying<'a>,
     detached: Vec<(u32, Span)>,
+    stand_ins: IndexSet<u32>,
+    lent_locals: IndexSet<u32>,
 }
 
 impl PatternBindings<'_> {
@@ -814,10 +855,37 @@ impl PatternBindings<'_> {
 
 impl TirRefVisitor for PatternBindings<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if let TirStmtKind::LetDestructure { pattern, value } = &stmt.kind {
-            self.bind(pattern, value, stmt.span);
-        }
+        // A value's own `let`s first, so a value yielding a local they lend
+        // to is known to lend.
         self.walk_stmt(stmt);
+        match &stmt.kind {
+            TirStmtKind::LetDestructure { pattern, value } => {
+                self.bind(pattern, value, stmt.span);
+            }
+            TirStmtKind::Let {
+                value: Some(value),
+                local_index,
+                is_mut,
+                storage,
+                type_id,
+                ..
+            } => {
+                if *is_mut
+                    && *storage == LetStorage::Aliased
+                    && self.type_table.is_boxed_reference_target(*type_id)
+                {
+                    self.stand_ins.insert(*local_index);
+                }
+                if yielded(value, &|expr| {
+                    lends(&self.stand_ins, &self.lent_locals, expr).then_some(expr.span)
+                })
+                .is_some()
+                {
+                    self.lent_locals.insert(*local_index);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn visit_expr(&mut self, expr: &TirExpr) {
@@ -842,19 +910,10 @@ impl TirOptVisitor for WriteBack<'_> {
             TirStmtKind::Let {
                 value: Some(value),
                 local_index,
-                is_mut,
-                storage,
-                type_id,
                 ..
             } => {
                 if let Some(place) = self.detached_in_value_position(value) {
                     self.hold_detached(*local_index, place, "a variable");
-                }
-                if *is_mut
-                    && *storage == LetStorage::Aliased
-                    && self.type_table.is_boxed_reference_target(*type_id)
-                {
-                    self.stand_ins.insert(*local_index);
                 }
             }
             TirStmtKind::Return { value: Some(value) } => {

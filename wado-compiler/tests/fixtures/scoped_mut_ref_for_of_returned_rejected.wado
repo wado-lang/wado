@@ -1,0 +1,20 @@
+// A turn of `for let v of &mut xs` stores `v` back as it ends, so `v` returned
+// would write a copy no store reaches.
+
+fn first(xs: &mut List<i32>) -> &mut i32 {
+    for let v of xs {
+        return v;
+    }
+    panic("empty");
+}
+
+test "a write through a turn's binding returned" {
+    let mut xs: List<i32> = [1];
+    *first(&mut xs) = 2;
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "the returned value holds it past the reference"
+}

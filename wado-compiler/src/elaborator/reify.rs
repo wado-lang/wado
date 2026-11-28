@@ -340,13 +340,14 @@ pub(crate) enum PathStep {
 }
 
 /// A pattern binding of `&mut V` under a `&mut` scrutinee, where `V` is
-/// replaced on assignment: the pattern binds the value into `held`, the arm
-/// binds `user` to `&mut held`, and the arm's exits store `held` back along
-/// `path` (WEP: Writable References).
+/// replaced on assignment: the pattern binds the value to `bound`, the arm
+/// holds it in `held` and binds `user` to `&mut held`, and the arm's exits
+/// store `held` back along `path` (WEP: Writable References).
 pub(crate) struct HeldBinding {
     name: String,
     user: u32,
     user_is_mut: bool,
+    bound: TirExpr,
     held: TirExpr,
     value_type: TypeId,
     path: Vec<PathStep>,
@@ -9817,6 +9818,7 @@ impl<'a> Reify<'a> {
                                 .find(|first| first.name == held.name)
                                 .expect("every alternative binds the same names");
                             held.user = first.user;
+                            held.bound = first.bound.clone();
                             held.held = first.held.clone();
                         }
                         let alt_bindings = collect_pattern_bindings_with_index(&alt_resolved);
@@ -10109,6 +10111,8 @@ impl<'a> Reify<'a> {
             unreachable!("`holds_binding` admits a `&mut` alone")
         };
         let user = ctx.add_local_at(name.to_string(), binding_type, is_mut, Some(id), span);
+        let bound_name = minted_name("bound", ctx.fresh_serial());
+        let bound = ctx.add_local(bound_name.clone(), value_type, false, None);
         let held_name = minted_name("held", ctx.fresh_serial());
         let held = ctx.add_local(held_name.clone(), value_type, true, None);
         ctx.address_taken_locals.insert(held);
@@ -10116,6 +10120,7 @@ impl<'a> Reify<'a> {
             name: name.to_string(),
             user,
             user_is_mut: is_mut,
+            bound: local_ref(bound, &bound_name, value_type),
             held: local_ref(held, &held_name, value_type),
             value_type,
             path: self
@@ -10125,8 +10130,8 @@ impl<'a> Reify<'a> {
                 .collect(),
         });
         TirPattern::Binding {
-            name: held_name,
-            local_index: held,
+            name: bound_name,
+            local_index: bound,
             type_id: value_type,
         }
     }
@@ -10216,7 +10221,7 @@ impl<'a> Reify<'a> {
         place: &TirExpr,
         ctx: &mut FunctionContext,
     ) -> Vec<TirMatchArm> {
-        let held_locals: IndexSet<u32> = held.iter().filter_map(|h| scoped_temp(&h.held)).collect();
+        let held_locals: IndexSet<u32> = held.iter().filter_map(|h| scoped_temp(&h.bound)).collect();
         let mut seen = 0;
         let alternatives = alternatives_holding(&arm.pattern, &held_locals, &mut seen);
         assert_eq!(seen, held.len(), "each held binding is one pattern binding");
@@ -10232,6 +10237,24 @@ impl<'a> Reify<'a> {
                         .type_table
                         .borrow_mut()
                         .make_mut_ref(h.value_type);
+                    let TirExprKind::Local {
+                        index: held_index,
+                        name: held_name,
+                    } = &h.held.kind
+                    else {
+                        unreachable!("a held binding's temp is a local")
+                    };
+                    lent.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name: held_name.clone(),
+                            local_index: *held_index,
+                            is_mut: true,
+                            type_id: h.value_type,
+                            value: Some(h.bound.clone()),
+                            storage: LetStorage::Aliased,
+                        },
+                        span,
+                    ));
                     lent.push(TirStmt::new(
                         TirStmtKind::Let {
                             name: h.name.clone(),

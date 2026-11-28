@@ -199,6 +199,27 @@ test "a closure" {
     assert f() == 3;
 }
 
+variant Shape {
+    Circle(i32),
+    Dot,
+}
+
+fn clear(shape: &mut Shape) {
+    *shape = Shape::Dot;
+}
+
+test "a variant payload replaced whole, here or by a callee" {
+    let mut held: Option<Shape> = Some(Shape::Circle(1));
+    if let Some(shape) = &mut held {
+        *shape = Shape::Circle(2);
+    }
+    assert held matches { Some(Circle(2)) };
+    if let Some(shape) = &mut held {
+        clear(shape);
+    }
+    assert held matches { Some(_::Dot) };
+}
+
 test "a guard and matches see the held value" {
     let mut o: Option<i32> = Some(5);
     match &mut o {
