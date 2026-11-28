@@ -1163,23 +1163,6 @@ fn stage_a_err_category_eligible<S: AsStrSlice>(category: S) -> bool {
     };
 }
 
-// Decide whether a descriptor `[output]` block is a Stage A claim (d)
-// (tokens-equivalence) target. ANTLR4's `Token.toString()` dump has
-// the form
-//
-//   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]
-//
-// one line per token, optionally prefixed by action-print output
-// (`<writeln("foo")>` echoes inside `{ ... }` action bodies).
-//
-// Returns the normalised expectation, or `None` when the output cannot be
-// reduced to a tokens dump at all (empty, or no `[@…]` line ever appears —
-// auto-skip). Action-print prefix lines stay in the expectation: the lexer
-// executes its action bodies and `to_lexer_string` renders the output sink
-// ahead of the dump. Whether a descriptor still diverges is a
-// `[stage_a_todo]` decision, not something this classifier can know — it never
-// sees Gale's actual output.
-
 /// Whether `line` opens a row of ANTLR4's lexer DFA dump (`s0-' '->:s5=>3`,
 /// `:s1=>2-'n'->:s2=>2`), which `showDFA` descriptors append after the token
 /// rows. A row opens with a state id — an optional `:`, `s`, digits — followed
@@ -1241,6 +1224,22 @@ fn strip_lexer_dfa_dump<S: AsStrSlice>(raw: S) -> String {
     return out;
 }
 
+/// Decide whether a descriptor `[output]` block is a Stage A claim (d)
+/// (tokens-equivalence) target. ANTLR4's `Token.toString()` dump has
+/// the form
+///
+///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]
+///
+/// one line per token, optionally prefixed by action-print output
+/// (`<writeln("foo")>` echoes inside `{ ... }` action bodies).
+///
+/// Returns the normalised expectation, or `None` when the output cannot be
+/// reduced to a tokens dump at all (empty, or no `[@…]` line ever appears —
+/// auto-skip). Action-print prefix lines stay in the expectation: the lexer
+/// executes its action bodies and `to_lexer_string` renders the output sink
+/// ahead of the dump. Whether a descriptor still diverges is a
+/// `[stage_a_todo]` decision, not something this classifier can know — it never
+/// sees Gale's actual output.
 fn classify_output_for_tokens<S: AsStrSlice>(input: S) -> Option<String> {
     let raw = &strip_lexer_dfa_dump(input);
     let mut seen_token_line = false;
