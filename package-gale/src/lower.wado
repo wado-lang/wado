@@ -2779,6 +2779,7 @@ fn lower_op<S: AsStrSlice>(
                 outer_suffix,
             ),
             &g,
+            &mut ctx.analysis,
         ),
         Label(lab) => lower_label_op(
             &lab,
@@ -2796,15 +2797,17 @@ fn lower_op<S: AsStrSlice>(
 }
 
 /// `op`, lowered from `g`, with `g`'s decision site and each alternative
-/// carrying the actions written in it, for the op-only walker, which has no
-/// surface alternative to read them from.
-fn with_surface_group(op: Op, g: &GroupElement) -> Op {
+/// carrying the actions written in it and whether it derives empty, for the
+/// op-only walker, which has no surface alternative to read them from.
+fn with_surface_group(op: Op, g: &GroupElement, analysis: &mut GrammarAnalysis) -> Op {
     let Group(mut go) = op else {
         unreachable();
     };
     go.atn_decision = g.atn_decision;
     for let alt of &mut go.alts {
-        alt.actions = g.alternatives[alt.alt_index].actions;
+        let surface = &g.alternatives[alt.alt_index];
+        alt.actions = surface.actions;
+        alt.nullable = analysis.tail_is_nullable_deep(&surface.elements, 0);
     }
     return Op::Group(go);
 }

@@ -100,7 +100,6 @@ use {
     ExcludedOp,
     RepeatOp,
     OptionalShapeLookaheadStrategy,
-    EmptyAltAdmits,
     GroupOp,
     TokenOnlyShape,
     ListLabelOp,
@@ -189,7 +188,7 @@ use {
     expect_set_call,
     kind_bitset_words,
 } from "./kind_set_gen.wado";
-use { group_alt_classes, non_greedy_static_undecided } from "./lower.wado";
+use { non_greedy_static_undecided } from "./lower.wado";
 use {
     ATN_SHADOW,
     ATN_VERIFIED,
@@ -4930,10 +4929,12 @@ fn repeat_is_scan_guarded(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
     let overlaps_follow = body_first.is_empty()
         || sets_overlap(&body_first, &r.caller_follow_first)
         || ctx.loop_exit_admits_any(r.atn_decision, &body_first);
+    // Read off the partition rather than `group_alt_decision`, whose gates
+    // mark predicates answered.
     let body_scans_to_decide = match &r.body {
-        Group(g) => op_group_alt_decision(g, ctx) matches { Some(branches) && branches
-            .iter_ref()
-            .any(|b| b.alts.len() > 1) },
+        Group(g) => group_dispatches(g)
+            && group_atn(g, ctx) matches { _::Unasked }
+            && group_partition(g).1.iter_ref().any(|b| b.alts.len() > 1),
         _ => false,
     };
     return r.body_scannable && (overlaps_follow || body_scans_to_decide || !r.duties.is_empty());
@@ -4975,8 +4976,8 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         if let Group(g) = &r.body {
             // Where the body has alternatives its own decision is the guard:
             // finding none ends the loop, and the dispatch commits to a find.
-            if let Some(branches) = op_group_alt_decision(g, ctx) {
-                let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc);
+            if let Some(decision) = group_alt_decision(g, ctx) {
+                let [winner, best] = gen_group_decide(w, &decision.branches, &g.scan_group.alts, ctx, nc);
                 w.line(`if ${best} <= p.pos { break; }`);
                 gen_iteration_duties(w, &r.duties, &r.body_admits, &best, &Refusable::Always, false, ctx, nc);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
@@ -5061,7 +5062,7 @@ variant StaticPath {
     /// The surface walker over a leaf, holding the body back from this follow.
     LeafWalk(List<i32>),
     /// The surface walker over this group.
-    GroupWalk(Element),
+    GroupWalk,
 }
 
 /// `?` / `??` under the op-only walker (LR-suffix bodies and the group bodies
@@ -5094,10 +5095,10 @@ fn gen_op_optional(
     }
     if r.strategy matches { _::OptionalScanGuard } {
         if let Group(g) = &r.body {
-            if let Some(branches) = op_group_alt_decision(g, ctx) {
+            if let Some(decision) = group_alt_decision(g, ctx) {
                 // One answer, one set of scans: the scan deciding entry is the
                 // scan the dispatch decides on.
-                let [winner, enters] = gen_decided_optional_group(w, r, &branches, g, ctx, nc, follow_gate);
+                let [winner, enters] = gen_decided_optional_group(w, r, &decision.branches, g, ctx, nc, follow_gate);
                 w.begin(`if ${enters}`);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
                 w.end();
@@ -5240,7 +5241,7 @@ fn gen_op_inner_for_storable_repeat(
     decided: Option<String> = null,
     proven: &List<i32> = &NO_KINDS,
 ) {
-    let entry = open_group_entry(w, elem, ctx, entry);
+    let entry = open_group_entry(w, body_group(&rep_op.body), ctx, entry);
     assert proven.is_empty() || entry matches { _::Guaranteed }, "only an entry that emits nothing keeps what its guard proved";
     match rep_op.body_shape {
         _::LeafRuleCall | _::LeafOther => gen_op_leaf(w, &rep_op.body, ctx, name_counts, proven),
@@ -5353,7 +5354,7 @@ fn gen_op_repeat_optional_group(
 
     if optional_asks_simulator(rep_op.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx) {
         let enters = atn_parse_enters(w, ctx, rep_op.atn_decision, rep_op.non_greedy);
-        let simulated = simulated_enters(w, rep_op, enters, ctx, name_counts, StaticPath::GroupWalk(rep.element));
+        let simulated = simulated_enters(w, rep_op, enters, ctx, name_counts, StaticPath::GroupWalk);
         opt.gen_present(w, ctx, &simulated);
         return;
     }
@@ -5374,7 +5375,7 @@ fn gen_op_repeat_optional_group(
             gen_op_optional_with_shape_lookahead_storable(w, rep_op, g_op, g_elem, s, ctx, name_counts, follow_gate);
         },
         _::OptionalScanGuard => {
-            if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
+            if let Some(decision) = group_alt_decision(g_op, ctx) {
                 // One answer, one set of scans.
                 let [winner, enters] = gen_decided_optional_group(
                     w,
@@ -5456,7 +5457,6 @@ impl OptionalGroup {
                 w,
                 self.g_op,
                 self.g_elem,
-                self.inner,
                 ctx,
                 cond,
                 proven,
@@ -5562,7 +5562,7 @@ fn gen_op_storable_optional_with_first<S: AsStrSlice>(
     cond: S,
     proven: &List<i32> = &NO_KINDS,
 ) {
-    let entry = optional_entry_test(cond, inner_elem, ctx);
+    let entry = optional_entry_test(cond, body_group(&rep_op.body), ctx);
     gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, &entry, null, proven);
 }
 
@@ -5612,14 +5612,13 @@ fn gen_op_transparent_optional_with_cond<S: AsStrSlice>(
     w: &mut CodeWriter,
     g_op: &GroupOp,
     g_elem: &GroupElement,
-    inner: &Element,
     ctx: &mut EmitContext,
     cond: S,
     proven_first: &List<i32> = &NO_KINDS,
 ) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
-    w.begin(`if ${optional_entry_test(cond, inner, ctx)}`);
+    w.begin(`if ${optional_entry_test(cond, Option::Some(g_op), ctx)}`);
     let mut nc: List<[String, i32]> = [];
     let outer_choice = ctx.cursor.enter_group_body(false);
     let first_proven = element_proven_first(&alt.actions, proven_first);
@@ -5697,13 +5696,14 @@ fn any_alt_gated(branches: &List<DecisionBranch>) -> bool {
     return branches.iter_ref().any(|b: &DecisionBranch| !b.gate.is_empty());
 }
 
-/// The alternatives of a repeat's group body, or `null` when the body is not a
-/// group (a leaf or a rule call has no per-alternative gate).
-fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> {
-    if let Group(g) = peel_labels(inner) {
-        return Option::Some(&g.alternatives);
-    }
-    return null;
+/// A repeat's group body, or `null` when the body is not a group (a leaf or a
+/// rule call has no per-alternative gate).
+fn body_group(body: &Op) -> Option<&GroupOp> {
+    return match body {
+        Group(g) => Option::Some(g),
+        ListLabel(ll) => body_group(&ll.inner),
+        _ => null,
+    };
 }
 
 /// What admits a group at all, branch for branch the same disjunction its
@@ -5716,13 +5716,10 @@ struct GroupAdmits {
 
 /// The disjunction admitting the group, and the gates it answers — branch by
 /// branch, never per alternative: alternatives sharing a branch are picked by
-/// the scan tournament, which no predicate reaches. `null` for a non-group body.
-fn group_admits(inner: &Element, ctx: &mut EmitContext) -> Option<GroupAdmits> {
-    let alts = repeat_body_group_alts(inner)?;
-    // A guard, not a dispatch chain: an empty alternative widens it to admit
-    // everything, which is the safe direction and creates no dead branch.
-    let [classes, groups] = group_partition(alts, &null, ctx);
-    let branches = guard_branches(alts, &groups, &classes, ctx);
+/// the scan tournament, which no predicate reaches.
+fn group_admits(g: &GroupOp, ctx: &mut EmitContext) -> GroupAdmits {
+    let [classes, groups] = group_partition(g);
+    let branches = guard_branches(&g.alts, &groups, &classes, ctx);
     let mut parts: List<String> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
         parts.push(`(${render_branch_cond(&branches[i], "p.peek_kind()", ctx)})`);
@@ -5734,24 +5731,24 @@ fn group_admits(inner: &Element, ctx: &mut EmitContext) -> Option<GroupAdmits> {
     if !absorbed {
         for let b of &branches {
             if b.alts.len() == 1 && !b.gate.is_empty() {
-                mark_alt_gate_answered(&alts[b.alts[0]], ctx);
+                mark_alt_gate_answered(&g.alts[b.alts[0]].actions, ctx);
             }
         }
     }
-    return Option::Some(GroupAdmits {
+    return GroupAdmits {
         condition: parts.join(" || "),
         gated: any_alt_gated(&branches),
         expected: classes_union(&classes),
-    });
+    };
 }
 
 /// The disjunction for a caller whose own first-set test already agrees with
 /// the dispatch: only a gate narrows it, so `null` where no branch has one.
-fn group_entry_condition(inner: &Element, ctx: &mut EmitContext) -> Option<String> {
+fn group_entry_condition(g: &GroupOp, ctx: &mut EmitContext) -> Option<String> {
     if !ctx.settings.emit_actions {
         return null;
     }
-    let admits = group_admits(inner, ctx)?;
+    let admits = group_admits(g, ctx);
     if !admits.gated {
         return null;
     }
@@ -5766,27 +5763,31 @@ fn looped() -> GroupEntry {
 /// The test an optional enters its body on: what its strategy proved, and what
 /// the body's dispatch will accept. Building one any other way is how an
 /// optional comes to admit a token its gated body then has no arm for.
-fn optional_entry_test<S: AsStrSlice>(own: S, inner: &Element, ctx: &mut EmitContext) -> String {
-    return match group_entry_condition(inner, ctx) {
-        Some(gate) => `${and_operand(own)} && ${and_operand(gate)}`,
-        null => own.to_string(),
-    };
+fn optional_entry_test<S: AsStrSlice>(own: S, group: Option<&GroupOp>, ctx: &mut EmitContext) -> String {
+    if let Some(g) = group && let Some(gate) = group_entry_condition(g, ctx) {
+        return `${and_operand(own)} && ${and_operand(gate)}`;
+    }
+    return own.to_string();
 }
 
 /// Discharge what `entry` owes before the group's own emit, and return what is
 /// left for the dispatch. A loop's gate break, its unscanned first iteration's
 /// report, and the flag both read all belong here — the site that decides it is
 /// a loop cannot also forget to guard it.
-fn open_group_entry(w: &mut CodeWriter, elem: &Element, ctx: &mut EmitContext, entry: GroupEntry) -> GroupEntry {
+fn open_group_entry(w: &mut CodeWriter, group: Option<&GroupOp>, ctx: &mut EmitContext, entry: GroupEntry) -> GroupEntry {
     let plus_flag = match &entry {
         Looped(flag) => *flag,
         _ => {
             return entry;
         },
     };
-    gen_repeat_gate_break(w, elem, ctx, &plus_flag);
+    if let Some(g) = group {
+        gen_repeat_gate_break(w, g, ctx, &plus_flag);
+        if !plus_flag.is_empty() {
+            gen_mandatory_first_report(w, g, ctx, &plus_flag);
+        }
+    }
     if !plus_flag.is_empty() {
-        gen_mandatory_first_report(w, elem, ctx, &plus_flag);
         w.line(`${plus_flag} = false;`);
     }
     return GroupEntry::Guaranteed;
@@ -5795,8 +5796,8 @@ fn open_group_entry(w: &mut CodeWriter, elem: &Element, ctx: &mut EmitContext, e
 /// Report a token the mandatory first iteration admits nowhere — the one
 /// position the loop's scan guard does not cover. A gated group is already
 /// reported by its own dispatch.
-fn gen_mandatory_first_report<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element, ctx: &mut EmitContext, plus_flag: S) {
-    let Some(admits) = mandatory_first_admits(inner, ctx) else {
+fn gen_mandatory_first_report<S: AsStrSlice>(w: &mut CodeWriter, g: &GroupOp, ctx: &mut EmitContext, plus_flag: S) {
+    let Some(admits) = mandatory_first_admits(g, ctx) else {
         return;
     };
     let expected_ref = expected_set_ref(ctx, &admits.expected);
@@ -5808,9 +5809,9 @@ fn gen_mandatory_first_report<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element
 
 /// What the mandatory first iteration of an undecided loop reports over, or
 /// `null` where the body or its gated dispatch already reports there.
-fn mandatory_first_admits(inner: &Element, ctx: &mut EmitContext) -> Option<GroupAdmits> {
-    let admits = group_admits(inner, ctx)?;
-    if admits.gated || repeat_body_reports_itself(inner, ctx) {
+fn mandatory_first_admits(g: &GroupOp, ctx: &mut EmitContext) -> Option<GroupAdmits> {
+    let admits = group_admits(g, ctx);
+    if admits.gated || group_reports_itself(g) {
         return null;
     }
     return Option::Some(admits);
@@ -5819,15 +5820,15 @@ fn mandatory_first_admits(inner: &Element, ctx: &mut EmitContext) -> Option<Grou
 /// Break a repeat whose gated group body admits no alternative here. A `+`'s
 /// mandatory first iteration is a required position, so it does not exit on the
 /// gate: it reports — at the dispatch, or here where there is none.
-fn gen_repeat_gate_break<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element, ctx: &mut EmitContext, plus_flag: S) {
-    let Some(cond) = group_entry_condition(inner, ctx) else {
+fn gen_repeat_gate_break<S: AsStrSlice>(w: &mut CodeWriter, g: &GroupOp, ctx: &mut EmitContext, plus_flag: S) {
+    let Some(cond) = group_entry_condition(g, ctx) else {
         return;
     };
     if plus_flag.is_empty() {
         w.line(`if ${negate_cond(&cond)} { break; }`);
         return;
     }
-    if group_dispatch_reports(inner) {
+    if g.alts.len() > 1 {
         w.line(`if !${plus_flag} && ${negate_cond(&cond)} { break; }`);
         return;
     }
@@ -5842,24 +5843,8 @@ fn gen_repeat_gate_break<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element, ctx
 /// and reports there. A group of several is a dispatch whose branches are all
 /// conditional under `Guaranteed`, and a nullable alternative matches zero
 /// tokens and says nothing.
-fn repeat_body_reports_itself(inner: &Element, ctx: &mut EmitContext) -> bool {
-    let Some(alts) = repeat_body_group_alts(inner) else {
-        return false;
-    };
-    if alts.len() != 1 {
-        return false;
-    }
-    return !ctx.analysis.tail_is_nullable_deep(&alts[0].elements, 0);
-}
-
-/// Whether the group's own emit reports a position no alternative admits. Only
-/// a group of several has the dispatch that does; one is emitted straight
-/// through.
-fn group_dispatch_reports(inner: &Element) -> bool {
-    return match repeat_body_group_alts(inner) {
-        Some(alts) => alts.len() > 1,
-        null => true,
-    };
+fn group_reports_itself(g: &GroupOp) -> bool {
+    return g.alts.len() == 1 && !g.alts[0].nullable;
 }
 
 /// Open a labeled rule call's captures: the token the call starts at, and the
@@ -5910,7 +5895,7 @@ fn gen_op_optional_with_shape_lookahead_storable(
     let conditions = shape_arm_conditions(w, rep_op, s, ctx, name_counts, gate_caller_follow);
     // The shape twin of `optional_entry_test`: the alternative is the same one
     // in every shape, so its gate joins each shape's own condition.
-    let gate = alt_gate_and_suffix(alt, ctx);
+    let gate = alt_gate_and_suffix(&body.actions, ctx);
     let outer_choice = ctx.cursor.enter_group_body(false);
     for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
         let entry = &s.shapes[ei];
@@ -5996,7 +5981,7 @@ fn gen_op_group(
     if entry matches { _::Required } {
         gen_decision_sync(w, ctx, ctx.plan.decision_entry_expect(g_op.atn_decision), "sync_alts", proven);
     }
-    let entry = open_group_entry(w, elem, ctx, entry);
+    let entry = open_group_entry(w, Option::Some(g_op), ctx, entry);
     let Group(g_elem) = peel_scalar_label(elem) else {
         unreachable();
     };
@@ -6722,7 +6707,7 @@ fn gen_op_repeat_star_plus_greedy(
         if repeat_speculates(rep_op, inner, is_plus, ctx) {
             gen_rep_speculative_iteration(w, &body, rep_op, inner, ctx, name_counts);
         } else {
-            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
+            let decided = gen_rep_iteration_entry(w, rep_op, ctx, name_counts, &plus_flag);
             gen_repeat_iteration(w, &body, rep_op, inner, ctx, decided_entry(&decided, &plus_flag), decided);
         }
     } else if is_plus && body matches { Storable(_) } {
@@ -6781,7 +6766,7 @@ fn gen_repeat_shadow<S: AsStrSlice>(
                 Some([cond, _]) => cond,
                 null => "false",
             },
-            GroupWalk(inner) => gen_group_optional_static_enters(&mut lines, &static_view, inner, ctx, nc),
+            _::GroupWalk => gen_group_optional_static_enters(&mut lines, &static_view, ctx, nc),
         }
     };
     let decision = ctx.plan.atn_decision_site(r.atn_decision);
@@ -6821,12 +6806,12 @@ fn gen_loop_static_enters(
             gen_caller_follow_gate(w, r, ctx, nc);
         }
         let decided = if let Group(g) = &r.body {
-            op_group_alt_decision(g, ctx);
+            group_alt_decision(g, ctx);
         } else {
             null;
         };
-        if let Some(branches) = decided && let Group(g) = &r.body {
-            let [_, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc);
+        if let Some(decision) = decided && let Group(g) = &r.body {
+            let [_, best] = gen_group_decide(w, &decision.branches, &g.scan_group.alts, ctx, nc);
             w.line(`if ${best} <= p.pos { break; }`);
             gen_iteration_duties(w, &r.duties, &r.body_admits, &best, &Refusable::Always, false, ctx, nc);
         } else {
@@ -6855,8 +6840,8 @@ fn gen_op_optional_static_enters(
     }
     if r.strategy matches { _::OptionalScanGuard }
         && let Group(g) = &r.body
-        && let Some(branches) = op_group_alt_decision(g, ctx) {
-        let [_, enters] = gen_decided_optional_group(w, r, &branches, g, ctx, nc, follow_gate);
+        && let Some(decision) = group_alt_decision(g, ctx) {
+        let [_, enters] = gen_decided_optional_group(w, r, &decision.branches, g, ctx, nc, follow_gate);
         return enters;
     }
     let own = gen_op_optional_entry_cond(w, r, ctx, nc);
@@ -6869,14 +6854,10 @@ fn gen_op_optional_static_enters(
 fn gen_group_optional_static_enters(
     w: &mut CodeWriter,
     r: &RepeatOp,
-    inner: &Element,
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
 ) -> String {
     let Group(g_op) = &r.body else {
-        unreachable();
-    };
-    let Group(g_elem) = peel_labels(inner) else {
         unreachable();
     };
     let follow_gate = r.gate_caller_follow;
@@ -6887,7 +6868,7 @@ fn gen_group_optional_static_enters(
         },
         OptionalShapeLookahead(s) => any_shape_enters(w, r, s, ctx, nc, follow_gate),
         _::OptionalScanGuard => {
-            if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
+            if let Some(decision) = group_alt_decision(g_op, ctx) {
                 let [_, enters] = gen_decided_optional_group(w, r, &decision.branches, g_op, ctx, nc, follow_gate);
                 return enters;
             }
@@ -6897,7 +6878,7 @@ fn gen_group_optional_static_enters(
         _::Plain => optional_entry_yielding(w, r, body_guard_cond(r, ctx), null, follow_gate, ctx, nc),
         NonGreedy(_) => unreachable(),
     };
-    return optional_entry_test(own, inner, ctx);
+    return optional_entry_test(own, body_group(&r.body), ctx);
 }
 
 /// Whether any shape of `s` enters here.
@@ -7049,17 +7030,12 @@ fn gen_rep_break_with_recovery<S: AsStrSlice>(w: &mut CodeWriter, scan_pos: S, r
 fn gen_rep_iteration_entry<S: AsStrSlice>(
     w: &mut CodeWriter,
     rep_op: &RepeatOp,
-    inner: &Element,
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
     plus_flag: S,
 ) -> Option<String> {
-    if let Group(g_op) = &rep_op.body {
-        if let Group(g_elem) = peel_scalar_label(inner) {
-            if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
-                return Option::Some(gen_rep_decided_entry(w, rep_op, g_op, &decision, ctx, name_counts, plus_flag));
-            }
-        }
+    if let Group(g_op) = &rep_op.body && let Some(decision) = group_alt_decision(g_op, ctx) {
+        return Option::Some(gen_rep_decided_entry(w, rep_op, g_op, &decision, ctx, name_counts, plus_flag));
     }
     let guarded_only = !plus_flag.is_empty();
     if guarded_only {
@@ -7783,7 +7759,7 @@ fn arms_fallback_last(untestable: &List<bool>) -> List<i32> {
 /// and every caller deciding whether to enter the group read this list, so a
 /// branch cannot admit one thing in one of them and something else in another.
 fn decision_branches(
-    alts: &List<Alternative>,
+    alts: &List<AltBody>,
     partition: &List<AltBranch>,
     classes: &List<AltClass>,
     ctx: &mut EmitContext,
@@ -7795,7 +7771,7 @@ fn decision_branches(
 /// unconditional term can absorb a gate: these claim no predicate answered,
 /// leaving `group_admits` to decide once the whole condition exists.
 fn guard_branches(
-    alts: &List<Alternative>,
+    alts: &List<AltBody>,
     partition: &List<AltBranch>,
     classes: &List<AltClass>,
     ctx: &mut EmitContext,
@@ -7804,7 +7780,7 @@ fn guard_branches(
 }
 
 fn build_decision_branches(
-    alts: &List<Alternative>,
+    alts: &List<AltBody>,
     partition: &List<AltBranch>,
     classes: &List<AltClass>,
     ctx: &mut EmitContext,
@@ -7840,14 +7816,10 @@ struct GroupDecision {
 /// The decision a group's dispatch takes, off the one partition
 /// (`group_partition`), for the dispatch and for callers deciding whether to
 /// enter the group.
-fn group_decision(
-    alts: &List<Alternative>,
-    empty_alt_admits: &Option<EmptyAltAdmits>,
-    ctx: &mut EmitContext,
-) -> GroupDecision {
-    let [classes, groups] = group_partition(alts, empty_alt_admits, ctx);
+fn group_decision(g: &GroupOp, ctx: &mut EmitContext) -> GroupDecision {
+    let [classes, groups] = group_partition(g);
     return GroupDecision {
-        branches: decision_branches(alts, &groups, &classes, ctx),
+        branches: decision_branches(&g.alts, &groups, &classes, ctx),
         expected: classes_union(&classes),
     };
 }
@@ -7856,11 +7828,11 @@ fn group_decision(
 /// one that does not: a lone alternative, or a token-only group. A group the
 /// simulator decides or checks has none either, so its caller enters it as a
 /// body and its own dispatch asks the simulator.
-fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut EmitContext) -> Option<GroupDecision> {
+fn group_alt_decision(g_op: &GroupOp, ctx: &mut EmitContext) -> Option<GroupDecision> {
     if !group_dispatches(g_op) || !group_atn(g_op, ctx) matches { _::Unasked } {
         return null;
     }
-    return Option::Some(group_decision(&g_elem.alternatives, &g_op.empty_alt_admits, ctx));
+    return Option::Some(group_decision(g_op, ctx));
 }
 
 fn group_dispatches(g_op: &GroupOp) -> bool {
@@ -7868,18 +7840,6 @@ fn group_dispatches(g_op: &GroupOp) -> bool {
         SimpleCst(_) | General(_) => g_op.alts.len() > 1,
         TokenOnly(_) | SingleAlt(_) | _::Transparent => false,
     };
-}
-
-/// `group_alt_decision` for the op-only walker, off the dispatch lower baked
-/// rather than the surface alternatives (invariant 9). Its callers commit and
-/// never report, so no expected set comes with it.
-fn op_group_alt_decision(g: &GroupOp, ctx: &EmitContext) -> Option<List<DecisionBranch>> {
-    if g.alts.len() < 2
-        || group_token_only_kinds(&g.alts) matches { Some(_) }
-        || !group_atn(g, ctx) matches { _::Unasked } {
-        return null;
-    }
-    return Option::Some(dispatch_branches(&g.dispatch));
 }
 
 /// Decide a group, as `[winner, best]`: which alternative, and how far it
@@ -8211,7 +8171,7 @@ fn gen_group_dispatch(
         // and a bare `else` here would run, on the tokens that arm refused,
         // exactly the alternative the predicate says does not exist. A gate
         // that fails leaves nothing viable, empty match included.
-        let gate = alt_gate_condition(&alts[slot], ctx);
+        let gate = alt_gate_condition(&g_op_alts[slot].actions, ctx);
         w.else_begin(&if gate.is_empty() { String::from("else") } else { `else if ${gate}` });
         gen_group_branch_body(w, &[slot], alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
         if !gate.is_empty() {
@@ -8256,15 +8216,15 @@ fn slot_first_union(group: &List<i32>, first_sets: &List<List<i32>>) -> List<i32
 /// `answers_gates`: whether this condition alone answers the predicate, so the
 /// body may drop its inline guard. A chain arm does; a disjunction term does
 /// not until the caller has ruled out an absorbing unconditional term.
-fn group_gate(group: &List<i32>, alts: &List<Alternative>, ctx: &mut EmitContext, answers_gates: bool) -> String {
+fn group_gate(group: &List<i32>, alts: &List<AltBody>, ctx: &mut EmitContext, answers_gates: bool) -> String {
     if group.len() != 1 {
         return String::new();
     }
-    let alt = &alts[group[0]];
+    let actions = &alts[group[0]].actions;
     if answers_gates {
-        return alt_gate_and_suffix(alt, ctx);
+        return alt_gate_and_suffix(actions, ctx);
     }
-    return alt_gate_suffix_unanswered(alt, ctx);
+    return alt_gate_suffix_unanswered(actions, ctx);
 }
 
 /// The order a branch emits its alternatives in: mandatory-heavy first, so the
@@ -8455,10 +8415,10 @@ fn gen_alt_group(
         TokenOnly(_) | SingleAlt(_) | _::Transparent => unreachable(),
     };
     let _ = dedup_name(&field_base, name_counts);
-    let [classes, groups] = group_partition(alts, &g_op.empty_alt_admits, ctx);
+    let [classes, groups] = group_partition(g_op);
     gen_group_dispatch(
         w,
-        &decision_branches(alts, &groups, &classes, ctx),
+        &decision_branches(&g_op.alts, &groups, &classes, ctx),
         &classes,
         alts,
         &g_op.alts,
@@ -8474,12 +8434,8 @@ fn gen_alt_group(
 
 /// What a group's alternatives match and the branches its dispatch takes over
 /// them, as `[classes, groups]` — the one place a group is partitioned.
-fn group_partition(
-    alts: &List<Alternative>,
-    empty_alt_admits: &Option<EmptyAltAdmits>,
-    ctx: &mut EmitContext,
-) -> [List<AltClass>, List<AltBranch>] {
-    let classes = group_alt_classes(alts, empty_alt_admits, &mut ctx.analysis);
+fn group_partition(g: &GroupOp) -> [List<AltClass>, List<AltBranch>] {
+    let classes = g.scan_group.alt_classes;
     return [classes, decision_partition(&classes)];
 }
 
@@ -9018,10 +8974,10 @@ fn tournament_gate(idx: i32, ctx: &mut EmitContext) -> Option<String> {
         return null;
     }
     if alt_scan_checks_gate(idx, ctx) {
-        mark_alt_gate_answered(alt, ctx);
+        mark_alt_gate_answered(&alt.actions, ctx);
         return null;
     }
-    return Option::Some(alt_gate_condition(alt, ctx));
+    return Option::Some(alt_gate_condition(&alt.actions, ctx));
 }
 
 /// Whether alternative `idx`'s scan helper tests its gate itself, against a
@@ -9386,7 +9342,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
 /// side can. The parse's marks the predicate its condition names gated.
 fn side_gate(side: PickSide, alt: &Alternative, ctx: &mut EmitContext) -> String {
     return match side {
-        _::Parse => alt_gate_condition(alt, ctx),
+        _::Parse => alt_gate_condition(&alt.actions, ctx),
         _::Scan => ctx.alt_scan_gate_conditions(alt),
     };
 }

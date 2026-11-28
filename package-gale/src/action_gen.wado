@@ -9,6 +9,7 @@ use {
     AttrDecl,
     Grammar,
     ParserRule,
+    edge_gates,
     is_parser_members,
     is_lexer_members,
 } from "./ir.wado";
@@ -645,12 +646,12 @@ pub fn atn_decision_gates(met: &List<MetPredicate>, ctx: &mut EmitContext, in_sc
 /// order — and marked gated as it goes: handing one out without suppressing
 /// the body's own inline guard is what this refuses to make possible. Ask
 /// `alt_has_gate` for the question alone.
-pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &mut EmitContext) -> List<String> {
+pub fn alt_initial_gate_conditions(actions: &List<AltAction>, ctx: &mut EmitContext) -> List<String> {
     if !ctx.settings.emit_actions {
         return [];
     }
     let mut conds: List<String> = [];
-    for let a of &alt.edge_gates() {
+    for let a of &edge_gates(actions) {
         if let Some(c) = ctx.gate_condition(a) {
             ctx.cursor.mark_predicate_gated(a.source.action_id);
             conds.push(ctx.cursor.take_cond(c));
@@ -751,13 +752,13 @@ pub fn mark_gated_predicates(
     }
     if !has_overlaps {
         for let idx of non_lr_indices {
-            mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
+            mark_alt_gate_predicates(&rule.alternatives[*idx].actions, ctx);
         }
         return;
     }
     for let group of groups {
         if group.len() == 1 {
-            mark_alt_gate_predicates(&rule.alternatives[non_lr_indices[group[0]]], ctx);
+            mark_alt_gate_predicates(&rule.alternatives[non_lr_indices[group[0]]].actions, ctx);
         } else {
             let tree = build_group_prediction_tree(
                 &rule.alternatives,
@@ -770,42 +771,43 @@ pub fn mark_gated_predicates(
             let mut gated: List<i32> = [];
             collect_gated_alts(&tree, &rule.alternatives, ctx, &mut gated);
             for let idx of &gated {
-                mark_alt_gate_predicates(&rule.alternatives[*idx], ctx);
+                mark_alt_gate_predicates(&rule.alternatives[*idx].actions, ctx);
             }
         }
     }
 }
 
-/// Mark `alt`'s gateable alt-initial predicates gated, so the dispatch
-/// carries them as its condition and the body does not repeat them as a guard.
-fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut EmitContext) {
-    for let a of &alt.edge_gates() {
+/// Mark the gateable alt-initial predicates among an alternative's `actions`
+/// gated, so the dispatch carries them as its condition and the body does not
+/// repeat them as a guard.
+fn mark_alt_gate_predicates(actions: &List<AltAction>, ctx: &mut EmitContext) {
+    for let a of &edge_gates(actions) {
         if ctx.gate_condition(a) matches { Some(_) } {
             ctx.cursor.mark_predicate_gated(a.source.action_id);
         }
     }
 }
 
-/// Record that `alt`'s alt-initial predicates are answered by a condition the
-/// caller has emitted — for one that can only tell after rendering it
-/// (`group_admits`).
-pub fn mark_alt_gate_answered(alt: &Alternative, ctx: &mut EmitContext) {
+/// Record that an alternative's alt-initial predicates are answered by a
+/// condition the caller has emitted — for one that can only tell after
+/// rendering it (`group_admits`).
+pub fn mark_alt_gate_answered(actions: &List<AltAction>, ctx: &mut EmitContext) {
     if ctx.settings.emit_actions {
-        mark_alt_gate_predicates(alt, ctx);
+        mark_alt_gate_predicates(actions, ctx);
     }
 }
 
 /// The ` && (pred)` suffix folding an alt's gateable predicates into a
 /// token-led dispatch condition, or "" when off (keeping non-Wado grammars
 /// byte-identical) or the alt has none.
-pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &mut EmitContext) -> String {
-    return and_gate(alt_gate_condition(alt, ctx));
+pub fn alt_gate_and_suffix(actions: &List<AltAction>, ctx: &mut EmitContext) -> String {
+    return and_gate(alt_gate_condition(actions, ctx));
 }
 
 /// An alt's gateable predicates joined into one condition, marked answered by
 /// it, or "" where it has none.
-pub fn alt_gate_condition(alt: &Alternative, ctx: &mut EmitContext) -> String {
-    return join_gate_conds(&alt_initial_gate_conditions(alt, ctx));
+pub fn alt_gate_condition(actions: &List<AltAction>, ctx: &mut EmitContext) -> String {
+    return join_gate_conds(&alt_initial_gate_conditions(actions, ctx));
 }
 
 /// The ` && <cond>` a rendered gate condition adds to a test, or nothing.
@@ -818,12 +820,12 @@ pub fn and_gate(cond: String) -> String {
 
 /// The same suffix without claiming the predicate answered; the caller marks it
 /// with `mark_alt_gate_answered` once it can tell.
-pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut EmitContext) -> String {
+pub fn alt_gate_suffix_unanswered(actions: &List<AltAction>, ctx: &mut EmitContext) -> String {
     if !ctx.settings.emit_actions {
         return String::new();
     }
     let mut conds: List<String> = [];
-    for let a of &alt.edge_gates() {
+    for let a of &edge_gates(actions) {
         if let Some(c) = ctx.gate_condition(a) {
             conds.push(ctx.cursor.take_cond(c));
         }
