@@ -2892,10 +2892,7 @@ fn shape_signatures_collide(sigs: &List<List<List<i32>>>) -> bool {
     return false;
 }
 
-/// Build the `RuleHeader` shared by every `Rule` variant. The cached
-/// snake/field names on `ParserRule` are reused so we don't recompute
-/// `to_snake_case`. `case_names` is derived from the alternative list
-/// with the same helper `parser_gen.wado` uses.
+/// Build the `RuleHeader` shared by every `Rule` variant.
 fn lower_header(rule: &ParserRule, ctx: &mut LowerContext) -> RuleHeader {
     let mut first: List<i32> = [];
     for let alt of &rule.alternatives {

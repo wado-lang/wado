@@ -520,8 +520,6 @@ pub variant LrRestBody {
     Suffix(i32),
 }
 
-/// One left-recursive alternative, with the prefix self-reference
-/// stripped and replaced by precedence-climbing semantics.
 impl LrAlt {
     /// `second_tokens` for `token`, which the suffix must start with.
     pub fn second_token(&self, token: i32) -> &List<i32> {
@@ -534,6 +532,8 @@ impl LrAlt {
     }
 }
 
+/// One left-recursive alternative, with the prefix self-reference
+/// stripped and replaced by precedence-climbing semantics.
 pub struct LrAlt {
     /// Index of the alternative in the original rule body. Drives
     /// the `_lr_<idx>` suffix-helper function name.

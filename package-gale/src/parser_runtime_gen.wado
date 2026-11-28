@@ -36,13 +36,14 @@ internal fn compute_fragment_entries(lowered: &LoweredGrammar, ctx: &mut EmitCon
             );
             continue;
         };
-        let rule_name = rule_header(rule).name;
-        let snake = rule_header(rule).snake_name;
-        let emits_vals = entry_emits_vals(ctx, &rule_name);
-        let mut visiting: List<String> = [];
-        let first_ids = ctx.analysis.first_of_rule(&rule_name, &mut visiting);
-        let call = if emits_vals { `let _ = _parse_${snake}(p);` } else { `_parse_${snake}(p);` };
-        result.push(RecoverFragmentEntry { call, first_ids });
+        let header = rule_header(rule);
+        let snake = header.snake_name;
+        let call = if entry_emits_vals(ctx, &header.name) {
+            `let _ = _parse_${snake}(p);`;
+        } else {
+            `_parse_${snake}(p);`;
+        };
+        result.push(RecoverFragmentEntry { call, first_ids: header.first });
     }
     return result;
 }

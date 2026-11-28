@@ -231,12 +231,7 @@ fn parse_call_args(r: &RuleCallOp, ctx: &mut EmitContext) -> List<String> {
     return args;
 }
 
-pub fn gen_parser(
-    w: &mut CodeWriter,
-    lowered: &LoweredGrammar,
-    members: &MemberDecls,
-    ctx: &mut EmitContext,
-) {
+pub fn gen_parser(w: &mut CodeWriter, lowered: &LoweredGrammar, members: &MemberDecls, ctx: &mut EmitContext) {
     if ctx.settings.has_parser_superclass() {
         gen_parser_super_interface(w, &ctx.settings.parser_superclass_name, &ctx.settings.parser_superclass_ops);
     }
@@ -539,11 +534,7 @@ fn lr_continuation_of(lowered_rule: &Rule) -> List<i32> {
 fn gen_scan_function(w: &mut CodeWriter, lowered_rule: &Rule, ctx: &mut EmitContext) {
     let header = rule_header(lowered_rule);
     let name = scan_fn_name(&header.snake_name);
-    // The left-recursive case is settled in `runnable_gate_scope`: such a
-    // rule's scope is unrunnable everywhere, not only in the wrapper that would
-    // have carried it, so the field is dropped from the set.
-    assert !(lowered_rule matches { LeftRecursive(_) } && header.scan_gate_scope matches { Some(_) }),
-        "lowering calls this rule left-recursive and the surface predicate does not";
+    assert !(lowered_rule matches { LeftRecursive(_) } && header.scan_gate_scope matches { Some(_) }), "`runnable_gate_scope` drops a left-recursive rule's scope, which no wrapper could carry";
     if let Some(scope) = &header.scan_gate_scope {
         // A rule that sets a gate for its own extent and puts it back after
         // (`locals` + `@init` / `@after`) is a *scope*, not a write, and the
@@ -611,13 +602,6 @@ fn scan_element_can_match_empty(se: &ScanElement, ctx: &mut EmitContext) -> bool
 fn gen_scan_function_named<S: AsStrSlice>(w: &mut CodeWriter, lowered_rule: &Rule, ctx: &mut EmitContext, fn_name: S) {
     let header = rule_header(lowered_rule);
     if let LeftRecursive(l) = lowered_rule {
-        // LR rule: project the atom's alt indices into the
-        // surface-rule numbering so `gen_scan_lr_functions` can
-        // walk surface alts for the atom-side scan body.
-        let mut non_lr_indices: List<i32> = [];
-        for let alt of &l.atom.alts {
-            non_lr_indices.push(alt.alt_index);
-        }
         // ATN-class LR rule: route the scan loop through
         // `atn_lr_loop_decision` (the rule's ATN loop-entry); every scan
         // rule call brackets with the scan caller stack via
@@ -632,7 +616,7 @@ fn gen_scan_function_named<S: AsStrSlice>(w: &mut CodeWriter, lowered_rule: &Rul
             lowered_rule,
             &l.lr_alts,
             &l.lr_dispatch,
-            &non_lr_indices,
+            &l.atom.decision.non_lr_indices,
             &l.atom.scan_alts,
             ctx,
             fn_name,
@@ -3108,13 +3092,8 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(
 /// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
 /// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
 /// path needs no per-(rule, mask) specialisation.
-fn gen_parse_fn_named<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    lowered_rule: &Rule,
-    ctx: &mut EmitContext,
-    fn_name: S,
-)
-    contract !(lowered_rule matches { Simple(_) }), "`gen_parse_fn` emits a `Simple` rule apart"
+fn gen_parse_fn_named<S: AsStrSlice>(w: &mut CodeWriter, lowered_rule: &Rule, ctx: &mut EmitContext, fn_name: S)
+    contract !lowered_rule matches { Simple(_) }, "`gen_parse_fn` emits a `Simple` rule apart"
 {
     let header = rule_header(lowered_rule);
     // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
