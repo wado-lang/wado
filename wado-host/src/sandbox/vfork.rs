@@ -12,6 +12,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 
+use super::linux::retried;
+
 /// What the child runs on. It makes system calls alone, so a stack far below
 /// a thread's is ample.
 const STACK_SIZE: usize = 256 * 1024;
@@ -20,7 +22,8 @@ const SHELL: &CStr = c"/bin/sh";
 
 /// Run `child` in a new process that shares the host's memory, on a stack of
 /// its own, and return its pid once it has called `exec` or exited. What
-/// `child` returns is the status the process exits with.
+/// `child` returns is the status the process exits with, and an error it
+/// returns is this call's, with the process reaped.
 ///
 /// The process starts with a copy of every descriptor the host holds, and
 /// closes all but the standard streams and `keep` before anything else. A file
@@ -35,7 +38,7 @@ const SHELL: &CStr = c"/bin/sh";
 /// allocates nothing and does not panic.
 pub(super) unsafe fn spawn(
     keep: &[RawFd],
-    mut child: impl FnMut() -> libc::c_int,
+    mut child: impl FnMut() -> io::Result<libc::c_int>,
 ) -> io::Result<libc::pid_t> {
     assert!(
         keep.is_sorted_by(|a, b| a < b) && keep.first().is_none_or(|&fd| fd > libc::STDERR_FILENO),
@@ -44,6 +47,7 @@ pub(super) unsafe fn spawn(
     let mut entry = Entry {
         keep,
         child: &mut child,
+        failure: None,
     };
     let stack = Stack::new()?;
     // SAFETY: plain calls on signal sets that live on this stack.
@@ -73,42 +77,61 @@ pub(super) unsafe fn spawn(
     };
     // SAFETY: `old` is the mask the call above returned.
     unsafe { libc::pthread_sigmask(libc::SIG_SETMASK, &raw const old, ptr::null_mut()) };
-    cloned
+    let pid = cloned?;
+    if let Some(failure) = entry.failure {
+        reap(pid)?;
+        return Err(failure);
+    }
+    Ok(pid)
 }
 
-/// What [`spawn`] hands the new process.
+/// The status the child `pid` ended with, once it has.
+pub(super) fn reap(pid: libc::pid_t) -> io::Result<libc::c_int> {
+    let mut status = 0;
+    // SAFETY: `status` outlives the call.
+    retried(|| unsafe { libc::waitpid(pid, &raw mut status, 0) })?;
+    Ok(status)
+}
+
+/// What [`spawn`] hands the new process, and what it hands back.
 struct Entry<'a> {
     keep: &'a [RawFd],
-    child: &'a mut dyn FnMut() -> libc::c_int,
+    child: &'a mut dyn FnMut() -> io::Result<libc::c_int>,
+    failure: Option<io::Error>,
 }
 
 extern "C" fn enter(entry: *mut c_void) -> libc::c_int {
     // SAFETY: `spawn` passes a pointer to its `Entry`, which it keeps alive
     // and does not touch until this process is done with it.
     let entry = unsafe { &mut *entry.cast::<Entry<'_>>() };
-    close_all_but(entry.keep);
-    default_caught_signals();
-    (entry.child)()
+    let ran = close_all_but(entry.keep).and_then(|()| {
+        default_caught_signals();
+        (entry.child)()
+    });
+    ran.unwrap_or_else(|err| {
+        entry.failure = Some(err);
+        127
+    })
 }
 
 /// Close every descriptor past the standard streams that `keep`, ascending,
 /// does not list.
-fn close_all_but(keep: &[RawFd]) {
+fn close_all_but(keep: &[RawFd]) -> io::Result<()> {
     let close = |first: u32, last: u32| {
-        // SAFETY: a plain system call. A child that kept the host's files open
-        // must not go on, and `abort` is safe here.
+        // SAFETY: a plain system call.
         if first <= last && unsafe { libc::syscall(libc::SYS_close_range, first, last, 0u32) } == -1
         {
-            unsafe { libc::abort() };
+            return Err(io::Error::last_os_error());
         }
+        Ok(())
     };
     let mut first = libc::STDERR_FILENO.cast_unsigned() + 1;
     for &fd in keep {
         let fd = fd.cast_unsigned();
-        close(first, fd - 1);
+        close(first, fd - 1)?;
         first = fd + 1;
     }
-    close(first, u32::MAX);
+    close(first, u32::MAX)
 }
 
 /// Every signal the host catches is back at its default, so the child may
