@@ -35,6 +35,7 @@ test "non-greedy: a sequence of segments mixes both forms" {
 // `while` recovery loop, where `match_any` fails (sets `recovering`) without
 // advancing. Without the loop's `!p.recovering` guard this spins forever; the
 // parse must instead terminate with a diagnostic.
+
 test "recovery: unterminated `.+?` terminates instead of hanging" {
     let r = ng::parse("[ a");
     assert !r.ok(), "expected a diagnostic for the unterminated '['";

@@ -1,6 +1,9 @@
 //! Helper functions for lexopt argument parsing
 
-use lexopt::Parser;
+use std::path::PathBuf;
+
+use lexopt::Arg::Value;
+use lexopt::{Arg, Parser};
 use wado_compiler::LogLevel;
 use wado_compiler::param_resolution::{ParamInputs, ParamPolicyLevel};
 use wado_host::options::LogLevel as HostLogLevel;
@@ -19,6 +22,21 @@ pub fn require_inputs(inputs: Vec<String>, usage: &str) -> Result<Vec<String>, C
     } else {
         Ok(inputs)
     }
+}
+
+/// Take `arg` as a subcommand's one directory operand, or reject it.
+pub fn take_dir_operand(
+    arg: Arg<'_>,
+    dir: &mut Option<PathBuf>,
+    usage: &str,
+) -> Result<(), CliExit> {
+    if dir.is_none()
+        && let Value(value) = arg
+    {
+        *dir = Some(PathBuf::from(value));
+        return Ok(());
+    }
+    Err(unexpected_arg(arg, usage))
 }
 
 pub fn reject_multiple_inputs(input: &Option<String>) -> Result<(), CliExit> {

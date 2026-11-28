@@ -147,6 +147,7 @@ test "a bare Option field is required, and one defaulting to null is not" {
         nickname: Option<String>,
         bio: Option<String> = null,
     }
+
     assert standalone::<Profile>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Profile","$defs":{"Profile":{"type":"object","properties":{"nickname":{"anyOf":[{"type":"string"},{"type":"null"}]},"bio":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null}},"required":["nickname"]}}}`;
 }
 

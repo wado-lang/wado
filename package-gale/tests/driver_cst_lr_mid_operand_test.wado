@@ -28,6 +28,7 @@ test "between's middle operand climbs the shared and when one is left over" {
 }
 
 // The climb that must stop sits in a nested operand, below a looser `or`.
+
 test "a nested operand leaves between its and" {
     assert_tree(
         "a between b or c and d and e",
@@ -49,6 +50,7 @@ test "between's trailing operand takes a looser operator" {
 }
 
 // The inner middle operand must leave an `and` to each enclosing `between`.
+
 test "a mid operand holding another mid-operand alternative" {
     assert_tree(
         "a between b between c and d and e",
@@ -82,6 +84,7 @@ test "binary and chains left-associatively" {
 
 // Each operand in the chain stops by itself, so finding where the middle
 // operand stops reads the chain once rather than from every operand.
+
 test "a long chain after a mid operand parses" {
     for let op of ["and", "or"] {
         let mut input = "a between b and c";

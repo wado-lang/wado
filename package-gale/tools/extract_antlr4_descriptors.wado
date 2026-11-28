@@ -27,8 +27,10 @@
 use { args, env, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize } from "wasi:filesystem";
 use { ErrorCode } from "wasi:filesystem/types.wado";
+
 // Only the path functions: the I/O here is on subdirectory descriptors, which
 // `core:fs` does not reach.
+
 use fs from "core:fs";
 use { CodeWriter, wado } from "wado-lang:wadopoet";
 use { HashMap } from "core:collections";
@@ -1161,23 +1163,6 @@ fn stage_a_err_category_eligible<S: AsStrSlice>(category: S) -> bool {
     };
 }
 
-/// Decide whether a descriptor `[output]` block is a Stage A claim (d)
-/// (tokens-equivalence) target. ANTLR4's `Token.toString()` dump has
-/// the form
-///
-///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]
-///
-/// one line per token, optionally prefixed by action-print output
-/// (`<writeln("foo")>` echoes inside `{ ... }` action bodies).
-///
-/// Returns the normalised expectation, or `None` when the output cannot be
-/// reduced to a tokens dump at all (empty, or no `[@…]` line ever appears —
-/// auto-skip). Action-print prefix lines stay in the expectation: the lexer
-/// executes its action bodies and `to_lexer_string` renders the output sink
-/// ahead of the dump. Whether a descriptor still diverges is a
-/// `[stage_a_todo]` decision, not something this classifier can know — it never
-/// sees Gale's actual output.
-
 /// Whether `line` opens a row of ANTLR4's lexer DFA dump (`s0-' '->:s5=>3`,
 /// `:s1=>2-'n'->:s2=>2`), which `showDFA` descriptors append after the token
 /// rows. A row opens with a state id — an optional `:`, `s`, digits — followed
@@ -1239,6 +1224,22 @@ fn strip_lexer_dfa_dump<S: AsStrSlice>(raw: S) -> String {
     return out;
 }
 
+/// Decide whether a descriptor `[output]` block is a Stage A claim (d)
+/// (tokens-equivalence) target. ANTLR4's `Token.toString()` dump has
+/// the form
+///
+///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]
+///
+/// one line per token, optionally prefixed by action-print output
+/// (`<writeln("foo")>` echoes inside `{ ... }` action bodies).
+///
+/// Returns the normalised expectation, or `None` when the output cannot be
+/// reduced to a tokens dump at all (empty, or no `[@…]` line ever appears —
+/// auto-skip). Action-print prefix lines stay in the expectation: the lexer
+/// executes its action bodies and `to_lexer_string` renders the output sink
+/// ahead of the dump. Whether a descriptor still diverges is a
+/// `[stage_a_todo]` decision, not something this classifier can know — it never
+/// sees Gale's actual output.
 fn classify_output_for_tokens<S: AsStrSlice>(input: S) -> Option<String> {
     let raw = &strip_lexer_dfa_dump(input);
     let mut seen_token_line = false;
@@ -2898,6 +2899,7 @@ test "parse_cli_args: no category selects every category" {
 
 // The Stage B′ emitter runs only on trees the jar pinned, which no test has:
 // pin its output against a committed file.
+
 test "emit_stage_b_oracle_test_chunk reproduces its committed chunk verbatim" {
     let committed = #include_str("../tests/antlr4-compat/drivers/Sets/Sets_2_test.wado");
     let chunk = emit_stage_b_oracle_test_chunk(
@@ -2957,6 +2959,7 @@ test "emit_test_chunk: each claim calls through its module's namespace" {
 
 // A module's `use` must name every grammar the descriptor supplies, or the
 // generator gets the master alone.
+
 test "emit_category_test_file: a module names its descriptor's slave grammars" {
     let composite = module_named("N", 2);
     let src = file_of([emit_stage_a_parse_test_chunk("C", "N", "i", "s", &Triage::Pass, &composite)]);
@@ -2972,6 +2975,7 @@ fn count_lines_starting<S: AsStrSlice, S1: AsStrSlice>(src: S, prefix: S1) -> i3
 
 // Each grammar keeps its own namespace, and the `tree_compare` helpers the
 // claims share are imported once.
+
 test "emit_category_test_file: one file carries many grammars" {
     let one = module_named("One");
     let two = module_named("Two");
@@ -2988,6 +2992,7 @@ test "emit_category_test_file: one file carries many grammars" {
 
 // The point of the module: claims on one grammar, from any stage and any
 // descriptor that repeats it, import it once.
+
 test "emit_category_test_file: claims sharing a module import it once" {
     let shared = module_named("First");
     let src = file_of([

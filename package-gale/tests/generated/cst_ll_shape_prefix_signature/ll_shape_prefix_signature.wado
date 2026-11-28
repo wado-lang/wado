@@ -3601,14 +3601,9 @@ fn _parse_stmt__inner(p: &mut Parser) {
             shape_scan_pos_2 = pos;
         }
         if shape_scan_pos >= 0 {
-            if !SYNC_2.has(p.peek_kind()) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
-            let rs_pick_5 = atn_decide_4(&mut p.atn, &p.kinds, p.pos, 0);
-            if rs_pick_5 < 0 && rs_pick_5 != ATN_NOTHING_STARTS { p.no_viable("no viable alternative", p.peek_span(), &NO_EXPECTED); }
-            if rs_pick_5 == 0 {
-                p.site = 2;
-                p.atn_ret_pending = 45;
-                _parse_m(p);
-            }
+            p.site = 2;
+            p.atn_ret_pending = 45;
+            _parse_m(p);
             p.expect(TK_LIT_AT, &SYNC_3, false);
             p.expect(TK_LIT_HASH, &SYNC_4, false);
         } else if shape_scan_pos_2 >= 0 {
@@ -3745,12 +3740,6 @@ fn atn_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
     let alt = atn_dfa_3(tokens, pos);
     if alt >= 0 { return alt; }
     return atn_predict_once(&ATN_SIM, 2, atn, tokens, pos, TK_EOF, min_prec);
-}
-
-fn atn_decide_4(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
-    let alt = atn_dfa_3(tokens, pos);
-    if alt >= 0 { return alt; }
-    return atn_predict_once(&ATN_SIM, 4, atn, tokens, pos, TK_EOF, min_prec);
 }
 
 fn atn_decide_5(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {

@@ -1,9 +1,9 @@
 //! Every wado-cli integration test, in one binary.
 //!
 //! Modules share a process, so cwd and environment are not isolated between
-//! them. `run_inprocess` is the only module that mutates such state and
-//! serializes on its own lock; the rest drive the CLI through `common::wado*`,
-//! which sets an absolute working directory on each command.
+//! them. No module mutates either: each drives the CLI through
+//! `common::wado*`, which sets an absolute working directory on each command,
+//! or calls a subcommand with absolute paths.
 
 #![allow(unused_crate_dependencies)]
 
@@ -36,6 +36,7 @@ mod manifest_integration;
 mod pgo;
 mod remote;
 mod run_inprocess;
+mod scaffold;
 // Spawns the binary, drives a real TCP socket, and sends Unix signals.
 #[cfg(unix)]
 mod serve;

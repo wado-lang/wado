@@ -926,6 +926,7 @@ struct ScalarKeys {
 }
 
 // Its `?`s forward errors `to_value` never raises for these keys and values.
+
 #[coverage(off)]
 impl Serialize for ScalarKeys {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
@@ -994,6 +995,7 @@ struct FirstKey<K> {
 }
 
 // Only a key the map refuses reaches this, so nothing after it runs.
+
 #[coverage(off)]
 impl<K: Deserialize> Deserialize for FirstKey<K> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<FirstKey<K>, DeserializeError> {
@@ -1044,6 +1046,7 @@ struct LastWins<D: Deserializer> {
 
 // The trait asks for every method, but reading a `Value` or a map reaches only
 // `on_duplicate_field` and `deserialize_any` or `begin_map`.
+
 #[coverage(off)]
 impl<D: Deserializer> Deserializer for LastWins<D> {
     type SeqAccess = D::SeqAccess;

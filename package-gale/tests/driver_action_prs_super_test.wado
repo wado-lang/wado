@@ -10,6 +10,7 @@ use { PsBase, Parser } from "./grammars/wado_prs_super.g4";
 // `>>` is one shift only when the two `>` are adjacent in the source — a fact
 // the token stream carries and the grammar cannot state. Stateless, like the
 // real `RustParserBase.NextGT`.
+
 struct GapBase {
     first: bool,
     gate_calls: i32 = 0,
@@ -56,6 +57,7 @@ test "a gap between the two > fails the predicate" {
 // The other emit path: the predicate selects at the dispatch instead of
 // guarding inside one alternative. Both alts match the same `ID`, so the tree
 // cannot say which was taken — what this pins is that the gate is reached.
+
 test "an alt-initial predicate gates the dispatch" {
     assert pick("a", true) == [true, 1];
     assert pick("a", false) == [true, 1];

@@ -6,17 +6,19 @@ use std::fmt::Write;
 
 use crate::ast::Visibility;
 use crate::ast::{
-    Block, CmImport, EffectHandlerBinding, Expr, ExprStmt, GenericType, IdentExpr, Item, LetStmt,
-    Module, NamedType, Param, Pattern, SelfKind, Stmt, StrLit, StructLiteralExpr,
-    StructLiteralField, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseNameSpelling,
-    WithHandlerExpr,
+    Block, CallExpr, CmImport, EffectHandlerBinding, EffectName, Expr, ExprStmt, Function,
+    GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern, ReturnKeyword,
+    ReturnStmt, SelfKind, Stmt, StrLit, StructLiteralExpr, StructLiteralField, Type, UnaryExpr,
+    UnaryOp, UseDecl, UseItem, UseNameSpelling, WithHandlerExpr,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::component_model::{CmInterfaceRegistry, SourceInterfaceBatch};
 use crate::hashmap::IndexMap;
 use crate::logger::Logger;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{KILN_ADAPTER_NAMESPACE, kiln_adapter_path};
+use crate::name::{
+    KILN_ADAPTER_GENERATE, KILN_ADAPTER_NAMESPACE, KILN_GENERATE, kiln_adapter_path,
+};
 use crate::token::Span;
 use crate::wir::{ImportEntry, ImportKind};
 use crate::world_registry::WorldInfo;
@@ -138,15 +140,16 @@ fn provided_wasi_interfaces(world: &WorldInfo) -> Vec<ProvidedInterface<'_>> {
         .collect()
 }
 
-/// Rewrite a kiln generator's `fn generate(req: Request<T>)` into the
-/// typed-options wire shape: `req` becomes `primary`, `inputs`, `module` and
-/// `options`, and the body opens with `let req: Request<T> = Request { primary,
-/// … };`, which same-scope shadowing keeps looking like the author's `req`. A
-/// `NoOptions` generator omits `options`, an empty record having no CM form.
-/// The author's body then runs under `core:kiln`'s `KilnLogSink`, which keeps
-/// an event's level as a diagnostic's, where `core:log`'s default sink would
-/// write every event to stderr, each line a warning. What the rewrite
-/// names of `core:kiln` it reaches through [`KILN_ADAPTER_NAMESPACE`].
+/// Stand a kiln generator's `fn generate(req: Request<T>)` behind the
+/// typed-options wire shape: an `export fn generate(primary, inputs, module,
+/// options)` builds `let req: Request<T> = Request { primary, … };` and calls
+/// the author's function, kept as [`KILN_ADAPTER_GENERATE`], so the wire
+/// parameters are never in the author's scope. A `NoOptions` generator omits
+/// `options`, an empty record having no CM form. The call runs under
+/// `core:kiln`'s `KilnLogSink`, which keeps an event's level as a diagnostic's,
+/// where `core:log`'s default sink would write every event to stderr, each line
+/// a warning. What the rewrite names of `core:kiln` it reaches through
+/// [`KILN_ADAPTER_NAMESPACE`].
 pub fn inject_kiln_request_adapter(
     target_world: Option<&str>,
     entry_module: &ModuleSource,
@@ -172,7 +175,7 @@ pub fn inject_kiln_request_adapter(
     let mut target: Option<(usize, String, Span, Type, RequestOptions)> = None;
     for (idx, item) in module.items.iter().enumerate() {
         let Item::Function(func) = item else { continue };
-        if !func.is_export || func.name != "generate" {
+        if !func.is_export || func.name != KILN_GENERATE {
             continue;
         }
         let Some(first) = func.params.first() else {
@@ -199,7 +202,6 @@ pub fn inject_kiln_request_adapter(
 
     let has_options = matches!(request_options, RequestOptions::Explicit(_));
     let options_type = match request_options {
-        // The author's `Request<T>` keeps its ids as the `let`'s annotation.
         RequestOptions::Explicit(ty) => ty.refreshed(&mut || module.alloc_ast_id()),
         RequestOptions::Default => Type::Named(NamedType::new(
             module.alloc_ast_id(),
@@ -253,14 +255,7 @@ pub fn inject_kiln_request_adapter(
         quoted: None,
         name_id: module.alloc_ast_id(),
         name_span: span,
-        value: Expr::Ident(IdentExpr {
-            id: module.alloc_ast_id(),
-            name: name.to_string(),
-            span,
-            segments: Vec::new(),
-            type_args: Vec::new(),
-            type_args_on_prefix: false,
-        }),
+        value: ident_expr(module, name, span),
         is_shorthand: false,
         span,
     };
@@ -296,19 +291,19 @@ pub fn inject_kiln_request_adapter(
         attrs: Vec::new(),
         pattern: Pattern::Ident {
             id: module.alloc_ast_id(),
-            name: param_name,
+            name: param_name.clone(),
             span,
         },
         name_span: span,
         is_mut: false,
-        ty: Some(request_ty),
+        ty: Some(request_ty.refreshed(&mut || module.alloc_ast_id())),
         value: Some(request_lit),
         else_block: None,
         span,
     });
 
-    // `with &mut KilnLogSink {} do { <the author's body> }`, the body moved in
-    // below once the function is borrowed.
+    // `with &mut KilnLogSink {} do { return $kiln_generate(<param_name>); }`,
+    // the call filled in below.
     let sink = Expr::Unary(Box::new(UnaryExpr {
         id: module.alloc_ast_id(),
         op: UnaryOp::MutRef,
@@ -349,27 +344,83 @@ pub fn inject_kiln_request_adapter(
         span,
     };
 
-    let Some(Item::Function(func)) = module.items.get_mut(item_idx) else {
+    let Some(Item::Function(author)) = module.items.get_mut(item_idx) else {
         unreachable!("the first pass found `generate` at this index");
     };
+    author.name = KILN_ADAPTER_GENERATE.to_string();
+    author.is_export = false;
+    author.visibility = Visibility::Private;
+    let export_targets = std::mem::take(&mut author.export_targets);
+    let return_type = author.return_type.clone();
+    let effects = author.effects.clone();
+    let effects_source = author.effects_source;
+    let (name_span, params_span, fn_span) = (author.name_span, author.params_span, author.span);
+
+    // `return $kiln_generate(<param_name>);`, the author's body behind its own
+    // function's scope.
+    let call = Expr::Call(Box::new(CallExpr {
+        id: module.alloc_ast_id(),
+        callee: ident_expr(module, KILN_ADAPTER_GENERATE, span),
+        type_args: Vec::new(),
+        args: vec![ident_expr(module, &param_name, span)],
+        has_trailing_comma: false,
+        span,
+    }));
+    with_sink.body.stmts = vec![Stmt::Return(ReturnStmt {
+        id: module.alloc_ast_id(),
+        keyword: ReturnKeyword::Return,
+        value: Some(call),
+        span,
+    })];
     let mut params = vec![primary_param, inputs_param, module_param];
     if let Some(options_param) = options_param {
         params.push(options_param);
     }
-    func.params = params;
-    if let Some(body) = func.body.as_mut() {
-        with_sink.body.stmts = std::mem::take(&mut body.stmts);
-        with_sink.body.span = body.span;
-        body.stmts = vec![
-            let_stmt,
-            Stmt::Expr(ExprStmt {
-                id: with_stmt_id,
-                expr: Expr::WithHandler(Box::new(with_sink)),
-                span,
-            }),
-        ];
-    }
+    let wire_generate = Function {
+        id: module.alloc_ast_id(),
+        name: KILN_GENERATE.to_string(),
+        name_span,
+        visibility: Visibility::Public,
+        is_export: true,
+        export_targets,
+        is_async: false,
+        type_params: Vec::new(),
+        attrs: Vec::new(),
+        params,
+        params_span,
+        return_type: return_type.map(|ty| ty.refreshed(&mut || module.alloc_ast_id())),
+        effects: effects
+            .into_iter()
+            .map(|effect| EffectName {
+                id: module.alloc_ast_id(),
+                ..effect
+            })
+            .collect(),
+        effects_source,
+        holds_contracts_of: None,
+        body: Some(Block {
+            id: module.alloc_ast_id(),
+            stmts: vec![
+                let_stmt,
+                Stmt::Expr(ExprStmt {
+                    id: with_stmt_id,
+                    expr: Expr::WithHandler(Box::new(with_sink)),
+                    span,
+                }),
+            ],
+            span,
+        }),
+        doc: None,
+        span: fn_span,
+    };
+    module
+        .items
+        .insert(item_idx + 1, Item::Function(wire_generate));
     module.items.insert(0, Item::Use(kiln_use));
+}
+
+fn ident_expr(module: &mut Module, name: &str, span: Span) -> Expr {
+    IdentExpr::bare(module.alloc_ast_id(), name, span)
 }
 
 /// `core:kiln`'s `name {}`, for a struct with no fields.

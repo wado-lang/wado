@@ -1,0 +1,24 @@
+// A blanket's bound holds at the instance of a generic newtype an impl names,
+// and at no other: there the static the newtype inherits answers.
+
+struct Base<T> { v: T }
+impl<T> Base<T> {
+    fn mk() -> i32 { return 1; }
+}
+type W<T> = Base<T>;
+
+trait Marked with () { fn mark(&self) -> i32; }
+impl Marked for W<i32> { fn mark(&self) -> i32 { return 2; } }
+
+trait Make with () { fn mk() -> i32; }
+impl<T: Marked> Make for T {
+    fn mk() -> i32 { return 20; }
+}
+
+test "the instance the impl names" {
+    assert W::<i32>::mk() == 20;
+}
+
+test "another instance" {
+    assert W::<String>::mk() == 1;
+}

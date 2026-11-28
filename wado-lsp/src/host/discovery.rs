@@ -165,17 +165,20 @@ pub fn governing_workspace(
     files: &dyn PackageFiles,
 ) -> Option<(PathBuf, String)> {
     let member_dir = resolve_parent_dirs(member_dir);
-    let mut dir = member_dir.clone();
-    while dir.pop() {
-        let candidate = dir.join(WORKSPACE_FILENAME);
-        let Ok(content) = files.read(&candidate) else {
-            continue;
-        };
-        let governs = read_workspace_members(&content)
-            .is_none_or(|members| workspace_governs(&dir, &members, &member_dir));
-        return governs.then_some((dir, content));
-    }
-    None
+    let (dir, content) = nearest_workspace(&member_dir, files)?;
+    let governs = read_workspace_members(&content)
+        .is_none_or(|members| workspace_governs(&dir, &members, &member_dir));
+    governs.then_some((dir, content))
+}
+
+/// The nearest `wado-workspace.toml` strictly above `dir`, whether or not its
+/// `members` covers `dir`: its directory and contents.
+#[must_use]
+pub fn nearest_workspace(dir: &Path, files: &dyn PackageFiles) -> Option<(PathBuf, String)> {
+    dir.ancestors().skip(1).find_map(|root| {
+        let content = files.read(&root.join(WORKSPACE_FILENAME)).ok()?;
+        Some((root.to_path_buf(), content))
+    })
 }
 
 /// The file that satisfies one `[dependencies]` entry.

@@ -450,6 +450,19 @@ fn a_keyword_is_escaped_and_a_typedef_resolves() {
     assert!(code.contains("fn started(&self) -> f64;"), "{code}");
 }
 
+/// CSSOM leaves `CSSOMString` to be either string type, and each is a `String`.
+#[test]
+fn a_cssom_string_is_a_string() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[attribute("cssText", &plain("CSSOMString"), false)],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(code.contains("fn css_text(&self) -> String;"), "{code}");
+    assert_eq!(skipped, Vec::<String>::new());
+}
+
 #[test]
 fn the_global_yields_the_dom_effect_with_its_resource_typed_attributes() {
     let (code, _) = chain().generate();
@@ -528,6 +541,40 @@ fn a_member_declared_twice_is_one_member() {
     let (code, skipped) = defs.generate();
     assert_eq!(code.matches("fn alert(&self);").count(), 1, "{code}");
     assert_eq!(skipped, Vec::<String>::new());
+}
+
+/// CSSOM's dashed attribute names the CSS property its camel-cased attribute
+/// does, as `CSSPositionTryDescriptors` declares both `margin-top` and
+/// `marginTop`.
+#[test]
+fn a_dashed_attribute_is_its_camel_cased_one() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            attribute("margin-top", &plain("CSSOMString"), false),
+            attribute("marginTop", &plain("CSSOMString"), false),
+            attribute("anchor-name", &plain("CSSOMString"), false),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert_eq!(code.matches("fn margin_top(&self)").count(), 1, "{code}");
+    // With no camel-cased attribute beside it, a dashed one binds itself.
+    assert!(code.contains("fn anchor_name(&self) -> String;"), "{code}");
+    assert_eq!(skipped, Vec::<String>::new());
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(glue.contains("const $value = p0.marginTop;"), "{glue}");
+    // A dashed name is no identifier, so the glue reaches it by its string.
+    assert!(
+        glue.contains("const $value = p0[\"anchor-name\"];"),
+        "{glue}"
+    );
+    assert!(
+        glue.contains("p0[\"anchor-name\"] = $string(p1, p2);"),
+        "{glue}"
+    );
 }
 
 /// `WebIDL` keeps a static operation apart from a regular one of its name, as
@@ -1539,6 +1586,16 @@ fn a_union_collapses_only_where_the_guest_supplies_the_value() {
                 ),
                 true,
             ),
+            // Two constituents left are still narrowed: the host may return
+            // the third.
+            attribute(
+                "slot",
+                &union(
+                    &[plain("Node"), plain("DOMString"), plain("TrustedHTML")],
+                    false,
+                ),
+                false,
+            ),
         ],
     ));
     let (code, skipped) = defs.generate();
@@ -1549,18 +1606,20 @@ fn a_union_collapses_only_where_the_guest_supplies_the_value() {
     );
     // `undefined` is the nullability marker, not a dropped constituent.
     assert!(code.contains("fn event(&self) -> Option<Node>;"), "{code}");
+    // Two constituents the slice types need no collapse either way.
+    assert!(code.contains("fn hidden(&self) -> BoolOrString;"), "{code}");
     assert_eq!(
         skipped,
         [
             "Element.inner_html: union narrowed in a result: `TrustedHTML` is outside the slice",
-            "Element.hidden: union of 2 expressible types in a result",
             "Element.script: union: `HTMLScriptElement` is outside the slice; `SVGScriptElement` is outside the slice",
+            "Element.slot: union narrowed in a result: `TrustedHTML` is outside the slice",
         ]
     );
 }
 
 #[test]
-fn a_union_of_several_types_is_a_variant_the_guest_supplies() {
+fn a_union_of_several_types_is_a_variant_either_way() {
     let mut defs = chain();
     defs.typedefs = vec![typedef(
         "Position",
@@ -1631,6 +1690,22 @@ fn a_union_of_several_types_is_a_variant_the_guest_supplies() {
                 &union(&[plain("boolean"), plain("DOMString")], false),
                 false,
             ),
+            // The host's value tells its case apart: by its class, by being
+            // an array, by its primitive type, or else as a dictionary.
+            operation(
+                "closest",
+                &union(
+                    &[
+                        plain("Element"),
+                        plain("EventInit"),
+                        sequence("sequence", &plain("DOMString")),
+                        plain("double"),
+                    ],
+                    true,
+                ),
+                &[],
+                "",
+            ),
         ],
     ));
     let (code, skipped) = defs.generate();
@@ -1663,10 +1738,12 @@ fn a_union_of_several_types_is_a_variant_the_guest_supplies() {
         code.contains("fn set_hidden(&self, value: BoolOrString);"),
         "{code}"
     );
-    assert_eq!(
-        skipped,
-        ["Element.hidden: union of 2 expressible types in a result"]
+    assert!(code.contains("fn hidden(&self) -> BoolOrString;"), "{code}");
+    assert!(
+        code.contains("fn closest(&self) -> Option<ElementOrEventInitOrStringListOrF64>;"),
+        "{code}"
     );
+    assert_eq!(skipped, Vec::<String>::new());
 
     let glue = generate(&defs.build(), "test.json")
         .expect("the slice should transform")
@@ -1693,6 +1770,67 @@ fn a_union_of_several_types_is_a_variant_the_guest_supplies() {
         glue.contains("p0.hidden = (p1 === 0 ? (p2 !== 0) : $string(p2, p3));"),
         "{glue}"
     );
+    // A result's case is the one whose test the host's value passes, and one
+    // passing none is an error; `Element`'s classes are `2..=2`.
+    let tested = [
+        "if ($within($value, 2, 2)) {\n            $view().setUint8($ret + 8, 0);",
+        "} else if ($dictionary($value)) {\n            $view().setUint8($ret + 8, 1);",
+        "} else if (Array.isArray($value)) {\n            $view().setUint8($ret + 8, 2);",
+        "} else if (typeof $value === \"number\") {\n            $view().setUint8($ret + 8, 3);",
+        "} else {\n            throw new TypeError(`${$value} is no case of the union`);",
+    ];
+    for test in tested {
+        assert!(glue.contains(test), "{test}\n{glue}");
+    }
+}
+
+/// Digital Credentials unions two enums, which `WebIDL` does not count as
+/// distinguishable; their values are, so the glue tests a case by them.
+#[test]
+fn a_result_union_of_two_enums_takes_the_case_holding_the_value() {
+    let mut defs = chain();
+    defs.enums = vec![
+        string_enum("Presentation", &["openid4vp"]),
+        string_enum("Issuance", &["openid4vci"]),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[attribute(
+            "protocol",
+            &union(&[plain("Presentation"), plain("Issuance")], false),
+            true,
+        )],
+    ));
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(
+        glue.contains("if ($ENUMS.Presentation.includes($value)) {"),
+        "{glue}"
+    );
+    assert!(
+        glue.contains("} else if ($ENUMS.Issuance.includes($value)) {"),
+        "{glue}"
+    );
+}
+
+#[test]
+#[should_panic(expected = "a union's enums must share no value")]
+fn a_union_of_two_enums_sharing_a_value_is_refused() {
+    let mut defs = chain();
+    defs.enums = vec![
+        string_enum("Presentation", &["openid4vp", "shared"]),
+        string_enum("Issuance", &["openid4vci", "shared"]),
+    ];
+    defs.interfaces.push(partial(
+        "Element",
+        &[attribute(
+            "protocol",
+            &union(&[plain("Presentation"), plain("Issuance")], false),
+            true,
+        )],
+    ));
+    let _ = generate(&defs.build(), "test.json");
 }
 
 #[test]

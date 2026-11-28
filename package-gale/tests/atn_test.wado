@@ -57,6 +57,7 @@ fn return_state_follows_call(atn: &Atn, ret: i32, target_start: i32) -> bool {
 // hinges on distinguishing between's first operand (after which `'and'` is
 // pending) from the LR loop operand — which the rule-index stack cannot do
 // but per-call-site return states can.
+
 global BETWEEN_G4: String = "
 grammar B;
 stat : expr ;
@@ -156,6 +157,7 @@ test "a decision holds up to one alternative fewer than the failed-alternative o
 
 // The simulator marks an alternative a predicate failed by offsetting it, so a
 // decision that wide would read its higher alternatives as failed ones.
+
 #[expect_trap]
 test "a decision as wide as the failed-alternative offset is refused" {
     build_atn(&parse(alternatives_g4(1024)).unwrap());
@@ -310,6 +312,7 @@ test "P4.2a: call sites map to distinct ATN return states (between shape)" {
 // `lr_loop_entry_decision` must skip the `*` loop (no precedence edges) and
 // return the LR loop entry (precedence enter edges) — otherwise the LR
 // dispatcher feeds the wrong decision number to `atn_lr_loop_decision`.
+
 global LR_ATOM_STAR_G4: String = "
 grammar T;
 e : e '+' e | ID* 'x' ;
@@ -337,6 +340,7 @@ test "lr_loop_entry_decision selects the precedence loop entry, not an atom star
 // suffix has an empty static `suffix_first`. The dispatcher keeps it (the
 // simulator admits the complement operator), so `build_atn` builds a precedence
 // edge for it, aligned with `valid_lr_alts`.
+
 global LR_OPEN_SUFFIX_G4: String = "
 grammar T;
 e : 'between' e 'and' e
@@ -367,6 +371,7 @@ test "build_atn builds a precedence edge for a `~X`-led LR suffix" {
 }
 
 // An LR suffix whose recursive operand is nested inside a Repeat (`('and' e)+`).
+
 global LR_NESTED_SELFREF_G4: String = "
 grammar T;
 e : e ('and' e)+
@@ -395,6 +400,7 @@ test "build_atn handles a nested self-reference in an LR suffix" {
 }
 
 // Two non-greedy `??` in one rule must get distinct ATN decisions.
+
 global TWO_QQ_G4: String = "
 grammar T;
 s : 'a' ('b')?? 'c' ('d')?? EOF ;
@@ -425,6 +431,7 @@ fn assert_qq_exit_first(atn: &Atn, d: i32) {
 
 // A decision-bearing node inside an LR suffix (built by the `_prec` builders)
 // must still record its decision site, or `decision_sites` is incomplete there.
+
 global LR_SUFFIX_QQ_G4: String = "
 grammar T;
 e : e ('x')?? '+' e | ID ;

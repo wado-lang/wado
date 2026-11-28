@@ -9,6 +9,8 @@
 
 use std::fmt::Write;
 
+use indexmap::{IndexMap, IndexSet};
+use wado_compiler::ast::HandleClasses;
 use wado_compiler::component_model::flat_params_in_buffer;
 use wado_compiler::name::{
     ExternHostQuery, ExternSlotAccess, callback_export_name, cm_callback_func_name, cm_import_alias,
@@ -74,8 +76,9 @@ export function $glue() {
 
   // Each declared interface's prototype, to its class.
   let $classes;
-  // The class of the nearest ancestor of `object`'s interface that is declared.
-  const $classOf = (object) => {
+  // The class of the nearest ancestor of `object`'s interface that is
+  // declared, or `undefined` where none is.
+  const $nearestClass = (object) => {
     if ($classes === undefined) {
       $classes = new Map();
       for (const [name, cls] of $CLASSES) {
@@ -90,8 +93,27 @@ export function $glue() {
         return cls;
       }
     }
-    throw new TypeError(`${object} is an instance of no interface this package declares`);
+    return undefined;
   };
+  const $classOf = (object) => {
+    const cls = $nearestClass(object);
+    if (cls === undefined) {
+      throw new TypeError(`${object} is an instance of no interface this package declares`);
+    }
+    return cls;
+  };
+  // Whether `value` is an object of the interface whose classes are `lo..=hi`.
+  const $within = (value, lo, hi) => {
+    if (Object(value) !== value) {
+      return false;
+    }
+    const cls = $nearestClass(value);
+    return cls !== undefined && lo <= cls && cls <= hi;
+  };
+  // Whether `value` is a dictionary: an object of no declared interface, and
+  // no array.
+  const $dictionary = (value) =>
+    Object(value) === value && !Array.isArray(value) && $nearestClass(value) === undefined;
 
   // What an `async` import answers: a promise of the function writing a
   // `Result` at an address, its payload `offset` in. The guest hands the
@@ -181,13 +203,18 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
     )
     .unwrap();
 
+    let classes: Classes = module
+        .resources
+        .iter()
+        .filter_map(|r| Some((r.name.as_str(), r.classes?)))
+        .collect();
     let functions = module
         .resources
         .iter()
         .flat_map(|r| &r.methods)
         .chain(module.interfaces.iter().flat_map(|i| &i.functions));
     for function in functions {
-        write_function(&mut out, function, &output.js[&function.cm_attr]);
+        write_function(&mut out, function, &output.js[&function.cm_attr], &classes);
     }
     out.push_str("    },\n  };\n}\n");
     out
@@ -224,7 +251,10 @@ fn cross_in_memory(params: &[WadoParam]) -> bool {
     flat_params_in_buffer(flat_params, false)
 }
 
-fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
+/// Each resource's classes, by its name.
+type Classes<'a> = IndexMap<&'a str, HandleClasses>;
+
+fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction, classes: &Classes) {
     assert!(
         reads_params(&function.params),
         "`{}` passes a closure through memory, which no shim reads",
@@ -254,15 +284,19 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
     let receiver = || args.first().expect("a member of the receiver");
     let call_args = |skip: usize| args[skip..].join(", ");
     let value = match &js.member {
-        JsMember::Get(attribute) => format!("{}.{attribute}", receiver()),
-        JsMember::Set(attribute) => format!("{}.{attribute} = {}", receiver(), args[1]),
-        JsMember::Call(operation) => format!("{}.{operation}({})", receiver(), call_args(1)),
+        JsMember::Get(attribute) => format!("{}{}", receiver(), property(attribute)),
+        JsMember::Set(attribute) => {
+            format!("{}{} = {}", receiver(), property(attribute), args[1])
+        }
+        JsMember::Call(operation) => {
+            format!("{}{}({})", receiver(), property(operation), call_args(1))
+        }
         JsMember::Static { interface, name } => {
-            format!("globalThis.{interface}.{name}({})", call_args(0))
+            format!("globalThis.{interface}{}({})", property(name), call_args(0))
         }
         JsMember::New { interface } => format!("new globalThis.{interface}({})", call_args(0)),
         JsMember::Global => "globalThis".to_string(),
-        JsMember::GlobalGet(attribute) => format!("globalThis.{attribute}"),
+        JsMember::GlobalGet(attribute) => format!("globalThis{}", property(attribute)),
         JsMember::ReasonName => format!("String({}.name ?? \"Error\")", receiver()),
         JsMember::ReasonMessage => format!("String({0}.message ?? {0})", receiver()),
     };
@@ -275,9 +309,7 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
                 "return $settle({value}, {payload}, ($ret, $value) => {{"
             )];
             if let Some(ok) = ok {
-                let mut written = Vec::new();
-                store(ok, "$ret", 0, "$value", &mut written);
-                lines.extend(written.into_iter().map(|line| format!("  {line}")));
+                store_nested(ok, "$ret", 0, "$value", classes, &mut lines);
             }
             lines.push("});".to_string());
             lines
@@ -291,7 +323,7 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
         Some(ty) => {
             flat.names.push("$ret".to_string());
             let mut lines = vec![format!("const $value = {value};")];
-            store(ty, "$ret", 0, "$value", &mut lines);
+            store(ty, "$ret", 0, "$value", classes, &mut lines);
             lines
         }
     };
@@ -306,6 +338,23 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
         writeln!(out, "        {line}").unwrap();
     }
     out.push_str("      },\n");
+}
+
+/// The access to the property `name`: `.name`, or `["name"]` where the name
+/// is no JavaScript identifier, as CSSOM's dashed attributes are not.
+fn property(name: &str) -> String {
+    if is_identifier(name) {
+        format!(".{name}")
+    } else {
+        format!("[{name:?}]")
+    }
+}
+
+/// Whether a `WebIDL` name is also a JavaScript identifier. A `WebIDL`
+/// identifier is letters, digits, `_` and `-`, so it is one without a `-`.
+#[must_use]
+pub fn is_identifier(name: &str) -> bool {
+    !name.contains('-')
 }
 
 /// The core parameters of the function being written, named in order.
@@ -774,7 +823,14 @@ fn load(ty: &WadoType, base: &str, offset: u32) -> String {
 }
 
 /// The statements writing the DOM's `value` of type `ty` at `base + offset`.
-fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<String>) {
+fn store(
+    ty: &WadoType,
+    base: &str,
+    offset: u32,
+    value: &str,
+    classes: &Classes,
+    lines: &mut Vec<String>,
+) {
     let at = place(base, offset);
     match Shape::of(ty) {
         Shape::String => lines.push(format!("$putString({at}, {value});")),
@@ -784,9 +840,14 @@ fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<St
             lines.push(format!("  $view().setUint8({at}, 0);"));
             lines.push("} else {".to_string());
             lines.push(format!("  $view().setUint8({at}, 1);"));
-            let mut some = Vec::new();
-            store(inner, base, offset + align_to(1, align), value, &mut some);
-            lines.extend(some.into_iter().map(|line| format!("  {line}")));
+            store_nested(
+                inner,
+                base,
+                offset + align_to(1, align),
+                value,
+                classes,
+                lines,
+            );
             lines.push("}".to_string());
         }
         Shape::Scalar(scalar) => lines.push(scalar.to_memory(&at, value)),
@@ -795,7 +856,14 @@ fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<St
             let (offsets, ..) = record_layout(field_types(fields));
             for (field, field_offset) in fields.iter().zip(offsets) {
                 let member = format!("{value}.{}", field.host_name);
-                store(&field.ty, base, offset + field_offset, &member, lines);
+                store(
+                    &field.ty,
+                    base,
+                    offset + field_offset,
+                    &member,
+                    classes,
+                    lines,
+                );
             }
         }
         Shape::List(elem) => {
@@ -803,13 +871,73 @@ fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<St
             lines.push(format!(
                 "$putList({at}, {value}, {size}, {align}, (at, item) => {{"
             ));
-            let mut items = Vec::new();
-            store(elem, "at", 0, "item", &mut items);
-            lines.extend(items.into_iter().map(|line| format!("  {line}")));
+            store_nested(elem, "at", 0, "item", classes, lines);
             lines.push("});".to_string());
         }
-        Shape::Variant(_) | Shape::Callback(..) => {
-            unreachable!("the WebIDL frontend returns no {ty:?}")
+        Shape::Variant(cases) => {
+            let tests: Vec<String> = cases
+                .iter()
+                .map(|case| case_test(&case.ty, value, classes))
+                .collect();
+            assert!(
+                tests.iter().collect::<IndexSet<_>>().len() == tests.len(),
+                "a union's cases must have tests of their own: {tests:?}"
+            );
+            let (payload, ..) = variant_layout(cases);
+            for (index, (case, test)) in cases.iter().zip(&tests).enumerate() {
+                let keyword = if index == 0 { "if" } else { "} else if" };
+                lines.push(format!("{keyword} ({test}) {{"));
+                lines.push(format!(
+                    "  {}",
+                    Scalar::U8.to_memory(&at, &index.to_string())
+                ));
+                store_nested(&case.ty, base, offset + payload, value, classes, lines);
+            }
+            lines.push("} else {".to_string());
+            lines.push(format!(
+                "  throw new TypeError(`${{{value}}} is no case of the union`);"
+            ));
+            lines.push("}".to_string());
+        }
+        Shape::Callback(..) => unreachable!("the WebIDL frontend returns no {ty:?}"),
+    }
+}
+
+/// [`store`], one level further in.
+fn store_nested(
+    ty: &WadoType,
+    base: &str,
+    offset: u32,
+    value: &str,
+    classes: &Classes,
+    lines: &mut Vec<String>,
+) {
+    let mut inner = Vec::new();
+    store(ty, base, offset, value, classes, &mut inner);
+    lines.extend(inner.into_iter().map(|line| format!("  {line}")));
+}
+
+/// The test that the host's `value` is of the union case `ty`.
+fn case_test(ty: &WadoType, value: &str, classes: &Classes) -> String {
+    match Shape::of(ty) {
+        Shape::Scalar(Scalar::Handle) => {
+            let WadoType::Named(name) = ty else {
+                unreachable!("a handle is a named resource")
+            };
+            let HandleClasses { lo, hi } = *classes
+                .get(name.as_str())
+                .expect("a union's handle must be a host interface's");
+            format!("$within({value}, {lo}, {hi})")
+        }
+        Shape::Scalar(Scalar::Bool) => format!("typeof {value} === \"boolean\""),
+        Shape::Scalar(_) => format!("typeof {value} === \"number\""),
+        Shape::String => format!("typeof {value} === \"string\""),
+        // By its values, which tell two enums apart where a union holds both.
+        Shape::Enum(name) => format!("$ENUMS.{name}.includes({value})"),
+        Shape::List(_) => format!("Array.isArray({value})"),
+        Shape::Record(_) => format!("$dictionary({value})"),
+        Shape::Option(_) | Shape::Variant(_) | Shape::Callback(..) => {
+            unreachable!("a union's case lowers to no {ty:?}")
         }
     }
 }

@@ -152,6 +152,7 @@ pub struct SpanAttrs {
 
 // Tier 1: the build-time threshold. `-D log.level=info` settles it, and
 // `from_env` reads the build environment rather than the run-time one.
+
 #[param(name = "log.level", from_env = "WADO_LOG_LEVEL")]
 global LOG_LEVEL: String = "trace";
 
@@ -159,11 +160,13 @@ global LOG_STATIC_LEVEL: Level = level_from_str(LOG_LEVEL);
 
 // Tier 2: the process-wide threshold, owned here rather than by the installed
 // sink, so there is no sink contract and no cache to invalidate.
+
 global mut RUNTIME_LEVEL: Level = Level::Trace;
 
 // Reentrancy backstop: a handler that logs forwards outward and terminates at
 // the outermost sink, but a self-reinstalling one would not. Past this depth an
 // event is dropped rather than chaining without bound.
+
 global MAX_DEPTH: i32 = 8;
 
 global mut DEPTH: i32 = 0;
@@ -244,6 +247,7 @@ pub interface Log {
 // The subscriber of last resort, and the level it admits. An application that
 // wants another format, destination or threshold installs a handler; one that
 // wants silence installs `NopSink`. The WEP argues the level.
+
 global DEFAULT_LEVEL: Level = Level::Info;
 
 global mut DEFAULT_SINK: TextSink = TextSink {};

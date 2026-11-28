@@ -7,6 +7,7 @@
 //! consuming input and recurses unboundedly — `wasm trap: call stack
 //! exhausted`. The parser must terminate on any input; a passing test (no
 //! trap) is the assertion.
+
 use recur from "./grammars/scan_group_recursion.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_scan_group_recursion" },
@@ -15,6 +16,7 @@ use recur from "./grammars/scan_group_recursion.g4"
 // A lone `|` starts `closure`'s mandatory `('||' | '|' '|')` group but cannot
 // complete it, so `closure` — and thus `expr` — must not match. Before the fix
 // the scan of `expr` recursed `expr -> primary -> closure -> expr` forever.
+
 test "lone pipe does not recurse unboundedly" {
     let r = recur::parse("|");
     assert r.diagnostics.len() > 0, "expected diagnostics for a lone '|'";
@@ -22,12 +24,14 @@ test "lone pipe does not recurse unboundedly" {
 
 // `| |` also cannot form `closure ('||' | '|' '|') expr` (the body `expr` is
 // absent), and must terminate with diagnostics rather than trap.
+
 test "double pipe without a body does not recurse unboundedly" {
     let r = recur::parse("| |");
     assert r.diagnostics.len() > 0, "expected diagnostics for '| |'";
 }
 
 // A well-formed `closure` still parses: `|| 1 ;` is `('||') expr` then `';'`.
+
 test "valid closure still parses cleanly" {
     let r = recur::parse("|| 1 ;");
     assert r.ok(), "expected a clean parse";

@@ -18,6 +18,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 // The hit case: the loop must leave `{ y }` to `expr?`, because the `.m()` it
 // would otherwise strand has no other taker.
+
 test "the loop declines an iteration that would strand the alternative" {
     assert_tree(
         "{ let a = x; { y }.m() }",
@@ -28,6 +29,7 @@ test "the loop declines an iteration that would strand the alternative" {
 // The rejection cases. A loop that simply stopped preferring an iteration
 // fails both: here the iteration is the right reading and taking it is what
 // lets the rest of the alternative match.
+
 test "an iteration another iteration can follow is still taken" {
     assert_tree(
         "{ let a = x; { y } { z } }",

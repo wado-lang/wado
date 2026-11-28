@@ -35,6 +35,7 @@ impl Writer {
 
 // Shared traversal. `open` / `leaf` / `close` are the only per-format pieces;
 // the skeleton hands each one the `&mut Writer` plus the current depth.
+
 fn walk(
     node: &Node,
     w: &mut Writer,
@@ -56,6 +57,7 @@ fn walk(
 }
 
 // Format 1: a Lisp-style S-expression on one line.
+
 fn to_sexpr(node: &Node) -> String {
     let mut sink = Writer { out: "" };
     walk(
@@ -76,6 +78,7 @@ fn to_sexpr(node: &Node) -> String {
 }
 
 // Format 2: an indented outline. Same skeleton, different leaf strings.
+
 fn to_outline(node: &Node) -> String {
     let mut sink = Writer { out: "" };
     walk(

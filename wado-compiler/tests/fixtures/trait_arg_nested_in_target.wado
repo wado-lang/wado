@@ -1,0 +1,17 @@
+// A parameter the impl's target places inside an argument (`T` in
+// `W<List<T>>`) is the receiver's there, and the impl answers its trait at
+// that type, through a bound and through a qualified call.
+struct W<T> { v: T }
+
+trait Mark<T> with () { fn tag() -> i32; }
+impl<T> Mark<T> for W<List<T>> { fn tag() -> i32 { return 1; } }
+
+fn held<X: Mark<i32>>() -> i32 { return X::tag(); }
+
+test "through a bound" {
+    assert held::<W<List<i32>>>() == 1;
+}
+
+test "through a qualified call" {
+    assert Mark::<i32, Self = W<List<i32>>>::tag() == 1;
+}

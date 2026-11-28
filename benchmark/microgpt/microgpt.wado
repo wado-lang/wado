@@ -20,15 +20,19 @@ use { measure } from "core:fuel";
 use { Seed, Seedable, Rng, Xoshiro256pp } from "core:prng";
 
 // One step per document, so a measured iteration is one pass over the corpus.
+
 global STEPS: i32 = 32;
+
 // Each sample runs the full attention window, deeper than any training step
 // reaches on this corpus.
+
 global SAMPLES: i32 = 24;
 global TEMPERATURE: f64 = 0.5;
 global SEED: u64 = 42;
 
 // Let there be a deterministic source of chaos. `core:prng` carries no shape but
 // the uniform one, and a newtype over its engine is local enough to extend.
+
 type Sampler = Xoshiro256pp;
 
 impl Sampler {
@@ -46,6 +50,7 @@ impl Sampler {
     }
 
     // `random.choices(range(n), weights)`: one draw against the cumulative sum.
+
     fn choice(&mut self, weights: &List<f64>) -> i32 {
         let mut total = 0.0;
         for let w of weights {
@@ -65,9 +70,10 @@ impl Sampler {
 // Let there be Autograd to recursively apply the chain rule through a
 // computation graph. A Python reference to a `Value` is a `&mut Value` here,
 // and `Graph` is the heap those nodes live in.
+
 struct Value {
-    // Python's `visited` set keys on object identity; `id` is this node's slot
-    // in `Graph.nodes`, so the set is a dense `List<bool>` instead of a tree.
+    /// Python's `visited` set keys on object identity; `id` is this node's slot
+    /// in `Graph.nodes`, so the set is a dense `List<bool>` instead of a tree.
     id: i32,
     data: f64,
     grad: f64,
@@ -124,6 +130,7 @@ impl Graph {
 
     // Python's operators wrap a bare number in a `Value` first, so the graph
     // carries a leaf for every constant. These keep that shape.
+
     fn add_num(&mut self, a: &mut Value, c: f64) -> &mut Value {
         let n = self.leaf(c);
         return self.add(a, n);
@@ -143,6 +150,7 @@ impl Graph {
     }
 
     // `a / b` is `a * b**-1`, as `__truediv__` has it.
+
     fn div(&mut self, a: &mut Value, b: &mut Value) -> &mut Value {
         let inv = self.pow(b, -1.0);
         return self.mul(a, inv);
@@ -153,6 +161,7 @@ impl Graph {
     }
 
     // `sum(xs)` starts at 0, so Python's graph carries that leaf too.
+
     fn sum(&mut self, xs: &mut List<&mut Value>) -> &mut Value {
         let mut acc = self.leaf(0.0);
         for let mut i = 0; i < xs.len(); i += 1 {
@@ -162,6 +171,7 @@ impl Graph {
     }
 
     // Everything above this length is one training step's graph, dropped whole.
+
     fn rewind(&mut self, len: i32) {
         self.nodes.truncate(len);
     }
@@ -194,6 +204,7 @@ fn backward(root: &mut Value, node_count: i32) {
 
 // Let there be a Tokenizer to translate strings to sequences of integers
 // ("tokens") and back.
+
 struct Tokenizer {
     uchars: List<char>,
     bos: i32,
@@ -224,6 +235,7 @@ impl Tokenizer {
     }
 
     // Surround the document with the BOS token on both sides.
+
     fn encode(&self, doc: &String) -> List<i32> {
         let mut tokens: List<i32> = [self.bos];
         for let c of doc.chars() {
@@ -235,6 +247,7 @@ impl Tokenizer {
 }
 
 // Initialize the parameters, to store the knowledge of the model.
+
 global N_LAYER: i32 = 1;
 global N_EMBD: i32 = 16;
 global BLOCK_SIZE: i32 = 16;
@@ -254,6 +267,7 @@ fn matrix(g: &mut Graph, rng: &mut Sampler, nout: i32, nin: i32, std: f64 = 0.08
 }
 
 // Python keys these by string in one dict; the shapes are fixed, so name them.
+
 struct Layer {
     attn_wq: List<List<&mut Value>>,
     attn_wk: List<List<&mut Value>>,
@@ -290,6 +304,7 @@ impl StateDict {
     }
 
     // Flatten every matrix into a single list of parameters.
+
     fn params(&mut self) -> List<&mut Value> {
         let mut out: List<&mut Value> = [];
         flatten_into(&mut out, &mut self.wte);
@@ -320,6 +335,7 @@ fn flatten_into(out: &mut List<&mut Value>, m: &mut List<List<&mut Value>>) {
 // Define the model architecture: a function mapping tokens and parameters to
 // logits over what comes next. Follow GPT-2, blessed among the GPTs, with minor
 // differences: layernorm -> rmsnorm, no biases, GeLU -> ReLU.
+
 fn linear(g: &mut Graph, x: &mut List<&mut Value>, w: &mut List<List<&mut Value>>) -> List<&mut Value> {
     let mut out: List<&mut Value> = [];
     for let mut o = 0; o < w.len(); o += 1 {
@@ -428,6 +444,7 @@ fn empty_cache() -> List<List<List<&mut Value>>> {
 
 // Forward the token sequence through the model, building up the computation
 // graph all the way to the loss.
+
 fn forward_loss(g: &mut Graph, state: &mut StateDict, tokens: &List<i32>) -> &mut Value {
     let n = i32::min(BLOCK_SIZE, tokens.len() - 1);
     let mut keys = empty_cache();
@@ -446,6 +463,7 @@ fn forward_loss(g: &mut Graph, state: &mut StateDict, tokens: &List<i32>) -> &mu
 }
 
 // Let there be Adam, the blessed optimizer and its buffers.
+
 global LEARNING_RATE: f64 = 0.01;
 global BETA1: f64 = 0.85;
 global BETA2: f64 = 0.99;
@@ -478,6 +496,7 @@ impl Adam {
         }
     }
 }
+
 global DOCS: List<String> = [
     "emma", "mary", "ada", "madeleine", "katelyn", "karla", "jayde", "harleigh", "paityn", "rosalina", "rita", "margaux",
     "mayra", "klara", "janiah", "coralie", "blythe", "joana", "minerva", "jalani", "isra", "zariya", "rosanna", "loxley",
@@ -485,6 +504,7 @@ global DOCS: List<String> = [
 ] as List<String>;
 
 // One measured iteration: a fresh model, then `steps` of forward, backward, Adam.
+
 fn train(steps: i32) -> f64 {
     let mut rng = Sampler::new();
     let tok = Tokenizer::new(&DOCS);
@@ -508,6 +528,7 @@ fn train(steps: i32) -> f64 {
 
 // Unlike the example's `generate`, this never stops early on a BOS draw: the
 // position count has to be fixed for the throughput figure to mean anything.
+
 fn generate(g: &mut Graph, state: &mut StateDict, tok: &Tokenizer, rng: &mut Sampler) -> String {
     let n_params = g.len();
     let mut keys = empty_cache();
@@ -531,6 +552,7 @@ fn generate(g: &mut Graph, state: &mut StateDict, tok: &Tokenizer, rng: &mut Sam
 
 // Weights steer which token is drawn, never what a position costs, so an
 // untrained model times the same as a trained one and the phase stands alone.
+
 fn infer(samples: i32) -> String {
     let mut rng = Sampler::new();
     let tok = Tokenizer::new(&DOCS);
@@ -546,6 +568,7 @@ fn infer(samples: i32) -> String {
 
 // Next-token predictions per iteration, which is what the throughput counts.
 // A step count would move with the corpus's document lengths.
+
 fn train_tokens(tok: &Tokenizer, steps: i32) -> f64 {
     let mut total = 0;
     for let step of 0..<steps {

@@ -1,8 +1,7 @@
 //! In-group error recovery: a missing element inside a `( … )` group is
 //! repaired in place (insert `<missing>`), the same as at top-level alt
-//! position. Guards the FIRST-of-rest `sync` threading in
-//! `gen_elements_with_non_greedy`; without it a group leaf would only
-//! delete-or-unwind, never insert.
+//! position. Guards the FIRST-of-rest `sync` threading through a group's
+//! leaves; without it a group leaf would only delete-or-unwind, never insert.
 
 use g from "./grammars/group_recovery.g4"
     with {

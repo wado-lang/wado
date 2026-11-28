@@ -1364,8 +1364,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if ident.owner_segment().is_some()
             && let receiver = match ident.segments.as_slice() {
-                [receiver, _] => self.receiver_at(receiver),
-                _ => None,
+                [.., receiver, _] => self.receiver_at(receiver),
+                [] | [_] => None,
             }
             && self
                 .lookup_function_signature(&ident.name, receiver.as_ref(), None, Some(ident.id))

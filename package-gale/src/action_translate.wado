@@ -4,7 +4,8 @@
 //! cannot emit returns a loud error naming it, so codegen surfaces a diagnostic
 //! rather than emitting invalid code. Shared with java2wado via `resolve_attr_ref`.
 
-use { ParserRule, AttrDecl, Alternative, Element } from "./ir.wado";
+use { AttrDecl, Element } from "./ir.wado";
+use { RuleAttrs, push_element_action_bodies } from "./rule_attrs.wado";
 use { resolve_attrs, ResolvedAttr, AttrTarget, AltBinding } from "./attr_resolve.wado";
 use { find_attr_refs, AttrRef } from "./attr_scan.wado";
 use { splice_attrs } from "./attr_substitute.wado";
@@ -17,13 +18,12 @@ use {
     VALS_LOCAL,
     MIN_PREC_LOCAL,
 } from "./ident.wado";
-use { rule_is_left_recursive } from "./lr_util.wado";
 use { push_unique } from "./list_util.wado";
 use { skip_ws } from "./g4/scan.wado";
 use { is_ident_char } from "./text.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
-pub fn vals_struct_name(rule: &ParserRule) -> String {
+pub fn vals_struct_name(rule: &RuleAttrs) -> String {
     return `${to_pascal_case(&rule.name)}Vals`;
 }
 
@@ -32,8 +32,8 @@ pub fn vals_struct_name(rule: &ParserRule) -> String {
 /// when the enclosing rule emits a `vals` local. Errors on the first unsupported
 /// reference.
 pub fn translate_wado_action<S: AsStrSlice>(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     body: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -59,8 +59,8 @@ pub fn translate_wado_action<S: AsStrSlice>(
 /// by the identity translator and java2wado (attribute resolution is
 /// language-independent). `ref_text` is exactly the reference (`$x`, `$x.v`).
 pub fn resolve_attr_ref<S: AsStrSlice>(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     ref_text: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -228,16 +228,16 @@ pub fn rule_binding_for<S: AsStrSlice>(bindings: &List<AltBinding>, name: S) -> 
 /// Whether any of `rule`'s actions references a rule-span special (`$text`,
 /// `$start`, `$stop`), so codegen must capture the rule's start token before the
 /// body.
-pub fn rule_uses_rule_span(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
-    return rule_action_bodies(rule).iter_ref().any(|b: &String| body_uses_rule_span(b, rule, rules));
+pub fn rule_uses_rule_span(rule: &RuleAttrs, rules: &List<RuleAttrs>) -> bool {
+    return rule.action_bodies.iter_ref().any(|b: &String| body_uses_rule_span(b, rule, rules));
 }
 
 /// The binding bases `rule`'s actions read, or `null` where that cannot be
 /// told apart from reading them all: a body that does not resolve, or one
 /// reaching children through `$ctx`.
-pub fn rule_binding_reads(rule: &ParserRule, rules: &List<ParserRule>) -> Option<List<String>> {
+pub fn rule_binding_reads(rule: &RuleAttrs, rules: &List<RuleAttrs>) -> Option<List<String>> {
     let mut reads: List<String> = [];
-    for let body of &rule_action_bodies(rule) {
+    for let body of &rule.action_bodies {
         let Ok(resolved) = resolve_attrs(body, rule, rules) else {
             return null;
         };
@@ -253,9 +253,9 @@ pub fn rule_binding_reads(rule: &ParserRule, rules: &List<ParserRule>) -> Option
 
 /// The bindings the rule's bodies name (`named_bindings`), which unlike
 /// `rule_binding_reads` leaves out a child `$ctx` reaches.
-pub fn rule_named_bindings(rule: &ParserRule) -> List<String> {
+pub fn rule_named_bindings(rule: &RuleAttrs) -> List<String> {
     let mut named: List<String> = [];
-    for let body of &rule_action_bodies(rule) {
+    for let body of &rule.action_bodies {
         for let base of named_bindings(body) {
             push_unique(&mut named, base);
         }
@@ -319,51 +319,7 @@ pub fn element_names_binding<S: AsStrSlice>(elem: &Element, base: S) -> bool {
     return bodies.iter_ref().any(|b| body_names_binding(b, &base));
 }
 
-/// Every action and predicate body running in the rule's own frame: its
-/// prequels', its alternatives', and those of the groups nested in them.
-pub fn rule_action_bodies(rule: &ParserRule) -> List<String> {
-    let mut out: List<String> = [];
-    for let a of &[rule.init_action, rule.after_action] {
-        if let Some(src) = a {
-            out.push(src.text);
-        }
-    }
-    for let alt of &rule.alternatives {
-        push_alt_action_bodies(alt, &mut out);
-    }
-    return out;
-}
-
-fn push_alt_action_bodies(alt: &Alternative, out: &mut List<String>) {
-    for let a of &alt.actions {
-        out.push(a.source.text);
-    }
-    for let e of &alt.elements {
-        push_element_action_bodies(e, out);
-    }
-}
-
-fn push_element_action_bodies(elem: &Element, out: &mut List<String>) {
-    match elem {
-        Group(g) => {
-            for let alt of &g.alternatives {
-                push_alt_action_bodies(alt, out);
-            }
-        },
-        Repeat(rep) => push_element_action_bodies(&rep.element, out),
-        Label(lab) => push_element_action_bodies(&lab.element, out),
-        Not(n) => push_element_action_bodies(&n.element, out),
-        // `a[$x.text]` is translated against the caller, so its arguments read
-        // the caller's captures exactly as an action body does.
-        RuleRef(r) => if let Some(src) = &r.arg_action {
-            out.push(src.text);
-        },
-        _ => {
-        },
-    }
-}
-
-fn body_uses_rule_span<S: AsStrSlice>(body: S, rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+fn body_uses_rule_span<S: AsStrSlice>(body: S, rule: &RuleAttrs, rules: &List<RuleAttrs>) -> bool {
     if let Ok(resolved) = resolve_attrs(body, rule, rules) {
         for let r of &resolved {
             if r.target matches { _::ParserSpecial } && (r.name == "text" || r.name == "start" || r.name == "stop") {
@@ -377,15 +333,15 @@ fn body_uses_rule_span<S: AsStrSlice>(body: S, rule: &ParserRule, rules: &List<P
 /// The Wado expression a resolved reference becomes, or an error if this
 /// slice cannot emit it yet.
 fn action_attr_expr<S: AsStrSlice>(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     r: &ResolvedAttr,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
     handle: S,
 ) -> Result<String, String> {
     if r.target matches { _::ParserSpecial } {
-        return parser_special_expr(r, rule_is_left_recursive(rule), handle);
+        return parser_special_expr(r, rule.left_recursive, handle);
     }
     return match r.target {
         _::RuleAttr => {
@@ -685,8 +641,8 @@ fn token_member_expr<S: AsStrSlice>(r: &ResolvedAttr, bindings: &List<AltBinding
 /// `$x == null` (or `!=`, with `negated`) on a token reference, or `null` where
 /// `ref_text` names anything else. A token that never matched is index `-1`.
 pub fn token_null_test<S: AsStrSlice>(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     ref_text: S,
     bindings: &List<AltBinding>,
     negated: bool,
@@ -711,8 +667,8 @@ pub fn token_null_test<S: AsStrSlice>(
 /// reads `"null"` as text, which prints as the jar's `null` but compares as a
 /// string, so a comparison asks this first.
 pub fn text_presence<S: AsStrSlice>(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     ref_text: S,
     bindings: &List<AltBinding>,
 ) -> Option<String> {
@@ -759,7 +715,7 @@ fn token_member_of<S: AsStrSlice, S1: AsStrSlice>(idx: S, member: &Option<String
 }
 
 fn rule_member_expr<S: AsStrSlice>(
-    rules: &List<ParserRule>,
+    rules: &List<RuleAttrs>,
     r: &ResolvedAttr,
     bindings: &List<AltBinding>,
     handle: S,
@@ -814,64 +770,47 @@ fn rule_member_expr<S: AsStrSlice>(
 
 /// The `wado_type_default` of a rule's returns/locals field named `name`, or
 /// `None` if there is no such field or its type has no Wado default.
-fn field_default<S: AsStrSlice>(rule: &ParserRule, name: S) -> Option<String> {
+fn field_default<S: AsStrSlice>(rule: &RuleAttrs, name: S) -> Option<String> {
     return match find_field(rule, name) {
         Some(d) => wado_type_default(&d.type_text),
         null => null,
     };
 }
 
-fn field_type<S: AsStrSlice>(rule: &ParserRule, name: S) -> String {
+fn field_type<S: AsStrSlice>(rule: &RuleAttrs, name: S) -> String {
     return match find_field(rule, name) {
         Some(d) => d.type_text,
         null => "",
     };
 }
 
-fn find_field<S: AsStrSlice>(rule: &ParserRule, name: S) -> Option<&AttrDecl> {
+fn find_field<S: AsStrSlice>(rule: &RuleAttrs, name: S) -> Option<&AttrDecl> {
     if let Some(d) = rule.returns_decls.iter_ref().find(|d| d.name == name.as_str_slice()) {
         return Option::Some(d);
     }
     return rule.locals_decls.iter_ref().find(|d| d.name == name.as_str_slice());
 }
 
-fn is_arg<S: AsStrSlice>(rule: &ParserRule, name: S) -> bool {
+fn is_arg<S: AsStrSlice>(rule: &RuleAttrs, name: S) -> bool {
     return rule.args.iter_ref().any(|d| d.name == name.as_str_slice());
 }
 
 /// Whether a rule exposes a value channel to callers (a defaultable
 /// `returns`/`locals`, or threaded args), so `_parse_<rule>` returns `<Rule>Vals`
 /// and a caller's `$a.v` reads it. Independent of whether the rule's own actions
-/// read the channel — a caller might.
-pub fn rule_returns_vals(rule: &ParserRule) -> bool {
-    return rule_value_channel_ready(rule);
-}
-
-/// Whether a rule exposes an emittable value channel: a returns / locals field
-/// whose type has a Wado default, or threaded rule arguments. Unsupported-type
-/// fields are excluded per-field, so one does not disable the whole channel.
-pub fn rule_value_channel_ready(rule: &ParserRule) -> bool {
-    for let d of &rule.returns_decls {
-        if wado_type_default(&d.type_text) matches { Some(_) } {
-            return true;
-        }
-    }
-    for let d of &rule.locals_decls {
-        if wado_type_default(&d.type_text) matches { Some(_) } {
-            return true;
-        }
-    }
-    return rule_threads_args(rule);
+/// read the channel — a caller might. A field whose type has no Wado default is
+/// left out on its own, so one does not disable the whole channel.
+pub fn rule_returns_vals(rule: &RuleAttrs) -> bool {
+    return rule.returns_decls.iter_ref().any(|d| field_in_vals(d))
+        || rule.locals_decls.iter_ref().any(|d| field_in_vals(d))
+        || rule_threads_args(rule);
 }
 
 /// Whether a rule's arguments are threaded as `_parse_<rule>` parameters and
 /// stored into its `<Rule>Vals`: a non-left-recursive rule every arg type of
 /// which has a Wado default. Otherwise `$arg` is a loud error.
-pub fn rule_threads_args(rule: &ParserRule) -> bool {
-    if rule_is_left_recursive(rule) {
-        return false;
-    }
-    if rule.args.is_empty() {
+pub fn rule_threads_args(rule: &RuleAttrs) -> bool {
+    if rule.left_recursive || rule.args.is_empty() {
         return false;
     }
     for let a of &rule.args {

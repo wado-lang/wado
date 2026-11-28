@@ -166,6 +166,7 @@ test "each step after the prompt computes one position against the cache, as onn
 }
 
 // The mask says the past is five positions long, past the four the cache holds.
+
 #[expect_trap]
 test "a mask longer than the prefilled cache's past and the step stops the step" {
     let mut cpu = Cpu {};
@@ -258,6 +259,7 @@ test "the prompt and each step after it reproduce onnxruntime's logits through o
 
 // Five positions and six pad to one capacity, so only the check on the host
 // tells them apart.
+
 #[expect_trap]
 test "a mask longer than the step stops the step without a past" {
     let mut cpu = Cpu {};
@@ -267,6 +269,7 @@ test "a mask longer than the step stops the step without a past" {
 }
 
 // The mask says the past is five positions long, past the four the cache holds.
+
 #[expect_trap]
 test "a mask longer than the cache's past and the step stops the step" {
     let mut cpu = Cpu {};
@@ -277,6 +280,7 @@ test "a mask longer than the cache's past and the step stops the step" {
 }
 
 // The mask says the past is one position short of none.
+
 #[expect_trap]
 test "a mask shorter than the step stops the step" {
     let mut cpu = Cpu {};

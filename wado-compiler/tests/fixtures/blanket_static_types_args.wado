@@ -1,0 +1,156 @@
+// A static a value blanket supplies types the call's arguments as any other
+// declaration does: a closure parameter, a literal and a list literal each
+// take the type the blanket's parameter writes.
+
+use lib from "./sub/blanket_static_types_args_lib.wado";
+use { Make as LibMake } from "./sub/blanket_static_types_args_lib.wado";
+
+struct S { v: i32 }
+struct Bx<T> { v: T }
+
+struct Base { v: i32 }
+impl Base {
+    fn ap(_n: i64) -> i32 { return 1; }
+}
+type N = Base;
+
+trait Marked with () { fn mark(&self) -> i32; }
+impl Marked for i32 { fn mark(&self) -> i32 { return 0; } }
+impl Marked for S { fn mark(&self) -> i32 { return 1; } }
+impl Marked for N { fn mark(&self) -> i32 { return 2; } }
+impl Marked for Bx<i32> { fn mark(&self) -> i32 { return 3; } }
+
+trait Make with () {
+    fn ap(f: fn(i32) -> i32) -> i32;
+    fn wide(n: i64) -> i64;
+    fn total(xs: List<i64>) -> i64;
+    fn named(s: String = "abc") -> i32;
+    fn twice<U>(f: fn(U) -> U, v: U) -> U;
+}
+impl<T: Marked> Make for T {
+    fn ap(f: fn(i32) -> i32) -> i32 { return f(20); }
+    fn wide(n: i64) -> i64 { return n; }
+    fn total(xs: List<i64>) -> i64 {
+        let mut sum: i64 = 0;
+        for let x of xs { sum += x; }
+        return sum;
+    }
+    fn named(s: String) -> i32 { return s.len(); }
+    fn twice<U>(f: fn(U) -> U, v: U) -> U { return f(f(v)); }
+}
+
+impl S {
+    fn through_self() -> i32 { return Self::ap(|x| x + 5); }
+}
+
+fn through_param<T: Marked>() -> i64 {
+    return T::ap(|x| x + 6) as i64 + T::wide(5_000_000_000);
+}
+
+fn own_slot_through_param<T: Marked>() -> i64 {
+    let n: i64 = T::twice(|x| x + 1, 5_000_000_000);
+    return n;
+}
+
+// A second parameter of the block, settled by the receiver's bound.
+trait Holder with () { type Item; }
+impl Holder for S { type Item = i64; }
+impl<V> Holder for Bx<V> { type Item = V; }
+trait TakeIt<A> with () {
+    fn take(a: A) -> A;
+    fn many(xs: List<A>) -> i32;
+    fn beside(seed: Self, xs: List<A>) -> A;
+}
+impl<A, T: Holder<Item = A>> TakeIt<A> for T {
+    fn take(a: A) -> A { return a; }
+    fn many(xs: List<A>) -> i32 { return xs.len(); }
+    fn beside(_seed: T, xs: List<A>) -> A { return xs[1]; }
+}
+
+// `Narrow` withholds the `Ord` its base derives, so the blanket's bound holds
+// at `Wide` alone, the link that owns the call.
+struct Wide { v: i32 }
+type Narrow = Wide;
+impl Eq for Narrow {
+    fn eq(&self, other: &Narrow) -> bool { return self.v == other.v; }
+}
+trait Mk with () { fn mk(n: i64) -> i64; }
+impl<T: Ord> Mk for T {
+    fn mk(n: i64) -> i64 { return n; }
+}
+
+trait Coll with () { fn collect(seed: Self, xs: List<i64>) -> i64; }
+impl<T: Marked> Coll for T {
+    fn collect(seed: T, xs: List<i64>) -> i64 { return seed.mark() as i64 + xs[1]; }
+}
+
+test "a generic receiver spelled without its arguments" {
+    let bx = Bx::<i32> { v: 1 };
+    assert Bx::collect(bx, [1, 5_000_000_000]) == 5_000_000_003;
+}
+
+test "its instance settling a second parameter of the block" {
+    let bx = Bx::<i64> { v: 1 };
+    assert Bx::beside(bx, [1, 5_000_000_000]) == 5_000_000_000;
+}
+
+test "the method's own slot, on a bound parameter" {
+    assert own_slot_through_param::<S>() == 5_000_000_002;
+}
+
+test "a primitive receiver" {
+    assert i32::ap(|x| x + 7) == 27;
+    assert i32::wide(5_000_000_000) == 5_000_000_000;
+}
+
+test "a receiver written `Self`" {
+    assert S::through_self() == 25;
+}
+
+test "a receiver that is a bound parameter" {
+    assert through_param::<S>() == 5_000_000_026;
+}
+
+test "a block parameter the receiver's bound settles" {
+    let n: i64 = S::take(5_000_000_000);
+    assert n == 5_000_000_000;
+    assert S::many([1, 5_000_000_000]) == 2;
+}
+
+test "a bound holding at a lower link of the chain" {
+    assert Narrow::mk(5_000_000_000) == 5_000_000_000;
+}
+
+test "a closure parameter" {
+    assert S::ap(|x| x + 1) == 21;
+}
+
+test "a literal" {
+    assert S::wide(5_000_000_000) == 5_000_000_000;
+}
+
+test "a list literal" {
+    assert S::total([1, 2, 5_000_000_000]) == 5_000_000_003;
+}
+
+test "a default" {
+    assert S::named() == 3;
+}
+
+test "the method's own slot, written" {
+    assert S::twice::<i64>(|x| x + 1, 5_000_000_000) == 5_000_000_002;
+}
+
+test "a receiver writing its arguments" {
+    assert Bx::<i32>::ap(|x| x + 2) == 22;
+    assert Bx::<i32>::wide(5_000_000_000) == 5_000_000_000;
+}
+
+test "over a static the newtype inherits" {
+    assert N::ap(|x| x + 3) == 23;
+}
+
+test "a receiver named through a namespace" {
+    assert lib::P::ap(|x| x + 4) == 24;
+    assert lib::P::wide(5_000_000_000) == 5_000_000_000;
+}

@@ -76,6 +76,7 @@ struct Point {
     x: i32,
     y: i32,
 }
+
 impl Serialize for Point;
 impl Deserialize for Point;
 
@@ -84,18 +85,21 @@ variant Shape {
     Pair([i32, i32]),
     Dot,
 }
+
 impl Serialize for Shape;
 impl Deserialize for Shape;
 
 struct Single {
     a: i32,
 }
+
 impl Deserialize for Single;
 
 struct WrapShape {
     s: Shape,
     t: i32,
 }
+
 impl Deserialize for WrapShape;
 
 test "Appendix A: unsigned integers" {
@@ -587,6 +591,7 @@ variant Nest {
     More(Nest),
     Stop,
 }
+
 impl Deserialize for Nest;
 
 /// `levels` nestings of `More`, innermost `Stop`. Each level is
@@ -619,6 +624,7 @@ test "max_depth is caller-tunable" {
 struct Small {
     a: i32 = 0,
 }
+
 impl Deserialize for Small;
 
 /// map(1) { "z": <levels of array(1) head> 0 } — one byte per level.
@@ -1075,6 +1081,7 @@ struct Unsorted {
     b: i32,
     a: i32,
 }
+
 impl Serialize for Unsorted;
 
 test "canonical: struct fields sorted even when declared out of order" {
@@ -1141,6 +1148,7 @@ impl Serialize for BadEntry {
 struct HoldsUnencodable {
     inner: Unencodable,
 }
+
 impl Serialize for HoldsUnencodable;
 
 fn fails_to_encode<T: Serialize>(v: &T) -> bool {

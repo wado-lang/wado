@@ -4,7 +4,8 @@
 //! `@members` methods (see `action.md`). A method call or constant that
 //! resolves to nothing real is a loud error, not a silently broken emit.
 
-use { ParserRule, Alternative, AttrDecl, Element, GrammarOption, Visibility } from "../ir.wado";
+use { AttrDecl } from "../ir.wado";
+use { RuleAttrs } from "../rule_attrs.wado";
 use {
     lexer_matched_text_expr,
     lexer_cursor_column_expr,
@@ -22,7 +23,6 @@ use {
     RULE_START_TOK_LOCAL,
     LR_ACC_LOCAL,
 } from "../action_translate.wado";
-use { rule_is_left_recursive } from "../lr_util.wado";
 use { to_snake_case, escape_ident, LEXER_VIEW_HERE } from "../ident.wado";
 use { AltBinding } from "../attr_resolve.wado";
 use { wado } from "wado-lang:wadopoet";
@@ -215,8 +215,8 @@ fn api_expr<S: AsStrSlice>(env: &JEnv, call: ApiCall, expr: S) -> Result<String,
 /// bindings) is empty — any body that reaches for it fails loudly through the
 /// same paths a parser body would.
 pub fn translate_java_lexer_stmts<S: AsStrSlice>(body: S, env: &JEnv) -> Result<String, String> {
-    let rule = lexer_body_rule();
-    let rules: List<ParserRule> = [];
+    let rule = RuleAttrs { name: "" };
+    let rules: List<RuleAttrs> = [];
     let bindings: List<AltBinding> = [];
     let tokens = tokenize_java(body)?;
     let stmts = parse_java_stmts(&tokens)?;
@@ -228,23 +228,17 @@ pub fn translate_java_lexer_expr<S: AsStrSlice>(body: S, env: &JEnv) -> Result<S
     let mut env = *env;
     env.sink = false;
     env.read_only = true;
-    let rule = lexer_body_rule();
-    let rules: List<ParserRule> = [];
+    let rule = RuleAttrs { name: "" };
+    let rules: List<RuleAttrs> = [];
     let bindings: List<AltBinding> = [];
     let tokens = tokenize_java(body)?;
     let expr = parse_java_expr(&tokens)?;
     return emit_expr(&rule, &rules, &expr, false, &bindings, &env);
 }
 
-fn lexer_body_rule() -> ParserRule {
-    let opts: List<GrammarOption> = [];
-    let alts: List<Alternative> = [];
-    return ParserRule::new("", Visibility::Public, opts, alts);
-}
-
 pub fn translate_java_expr<S: AsStrSlice>(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     body: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -256,8 +250,8 @@ pub fn translate_java_expr<S: AsStrSlice>(
 }
 
 pub fn translate_java_stmts<S: AsStrSlice>(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     body: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -285,8 +279,8 @@ pub fn with_locals(env: &JEnv, stmts: &List<JStmt>) -> JEnv {
 
 /// Space-joined statements (each already carries its `;`).
 pub fn emit_java_stmts(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     stmts: &List<JStmt>,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -307,8 +301,8 @@ pub fn emit_java_stmts(
 /// stores a value in that may be `null`, to a fixed point, since one such
 /// local makes another it is copied into one too.
 fn with_nullable_locals(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     stmts: &List<JStmt>,
     bindings: &List<AltBinding>,
     env: &JEnv,
@@ -348,8 +342,8 @@ fn local_store(st: &JStmt) -> Option<[String, JExpr]> {
 /// Refuse to hand a method a `String` that may be Java's `null`: its parameter
 /// is a Wado `String`, which cannot carry that.
 fn refuse_nullable_args(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     args: &List<JExpr>,
     bindings: &List<AltBinding>,
     env: &JEnv,
@@ -374,8 +368,8 @@ fn present_local<S: AsStrSlice>(name: S) -> String {
 /// it is not; `null` where it always holds a value. A label's text that may not
 /// have matched, the `null` literal, and a nullable local are the ones that may.
 fn value_presence(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     e: &JExpr,
     bindings: &List<AltBinding>,
     env: &JEnv,
@@ -393,8 +387,8 @@ fn value_presence(
 
 /// A `String` value as Wado holds it: Java's `null` reads as its text.
 fn string_value(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     e: &JExpr,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -407,8 +401,8 @@ fn string_value(
 }
 
 fn emit_stmt(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     s: &JStmt,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -477,8 +471,8 @@ fn lexer_attr_env(env: &JEnv) -> LexerAttrEnv {
 /// `$mode`'s write is a different field from its read, so the site's own syntax
 /// decides which — `emit_expr` alone would have to guess.
 fn emit_assign_target(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     a: &JAssign,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -492,8 +486,8 @@ fn emit_assign_target(
 }
 
 fn emit_local(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     l: &JLocal,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -524,8 +518,8 @@ fn emit_local(
 /// Emit `System.out.print`/`println` as `<this>.emit(<template>)`, rendering the
 /// argument as a template literal and appending `\n` for `println`.
 fn emit_print(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     args: &List<JExpr>,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -562,8 +556,8 @@ pub fn map_java_type<S: AsStrSlice>(ty: S) -> Option<String> {
 }
 
 pub fn emit_expr(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     e: &JExpr,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -647,8 +641,8 @@ pub fn emit_expr(
 }
 
 fn emit_member(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     m: &JMember,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -668,8 +662,8 @@ fn emit_member(
 }
 
 fn emit_call(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     c: &JCall,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -742,8 +736,8 @@ fn emit_recognizer_call<S: AsStrSlice, S1: AsStrSlice>(env: &JEnv, name: S, args
 /// (`$ctx.ID()`). The accessor reads what `$ID` does, unless the name repeats
 /// in that context: ANTLR4 then returns a list, which is never null.
 fn token_presence_test(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     b: &JBinary,
     bindings: &List<AltBinding>,
     env: &JEnv,
@@ -805,12 +799,7 @@ fn ctx_token_accessor(callee: &JExpr) -> Option<String> {
 
 /// The condition under which the label text `e` reads is there
 /// (`text_presence`), or `null` where `e` reads none.
-fn text_presence_of(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
-    e: &JExpr,
-    bindings: &List<AltBinding>,
-) -> Option<String> {
+fn text_presence_of(rule: &RuleAttrs, rules: &List<RuleAttrs>, e: &JExpr, bindings: &List<AltBinding>) -> Option<String> {
     return match without_parens(e) {
         Attr(text) => text_presence(rule, rules, text, bindings),
         _ => null,
@@ -861,19 +850,19 @@ fn without_parens(e: &JExpr) -> &JExpr {
 /// How often token `name` can occur in one match of the context `ctx` is cast
 /// to: a labeled alternative's own (`#add` → `AddContext`) or, uncast, the
 /// rule's, whose alternatives exclude each other.
-fn ctx_token_count(rule: &ParserRule, accessor: &JExpr, name: &String) -> i32 {
+fn ctx_token_count(rule: &RuleAttrs, accessor: &JExpr, name: &String) -> i32 {
     let class = match accessor {
         Member(m) => ctx_cast_class(&m.recv),
         _ => null,
     };
     let mut count = 0;
-    for let alt of &rule.alternatives {
+    for let alt of &rule.alt_tokens {
         let in_context = match [&class, &alt.label] {
             [Some(c), Some(label)] => *c == `${capitalized(label)}Context`,
             _ => true,
         };
         if in_context {
-            count = i32::max(count, token_occurrences(&alt.elements, name));
+            count = i32::max(count, alt.count(name));
         }
     }
     return count;
@@ -899,33 +888,6 @@ fn ctx_cast_class(e: &JExpr) -> Option<String> {
     };
 }
 
-fn token_occurrences(elements: &List<Element>, name: &String) -> i32 {
-    let mut count = 0;
-    for let e of elements {
-        count += token_occurrences_in(e, name);
-    }
-    return count;
-}
-
-/// How often token `name` can occur in one match of `e`, where a loop's body
-/// counts as twice: more than once is all the accessor's shape asks.
-fn token_occurrences_in(e: &Element, name: &String) -> i32 {
-    return match e {
-        TokenRef(t) => if t.name == *name { 1 } else { 0 },
-        Label(l) => token_occurrences_in(&l.element, name),
-        Repeat(r) => {
-            let once = token_occurrences_in(&r.element, name);
-            if r.kind matches { _::Optional } {
-                once;
-            } else {
-                2 * once;
-            }
-        },
-        Group(g) => g.alternatives.iter_ref().fold(0, |n, a| i32::max(n, token_occurrences(&a.elements, name))),
-        RuleRef(_) | Literal(_) | Wildcard(_) | Not(_) => 0,
-    };
-}
-
 /// Whether `e` reduces (through parens and casts) to the `$ctx` special — the
 /// receiver of a ctx-child accessor `((BinaryContext)$ctx).e(0)`.
 fn is_ctx_expr(e: &JExpr) -> bool {
@@ -941,12 +903,12 @@ fn is_ctx_expr(e: &JExpr) -> bool {
 /// precedence accumulator `_lr_acc`, child i>=1 is the i-th suffix self-ref.
 /// Only valid inside a left-recursive rule for its own children; else a loud error.
 fn emit_ctx_child(
-    rule: &ParserRule,
+    rule: &RuleAttrs,
     m: &JMember,
     args: &List<JExpr>,
     bindings: &List<AltBinding>,
 ) -> Result<String, String> {
-    if !rule_is_left_recursive(rule) {
+    if !rule.left_recursive {
         return Result::Err("java2wado: `$ctx` child access is only supported in a left-recursive rule");
     }
     if m.name != rule.name {
@@ -968,8 +930,8 @@ fn emit_ctx_child(
 }
 
 fn emit_member_call<S: AsStrSlice>(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     m: &JMember,
     raw_args: &List<JExpr>,
     args_w: S,
@@ -1069,8 +1031,8 @@ fn method_declared<S: AsStrSlice>(env: &JEnv, name: S) -> bool {
 /// an ANTLR field Gale does not model (`_input`, ...), which emitted verbatim
 /// would reference nothing; a parser body keeps it as the rule's own scope.
 fn name_expr<S: AsStrSlice>(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     name: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -1136,8 +1098,8 @@ fn is_grammar_class<S: AsStrSlice>(env: &JEnv, name: S) -> bool {
 }
 
 fn emit_args(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     args: &List<JExpr>,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -1193,13 +1155,7 @@ fn is_upper_ident<S: AsStrSlice>(name: S) -> bool {
 /// Whether `e` has Java type `String`, which makes a `+` it is an operand of a
 /// concatenation. Java decides by the operands' static types, so this answers
 /// from the declarations the body can see.
-fn is_java_string(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
-    e: &JExpr,
-    bindings: &List<AltBinding>,
-    env: &JEnv,
-) -> bool {
+fn is_java_string(rule: &RuleAttrs, rules: &List<RuleAttrs>, e: &JExpr, bindings: &List<AltBinding>, env: &JEnv) -> bool {
     return match e {
         Str(_) => true,
         Attr(text) => attr_is_string(rule, rules, text, bindings),
@@ -1225,7 +1181,7 @@ fn is_java_string(
 
 /// Whether `$name` or `$name.member` reads a `String`: a `.text`, or an
 /// attribute its rule declares `String`.
-fn attr_is_string(rule: &ParserRule, rules: &List<ParserRule>, text: &String, bindings: &List<AltBinding>) -> bool {
+fn attr_is_string(rule: &RuleAttrs, rules: &List<RuleAttrs>, text: &String, bindings: &List<AltBinding>) -> bool {
     let body = text.substr_bytes(1, text.len());
     let Some(dot) = body.find(".") else {
         return body == "text"
@@ -1286,8 +1242,8 @@ fn plus_chain(e: &JExpr) -> PlusChain {
 /// the link whose right operand is the first `String`, -1 when the leftmost
 /// operand already is one, null when no operand is.
 fn concat_start(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     chain: &PlusChain,
     bindings: &List<AltBinding>,
     env: &JEnv,
@@ -1306,8 +1262,8 @@ fn concat_start(
 /// Emit a `+` chain: arithmetic until an operand is a `String`, a template
 /// literal from there. Each operand is classified once.
 fn emit_plus(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     e: &JExpr,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -1331,8 +1287,8 @@ fn emit_plus(
 /// Append the parts of a chain that concatenates from link `start` on. What
 /// precedes it is arithmetic, and so one interpolated value.
 fn append_concat(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     chain: &PlusChain,
     start: i32,
     vals_in_scope: bool,
@@ -1351,8 +1307,8 @@ fn append_concat(
 /// Append `e` as template text: a literal's text, a concatenation's own parts
 /// (parenthesized or not), anything else interpolated.
 fn append_part(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     e: &JExpr,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
@@ -1393,8 +1349,8 @@ fn append_part(
 }
 
 fn append_interp(
-    rule: &ParserRule,
-    rules: &List<ParserRule>,
+    rule: &RuleAttrs,
+    rules: &List<RuleAttrs>,
     e: &JExpr,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,

@@ -24,6 +24,7 @@ test "between with trailing and brackets the middle operand as ANTLR4 does" {
 }
 
 // The climb that must stop sits in a nested operand, below a looser `or`.
+
 test "a nested operand leaves between its and" {
     assert_tree(
         "between a or b and c and d ;",
@@ -41,6 +42,7 @@ test "a nested operand leaves between its and" {
 
 // Leaving an operand restores the caller's precedence, so an enclosing `or`
 // still takes a tighter `and` as its right operand.
+
 test "an operand the climb leaves keeps its caller's precedence" {
     assert_tree(
         "between X and X or X and X or X and X ;",
@@ -54,6 +56,7 @@ test "an operand the climb leaves keeps its caller's precedence" {
 
 // The `and` after `X4` is left by every loop around it, and one prediction
 // answers for all of them.
+
 test "an exit leaves every enclosing loop that returns into the next" {
     assert_tree(
         "between X1 and X2 or between X3 and X4 and between X1 and X2 or between X3 and X4 ;",
@@ -70,6 +73,7 @@ test "binary and/or chain parses" {
 
 // between mixed with a binary continuation: with only one `and` in the input the
 // middle operand yields it, and the trailing operand takes the `or`.
+
 test "between then or continuation parses" {
     assert_tree("between X1 and X2 or X3 ;", "(stat (expr between (expr X1) and (expr (expr X2) or (expr X3))) ;)");
 }
