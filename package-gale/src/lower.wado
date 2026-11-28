@@ -2916,7 +2916,22 @@ fn lower_header(rule: &ParserRule, ctx: &mut LowerContext) -> RuleHeader {
         },
         first,
         scan_gate_scope: scan_gate_scope(rule, &ctx.settings),
+        forwards_to: forwarding_target(rule),
     };
+}
+
+fn forwarding_target(rule: &ParserRule) -> Option<String> {
+    if rule.alternatives.len() != 1 || rule.init_action matches { Some(_) } || rule.after_action matches { Some(_) } {
+        return null;
+    }
+    let alt = &rule.alternatives[0];
+    if alt.elements.len() != 1 || !alt.actions.is_empty() {
+        return null;
+    }
+    let RuleRef(r) = &alt.elements[0] else {
+        return null;
+    };
+    return Option::Some(r.snake_name);
 }
 
 /// The gate scope `rule` opens, or `null` where the scan cannot run it. A field

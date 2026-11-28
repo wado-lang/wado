@@ -80,7 +80,7 @@ use {
     sll_decide_fn_name,
 } from "./atn_sll.wado";
 use { gen_lr_decide_fn, lr_decide_fn_name, lr_sim, lr_table } from "./atn_lr_table.wado";
-use { Diagnostic, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Diagnostics, LoweredGrammar } from "./gir.wado";
+use { Diagnostic, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Diagnostics, LoweredGrammar, rule_header } from "./gir.wado";
 
 pub struct GenerateOptions {
     /// Parsed highlight query. `Some` emits the highlighter (defaults +
@@ -267,7 +267,8 @@ fn emit_context(grammar: &Grammar, lowered: &LoweredGrammar, lctx: LowerContext,
     let LowerContext { analysis, settings, follow, tables, diagnostics, marks, decisions, .. } = lctx;
     let mut analysis = analysis;
     let plan = plan_parser(grammar, lowered, &mut analysis, &settings, &marks, atn);
-    return EmitContext::new(analysis, settings, follow, tables, diagnostics, plan, decisions);
+    let rules = lowered.parser_rules.iter_ref().map(|r| *rule_header(r)).collect();
+    return EmitContext::new(rules, analysis, settings, follow, tables, diagnostics, plan, decisions);
 }
 
 pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {

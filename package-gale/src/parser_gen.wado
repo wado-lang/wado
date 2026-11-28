@@ -7849,12 +7849,10 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                 gen_predicate_gated_pick(w, side, &a.alts, rule, fn_name, ctx, rule_display);
                 return;
             }
-            if ctx.ambiguous_routes_via_atn(&a.alts) {
+            if ctx.ambiguous_routes_via_atn() {
                 let in_scan = side matches { _::Scan };
                 assert !in_scan || ctx.plan.needs_atn, "a scan picks through the ATN only where every scan takes its state by `&mut`";
-                let Some(numbers) = ctx.atn_body_alt_numbers(sorted_indices) else {
-                    unreachable();
-                };
+                let numbers = rule_decision(rule).slots_of(sorted_indices);
                 let rule_index = ctx.cursor.current_rule_index();
                 let met = *ctx.decisions.at_rule(rule_index);
                 let dec = ctx.plan.atn_rule_body_decision(rule_index);

@@ -328,6 +328,9 @@ pub struct RuleHeader {
     /// The scan gate member the rule sets for its own extent and puts back
     /// after (`scan_gate::runnable_gate_scope`), where the scan simulates it.
     pub scan_gate_scope: Option<GateScope> = null,
+    /// The rule a rule whose whole body is one bare call to it forwards to, by
+    /// snake name; `null` where the rule does anything else.
+    pub forwards_to: Option<String> = null,
 }
 
 impl RuleHeader {
@@ -396,6 +399,16 @@ impl RuleDecision {
     /// Whether some group holds more than one alternative.
     pub fn has_overlaps(&self) -> bool {
         return self.trees.iter_ref().any(|t| t matches { Some(_) });
+    }
+
+    /// Each of `alts`' slot, the number the simulator answers it by at the
+    /// rule's body decision: a left-recursive rule's is its atom block, which
+    /// numbers the non-LR alternatives in order.
+    pub fn slots_of(&self, alts: &List<i32>) -> List<i32> {
+        return alts
+            .iter_ref()
+            .map(|a| self.non_lr_indices.position(|i| i == *a).expect("a decision chooses only among its own alternatives"))
+            .collect();
     }
 }
 

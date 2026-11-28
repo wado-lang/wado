@@ -602,7 +602,7 @@ fn warn_unsupported_prediction_predicate(src: &ActionSource, ctx: &mut EmitConte
 }
 
 fn current_rule_is_multi_alt(ctx: &EmitContext) -> bool {
-    return ctx.current_rule().alternatives.len() > 1;
+    return ctx.current_rule().alt_labels.len() > 1;
 }
 
 /// A predicate an ATN-routed decision evaluates: the action id its edge is
@@ -703,7 +703,7 @@ fn collect_gated_alts(node: &RulePrediction, rule: &Rule, ctx: &EmitContext, out
         },
         Ambiguous(a) => {
             if ambiguous_group_predicate_gated(a, rule, ctx)
-                || ctx.ambiguous_routes_via_atn(&a.alts) && any_alt_has_gate(&a.alts, rule, ctx) {
+                || ctx.ambiguous_routes_via_atn() && any_alt_has_gate(&a.alts, rule, ctx) {
                 for let idx of &a.alts {
                     out.push(*idx);
                 }

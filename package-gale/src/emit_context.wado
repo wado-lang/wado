@@ -3,8 +3,8 @@
 //! and records the tables its text names and the diagnostics it raises. Where
 //! the walk stands is the `EmitCursor`.
 
-use { AltAction, ParserRule } from "./ir.wado";
-use { Admits, Diagnostics, admits_or_everything } from "./gir.wado";
+use { AltAction } from "./ir.wado";
+use { Admits, Diagnostics, RuleHeader, admits_or_everything } from "./gir.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
@@ -24,7 +24,6 @@ use { RuleAttrs } from "./rule_attrs.wado";
 use { SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { push_unique } from "./list_util.wado";
-use { alt_is_left_recursive } from "./lr_util.wado";
 use { sets_overlap } from "./token_kinds.wado";
 use { HashMap, HashSet } from "core:collections";
 use { CodeWriter, FnSpec, IdGen } from "wado-lang:wadopoet";
@@ -306,6 +305,8 @@ impl EmitCursor {
 
 /// The context parser emit threads through its walk.
 pub struct EmitContext {
+    /// Each parser rule's header, by rule index.
+    rules: List<RuleHeader>,
     pub analysis: GrammarAnalysis,
     pub settings: GenSettings,
     pub follow: RuleFollow,
@@ -322,6 +323,7 @@ pub struct EmitContext {
 impl EmitContext {
     /// Emit over what the earlier phases settled, with the cursor outside every rule.
     pub fn new(
+        rules: List<RuleHeader>,
         analysis: GrammarAnalysis,
         settings: GenSettings,
         follow: RuleFollow,
@@ -329,9 +331,12 @@ impl EmitContext {
         diagnostics: Diagnostics,
         plan: ParserPlan,
         decisions: DecisionPredicates,
-    ) -> EmitContext {
-        let cursor = EmitCursor::new(analysis.parser_rules().len());
+    ) -> EmitContext
+        contract rules.len() == analysis.rule_attrs().len(), "every parser rule has a header"
+    {
+        let cursor = EmitCursor::new(rules.len());
         return EmitContext {
+            rules,
             analysis,
             settings,
             follow,
@@ -345,8 +350,8 @@ impl EmitContext {
     }
 
     /// The rule being emitted.
-    pub fn current_rule(&self) -> &ParserRule {
-        return &self.analysis.parser_rules()[self.cursor.current_rule_index()];
+    pub fn current_rule(&self) -> &RuleHeader {
+        return &self.rules[self.cursor.current_rule_index()];
     }
 
     /// `current_rule` as its action bodies see it.
@@ -392,38 +397,12 @@ impl EmitContext {
         return self.plan.rule_reaches_simulator(self.analysis.snake_rule_index(snake));
     }
 
-    /// Whether an `Ambiguous` node's decision is a runtime-ATN prediction.
-    pub fn ambiguous_routes_via_atn(&self, alts: &List<i32>) -> bool {
+    /// Whether the simulator decides the current rule's body decision, so an
+    /// `Ambiguous` node of its tree is a runtime-ATN prediction.
+    pub fn ambiguous_routes_via_atn(&self) -> bool {
         return self.settings.prediction.asks_simulator()
             && self.plan.needs_atn
-            && self.plan.atn_rule_body_decision(self.cursor.current_rule_index()) >= 0
-            && self.atn_body_alt_numbers(alts) matches { Some(_) };
-    }
-
-    /// The number the simulator answers each of the current rule's `alts` by
-    /// at its body decision, or `null` where that decision is not among them.
-    /// A left-recursive rule's body decision is its atom block, which numbers
-    /// the non-LR alternatives in order and holds no suffix.
-    pub fn atn_body_alt_numbers(&self, alts: &List<i32>) -> Option<List<i32>> {
-        let rule = self.current_rule();
-        let mut number_of: List<i32> = [];
-        let mut next = 0;
-        for let alt of &rule.alternatives {
-            if alt_is_left_recursive(alt, &rule.name) {
-                number_of.push(-1);
-            } else {
-                number_of.push(next);
-                next += 1;
-            }
-        }
-        let mut numbers: List<i32> = [];
-        for let idx of alts {
-            if number_of[*idx] < 0 {
-                return null;
-            }
-            numbers.push(number_of[*idx]);
-        }
-        return Option::Some(numbers);
+            && self.plan.atn_rule_body_decision(self.cursor.current_rule_index()) >= 0;
     }
 
     /// Whether a `*` / `+` at decision `site` may exit on a token in `kinds`,
@@ -440,7 +419,7 @@ impl EmitContext {
             return true;
         }
         return exit.reaches_end
-            && self.follow.caller_may_continue_on(&self.analysis.parser_rules()[exit.rule].name, kinds);
+            && self.follow.caller_may_continue_on(&self.rules[exit.rule].name, kinds);
     }
 
     /// Where an alternative of the rule being emitted renders its predicates.
@@ -527,23 +506,13 @@ impl EmitContext {
         if self.scan_reaches_simulator(snake) || self.plan.rule_reads_follow(snake) {
             return null;
         }
-        let rule = &self.analysis.parser_rules()[self.analysis.snake_rule_index(snake)];
-        if rule.alternatives.len() != 1
-            || rule.init_action matches { Some(_) }
-            || rule.after_action matches { Some(_) } {
-            return null;
-        }
-        let alt = &rule.alternatives[0];
-        if alt.elements.len() != 1 || !alt.actions.is_empty() {
-            return null;
-        }
-        let RuleRef(r) = &alt.elements[0] else {
+        let Some(target) = &self.rules[self.analysis.snake_rule_index(snake)].forwards_to else {
             return null;
         };
-        if self.plan.rule_reads_follow(&r.snake_name) || self.plan.rule_takes_min_prec_arg(&r.snake_name) {
+        if self.plan.rule_reads_follow(target) || self.plan.rule_takes_min_prec_arg(target) {
             return null;
         }
-        return Option::Some(r.snake_name);
+        return Option::Some(*target);
     }
 
     /// The kinds a rule matches when its scan is one token test, or `null`.
