@@ -1,0 +1,20 @@
+// A parameter the impl's target places inside an argument (`T` in
+// `W<List<T>>`) is the receiver's there, so the impl answers its trait at no
+// other type, through a bound or through a qualified call.
+struct W<T> { v: T }
+
+trait Mark<T> with () { fn tag() -> i32; }
+impl<T> Mark<T> for W<List<T>> { fn tag() -> i32 { return 1; } }
+
+fn other<X: Mark<String>>() -> i32 { return 7; }
+
+export fn run() {
+    let c = other::<W<List<i32>>>();
+    let d = Mark::<String, Self = W<List<i32>>>::tag();
+}
+
+__DATA__
+{
+  "compile_error": ":12:13: analysis error: type 'W<List<i32>>' does not implement trait 'Mark<String>' required by bound on 'X'",
+  "compile_errors_contains": ["unknown function 'W<List<i32>>::tag'"]
+}

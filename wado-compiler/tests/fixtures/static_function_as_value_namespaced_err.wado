@@ -1,0 +1,13 @@
+// A static function named through a namespace is called, never read, as one
+// named by its type alone is.
+use lib from "./sub/blanket_static_types_args_lib.wado";
+
+export fn run() {
+    let c = lib::P::origin;
+}
+
+__DATA__
+{
+  "compile_error": ":6:13: analysis error: `lib::P::origin` is a static function: call it rather than read it as a value",
+  "compile_error_count": 1
+}

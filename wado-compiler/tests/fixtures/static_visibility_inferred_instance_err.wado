@@ -1,0 +1,17 @@
+// A generic receiver spelled without its arguments reaches the block the
+// expected type settles, and is held to that block's visibility, whichever
+// block the type's index lists first. The report opens with the first error
+// and lists the second right after it, so the two public calls raise none.
+use { W, V } from "./sub/static_visibility_inferred_instance_lib.wado";
+
+export fn run() {
+    let a: W<String> = W::mk();
+    let b: W<i32> = W::mk();
+    let c: V<String> = V::mk();
+    let d: V<i32> = V::mk();
+}
+
+__DATA__
+{
+  "compile_error": ".wado:9:21: analysis error: method `mk` of `W` is private to its defining file; mark it `internal` (same package) or `pub` (cross package) to widen access; 11:21: method `mk` of `V` is private to its defining file"
+}
