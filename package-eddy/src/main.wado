@@ -189,8 +189,12 @@ ${commits.trim()}`;
             Err(e) => Some(e),
         },
     };
+    let mut incomplete = result.failures();
     if let Some(e) = &report_error {
-        eprintln(`eddy: the findings are not placed or reproduced: ${*e}`);
+        incomplete.push(`The findings are not placed or reproduced: ${*e}`);
+    }
+    for let s of &incomplete {
+        eprintln(`eddy: ${*s}`);
     }
 
     let attempt = Attempt {
@@ -216,9 +220,6 @@ ${commits.trim()}`;
     eprintln(
         `recorded in ${path}: ${result.searches.len()} searches, ${result.candidates.len()} candidates kept, ${result.reproductions.len()} tried, ${result.findings.len()} ${reported}, ${result.total_turns()} turns`,
     );
-    if let Some(e) = &result.triage_error {
-        eprintln(`eddy: the triage failed, so the first candidates the searches found were kept: ${*e}`);
-    }
     // Computed here rather than recorded: a price changes, and the tokens a
     // review took do not.
     let cost = cost_summary(&[
@@ -234,7 +235,7 @@ ${commits.trim()}`;
     write_findings(&dir, &head, &result.findings);
     fs::write(
         fs::join(&dir, "review.md"),
-        &review_comment(&result.findings, &head, &cost, &result.error, &report_error),
+        &review_comment(&result.findings, &head, &cost, &result.error, &incomplete),
     ).unwrap();
     if let Some(e) = &result.error {
         fail(*e);

@@ -125,6 +125,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client, MonotonicC
     let mut out = Baseline {
         reviewer: CLAUDE_MODEL,
         grader: GRADER,
+        reporter: if RUN { REPORTER } else { "" },
         tools: TOOLS,
         symbols: SYMBOLS,
         run: RUN,
@@ -267,6 +268,11 @@ fn review_once(
         report_usage: Some(report_usage),
         report_error,
     };
+    // A report that failed leaves findings unreported, which would grade as
+    // a miss.
+    if reviewed.error matches { null } && let Some(e) = &reviewed.report_error {
+        reviewed.error = Some(`the report failed: ${*e}`);
+    }
     if reviewed.error matches { Some(_) } {
         return reviewed;
     }
@@ -316,14 +322,16 @@ fn earlier_entries(path: &String) -> HashMap<i32, Entry> with Preopens {
         || earlier.tools != TOOLS
         || earlier.symbols != SYMBOLS
         || earlier.run != RUN
+        || RUN && earlier.reporter != REPORTER
         || earlier.reviewers != REVIEWERS
         || earlier.diff_limit != LIMIT
         || TOOLS && (earlier.max_turns != MAX_TURNS || earlier.effort != EFFORT) {
         assert ONLY == 0, `only= keeps the other entries of ${*path}, so it must hold runs with these settings`;
         return by_fix;
     }
+    // A run that failed measured nothing, so it is made again.
     for let e of earlier.entries {
-        by_fix[e.fix] = e;
+        by_fix[e.fix] = Entry { ..e, runs: e.runs.into_iter().filter(|r| r.error matches { null }).collect() };
     }
     return by_fix;
 }

@@ -54,10 +54,10 @@ struct Answer {
 
 /// Reports `reviewed`, a review of `change` in the tree at `w` checked out at
 /// `commit`, by its steps: each reproduction that reports a finding, in the
-/// tree as its reproducer left it, and then the review keeps as findings only
-/// those a test reproduced again alone, where `w` can run one. A review with
-/// no reproductions, which ran nothing, is reported whole. A step that
-/// fails to report is named in the error and the others are still reported.
+/// tree as its reproducer left it, or a review with no reproductions whole,
+/// and then the review keeps as findings only those a test reproduced again
+/// alone, where `w` can run one. A step that fails to report is named in the
+/// error and the others are still reported.
 /// What `model` took is added to `spent`.
 pub fn report_all(
     credential: &mut Credential,
@@ -68,12 +68,15 @@ pub fn report_all(
     reviewed: &mut Reviewed,
     spent: &mut Usage,
 ) -> Result<(), String> with (Client, Preopens, Process, MonotonicClock) {
+    let mut errors: List<String> = [];
+    let mut reported: List<Finding> = [];
     if reviewed.reproductions.is_empty() {
         replay(w, commit, &reviewed.calls);
-        return report(credential, model, change, w, commit, reviewed, spent);
+        if let Err(e) = report(credential, model, change, w, commit, reviewed, spent) {
+            errors.push(e);
+        }
+        reported = reviewed.findings;
     }
-    let mut errors: List<String> = [];
-    let mut verified: List<Finding> = [];
     for let i of 0..<reviewed.reproductions.len() {
         let tried = &mut reviewed.reproductions[i];
         if tried.findings.is_empty() {
@@ -83,14 +86,13 @@ pub fn report_all(
         if let Err(e) = report(credential, model, change, w, commit, tried, spent) {
             errors.push(`reproduction ${i + 1}: ${e}`);
         }
-        for let f of &tried.findings {
-            if w.runner matches { null } || f.repro matches { Some(r) && r.verified } {
-                verified.push(*f);
-            }
-        }
+        reported.extend(&tried.findings);
     }
-    reset_snapshot(&w.repo, &w.root, commit);
-    reviewed.findings = verified;
+    if w.runner matches { Some(_) } {
+        reset_snapshot(&w.repo, &w.root, commit);
+        reported = reported.into_iter().filter(|f| f.repro matches { Some(r) && r.verified }).collect();
+    }
+    reviewed.findings = reported;
     return if errors.is_empty() { Ok(()) } else { Err(errors.join("; ")) };
 }
 

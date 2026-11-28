@@ -23,11 +23,17 @@ global WINDOW: i32 = 30;
 /// The most bytes of called definitions one unit shows.
 global CALLED_BYTES: i32 = 24_000;
 
+/// The most bytes of one unit: a search reads no more at once. Its lines come
+/// first, then what it calls as far as it fits.
+pub global MAX_UNIT_BYTES: i32 = 30_000;
+
 /// What a change did to one file, by the line numbers of the file it leaves,
 /// from 1: the lines it added, and the lines it removed just before each line.
 struct Touched {
     added: List<i32>,
     removed: HashMap<i32, List<String>>,
+    /// Whether the change deleted the file, which it leaves empty.
+    deleted: bool = false,
 }
 
 impl Touched {
@@ -80,11 +86,12 @@ impl Unit {
 pub fn units(diff: &String, sources: &HashMap<String, String>) -> List<Unit> {
     let mut out: List<Unit> = [];
     for let [file, touched] of touched_files(diff).entries() {
-        let Some(source) = sources.get(*file) else {
+        if !touched.deleted && !sources.contains_key(*file) {
             continue;
-        };
+        }
+        let source = sources.get(*file).unwrap_or("");
         let lines: List<String> = source.lines().map(|l| l.to_string()).collect();
-        let items = items_of(&lines);
+        let items = items_of(&lines, file.ends_with(".rs"));
         let mut spans: List<[i32, i32]> = [];
         // Past the last line: what the change removed at the end of the file.
         for let line of 1..=lines.len() + 1 {
@@ -136,16 +143,24 @@ fn unit(
             text.push_str(`${n:>6}${mark}${lines[n - 1]}\n`);
         }
     }
-    let called = called_text(lines, items, start, end);
+    if text.len() > MAX_UNIT_BYTES {
+        text = `${text.substr_bytes(0, text.floor_char_boundary(MAX_UNIT_BYTES - CUT.len()))}${CUT}`;
+    }
+    let heading = "\nIt calls, in this file:\n";
+    let room = MAX_UNIT_BYTES - text.len() - heading.len();
+    let called = called_text(lines, items, start, end, i32::min(CALLED_BYTES, room));
     if !called.is_empty() {
-        text.push_str(`\nIt calls, in this file:\n${called}`);
+        text.push_str(`${heading}${called}`);
     }
     return Unit { file: *file, name: *name, start, end, changed, text };
 }
 
+/// What ends a unit's lines cut short at `MAX_UNIT_BYTES`.
+global CUT: String = "\n[cut short]\n";
+
 /// The definitions of the functions lines `start..=end` call by name, in the
-/// file of `lines`, up to `CALLED_BYTES`.
-fn called_text(lines: &List<String>, items: &List<Item>, start: i32, end: i32) -> String {
+/// file of `lines`, up to `budget` bytes.
+fn called_text(lines: &List<String>, items: &List<Item>, start: i32, end: i32, budget: i32) -> String {
     let mut names: List<String> = [];
     for let n of start..=end {
         for let name of called_names(&lines[n - 1]) {
@@ -164,7 +179,7 @@ fn called_text(lines: &List<String>, items: &List<Item>, start: i32, end: i32) -
         for let n of it.start..=i32::min(it.end, it.start + MAX_UNIT_LINES - 1) {
             body.push_str(`${n:>6} ${lines[n - 1]}\n`);
         }
-        if out.len() + body.len() > CALLED_BYTES {
+        if out.len() + body.len() > budget {
             continue;
         }
         out.push_str(&body);
@@ -221,8 +236,8 @@ fn span_of(items: &List<Item>, line: i32, count: i32) -> [String, i32, i32] {
 }
 
 /// The items of a formatted Rust or Wado file of `lines`.
-fn items_of(lines: &List<String>) -> List<Item> {
-    let mut scan = Scan {};
+fn items_of(lines: &List<String>, nests: bool) -> List<Item> {
+    let mut scan = Scan { nests };
     let mut starts_in_code: List<bool> = [];
     let mut marks: List<List<char>> = [];
     for let l of lines {
@@ -239,8 +254,8 @@ fn items_of(lines: &List<String>) -> List<Item> {
         };
         let mut start = i;
         let mut tested = name.starts_with("test") || name == "mod tests";
-        while start > 0 && starts_in_code[start - 1] && is_preamble(&lines[start - 1]) {
-            start -= 1;
+        while let Some(above) = preamble_above(lines, &starts_in_code, &marks, start) {
+            start = above;
             let t = lines[start].trim();
             tested = tested || t.starts_with("#[") && (t.ends_with("test]") || t == "#[cfg(test)]");
         }
@@ -284,17 +299,19 @@ fn item_end(marks: &List<List<char>>, header: i32) -> i32 {
 }
 
 /// Where a scan of source text stands between lines: in code, in a string
-/// `close` ends, where a backslash escapes unless the string is raw, or in a
-/// block comment.
+/// `close` ends, where a backslash escapes unless the string is raw, or in
+/// `comments` block comments.
 struct Scan {
     close: String = "",
     raw: bool = false,
-    in_comment: bool = false,
+    comments: i32 = 0,
+    /// Whether a block comment holds others, as in Rust; in Wado one does not.
+    nests: bool = false,
 }
 
 impl Scan {
     fn in_code(&self) -> bool {
-        return self.close.is_empty() && !self.in_comment;
+        return self.close.is_empty() && self.comments == 0;
     }
 
     /// The brackets and semicolons of `line` that are code, read from where
@@ -305,9 +322,12 @@ impl Scan {
         let mut i = 0;
         while i < cs.len() {
             let c = cs[i];
-            if self.in_comment {
+            if self.comments > 0 {
                 if c == '*' && i + 1 < cs.len() && cs[i + 1] == '/' {
-                    self.in_comment = false;
+                    self.comments -= 1;
+                    i += 1;
+                } else if self.nests && c == '/' && i + 1 < cs.len() && cs[i + 1] == '*' {
+                    self.comments += 1;
                     i += 1;
                 }
             } else if !self.close.is_empty() {
@@ -320,7 +340,7 @@ impl Scan {
             } else if c == '/' && i + 1 < cs.len() && cs[i + 1] == '/' {
                 break;
             } else if c == '/' && i + 1 < cs.len() && cs[i + 1] == '*' {
-                self.in_comment = true;
+                self.comments = 1;
                 i += 1;
             } else if c == '"' || c == '`' {
                 let mut hashes = 0;
@@ -371,10 +391,32 @@ fn closes_at(cs: &List<char>, i: i32, close: &String) -> bool {
     return true;
 }
 
-/// Whether `line` belongs to the item below it: a comment or an attribute.
-fn is_preamble(line: &String) -> bool {
-    let t = line.trim_start();
-    return t.starts_with("//") || t.starts_with("#[");
+/// The first line, from 0, of the comment or attribute that ends right above
+/// line `below`, or none. An attribute may span lines, `#[` to the `]` that
+/// closes it.
+fn preamble_above(lines: &List<String>, starts_in_code: &List<bool>, marks: &List<List<char>>, below: i32) -> Option<i32> {
+    let mut balance = 0;
+    let mut k = below - 1;
+    while k >= 0 && starts_in_code[k] {
+        let t = lines[k].trim_start();
+        if t.starts_with("//") && k == below - 1 {
+            return Some(k);
+        }
+        if t.trim().is_empty() || t.starts_with("//") {
+            return null;
+        }
+        for let m of &marks[k] {
+            balance += if *m == ']' { 1 } else if *m == '[' { -1 } else { 0 };
+        }
+        if t.starts_with("#[") && balance == 0 {
+            return Some(k);
+        }
+        if balance <= 0 {
+            return null;
+        }
+        k -= 1;
+    }
+    return null;
 }
 
 /// The kind and name of the item a line `body`, without its indent, starts,
@@ -431,17 +473,20 @@ fn touched_files(diff: &String) -> HashMap<String, Touched> {
                 removed_before(&mut out, &file, n, &mut pending);
                 file = "";
             },
-            _::File(path) => {
+            _::File(path) | _::Deleted(path) => {
                 file = path;
-                if !file.is_empty() {
-                    out.try_insert(file, Touched { added: [], removed: HashMap::<i32, List<String>>::new() });
-                }
+                out.try_insert(file, Touched {
+                    added: [],
+                    removed: HashMap::<i32, List<String>>::new(),
+                    deleted: kind matches { _::Deleted(_) },
+                });
             },
             _ && file.is_empty() => {
             },
-            _::Hunk([start, _]) => {
+            // A hunk that leaves no lines names the line before what it removed.
+            _::Hunk([start, count]) => {
                 removed_before(&mut out, &file, n, &mut pending);
-                n = start;
+                n = if count == 0 { start + 1 } else { start };
             },
             _::Removed => pending.push(l.substr_bytes(1, l.len())),
             _::Added | _::Context => {
@@ -539,25 +584,28 @@ struct A;
 
 fn f(a: [u8; 4]) -> char {
     let s = r#\"}\"#; // }
-    /* } */
+    /* /* } */ } */
     return '}';
 }
 
 #[cfg(test)]
 mod tests {
-    #[test]
+    #[cfg_attr(
+        x,
+        test
+    )]
     fn checks() {}
 }
 ";
     let lines: List<String> = source.lines().map(|l| l.to_string()).collect();
-    let spans: List<String> = items_of(&lines)
-        .into_iter()
-        .map(|it| `${it.name} ${it.start}-${it.end} ${it.is_test}`)
-        .collect();
-    assert spans == [
-        "global PROMPT 1-4 false", "struct A 6-6 false", "fn f 8-12 false", "mod tests 14-18 true",
-        "fn checks 16-17 true",
+    let spans = |nests: bool| items_of(&lines, nests).into_iter().map(|it| `${it.name} ${it.start}-${it.end} ${it.is_test}`).collect();
+    assert spans(true) == [
+        "global PROMPT 1-4 false", "struct A 6-6 false", "fn f 8-12 false", "mod tests 14-21 true",
+        "fn checks 16-20 false",
     ];
+    // A comment that holds no other ends at its first `*/`, so the `}` after
+    // it closes `f`.
+    assert spans(false)[2] == "fn f 8-10 false";
 }
 
 test "lines removed at a hunk's end, at the file's end, and ones that read as a header are kept" {
@@ -575,6 +623,36 @@ test "lines removed at a hunk's end, at the file's end, and ones that read as a 
     sources["f.rs"] = "fn a() {}\n";
     let found = units(&diff, &sources);
     assert found.len() == 1 && found[0].text.contains("     1 fn a() {}\n       --- gone\n       -fn b() {}\n");
+}
+
+test "a unit is cut short where it would not fit in a search" {
+    let line = "x".repeat(MAX_UNIT_BYTES);
+    let mut sources = HashMap::<String, String>::new();
+    sources["f.rs"] = `fn f() {\n    ${line}\n}\n`;
+    let diff = "diff --git a/f.rs b/f.rs\n--- a/f.rs\n+++ b/f.rs\n@@ -2 +2 @@\n-y\n+    x\n";
+    let text = units(&diff, &sources)[0].text;
+    assert text.len() <= MAX_UNIT_BYTES && text.ends_with("\n[cut short]\n");
+}
+
+test "a file the change deleted is read as what it removed, and a hunk that leaves nothing removes after its line" {
+    let diff = "diff --git a/gone.rs b/gone.rs
+--- a/gone.rs
++++ /dev/null
+@@ -1,2 +0,0 @@
+-fn a() {}
+-fn b() {}
+diff --git a/f.rs b/f.rs
+--- a/f.rs
++++ b/f.rs
+@@ -2 +1,0 @@
+-x
+";
+    let mut sources = HashMap::<String, String>::new();
+    sources["f.rs"] = "kept\n";
+    let found = units(&diff, &sources);
+    let gone = found.into_iter().filter(|u| u.file == "gone.rs").collect();
+    assert gone.len() == 1 && gone[0].text == "       -fn a() {}\n       -fn b() {}\n";
+    assert touched_files(&diff)["f.rs"].removed.get(2) == Some(["x"]);
 }
 
 test "a line outside every definition, or in one too long, is read in a window" {

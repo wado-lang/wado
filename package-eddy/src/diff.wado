@@ -6,9 +6,11 @@
 pub variant DiffLine {
     /// `diff --git …`, which starts a file's part.
     Start,
-    /// `+++ b/<path>`: the path of the file the part's hunks change, or empty
-    /// for a file the change deleted.
+    /// `+++ b/<path>`: the path of the file the part's hunks change.
     File(String),
+    /// `+++ /dev/null`: the file the change deleted, by the path the part's
+    /// `--- a/<path>` gave it.
+    Deleted(String),
     /// A hunk header: its new side's first line and its line count.
     Hunk([i32, i32]),
     Added,
@@ -23,6 +25,7 @@ pub variant DiffLine {
 pub fn diff_lines(diff: &String) -> List<[String, DiffLine]> {
     let mut out: List<[String, DiffLine]> = [];
     let mut in_hunk = false;
+    let mut old_path = "";
     for let l of diff.lines() {
         let line = l.to_string();
         let kind = if l.starts_with("diff --git ") {
@@ -31,8 +34,13 @@ pub fn diff_lines(diff: &String) -> List<[String, DiffLine]> {
         } else if let Some(hunk) = l.strip_prefix("@@ ") {
             in_hunk = true;
             DiffLine::Hunk(new_side(hunk.to_string()));
-        } else if !in_hunk && let Some(rest) = l.strip_prefix("+++ ") {
-            DiffLine::File(rest.strip_prefix("b/").map(|p| p.to_string()).unwrap_or(""));
+        } else if !in_hunk && let Some(path) = l.strip_prefix("--- a/") {
+            old_path = path.to_string();
+            DiffLine::Other;
+        } else if !in_hunk && l == "+++ /dev/null" {
+            DiffLine::Deleted(old_path);
+        } else if !in_hunk && let Some(path) = l.strip_prefix("+++ b/") {
+            DiffLine::File(path.to_string());
         } else if !in_hunk || l.starts_with("\\") {
             DiffLine::Other;
         } else if l.starts_with("+") {
@@ -51,7 +59,7 @@ pub fn diff_lines(diff: &String) -> List<[String, DiffLine]> {
 pub fn diff_files(diff: &String) -> List<String> {
     let mut out: List<String> = [];
     for let [_, kind] of diff_lines(diff) {
-        if let _::File(path) = kind && !path.is_empty() {
+        if let _::File(path) = kind {
             out.push(path);
         }
     }
@@ -66,7 +74,7 @@ pub fn numbered(diff: &String, files: &List<String>) -> String {
     for let [l, kind] of diff_lines(diff) {
         match kind {
             _::Start => wanted = false,
-            _::File(path) => {
+            _::File(path) | _::Deleted(path) => {
                 wanted = files.contains_str(&path);
                 if wanted {
                     out.push_str(`${l}\n`);
@@ -94,7 +102,7 @@ pub fn shows(diff: &String, file: &String, line: i32) -> bool {
     let mut in_file = false;
     for let [_, kind] of diff_lines(diff) {
         match kind {
-            _::Start => in_file = false,
+            _::Start | _::Deleted(_) => in_file = false,
             _::File(path) => in_file = path == *file,
             _::Hunk([start, count]) && in_file && start <= line && line < start + count => {
                 return true;
@@ -185,7 +193,8 @@ diff --git a/old b/old
 ";
     let kinds: List<DiffLine> = diff_lines(&diff).into_iter().map(|l| l[1]).collect();
     assert kinds[4] == DiffLine::Removed && kinds[5] == DiffLine::Removed && kinds[6] == DiffLine::Added;
-    assert kinds[9] == DiffLine::File("");
+    assert kinds[9] == DiffLine::Deleted("old");
     assert diff_files(&diff) == ["f"];
     assert numbered(&diff, &["g"]) == "";
+    assert numbered(&diff, &["old"]).ends_with("@@ -1 +0,0 @@\n       -x\n");
 }
