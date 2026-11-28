@@ -2,14 +2,10 @@
 //! and `.wado` file under the paths, and the groups of nodes alike among them,
 //! largest first.
 
-use { read_source, find_similar, Tree, Measure } from "./lib.wado";
+use { is_source, read_source, find_similar, Tree, Measure } from "./lib.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-
-fn is_source(path: &String) -> bool {
-    return path.ends_with(".rs") || path.ends_with(".wado");
-}
 
 fn source_files(root: &String) -> List<String> with (Stderr, Preopens) {
     if is_source(root) {

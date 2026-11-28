@@ -19,7 +19,7 @@ pub enum TestMark {
 /// name called.
 pub struct Language {
     pub class_of: fn(i32) -> TokenClass,
-    pub marks_test: fn(i32, String) -> TestMark,
+    pub marks_test: fn(i32, StrSlice) -> TestMark,
     pub sequence: i32,
     pub declares: i32,
     pub member: i32,
@@ -55,8 +55,7 @@ pub fn classify(raw: &Tree, lang: &Language) -> Tree {
     for let mut i = 0; i < n; i += 1 {
         match raw.row[i] {
             _::Open => {
-                let text = raw.source.slice(raw.start[i], raw.end[i]).to_string();
-                match (lang.marks_test)(raw.kind[i], text) {
+                match (lang.marks_test)(raw.kind[i], raw.source.slice(raw.start[i], raw.end[i])) {
                     _::None => {
                     },
                     _::Itself => test_code[i] = true,

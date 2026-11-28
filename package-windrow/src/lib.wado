@@ -6,6 +6,11 @@ pub use { Site, Group, Measure, find_similar } from "./similar.wado";
 pub use { read_rust } from "./rust.wado";
 pub use { read_wado } from "./wado.wado";
 
+/// Whether a path names a file in a language Windrow reads.
+pub fn is_source(path: &String) -> bool {
+    return path.ends_with(".rs") || path.ends_with(".wado");
+}
+
 /// The tree of a file in the language its extension names: `.wado`, else Rust.
 pub fn read_source(path: String, source: String) -> Result<Tree, String> {
     if path.ends_with(".wado") {

@@ -26,11 +26,11 @@ fn class_of(kind: i32) -> TokenClass {
 }
 
 /// `#[test]`, or a `cfg` that names `test`, marks the item it is attached to.
-fn marks_test(kind: i32, text: String) -> TestMark {
+fn marks_test(kind: i32, text: StrSlice) -> TestMark {
     if kind != RK_OUTER_ATTRIBUTE as i32 {
         return TestMark::None;
     }
-    let compact = text.replace(" ", "").replace("\n", "");
+    let compact = text.to_string().replace(" ", "").replace("\n", "");
     if compact == "#[test]" || compact.starts_with("#[cfg(test") {
         return TestMark::Parent;
     }

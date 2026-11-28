@@ -74,23 +74,40 @@ fn run_hash(word: &List<u64>, at: i32) -> u64 {
     return splitmix(h);
 }
 
-/// Takes the run at token `at` into a signature.
-fn take_run(signature: &mut List<u64>, seeds: &List<u64>, word: &List<u64>, at: i32) {
-    take(signature, seeds, run_hash(word, at));
+/// The `H` hash functions of a signature, and whether names are gathered at
+/// all: a measure that ignores them leaves their signatures empty.
+struct Hasher {
+    seeds: List<u64>,
+    names: bool,
 }
 
-/// Takes the token at `at` into a signature of names, if it is a spelled one.
-fn take_name(signature: &mut List<u64>, seeds: &List<u64>, word: &List<u64>, at: i32) {
-    if is_spelled(word[at]) {
-        take(signature, seeds, splitmix(word[at]));
+impl Hasher {
+    fn new(measure: Measure) -> Hasher {
+        let mut seeds: List<u64> = [];
+        for let mut j = 0; j < H; j += 1 {
+            seeds.push(splitmix(j as u64 + 1));
+        }
+        return Hasher { seeds, names: measure matches { _::ShapeOrNames } };
     }
-}
 
-fn take(signature: &mut List<u64>, seeds: &List<u64>, h: u64) {
-    for let mut j = 0; j < H; j += 1 {
-        let v = (h ^ seeds[j]) * 0xD6E8_FEB8_6659_FD93;
-        if v < signature[j] {
-            signature[j] = v;
+    /// Takes the run at token `at` into a signature.
+    fn take_run(&self, signature: &mut List<u64>, word: &List<u64>, at: i32) {
+        self.take(signature, run_hash(word, at));
+    }
+
+    /// Takes the token at `at` into a signature of names, if it is a spelled one.
+    fn take_name(&self, signature: &mut List<u64>, word: &List<u64>, at: i32) {
+        if self.names && is_spelled(word[at]) {
+            self.take(signature, splitmix(word[at]));
+        }
+    }
+
+    fn take(&self, signature: &mut List<u64>, h: u64) {
+        for let mut j = 0; j < H; j += 1 {
+            let v = (h ^ self.seeds[j]) * 0xD6E8_FEB8_6659_FD93;
+            if v < signature[j] {
+                signature[j] = v;
+            }
         }
     }
 }
@@ -133,7 +150,7 @@ struct Frame {
     inner: List<[i32, i32]>,
 }
 
-fn gather(units: &mut Units, seeds: &List<u64>, t: i32, tree: &Tree, s: &Shapes, min_tokens: i32) {
+fn gather(units: &mut Units, hasher: &Hasher, t: i32, tree: &Tree, s: &Shapes, min_tokens: i32) {
     let mut frames: List<Frame> = [];
     let mut unclaimed: List<i32> = [];
     for let mut i = 0; i < tree.len(); i += 1 {
@@ -162,7 +179,7 @@ fn gather(units: &mut Units, seeds: &List<u64>, t: i32, tree: &Tree, s: &Shapes,
                 next_inner += 1;
                 continue;
             }
-            take_run(&mut frame.signature, seeds, &s.word, at);
+            hasher.take_run(&mut frame.signature, &s.word, at);
             at += 1;
         }
         next_inner = 0;
@@ -173,7 +190,7 @@ fn gather(units: &mut Units, seeds: &List<u64>, t: i32, tree: &Tree, s: &Shapes,
                 next_inner += 1;
                 continue;
             }
-            take_name(&mut frame.names, seeds, &s.word, at);
+            hasher.take_name(&mut frame.names, &s.word, at);
             at += 1;
         }
         let spans_more = frames.is_empty() || s.tokens[frames[frames.len() - 1].row] > s.tokens[frame.row];
@@ -212,7 +229,7 @@ fn gather(units: &mut Units, seeds: &List<u64>, t: i32, tree: &Tree, s: &Shapes,
 /// which no single node holds. Each run is enclosed by the nearest unit
 /// enclosing its sequence. `first_unit` is the first unit `gather` made for
 /// this tree.
-fn gather_runs(units: &mut Units, seeds: &List<u64>, t: i32, tree: &Tree, s: &Shapes, min_tokens: i32, first_unit: i32) {
+fn gather_runs(units: &mut Units, hasher: &Hasher, t: i32, tree: &Tree, s: &Shapes, min_tokens: i32, first_unit: i32) {
     let mut unit_of_row: List<i32> = List::filled(tree.len(), -1);
     for let mut u = first_unit; u < units.tokens.len(); u += 1 {
         unit_of_row[units.site[u].row] = u;
@@ -248,9 +265,9 @@ fn gather_runs(units: &mut Units, seeds: &List<u64>, t: i32, tree: &Tree, s: &Sh
             let mut names: List<u64> = List::filled(H, EMPTY);
             for let mut at = start; at < end; at += 1 {
                 if at + K <= end {
-                    take_run(&mut signature, seeds, &s.word, at);
+                    hasher.take_run(&mut signature, &s.word, at);
                 }
-                take_name(&mut names, seeds, &s.word, at);
+                hasher.take_name(&mut names, &s.word, at);
             }
             units.push(Site { tree: t, row: kids[i], last: kids[j] }, end - start, parent, &signature, &names);
         }
@@ -335,19 +352,16 @@ pub fn find_similar(
     measure: Measure = Measure::Shape,
 ) -> List<Group> {
     assert min_tokens >= K, "a node shorter than one run has no runs to compare";
-    let mut seeds: List<u64> = [];
-    for let mut j = 0; j < H; j += 1 {
-        seeds.push(splitmix(j as u64 + 1));
-    }
+    let hasher = Hasher::new(measure);
     let mut units = Units { site: [], tokens: [], parent: [], signature: [], names: [], named: [] };
     for let mut t = 0; t < trees.len(); t += 1 {
         let s = shapes(&trees[t]);
         let first_unit = units.tokens.len();
-        gather(&mut units, &seeds, t, &trees[t], &s, min_tokens);
-        gather_runs(&mut units, &seeds, t, &trees[t], &s, min_tokens, first_unit);
+        gather(&mut units, &hasher, t, &trees[t], &s, min_tokens);
+        gather_runs(&mut units, &hasher, t, &trees[t], &s, min_tokens, first_unit);
     }
     for let mut u = 0; u < units.tokens.len(); u += 1 {
-        units.named.push(measure matches { _::ShapeOrNames } && has_names(&units, u));
+        units.named.push(has_names(&units, u));
     }
 
     let mut buckets = HashMap::<u64, List<i32>>::new();
