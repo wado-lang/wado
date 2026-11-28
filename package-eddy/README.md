@@ -68,8 +68,9 @@ Each finding is also written under `scratchpad/eddy/<head>/`, numbered from 1:
   out the reviewed commit, applies the patch and runs the test, so a reader
   with the repository alone reproduces it.
 - `review.md` is one comment for the whole review: a table of the findings and
-  what the review cost, then each finding's comment folded. It is written when
-  the review fails too, with the error.
+  what the review cost, then each finding's comment folded. It names each kind
+  of step that did not finish, and it is written when the review fails too,
+  with the error. A review fails when every search or every reproduction did.
 
 A finding's `line` is a line the diff shows, which is where a pull request
 takes a comment on a line, or 0.

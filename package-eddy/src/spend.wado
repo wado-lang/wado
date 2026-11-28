@@ -222,8 +222,14 @@ test "a prompt read from another agent's cache is charged to the prompt, every t
 
 test "a write after the cache lapsed is charged to what it wrote again" {
     let requests: List<Request> = [
-        Request { started: 0.0, usage: Usage { cache_creation_input_tokens: 1_000_000 } },
-        Request { started: 1.0, usage: Usage { cache_creation_input_tokens: 2_000_000 } },
+        Request {
+            started: 0.0,
+            usage: Usage { cache_creation_input_tokens: 1_000_000 },
+        },
+        Request {
+            started: 1.0,
+            usage: Usage { cache_creation_input_tokens: 2_000_000 },
+        },
     ];
     let calls: List<Call> = [
         Call { name: "Read", input: Value::Null, is_error: false, turn: 1, bytes: 10 },

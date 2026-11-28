@@ -394,7 +394,12 @@ fn closes_at(cs: &List<char>, i: i32, close: &String) -> bool {
 /// The first line, from 0, of the comment or attribute that ends right above
 /// line `below`, or none. An attribute may span lines, `#[` to the `]` that
 /// closes it.
-fn preamble_above(lines: &List<String>, starts_in_code: &List<bool>, marks: &List<List<char>>, below: i32) -> Option<i32> {
+fn preamble_above(
+    lines: &List<String>,
+    starts_in_code: &List<bool>,
+    marks: &List<List<char>>,
+    below: i32,
+) -> Option<i32> {
     let mut balance = 0;
     let mut k = below - 1;
     while k >= 0 && starts_in_code[k] {
@@ -406,7 +411,13 @@ fn preamble_above(lines: &List<String>, starts_in_code: &List<bool>, marks: &Lis
             return null;
         }
         for let m of &marks[k] {
-            balance += if *m == ']' { 1 } else if *m == '[' { -1 } else { 0 };
+            balance += if *m == ']' {
+                1;
+            } else if *m == '[' {
+                -1;
+            } else {
+                0;
+            };
         }
         if t.starts_with("#[") && balance == 0 {
             return Some(k);
@@ -598,7 +609,10 @@ mod tests {
 }
 ";
     let lines: List<String> = source.lines().map(|l| l.to_string()).collect();
-    let spans = |nests: bool| items_of(&lines, nests).into_iter().map(|it| `${it.name} ${it.start}-${it.end} ${it.is_test}`).collect();
+    let spans = |nests: bool| items_of(&lines, nests)
+        .into_iter()
+        .map(|it| `${it.name} ${it.start}-${it.end} ${it.is_test}`)
+        .collect();
     assert spans(true) == [
         "global PROMPT 1-4 false", "struct A 6-6 false", "fn f 8-12 false", "mod tests 14-21 true",
         "fn checks 16-20 false",
