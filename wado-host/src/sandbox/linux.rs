@@ -1435,7 +1435,7 @@ fn check(ret: libc::c_int) -> io::Result<()> {
     Ok(())
 }
 
-fn check_long(ret: libc::c_long) -> io::Result<()> {
+pub(super) fn check_long(ret: libc::c_long) -> io::Result<()> {
     if ret == -1 {
         return Err(io::Error::last_os_error());
     }

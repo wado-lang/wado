@@ -12,7 +12,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 
-use super::linux::retried;
+use super::linux::{check_long, retried};
 
 /// What the child runs on. It makes system calls alone, so a stack far below
 /// a thread's is ample.
@@ -118,12 +118,11 @@ extern "C" fn enter(entry: *mut c_void) -> libc::c_int {
 /// does not list.
 fn close_all_but(keep: &[RawFd]) -> io::Result<()> {
     let close = |first: u32, last: u32| {
-        // SAFETY: a plain system call.
-        if first <= last && unsafe { libc::syscall(libc::SYS_close_range, first, last, 0u32) } == -1
-        {
-            return Err(io::Error::last_os_error());
+        if first > last {
+            return Ok(());
         }
-        Ok(())
+        // SAFETY: a plain system call.
+        check_long(unsafe { libc::syscall(libc::SYS_close_range, first, last, 0u32) })
     };
     let mut first = libc::STDERR_FILENO.cast_unsigned() + 1;
     for &fd in keep {
