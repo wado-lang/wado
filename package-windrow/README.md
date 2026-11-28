@@ -81,9 +81,11 @@ git log $R --no-merges --format='%h %s' -E -i --grep='^feat' "${P[@]}" | head -2
 Each cell replays one list, with `--names` for the shape + names rows:
 
 ```sh
-for L in dedup feat; do
-  wado run package-windrow/tools/recall.wado -- --commits rs-$L.txt --files '*.rs' [--names]
-  wado run package-windrow/tools/recall.wado -- --commits wado-$L.txt --files '*.wado' [--names]
+for N in '' --names; do
+  for L in dedup feat; do
+    wado run package-windrow/tools/recall.wado -- --commits rs-$L.txt --files '*.rs' $N
+    wado run package-windrow/tools/recall.wado -- --commits wado-$L.txt --files '*.wado' $N
+  done
 done
 ```
 
