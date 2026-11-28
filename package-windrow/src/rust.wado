@@ -52,8 +52,9 @@ fn marks_test(kind: i32, text: StrSlice) -> TestMark {
 }
 
 /// `s` with each `= "…"` or `= r#"…"#` value emptied to `""`, so no character
-/// inside one reads as a delimiter or a predicate. `s` has no whitespace.
+/// inside one reads as a delimiter or a predicate.
 fn without_string_values(s: StrSlice) -> String {
+    assert !s.chars().any(|c| c.is_whitespace()), "a value must follow its `=` directly";
     let mut out = "";
     let mut kept = 0;
     let mut i = 0;
